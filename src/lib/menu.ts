@@ -1,6 +1,7 @@
 import "server-only";
 
-import type { MenuNode } from "./types";
+import { categories as fallbackCategories } from "./demo-data";
+import type { MenuNode, WooCategoryNode } from "./types";
 
 const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
 
@@ -10,20 +11,39 @@ type StoreCategory = {
   slug: string;
   parent: number;
   count: number;
+  image?: {
+    src?: string;
+    thumbnail?: string;
+  } | null;
+  permalink?: string;
 };
 
-function buildCategoryTree(categories: StoreCategory[], parent = 0): MenuNode[] {
+function hasProductsInTree(categories: StoreCategory[], category: StoreCategory): boolean {
+  if (category.count > 0) {
+    return true;
+  }
+
   return categories
-    .filter((category) => category.parent === parent && category.count > 0)
+    .filter((child) => child.parent === category.id)
+    .some((child) => hasProductsInTree(categories, child));
+}
+
+function buildCategoryTree(categories: StoreCategory[], parent = 0): WooCategoryNode[] {
+  return categories
+    .filter((category) => category.parent === parent && hasProductsInTree(categories, category))
     .map((category) => ({
       id: category.id,
       title: category.name,
-      url: `${siteUrl}/product-category/${category.slug}/`,
+      url: category.permalink || `${siteUrl}/product-category/${category.slug}/`,
       href: `/shop?category=${encodeURIComponent(category.slug)}`,
       type: "taxonomy",
       object: "product_cat",
       objectId: category.id,
       slug: category.slug,
+      parent: category.parent,
+      count: category.count,
+      image: category.image?.thumbnail || category.image?.src,
+      permalink: category.permalink || `${siteUrl}/product-category/${category.slug}/`,
       children: buildCategoryTree(categories, category.id),
     }));
 }
@@ -45,14 +65,27 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 }
 
 export async function getHeaderMenu(): Promise<MenuNode[]> {
+  return getWordPressCategoryTree();
+}
+
+export async function getWordPressCategoryTree(): Promise<WooCategoryNode[]> {
   const categories = await fetchJson<StoreCategory[]>(
     `${siteUrl}/wp-json/wc/store/v1/products/categories?per_page=100`,
   );
 
-  if (!categories?.length) {
-    return [];
+  if (categories?.length) {
+    return buildCategoryTree(categories);
   }
 
-  return buildCategoryTree(categories);
+  return buildCategoryTree(
+    fallbackCategories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      parent: category.parent || 0,
+      count: category.productCount,
+      permalink: `${siteUrl}/product-category/${category.slug}/`,
+    })),
+  );
 }
 

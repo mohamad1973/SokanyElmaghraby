@@ -34,6 +34,18 @@ export type MenuNode = {
   object: string;
   objectId: number;
   slug: string;
+  parent?: number;
+  count?: number;
+  image?: string;
+  permalink?: string;
   children: MenuNode[];
+};
+
+export type WooCategoryNode = MenuNode & {
+  parent: number;
+  count: number;
+  image?: string;
+  permalink: string;
+  children: WooCategoryNode[];
 };
 
