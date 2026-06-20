@@ -1,0 +1,219 @@
+import "server-only";
+
+import type { CSSProperties } from "react";
+
+export type MenuItem = {
+  label: string;
+  href: string;
+};
+
+export type ThemeSettings = {
+  brand: {
+    logoUrl: string;
+    logoText: string;
+    tagline: string;
+    primaryColor: string;
+    primaryColorDark: string;
+    backgroundColor: string;
+    fontFamily: string;
+  };
+  topBanner: {
+    enabled: boolean;
+    text: string;
+    url: string;
+    desktopImage: string;
+    mobileImage: string;
+  };
+  header: {
+    ctaText: string;
+    ctaUrl: string;
+    showCart: boolean;
+    mobileShowSearch: boolean;
+    mobileShowCart: boolean;
+  };
+  navigation: MenuItem[];
+  hero: {
+    enabled: boolean;
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    primaryCtaText: string;
+    primaryCtaUrl: string;
+    secondaryCtaText: string;
+    secondaryCtaUrl: string;
+    desktopImage: string;
+    tabletImage: string;
+    mobileImage: string;
+  };
+  sections: {
+    trustBadges: boolean;
+    categories: boolean;
+    bestSellers: boolean;
+    competitiveBanner: boolean;
+    customBanner: {
+      enabled: boolean;
+      title: string;
+      desktopImage: string;
+      tabletImage: string;
+      mobileImage: string;
+      ctaText: string;
+      ctaUrl: string;
+    };
+  };
+  footer: {
+    description: string;
+    copyright: string;
+  };
+};
+
+const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
+
+export const defaultThemeSettings: ThemeSettings = {
+  brand: {
+    logoUrl: "",
+    logoText: "SOKANY",
+    tagline: "مؤسسة المغربي",
+    primaryColor: "#DAFF00",
+    primaryColorDark: "#C1E200",
+    backgroundColor: "#F4F5F2",
+    fontFamily: "Almarai",
+  },
+  topBanner: {
+    enabled: true,
+    text: "شحن داخل محافظات مصر • ضمان عام • منتجات أصلية من الوكيل الحصري",
+    url: "/shop",
+    desktopImage: "",
+    mobileImage: "",
+  },
+  header: {
+    ctaText: "اطلب الآن",
+    ctaUrl: "/checkout",
+    showCart: true,
+    mobileShowSearch: true,
+    mobileShowCart: true,
+  },
+  navigation: [
+    { href: "/", label: "الرئيسية" },
+    { href: "/shop", label: "المتجر" },
+    { href: "/offers", label: "العروض" },
+    { href: "/warranty", label: "الضمان" },
+    { href: "/contact", label: "تواصل معنا" },
+  ],
+  hero: {
+    enabled: true,
+    eyebrow: "مؤسسة المغربي الوكيل الحصري لسوكاني في مصر",
+    title: "سوكاني الأصلية بضمان رسمي وتجربة شراء أسرع من أي متجر تقليدي",
+    subtitle: "واجهة حديثة مستوحاة من الشركة الأم، مصممة للبيع في مصر: منتجات أصلية، دفع فوري أو كاش، شحن داخل الجمهورية، وصفحات منتجات غنية بالمواصفات.",
+    primaryCtaText: "تسوق المنتجات",
+    primaryCtaUrl: "/shop",
+    secondaryCtaText: "تواصل مع خدمة العملاء",
+    secondaryCtaUrl: "/contact",
+    desktopImage: "",
+    tabletImage: "",
+    mobileImage: "",
+  },
+  sections: {
+    trustBadges: true,
+    categories: true,
+    bestSellers: true,
+    competitiveBanner: true,
+    customBanner: {
+      enabled: false,
+      title: "عرض خاص من سوكاني",
+      desktopImage: "",
+      tabletImage: "",
+      mobileImage: "",
+      ctaText: "تسوق الآن",
+      ctaUrl: "/offers",
+    },
+  },
+  footer: {
+    description:
+      "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
+    copyright: "SOKANY Egypt. جميع الحقوق محفوظة.",
+  },
+};
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function mergeSettings(settings: unknown): ThemeSettings {
+  if (!isObject(settings)) {
+    return defaultThemeSettings;
+  }
+
+  return {
+    ...defaultThemeSettings,
+    ...settings,
+    brand: { ...defaultThemeSettings.brand, ...(isObject(settings.brand) ? settings.brand : {}) },
+    topBanner: {
+      ...defaultThemeSettings.topBanner,
+      ...(isObject(settings.topBanner) ? settings.topBanner : {}),
+    },
+    header: { ...defaultThemeSettings.header, ...(isObject(settings.header) ? settings.header : {}) },
+    navigation: Array.isArray(settings.navigation)
+      ? settings.navigation.filter((item): item is MenuItem => isObject(item) && typeof item.label === "string" && typeof item.href === "string")
+      : defaultThemeSettings.navigation,
+    hero: { ...defaultThemeSettings.hero, ...(isObject(settings.hero) ? settings.hero : {}) },
+    sections: {
+      ...defaultThemeSettings.sections,
+      ...(isObject(settings.sections) ? settings.sections : {}),
+      customBanner: {
+        ...defaultThemeSettings.sections.customBanner,
+        ...(isObject(settings.sections) && isObject(settings.sections.customBanner)
+          ? settings.sections.customBanner
+          : {}),
+      },
+    },
+    footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
+  };
+}
+
+export async function getThemeSettings(): Promise<ThemeSettings> {
+  try {
+    const response = await fetch(`${siteUrl}/wp-json/sokany/v1/theme-settings`, {
+      next: { revalidate: 60 },
+    });
+
+    if (!response.ok) {
+      return defaultThemeSettings;
+    }
+
+    return mergeSettings(await response.json());
+  } catch {
+    return defaultThemeSettings;
+  }
+}
+
+export async function updateThemeSettings(settings: ThemeSettings): Promise<ThemeSettings> {
+  const secret = process.env.SOKANY_FRONTEND_SECRET;
+
+  if (!secret) {
+    return settings;
+  }
+
+  const response = await fetch(`${siteUrl}/wp-json/sokany/v1/theme-settings`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sokany-Settings-Secret": secret,
+    },
+    body: JSON.stringify(settings),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update WordPress theme settings.");
+  }
+
+  return mergeSettings(await response.json());
+}
+
+export function getThemeCssVariables(settings: ThemeSettings) {
+  return {
+    "--brand-gold": settings.brand.primaryColor,
+    "--brand-gold-dark": settings.brand.primaryColorDark,
+    "--background": settings.brand.backgroundColor,
+  } as CSSProperties;
+}
+

@@ -1,0 +1,10 @@
+<svg width="640" height="640" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="640" rx="48" fill="#F2F3F5"/>
+  <rect x="122" y="142" width="396" height="356" rx="42" fill="#FFFFFF"/>
+  <path d="M216 430H424" stroke="#DAFF00" stroke-width="18" stroke-linecap="round"/>
+  <path d="M252 238H388C410.091 238 428 255.909 428 278V374C428 396.091 410.091 414 388 414H252C229.909 414 212 396.091 212 374V278C212 255.909 229.909 238 252 238Z" fill="#101010"/>
+  <path d="M254 284H386" stroke="#DAFF00" stroke-width="16" stroke-linecap="round"/>
+  <path d="M254 326H342" stroke="#DAFF00" stroke-width="16" stroke-linecap="round"/>
+  <text x="320" y="548" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="56" font-weight="700" fill="#101010">SOKANY</text>
+</svg>
+
