@@ -42,12 +42,11 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="rounded-xl border border-black/10 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-zinc-950">خطوات التفعيل على WordPress</h2>
+        <h2 className="text-xl font-bold text-zinc-950">مصادر البيانات الحالية</h2>
         <ol className="mt-4 list-decimal space-y-2 pr-5 text-sm leading-7 text-zinc-700">
-          <li>ارفع ملف `wordpress-plugin/sokany-headless-settings.php` إلى WordPress كإضافة.</li>
-          <li>فعّل الإضافة من لوحة WordPress.</li>
-          <li>أضف `SOKANY_FRONTEND_SECRET` بنفس القيمة في WordPress و `.env.local`.</li>
-          <li>بعدها ستُحفظ إعدادات الواجهة داخل WordPress بدلاً من fallback المحلي.</li>
+          <li>المنتجات والطلبات تأتي من WooCommerce REST API.</li>
+          <li>منيو الهيدر تأتي من تصنيفات WooCommerce بدون أي WordPress plugin.</li>
+          <li>إعدادات الشكل تستخدم القيم الافتراضية داخل مشروع Next.js حتى نضيف تخزين دائم لاحقاً.</li>
         </ol>
       </div>
     </div>

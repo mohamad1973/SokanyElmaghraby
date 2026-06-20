@@ -66,8 +66,6 @@ export type ThemeSettings = {
   };
 };
 
-const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
-
 export const defaultThemeSettings: ThemeSettings = {
   brand: {
     logoUrl: "",
@@ -171,42 +169,11 @@ function mergeSettings(settings: unknown): ThemeSettings {
 }
 
 export async function getThemeSettings(): Promise<ThemeSettings> {
-  try {
-    const response = await fetch(`${siteUrl}/wp-json/sokany/v1/theme-settings`, {
-      next: { revalidate: 60 },
-    });
-
-    if (!response.ok) {
-      return defaultThemeSettings;
-    }
-
-    return mergeSettings(await response.json());
-  } catch {
-    return defaultThemeSettings;
-  }
+  return defaultThemeSettings;
 }
 
 export async function updateThemeSettings(settings: ThemeSettings): Promise<ThemeSettings> {
-  const secret = process.env.SOKANY_FRONTEND_SECRET;
-
-  if (!secret) {
-    return settings;
-  }
-
-  const response = await fetch(`${siteUrl}/wp-json/sokany/v1/theme-settings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Sokany-Settings-Secret": secret,
-    },
-    body: JSON.stringify(settings),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to update WordPress theme settings.");
-  }
-
-  return mergeSettings(await response.json());
+  return mergeSettings(settings);
 }
 
 export function getThemeCssVariables(settings: ThemeSettings) {

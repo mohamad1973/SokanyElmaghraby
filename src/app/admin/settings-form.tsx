@@ -81,7 +81,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
     setIsSaving(false);
 
     if (!response.ok) {
-      setStatus("تعذر حفظ الإعدادات. تأكد من تفعيل WordPress plugin و SOKANY_FRONTEND_SECRET.");
+      setStatus("تعذر حفظ الإعدادات. حاول مرة أخرى أو راجع اتصال لوحة التحكم.");
       return;
     }
 
@@ -96,7 +96,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
       <div>
         <h1 className="text-3xl font-bold text-zinc-950">{title}</h1>
         <p className="mt-2 text-sm text-zinc-600">
-          يتم حفظ الإعدادات داخل WordPress عند تفعيل plugin، مع fallback محلي أثناء التطوير.
+          يعمل الموقع الآن بدون WordPress plugin، وتعتمد المنيو على تصنيفات WooCommerce مباشرة.
         </p>
       </div>
 
