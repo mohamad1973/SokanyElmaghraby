@@ -49,3 +49,10 @@ export type WooCategoryNode = MenuNode & {
   children: WooCategoryNode[];
 };
 
+export type ManagedCategoryNode = WooCategoryNode & {
+  isVisible: boolean;
+  isTrashed: boolean;
+  sortOrder: number;
+  children: ManagedCategoryNode[];
+};
+

@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model CategoryMenuSetting {
+  id         Int      @id @default(autoincrement())
+  categoryId Int      @unique
+  slug       String
+  isVisible  Boolean  @default(true)
+  isTrashed  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isTrashed])
+  @@index([isVisible])
+}

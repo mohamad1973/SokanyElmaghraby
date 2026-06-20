@@ -1,14 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { getWordPressCategoryTree } from "@/lib/menu";
-import type { WooCategoryNode } from "@/lib/types";
+import { getManagedCategoryTree } from "@/lib/category-menu-settings";
+import type { ManagedCategoryNode } from "@/lib/types";
 
-function countCategories(categories: WooCategoryNode[]): number {
+import { CategoryMenuActions } from "./category-menu-actions";
+
+function countCategories(categories: ManagedCategoryNode[]): number {
   return categories.reduce((total, category) => total + 1 + countCategories(category.children), 0);
 }
 
-function CategoryChildren({ categories, level = 1 }: { categories: WooCategoryNode[]; level?: number }) {
+function CategoryChildren({
+  categories,
+  actionsDisabled,
+  level = 1,
+}: {
+  categories: ManagedCategoryNode[];
+  actionsDisabled: boolean;
+  level?: number;
+}) {
   if (!categories.length) {
     return null;
   }
@@ -37,9 +47,19 @@ function CategoryChildren({ categories, level = 1 }: { categories: WooCategoryNo
               >
                 عرض في المتجر
               </Link>
+              <CategoryMenuActions
+                categoryId={category.id}
+                slug={category.slug}
+                isTrashed={category.isTrashed}
+                disabled={actionsDisabled}
+              />
             </div>
           </div>
-          <CategoryChildren categories={category.children} level={level + 1} />
+          <CategoryChildren
+            categories={category.children}
+            actionsDisabled={actionsDisabled}
+            level={level + 1}
+          />
         </div>
       ))}
     </div>
@@ -47,8 +67,9 @@ function CategoryChildren({ categories, level = 1 }: { categories: WooCategoryNo
 }
 
 export default async function AdminNavigationPage() {
-  const categories = await getWordPressCategoryTree();
+  const { categories, trashedCategories, status } = await getManagedCategoryTree();
   const totalCategories = countCategories(categories);
+  const actionsDisabled = !status.settingsAvailable;
 
   return (
     <div className="space-y-6">
@@ -60,6 +81,14 @@ export default async function AdminNavigationPage() {
         </p>
       </div>
 
+      {!status.settingsAvailable ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">
+          التخزين في MySQL غير مفعل حالياً، لذلك أزرار الترش والاسترجاع معطلة.
+          أضف `DATABASE_URL` ثم شغل Prisma migration لتفعيل الحفظ.
+          {status.error ? <span className="mt-1 block font-mono text-xs">{status.error}</span> : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Main Categories</p>
@@ -70,8 +99,8 @@ export default async function AdminNavigationPage() {
           <p className="mt-2 text-3xl font-bold text-zinc-950">{totalCategories}</p>
         </div>
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Source</p>
-          <p className="mt-2 text-sm font-bold text-zinc-950">WooCommerce Store API</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Trash</p>
+          <p className="mt-2 text-3xl font-bold text-zinc-950">{trashedCategories.length}</p>
         </div>
       </div>
 
@@ -124,12 +153,21 @@ export default async function AdminNavigationPage() {
                   >
                     عرض في المتجر
                   </Link>
+                  <CategoryMenuActions
+                    categoryId={category.id}
+                    slug={category.slug}
+                    isTrashed={category.isTrashed}
+                    disabled={actionsDisabled}
+                  />
                 </div>
               </div>
 
               <div className="p-5">
                 {category.children.length ? (
-                  <CategoryChildren categories={category.children} />
+                  <CategoryChildren
+                    categories={category.children}
+                    actionsDisabled={actionsDisabled}
+                  />
                 ) : (
                   <p className="rounded-xl bg-zinc-50 p-4 text-sm text-zinc-500">
                     لا توجد sub categories تحت هذه الكاتيجوري.
@@ -140,6 +178,48 @@ export default async function AdminNavigationPage() {
           ))}
         </div>
       )}
+
+      <section className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-zinc-950">Trash</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              الكاتيجوري الموجودة هنا تختفي من واجهة الموقع ويمكن استرجاعها.
+            </p>
+          </div>
+          <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold text-zinc-700">
+            {trashedCategories.length} عنصر
+          </span>
+        </div>
+
+        {trashedCategories.length ? (
+          <div className="mt-4 grid gap-3">
+            {trashedCategories.map((category) => (
+              <div
+                key={category.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black/10 bg-zinc-50 p-4"
+              >
+                <div>
+                  <p className="text-sm font-bold text-zinc-950">{category.title}</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    slug: <span className="font-mono">{category.slug}</span>
+                  </p>
+                </div>
+                <CategoryMenuActions
+                  categoryId={category.id}
+                  slug={category.slug}
+                  isTrashed={category.isTrashed}
+                  disabled={actionsDisabled}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-xl bg-zinc-50 p-4 text-sm text-zinc-500">
+            لا توجد كاتيجوري في الترش حالياً.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
