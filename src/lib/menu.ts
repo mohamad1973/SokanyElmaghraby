@@ -1,5 +1,6 @@
 import "server-only";
 
+import { categories as fallbackCategories } from "./demo-data";
 import type { MenuNode } from "./types";
 
 const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
@@ -12,9 +13,19 @@ type StoreCategory = {
   count: number;
 };
 
+function hasProductsInTree(categories: StoreCategory[], category: StoreCategory): boolean {
+  if (category.count > 0) {
+    return true;
+  }
+
+  return categories
+    .filter((child) => child.parent === category.id)
+    .some((child) => hasProductsInTree(categories, child));
+}
+
 function buildCategoryTree(categories: StoreCategory[], parent = 0): MenuNode[] {
   return categories
-    .filter((category) => category.parent === parent && category.count > 0)
+    .filter((category) => category.parent === parent && hasProductsInTree(categories, category))
     .map((category) => ({
       id: category.id,
       title: category.name,
@@ -49,10 +60,18 @@ export async function getHeaderMenu(): Promise<MenuNode[]> {
     `${siteUrl}/wp-json/wc/store/v1/products/categories?per_page=100`,
   );
 
-  if (!categories?.length) {
-    return [];
+  if (categories?.length) {
+    return buildCategoryTree(categories);
   }
 
-  return buildCategoryTree(categories);
+  return buildCategoryTree(
+    fallbackCategories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      parent: category.parent || 0,
+      count: category.productCount,
+    })),
+  );
 }
 

@@ -5,47 +5,126 @@ import { useState } from "react";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
+function categoryIconName(title: string) {
+  if (title.includes("مطبخ")) {
+    return "kitchen";
+  }
+
+  if (title.includes("منزل")) {
+    return "home";
+  }
+
+  if (title.includes("العناية") || title.includes("شخص")) {
+    return "care";
+  }
+
+  if (title.includes("غيار") || title.includes("قطع")) {
+    return "parts";
+  }
+
+  return "category";
+}
+
+function CategoryIcon({ title }: { title: string }) {
+  const icon = categoryIconName(title);
+
+  return (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/10 text-black">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-none stroke-current stroke-2">
+        {icon === "kitchen" ? (
+          <>
+            <path d="M7 3v18" />
+            <path d="M4 7h6" />
+            <path d="M17 3v18" />
+            <path d="M14 7h6v4h-6z" />
+          </>
+        ) : null}
+        {icon === "home" ? (
+          <>
+            <path d="M3 11 12 4l9 7" />
+            <path d="M5 10v10h14V10" />
+            <path d="M9 20v-6h6v6" />
+          </>
+        ) : null}
+        {icon === "care" ? (
+          <>
+            <path d="M8 4h8v7a4 4 0 0 1-8 0z" />
+            <path d="M12 15v6" />
+            <path d="M8 21h8" />
+          </>
+        ) : null}
+        {icon === "parts" ? (
+          <>
+            <path d="M14 7a4 4 0 0 0-5 5l-5 5 3 3 5-5a4 4 0 0 0 5-5z" />
+            <path d="m14 7 3 3" />
+          </>
+        ) : null}
+        {icon === "category" ? (
+          <>
+            <path d="M4 4h7v7H4z" />
+            <path d="M13 4h7v7h-7z" />
+            <path d="M4 13h7v7H4z" />
+            <path d="M13 13h7v7h-7z" />
+          </>
+        ) : null}
+      </svg>
+    </span>
+  );
+}
+
+function DesktopSubCategories({ items }: { items: MenuNode[] }) {
+  return (
+    <div className="grid min-w-[280px] gap-2 p-3">
+      {items.map((child) => (
+        <div key={child.id} className="rounded-xl border border-black/5 bg-white">
+          <Link
+            href={child.href}
+            className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-bold text-zinc-900 transition hover:bg-brand-gold"
+          >
+            <span>{child.title}</span>
+            {child.children.length ? <span className="text-zinc-400">‹</span> : null}
+          </Link>
+          {child.children.length ? (
+            <div className="grid gap-1 border-t border-black/5 bg-zinc-50 px-3 py-2">
+              {child.children.map((grandChild) => (
+                <Link
+                  key={grandChild.id}
+                  href={grandChild.href}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold text-zinc-600 transition hover:bg-white hover:text-black"
+                >
+                  {grandChild.title}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DesktopMenu({ menu }: { menu: MenuNode[] }) {
+  if (!menu.length) {
+    return null;
+  }
+
   return (
     <nav className="hidden border-t border-black/10 bg-brand-gold lg:block">
-      <div className="mx-auto flex max-w-7xl items-center justify-start px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-center gap-1 px-4 sm:px-6 lg:px-8">
         {menu.map((item) => (
           <div key={item.id} className="group relative">
             <Link
               href={item.href}
-              className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-black transition hover:bg-black hover:text-white"
+              className="flex min-h-14 items-center gap-3 px-5 py-3 text-base font-bold text-black transition hover:bg-black hover:text-white"
             >
+              <CategoryIcon title={item.title} />
               {item.title}
-              {item.children.length ? <span className="text-xs">‹</span> : null}
+              {item.children.length ? <span className="text-xs text-black/45 group-hover:text-white/70">⌄</span> : null}
             </Link>
 
             {item.children.length ? (
-              <div className="invisible absolute right-0 top-full z-50 min-w-64 translate-y-2 rounded-b-xl bg-zinc-950 p-2 text-white opacity-0 shadow-2xl transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
-                {item.children.map((child) => (
-                  <div key={child.id} className="group/child relative">
-                    <Link
-                      href={child.href}
-                      className="flex items-center justify-between rounded-lg px-4 py-3 text-sm font-bold transition hover:bg-brand-gold hover:text-black"
-                    >
-                      <span>{child.title}</span>
-                      {child.children.length ? <span>‹</span> : null}
-                    </Link>
-
-                    {child.children.length ? (
-                      <div className="invisible absolute right-full top-0 min-w-60 translate-x-2 rounded-xl bg-zinc-900 p-2 opacity-0 shadow-xl transition group-hover/child:visible group-hover/child:translate-x-0 group-hover/child:opacity-100">
-                        {child.children.map((grandChild) => (
-                          <Link
-                            key={grandChild.id}
-                            href={grandChild.href}
-                            className="block rounded-lg px-4 py-3 text-sm transition hover:bg-brand-gold hover:text-black"
-                          >
-                            {grandChild.title}
-                          </Link>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
+              <div className="invisible absolute right-0 top-full z-50 translate-y-2 rounded-b-2xl border border-black/10 bg-white text-black opacity-0 shadow-2xl transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100">
+                <DesktopSubCategories items={item.children} />
               </div>
             ) : null}
           </div>
@@ -58,16 +137,20 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
 function MobileMenu({ menu, settings }: { menu: MenuNode[]; settings: ThemeSettings }) {
   const [openId, setOpenId] = useState<number | null>(null);
 
+  if (!menu.length) {
+    return null;
+  }
+
   return (
-    <div className="border-t border-black/5 px-4 py-3 lg:hidden">
-      <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto text-sm font-bold text-zinc-700">
+    <div className="border-t border-black/5 bg-brand-gold px-4 py-3 lg:hidden">
+      <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto text-sm font-bold text-black">
         {settings.header.mobileShowSearch ? (
-          <Link href="/shop" className="rounded-full bg-brand-cream px-4 py-2 text-zinc-950">
+          <Link href="/shop" className="whitespace-nowrap rounded-full bg-black px-4 py-2 text-white">
             بحث
           </Link>
         ) : null}
         {settings.header.mobileShowCart ? (
-          <Link href="/cart" className="rounded-full bg-white px-4 py-2 text-zinc-950">
+          <Link href="/cart" className="whitespace-nowrap rounded-full bg-white px-4 py-2 text-zinc-950">
             السلة
           </Link>
         ) : null}
@@ -76,7 +159,7 @@ function MobileMenu({ menu, settings }: { menu: MenuNode[]; settings: ThemeSetti
             key={item.id}
             type="button"
             onClick={() => setOpenId(openId === item.id ? null : item.id)}
-            className="whitespace-nowrap rounded-full bg-brand-gold px-4 py-2 text-black"
+            className="flex whitespace-nowrap rounded-full bg-white/85 px-4 py-2 text-black shadow-sm"
           >
             {item.title}
           </button>
@@ -84,17 +167,31 @@ function MobileMenu({ menu, settings }: { menu: MenuNode[]; settings: ThemeSetti
       </div>
 
       {openId ? (
-        <div className="mt-3 rounded-2xl bg-zinc-950 p-3 text-white">
+        <div className="mt-3 rounded-2xl bg-white p-3 text-black shadow-lg">
           {menu
             .find((item) => item.id === openId)
             ?.children.map((child) => (
-              <Link
-                key={child.id}
-                href={child.href}
-                className="block rounded-xl px-4 py-3 text-sm font-bold hover:bg-brand-gold hover:text-black"
-              >
-                {child.title}
-              </Link>
+              <div key={child.id} className="border-b border-black/5 last:border-b-0">
+                <Link
+                  href={child.href}
+                  className="block rounded-xl px-4 py-3 text-sm font-bold hover:bg-brand-gold"
+                >
+                  {child.title}
+                </Link>
+                {child.children.length ? (
+                  <div className="grid gap-1 pb-3 pr-4">
+                    {child.children.map((grandChild) => (
+                      <Link
+                        key={grandChild.id}
+                        href={grandChild.href}
+                        className="rounded-lg px-4 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-black"
+                      >
+                        {grandChild.title}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             ))}
         </div>
       ) : null}
@@ -103,18 +200,6 @@ function MobileMenu({ menu, settings }: { menu: MenuNode[]; settings: ThemeSetti
 }
 
 export function Header({ settings, menu }: { settings: ThemeSettings; menu: MenuNode[] }) {
-  const headerMenu = menu.length ? menu : settings.navigation.map((item, index) => ({
-    id: index + 1,
-    title: item.label,
-    url: item.href,
-    href: item.href,
-    type: "custom",
-    object: "custom",
-    objectId: 0,
-    slug: "",
-    children: [],
-  }));
-
   return (
     <header className="sticky top-0 z-50 border-b border-black/10 bg-white/95 backdrop-blur-xl">
       {settings.topBanner.enabled ? (
@@ -181,14 +266,6 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-7 text-sm font-bold text-zinc-700 lg:flex">
-          {settings.navigation.map((item) => (
-            <Link key={item.href} href={item.href} className="transition hover:text-brand-gold">
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
         <div className="flex items-center gap-2">
           {settings.header.showCart ? (
             <Link
@@ -207,8 +284,8 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </div>
       </div>
 
-      <DesktopMenu menu={headerMenu} />
-      <MobileMenu menu={headerMenu} settings={settings} />
+      <DesktopMenu menu={menu} />
+      <MobileMenu menu={menu} settings={settings} />
     </header>
   );
 }
