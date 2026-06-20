@@ -8,6 +8,7 @@ import type { MenuNode } from "@/lib/types";
 
 import { Footer } from "./footer";
 import { Header } from "./header";
+import { PwaInstallPrompt } from "./pwa-install-prompt";
 
 export function SiteChrome({
   children,
@@ -29,6 +30,7 @@ export function SiteChrome({
       <Header settings={settings} menu={menu} />
       <main className="flex-1">{children}</main>
       <Footer settings={settings} />
+      <PwaInstallPrompt />
     </>
   );
 }

@@ -1,0 +1,35 @@
+{
+  "name": "SOKANY Egypt",
+  "short_name": "SOKANY",
+  "description": "تسوق منتجات سوكاني الأصلية في مصر من مؤسسة المغربي الوكيل الحصري.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#050505",
+  "theme_color": "#DAFF00",
+  "orientation": "portrait-primary",
+  "dir": "rtl",
+  "lang": "ar-EG",
+  "categories": ["shopping", "lifestyle", "business"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -13,6 +13,8 @@ const almarai = Almarai({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://sokany-eg.com"),
+  manifest: "/manifest.webmanifest",
+  applicationName: "SOKANY Egypt",
   title: {
     default: "SOKANY Egypt | مؤسسة المغربي الوكيل الحصري",
     template: "%s | SOKANY Egypt",
@@ -34,6 +36,18 @@ export const metadata: Metadata = {
     siteName: "SOKANY Egypt",
     locale: "ar_EG",
     type: "website",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "SOKANY",
   },
 };
 
