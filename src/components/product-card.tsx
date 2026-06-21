@@ -11,7 +11,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const isOnSale = product.salePrice && product.regularPrice && product.salePrice !== product.regularPrice;
 
   return (
-    <article className="group overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+    <article className="group overflow-hidden border border-black/10 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
       <Link href={`/product/${product.slug}`} className="block">
         <div className="relative aspect-square overflow-hidden bg-brand-cream">
           {isOnSale ? (
@@ -56,7 +56,7 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
           <Link
             href={`/product/${product.slug}`}
-            className="rounded-full bg-black px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-gold hover:text-black"
+            className="bg-black px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-gold hover:text-black"
           >
             التفاصيل
           </Link>
