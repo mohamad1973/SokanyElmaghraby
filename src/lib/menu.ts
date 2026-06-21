@@ -65,9 +65,9 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 }
 
 export async function getHeaderMenu(): Promise<MenuNode[]> {
-  const { getVisibleFrontendCategories } = await import("./category-visibility");
+  const { getSelectedMenuCategories } = await import("./category-menu-selection");
 
-  return getVisibleFrontendCategories(await getWordPressCategoryTree());
+  return getSelectedMenuCategories(await getWordPressCategoryTree());
 }
 
 export async function getWordPressCategoryTree(): Promise<WooCategoryNode[]> {

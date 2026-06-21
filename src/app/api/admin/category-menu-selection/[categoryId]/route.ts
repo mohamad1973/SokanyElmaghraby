@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { authOptions } from "@/lib/auth";
-import { updateCategoryVisibility } from "@/lib/category-visibility";
+import { updateCategoryMenuSelection } from "@/lib/category-menu-selection";
 
 type RouteContext = {
   params: Promise<{
@@ -21,31 +21,31 @@ export async function PATCH(request: Request, context: RouteContext) {
   const numericCategoryId = Number(categoryId);
   const payload = (await request.json()) as {
     slug?: string;
-    isVisibleOnFrontend?: boolean;
+    showInMenu?: boolean;
   };
 
   if (!Number.isInteger(numericCategoryId) || !payload.slug) {
     return NextResponse.json({ message: "Invalid category payload." }, { status: 400 });
   }
 
-  if (typeof payload.isVisibleOnFrontend !== "boolean") {
-    return NextResponse.json({ message: "Visibility value is required." }, { status: 400 });
+  if (typeof payload.showInMenu !== "boolean") {
+    return NextResponse.json({ message: "Menu selection value is required." }, { status: 400 });
   }
 
   try {
     return NextResponse.json(
-      await updateCategoryVisibility(
+      await updateCategoryMenuSelection(
         {
           id: numericCategoryId,
           slug: payload.slug,
         },
-        payload.isVisibleOnFrontend,
+        payload.showInMenu,
       ),
     );
   } catch (error) {
     return NextResponse.json(
       {
-        message: error instanceof Error ? error.message : "Failed to update category visibility.",
+        message: error instanceof Error ? error.message : "Failed to update menu selection.",
       },
       { status: 500 },
     );

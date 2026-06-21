@@ -1,20 +1,19 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { getCategoriesWithVisibility } from "@/lib/category-visibility";
+import { getCategoriesWithMenuSelection } from "@/lib/category-menu-selection";
 import { getWordPressCategoryTree } from "@/lib/menu";
-import type { CategoryVisibilityNode } from "@/lib/types";
+import type { CategoryMenuSelectionNode } from "@/lib/types";
 
-import { CategoryVisibilityToggle } from "./category-visibility-toggle";
+import { CategoryMenuToggle } from "./category-menu-toggle";
 
-function countCategories(categories: CategoryVisibilityNode[]): number {
+function countCategories(categories: CategoryMenuSelectionNode[]): number {
   return categories.reduce((total, category) => total + 1 + countCategories(category.children), 0);
 }
 
-function countHiddenCategories(categories: CategoryVisibilityNode[]): number {
+function countSelectedCategories(categories: CategoryMenuSelectionNode[]): number {
   return categories.reduce(
-    (total, category) =>
-      total + (category.isVisibleOnFrontend ? 0 : 1) + countHiddenCategories(category.children),
+    (total, category) => total + (category.showInMenu ? 1 : 0) + countSelectedCategories(category.children),
     0,
   );
 }
@@ -24,7 +23,7 @@ function CategoryChildren({
   actionsDisabled,
   level = 1,
 }: {
-  categories: CategoryVisibilityNode[];
+  categories: CategoryMenuSelectionNode[];
   actionsDisabled: boolean;
   level?: number;
 }) {
@@ -56,10 +55,10 @@ function CategoryChildren({
               >
                 عرض في المتجر
               </Link>
-              <CategoryVisibilityToggle
+              <CategoryMenuToggle
                 categoryId={category.id}
                 slug={category.slug}
-                isVisibleOnFrontend={category.isVisibleOnFrontend}
+                showInMenu={category.showInMenu}
                 disabled={actionsDisabled}
               />
             </div>
@@ -76,9 +75,9 @@ function CategoryChildren({
 }
 
 export default async function AdminNavigationPage() {
-  const { categories, status } = await getCategoriesWithVisibility(await getWordPressCategoryTree());
+  const { categories, status } = await getCategoriesWithMenuSelection(await getWordPressCategoryTree());
   const totalCategories = countCategories(categories);
-  const hiddenCategoriesCount = countHiddenCategories(categories);
+  const selectedCategoriesCount = countSelectedCategories(categories);
   const actionsDisabled = !status.settingsAvailable;
 
   return (
@@ -93,7 +92,7 @@ export default async function AdminNavigationPage() {
 
       {!status.settingsAvailable ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">
-          الداشبورد يعرض كل كاتيجوري WordPress حالياً، لكن أزرار الإظهار والإخفاء تحتاج تفعيل
+          الداشبورد يعرض كل كاتيجوري WordPress حالياً، لكن أزرار الإضافة والإزالة من المنيو تحتاج تفعيل
           قاعدة البيانات عبر `DATABASE_URL`.
           {status.error ? <span className="mt-1 block font-mono text-xs">{status.error}</span> : null}
         </div>
@@ -109,8 +108,8 @@ export default async function AdminNavigationPage() {
           <p className="mt-2 text-3xl font-bold text-zinc-950">{totalCategories}</p>
         </div>
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Hidden</p>
-          <p className="mt-2 text-3xl font-bold text-zinc-950">{hiddenCategoriesCount}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">In Menu</p>
+          <p className="mt-2 text-3xl font-bold text-zinc-950">{selectedCategoriesCount}</p>
         </div>
       </div>
 
@@ -163,10 +162,10 @@ export default async function AdminNavigationPage() {
                   >
                     عرض في المتجر
                   </Link>
-                  <CategoryVisibilityToggle
+                  <CategoryMenuToggle
                     categoryId={category.id}
                     slug={category.slug}
-                    isVisibleOnFrontend={category.isVisibleOnFrontend}
+                    showInMenu={category.showInMenu}
                     disabled={actionsDisabled}
                   />
                 </div>

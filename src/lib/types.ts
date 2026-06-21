@@ -41,7 +41,7 @@ export type MenuNode = {
   children: MenuNode[];
 };
 
-export type WooCategoryNode = MenuNode & {
+export type WooCategoryNode = Omit<MenuNode, "children" | "parent" | "count" | "image" | "permalink"> & {
   parent: number;
   count: number;
   image?: string;
@@ -49,8 +49,8 @@ export type WooCategoryNode = MenuNode & {
   children: WooCategoryNode[];
 };
 
-export type CategoryVisibilityNode = WooCategoryNode & {
-  isVisibleOnFrontend: boolean;
-  children: CategoryVisibilityNode[];
+export type CategoryMenuSelectionNode = Omit<WooCategoryNode, "children"> & {
+  showInMenu: boolean;
+  children: CategoryMenuSelectionNode[];
 };
 

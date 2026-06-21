@@ -7,14 +7,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model CategoryVisibilitySetting {
-  id                    Int      @id @default(autoincrement())
-  categoryId            Int      @unique
-  slug                  String
-  isVisibleOnFrontend   Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+model CategoryMenuSelection {
+  id         Int      @id @default(autoincrement())
+  categoryId Int      @unique
+  slug       String
+  showInMenu Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([slug])
-  @@index([isVisibleOnFrontend])
+  @@index([showInMenu])
 }

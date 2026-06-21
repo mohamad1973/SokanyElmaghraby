@@ -296,9 +296,9 @@ export async function getCategories(): Promise<Category[]> {
       parent: category.parent || 0,
     }));
 
-    const { filterVisibleCategoryList } = await import("./category-visibility");
+    const { filterSelectedCategoryList } = await import("./category-menu-selection");
 
-    return filterVisibleCategoryList(categories);
+    return filterSelectedCategoryList(categories);
   }
 
   const storeData = await storeFetch<StoreApiCategory[]>("products/categories?per_page=30");
@@ -315,9 +315,9 @@ export async function getCategories(): Promise<Category[]> {
         parent: category.parent || 0,
       }));
 
-    const { filterVisibleCategoryList } = await import("./category-visibility");
+    const { filterSelectedCategoryList } = await import("./category-menu-selection");
 
-    return filterVisibleCategoryList(categories);
+    return filterSelectedCategoryList(categories);
   }
 
   return fallbackCategories;
