@@ -58,14 +58,14 @@ export function CategoryMenuToggle({
             : "bg-brand-gold text-black hover:bg-brand-gold-dark"
         } disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400`}
       >
-        {isSaving ? "جار الحفظ..." : showInMenu ? "إزالة من المنيو" : "إضافة إلى المنيو"}
+        {isSaving ? "جار الحفظ..." : showInMenu ? "حذف من المنيو" : "إضافة إلى المنيو"}
       </button>
       <span
         className={`rounded-full px-3 py-1 text-xs font-bold ${
           showInMenu ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
         }`}
       >
-        {showInMenu ? "موجودة في المنيو" : "غير موجودة في المنيو"}
+        الحالة: {showInMenu ? "مضافة للمنيو" : "غير مضافة للمنيو"}
       </span>
       {error ? <span className="text-xs font-semibold text-red-600">{error}</span> : null}
     </div>

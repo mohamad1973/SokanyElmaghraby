@@ -12,6 +12,8 @@ const navItems = [
   { href: "/admin/footer", label: "Footer" },
   { href: "/admin/banners", label: "Banners" },
   { href: "/admin/navigation", label: "Menus" },
+  { href: "/admin/products", label: "Products" },
+  { href: "/admin/categories", label: "Categories" },
   { href: "/admin/orders", label: "Orders" },
 ];
 

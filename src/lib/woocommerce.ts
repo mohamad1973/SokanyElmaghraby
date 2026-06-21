@@ -229,21 +229,75 @@ async function getCategoryIdBySlug(slug?: string) {
   return wooData?.[0]?.id || null;
 }
 
-export async function getProducts(limit = 12, categorySlug?: string): Promise<Product[]> {
-  const categoryId = await getCategoryIdBySlug(categorySlug);
-  const categoryQuery = categoryId ? `&category=${categoryId}` : "";
-  const data = await wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish${categoryQuery}`);
-
-  if (data?.length) {
-    return data.map(mapProduct);
+async function getCategoryIdsBySlug(slug?: string) {
+  if (!slug) {
+    return [];
   }
 
-  const storeData = await storeFetch<StoreApiProduct[]>(
-    `products?per_page=${limit}${categoryId ? `&category=${categoryId}` : ""}`,
-  );
+  const categories = await storeFetch<StoreApiCategory[]>("products/categories?per_page=100");
+  const selectedCategory = categories?.find((category) => category.slug === slug);
+
+  if (!categories?.length || !selectedCategory) {
+    const categoryId = await getCategoryIdBySlug(slug);
+
+    return categoryId ? [categoryId] : [];
+  }
+
+  const descendantIds = new Set<number>([selectedCategory.id]);
+  let foundChild = true;
+
+  while (foundChild) {
+    foundChild = false;
+
+    categories.forEach((category) => {
+      if (category.parent && descendantIds.has(category.parent) && !descendantIds.has(category.id)) {
+        descendantIds.add(category.id);
+        foundChild = true;
+      }
+    });
+  }
+
+  return Array.from(descendantIds);
+}
+
+function uniqueProducts(products: Product[], limit: number) {
+  const productsById = new Map<number, Product>();
+
+  products.forEach((product) => {
+    productsById.set(product.id, product);
+  });
+
+  return Array.from(productsById.values()).slice(0, limit);
+}
+
+export async function getProducts(limit = 12, categorySlug?: string): Promise<Product[]> {
+  const categoryIds = await getCategoryIdsBySlug(categorySlug);
+  const categoryId = categoryIds[0];
+  const categoryQuery = categoryId ? `&category=${categoryId}` : "";
+  const data = categoryIds.length > 1
+    ? (
+        await Promise.all(
+          categoryIds.map((id) => wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish&category=${id}`)),
+        )
+      ).flatMap((categoryProducts) => categoryProducts || [])
+    : await wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish${categoryQuery}`);
+
+  if (data?.length) {
+    return uniqueProducts(data.map(mapProduct), limit);
+  }
+
+  const storeData = categoryIds.length > 1
+    ? (
+        await Promise.all(
+          categoryIds.map((id) => storeFetch<StoreApiProduct[]>(`products?per_page=${limit}&category=${id}`)),
+        )
+      ).flatMap((categoryProducts) => categoryProducts || [])
+    : await storeFetch<StoreApiProduct[]>(
+        `products?per_page=${limit}${categoryId ? `&category=${categoryId}` : ""}`,
+      );
 
   if (storeData?.length) {
-    return storeData.map(mapStoreProduct);
+    return uniqueProducts(storeData.map(mapStoreProduct), limit);
   }
 
   return fallbackProducts.slice(0, limit);

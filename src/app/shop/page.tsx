@@ -32,15 +32,20 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
           title={selectedCategory ? selectedCategory.name : "متجر سوكاني مصر"}
           description={
             selectedCategory
-              ? selectedCategory.description
+              ? `${selectedCategory.description} - ${products.length} منتج داخل هذه المجموعة.`
               : "واجهة سريعة للمنتجات الحالية، جاهزة للربط المباشر مع WooCommerce والفلاتر المتقدمة."
           }
         />
 
         <div className="mb-8 flex gap-3 overflow-x-auto pb-2">
-          <span className="whitespace-nowrap rounded-full bg-black px-5 py-3 text-sm font-bold text-white">
+          <a
+            href="/shop"
+            className={`whitespace-nowrap rounded-full px-5 py-3 text-sm font-bold ${
+              selectedCategorySlug ? "bg-white text-zinc-700" : "bg-black text-white"
+            }`}
+          >
             كل المنتجات
-          </span>
+          </a>
           {categories.map((category) => (
             <a
               key={category.id}
@@ -56,11 +61,28 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
           ))}
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {selectedCategorySlug ? (
+          <div className="mb-6 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
+            <p className="text-sm font-bold text-zinc-950">
+              المنتجات المعروضة حالياً تخص مجموعة: {selectedCategory?.name || selectedCategorySlug}
+            </p>
+            <p className="mt-1 text-sm text-zinc-500">
+              يتم جلب المنتجات مباشرة من WooCommerce، ولو المجموعة تحتوي sub categories يتم تضمين منتجاتها أيضاً.
+            </p>
+          </div>
+        ) : null}
+
+        {products.length ? (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-black/10 bg-white p-10 text-center text-sm font-semibold text-zinc-600">
+            لا توجد منتجات داخل هذه المجموعة حالياً.
+          </div>
+        )}
       </div>
     </div>
   );
