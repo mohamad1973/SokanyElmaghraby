@@ -16,6 +16,7 @@ type WooCategory = {
   name: string;
   slug: string;
   parent?: number;
+  image?: WooImage | null;
 };
 
 type WooAttribute = {
@@ -78,6 +79,7 @@ type StoreApiCategory = {
   description?: string;
   count?: number;
   parent?: number;
+  image?: StoreApiImage | null;
 };
 
 function stripHtml(value = "") {
@@ -348,6 +350,7 @@ export async function getCategories(): Promise<Category[]> {
       description: stripHtml(category.description) || "مجموعة مختارة من منتجات سوكاني الأصلية.",
       productCount: category.count || 0,
       parent: category.parent || 0,
+      image: category.image?.src,
     }));
 
     const { filterSelectedCategoryList } = await import("./category-menu-selection");
@@ -367,6 +370,7 @@ export async function getCategories(): Promise<Category[]> {
         description: stripHtml(category.description) || "مجموعة مختارة من منتجات سوكاني الأصلية.",
         productCount: category.count || 0,
         parent: category.parent || 0,
+        image: category.image?.thumbnail || category.image?.src,
       }));
 
     const { filterSelectedCategoryList } = await import("./category-menu-selection");

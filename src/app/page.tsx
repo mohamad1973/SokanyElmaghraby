@@ -132,7 +132,20 @@ export default async function Home() {
                 href={`/shop?category=${category.slug}`}
                 className="group rounded-[2rem] border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
               >
-                <div className="mb-8 h-28 rounded-[1.5rem] bg-gradient-to-br from-brand-gold to-zinc-950 transition group-hover:from-brand-gold-dark group-hover:to-zinc-900" />
+                <div className="relative mb-8 h-40 overflow-hidden rounded-[1.5rem] bg-brand-cream">
+                  {category.image ? (
+                    <Image
+                      src={category.image}
+                      alt={category.name}
+                      fill
+                      sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                      className="object-cover transition duration-500 group-hover:scale-105"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="h-full bg-gradient-to-br from-brand-gold to-zinc-950 transition group-hover:from-brand-gold-dark group-hover:to-zinc-900" />
+                  )}
+                </div>
                 <h3 className="text-xl font-bold text-zinc-950">{category.name}</h3>
                 <p className="mt-3 min-h-16 text-sm leading-7 text-zinc-600">{category.description}</p>
                 <p className="mt-5 text-sm font-bold text-brand-gold">

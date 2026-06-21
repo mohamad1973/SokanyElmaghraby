@@ -23,6 +23,7 @@ export type Category = {
   description: string;
   productCount: number;
   parent?: number;
+  image?: string;
 };
 
 export type MenuNode = {
