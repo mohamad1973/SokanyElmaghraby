@@ -7,13 +7,51 @@ import { getThemeSettings } from "@/lib/theme-settings";
 import { getCategories, getFeaturedProducts } from "@/lib/woocommerce";
 
 const trustItems = [
-  { title: "الوكيل الحصري", text: "منتجات أصلية من مؤسسة المغربي في مصر" },
-  { title: "ضمان عام كامل", text: "ضد عيوب الصناعة مع دعم ما بعد البيع" },
-  { title: "دفع مرن", text: "فوري للدفع الإلكتروني أو كاش عند الاستلام" },
-  { title: "شحن داخل مصر", text: "تأكيد الطلب قبل الشحن ومتابعة العميل" },
+  { title: "الوكيل الحصري", text: "منتجات أصلية من مؤسسة المغربي في مصر", icon: "shield" },
+  { title: "ضمان عام كامل", text: "ضد عيوب الصناعة مع دعم ما بعد البيع", icon: "check" },
+  { title: "دفع مرن", text: "فوري للدفع الإلكتروني أو كاش عند الاستلام", icon: "card" },
+  { title: "شحن داخل مصر", text: "تأكيد الطلب قبل الشحن ومتابعة العميل", icon: "truck" },
 ];
 
 export const dynamic = "force-dynamic";
+
+function TrustIcon({ icon }: { icon: string }) {
+  const className = "h-7 w-7";
+
+  if (icon === "check") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M20 7 10 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 3.5 19.5 7v5.5c0 4.2-2.8 6.9-7.5 8-4.7-1.1-7.5-3.8-7.5-8V7L12 3.5Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "card") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M4 7.5h16A1.5 1.5 0 0 1 21.5 9v9A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18V9A1.5 1.5 0 0 1 4 7.5Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M2.5 11h19M6 16h4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "truck") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M3 6.5h11v9H3v-9ZM14 10h3.5l3.5 3.5v2H14V10Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M6.5 18.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM17.5 18.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <path d="M12 3.5 19.5 7v5.5c0 4.2-2.8 6.9-7.5 8-4.7-1.1-7.5-3.8-7.5-8V7L12 3.5Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 12.5 11 14.5 15.5 10" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default async function Home() {
   const [featuredProducts, categories, settings] = await Promise.all([
@@ -110,9 +148,12 @@ export default async function Home() {
       {settings.sections.trustBadges ? <section className="bg-white py-8">
         <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
           {trustItems.map((item) => (
-            <div key={item.title} className="rounded-3xl border border-black/10 bg-brand-cream p-5">
-              <h3 className="font-bold text-zinc-950">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{item.text}</p>
+            <div key={item.title} className="rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-sm">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-gold/10 text-brand-gold">
+                <TrustIcon icon={item.icon} />
+              </div>
+              <h3 className="font-bold text-white">{item.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-300">{item.text}</p>
             </div>
           ))}
         </div>
