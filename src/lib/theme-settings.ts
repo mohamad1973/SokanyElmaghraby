@@ -2,6 +2,8 @@ import "server-only";
 
 import type { CSSProperties } from "react";
 
+import { getPrismaClient } from "./db";
+
 export type MenuItem = {
   label: string;
   href: string;
@@ -168,12 +170,59 @@ function mergeSettings(settings: unknown): ThemeSettings {
   };
 }
 
+async function ensureThemeSettingsTable(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`ThemeSettings\` (
+      \`id\` VARCHAR(64) NOT NULL,
+      \`settings\` JSON NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+}
+
 export async function getThemeSettings(): Promise<ThemeSettings> {
-  return defaultThemeSettings;
+  const prisma = getPrismaClient();
+
+  if (!prisma) {
+    return defaultThemeSettings;
+  }
+
+  try {
+    await ensureThemeSettingsTable(prisma);
+
+    const rows = await prisma.$queryRaw<Array<{ settings: unknown }>>`
+      SELECT settings
+      FROM ThemeSettings
+      WHERE id = 'site'
+      LIMIT 1
+    `;
+
+    return mergeSettings(rows[0]?.settings);
+  } catch {
+    return defaultThemeSettings;
+  }
 }
 
 export async function updateThemeSettings(settings: ThemeSettings): Promise<ThemeSettings> {
-  return mergeSettings(settings);
+  const mergedSettings = mergeSettings(settings);
+  const prisma = getPrismaClient();
+
+  if (!prisma) {
+    return mergedSettings;
+  }
+
+  await ensureThemeSettingsTable(prisma);
+  await prisma.$executeRaw`
+    INSERT INTO ThemeSettings (id, settings)
+    VALUES ('site', CAST(${JSON.stringify(mergedSettings)} AS JSON))
+    ON DUPLICATE KEY UPDATE
+      settings = VALUES(settings),
+      updatedAt = CURRENT_TIMESTAMP(3)
+  `;
+
+  return mergedSettings;
 }
 
 export function getThemeCssVariables(settings: ThemeSettings) {

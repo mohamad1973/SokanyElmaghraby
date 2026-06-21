@@ -1,9 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
+import { saveMediaAsset } from "@/lib/admin-media";
 import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -16,6 +14,7 @@ const allowedMimeTypes = new Map([
   ["image/gif", "gif"],
   ["image/avif", "avif"],
 ]);
+const maxFileSize = 4 * 1024 * 1024;
 
 function slugify(value: string) {
   return value
@@ -49,20 +48,37 @@ export async function POST(request: Request) {
     );
   }
 
+  if (file.size > maxFileSize) {
+    return NextResponse.json(
+      { message: "حجم الصورة كبير جداً. الحد الأقصى الحالي 4MB." },
+      { status: 400 },
+    );
+  }
+
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  const uploadDirectory = path.join(process.cwd(), "public", "uploads", "admin");
   const filename = `${slugify(purpose)}-${Date.now()}.${extension}`;
-  const filePath = path.join(uploadDirectory, filename);
 
-  await mkdir(uploadDirectory, { recursive: true });
-  await writeFile(filePath, buffer);
-
-  return NextResponse.json({
-    url: `/uploads/admin/${filename}`,
-    filename,
-    size: file.size,
-    type: file.type,
-  });
+  try {
+    return NextResponse.json(
+      await saveMediaAsset({
+        filename,
+        mimeType: file.type,
+        size: file.size,
+        purpose,
+        data: buffer,
+      }),
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : "تعذر حفظ الصورة في قاعدة البيانات.",
+      },
+      { status: 500 },
+    );
+  }
 }
 
