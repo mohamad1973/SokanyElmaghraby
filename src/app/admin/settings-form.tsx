@@ -89,7 +89,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
     const savedSettings = (await response.json()) as ThemeSettings;
     setSettings(savedSettings);
     setNavigationText(navigationToText(savedSettings.navigation));
-    setStatus("تم حفظ الإعدادات بنجاح.");
+    setStatus("تم حفظ الإعدادات بنجاح. افتح الفرونت أو اعمل Refresh لرؤية التغييرات.");
   }
 
   return (
@@ -269,6 +269,16 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
           </Field>
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={settings.hero.enabled}
+              onChange={(event) =>
+                setSettings({ ...settings, hero: { ...settings.hero, enabled: event.target.checked } })
+              }
+            />
+            إظهار Hero Section في الصفحة الرئيسية
+          </label>
           <Field label="عنوان Hero">
             <input
               value={settings.hero.title}
@@ -333,6 +343,41 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               })
             }
           />
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={settings.sections.customBanner.enabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  sections: {
+                    ...settings.sections,
+                    customBanner: {
+                      ...settings.sections.customBanner,
+                      enabled: event.target.checked,
+                    },
+                  },
+                })
+              }
+            />
+            إظهار بنر العروض العام في الصفحة الرئيسية
+          </label>
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={settings.sections.competitiveBanner}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  sections: {
+                    ...settings.sections,
+                    competitiveBanner: event.target.checked,
+                  },
+                })
+              }
+            />
+            إظهار سكشن الميزة التنافسية
+          </label>
           <ImageUploadField
             label="بنر عروض عام - موبايل"
             value={settings.sections.customBanner.mobileImage}

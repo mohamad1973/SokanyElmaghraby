@@ -13,6 +13,8 @@ const trustItems = [
   { title: "شحن داخل مصر", text: "تأكيد الطلب قبل الشحن ومتابعة العميل" },
 ];
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const [featuredProducts, categories, settings] = await Promise.all([
     getFeaturedProducts(),

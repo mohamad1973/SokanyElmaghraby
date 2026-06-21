@@ -11,6 +11,8 @@ const almarai = Almarai({
   weight: ["300", "400", "700", "800"],
 });
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://sokany-eg.com"),
   manifest: "/manifest.webmanifest",
