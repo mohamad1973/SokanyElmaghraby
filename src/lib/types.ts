@@ -49,3 +49,8 @@ export type WooCategoryNode = MenuNode & {
   children: WooCategoryNode[];
 };
 
+export type CategoryVisibilityNode = WooCategoryNode & {
+  isVisibleOnFrontend: boolean;
+  children: CategoryVisibilityNode[];
+};
+

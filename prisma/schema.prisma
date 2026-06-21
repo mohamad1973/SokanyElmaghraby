@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model CategoryVisibilitySetting {
+  id                    Int      @id @default(autoincrement())
+  categoryId            Int      @unique
+  slug                  String
+  isVisibleOnFrontend   Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isVisibleOnFrontend])
+}

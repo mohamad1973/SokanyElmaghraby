@@ -287,20 +287,24 @@ export async function getCategories(): Promise<Category[]> {
   );
 
   if (data?.length) {
-    return data.map((category) => ({
+    const categories = data.map((category) => ({
       id: category.id,
       name: category.name,
       slug: category.slug,
       description: stripHtml(category.description) || "مجموعة مختارة من منتجات سوكاني الأصلية.",
       productCount: category.count || 0,
-            parent: category.parent || 0,
+      parent: category.parent || 0,
     }));
+
+    const { filterVisibleCategoryList } = await import("./category-visibility");
+
+    return filterVisibleCategoryList(categories);
   }
 
   const storeData = await storeFetch<StoreApiCategory[]>("products/categories?per_page=30");
 
   if (storeData?.length) {
-    return storeData
+    const categories = storeData
       .filter((category) => category.count !== 0)
       .map((category) => ({
         id: category.id,
@@ -308,7 +312,12 @@ export async function getCategories(): Promise<Category[]> {
         slug: category.slug,
         description: stripHtml(category.description) || "مجموعة مختارة من منتجات سوكاني الأصلية.",
         productCount: category.count || 0,
+        parent: category.parent || 0,
       }));
+
+    const { filterVisibleCategoryList } = await import("./category-visibility");
+
+    return filterVisibleCategoryList(categories);
   }
 
   return fallbackCategories;
