@@ -34,7 +34,10 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       {
-        message: error instanceof Error ? error.message : "Failed to update settings.",
+        message:
+          error instanceof Error
+            ? `تعذر حفظ إعدادات البنرات في قاعدة البيانات: ${error.message}`
+            : "تعذر حفظ إعدادات البنرات في قاعدة البيانات.",
       },
       { status: 500 },
     );

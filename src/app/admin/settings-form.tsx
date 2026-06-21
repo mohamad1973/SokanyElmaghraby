@@ -81,7 +81,8 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
     setIsSaving(false);
 
     if (!response.ok) {
-      setStatus("تعذر حفظ الإعدادات. حاول مرة أخرى أو راجع اتصال لوحة التحكم.");
+      const errorPayload = (await response.json().catch(() => null)) as { message?: string } | null;
+      setStatus(errorPayload?.message || "تعذر حفظ الإعدادات. حاول مرة أخرى أو راجع اتصال لوحة التحكم.");
       return;
     }
 

@@ -170,15 +170,32 @@ function mergeSettings(settings: unknown): ThemeSettings {
   };
 }
 
+function parseStoredSettings(settings: unknown) {
+  if (typeof settings !== "string") {
+    return settings;
+  }
+
+  try {
+    return JSON.parse(settings) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureThemeSettingsTable(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`ThemeSettings\` (
       \`id\` VARCHAR(64) NOT NULL,
-      \`settings\` JSON NOT NULL,
+      \`settings\` LONGTEXT NOT NULL,
       \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
       PRIMARY KEY (\`id\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE \`ThemeSettings\`
+    MODIFY \`settings\` LONGTEXT NOT NULL;
   `);
 }
 
@@ -199,7 +216,7 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       LIMIT 1
     `;
 
-    return mergeSettings(rows[0]?.settings);
+    return mergeSettings(parseStoredSettings(rows[0]?.settings));
   } catch {
     return defaultThemeSettings;
   }
@@ -216,7 +233,7 @@ export async function updateThemeSettings(settings: ThemeSettings): Promise<Them
   await ensureThemeSettingsTable(prisma);
   await prisma.$executeRaw`
     INSERT INTO ThemeSettings (id, settings)
-    VALUES ('site', CAST(${JSON.stringify(mergedSettings)} AS JSON))
+    VALUES ('site', ${JSON.stringify(mergedSettings)})
     ON DUPLICATE KEY UPDATE
       settings = VALUES(settings),
       updatedAt = CURRENT_TIMESTAMP(3)
