@@ -85,8 +85,11 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
       ) : null}
 
       {orders.length > 0 ? <div className="overflow-hidden rounded-md border border-[#c3c4c7] bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-[1400px] border-collapse text-right text-sm">
+        <div className="border-b border-[#c3c4c7] bg-[#f6f7f7] px-4 py-2 text-xs font-bold text-zinc-600">
+          اسحب يمين/شمال لرؤية كل بيانات الطلب، واسحب لأعلى/أسفل عند كثرة الطلبات.
+        </div>
+        <div className="max-h-[70vh] overflow-auto">
+          <table className="min-w-[1700px] border-collapse text-right text-sm">
             <thead className="bg-[#f6f7f7] text-[#1d2327]">
               <tr>
                 <th className="border-b border-[#c3c4c7] px-3 py-3">Order #</th>

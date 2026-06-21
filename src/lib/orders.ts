@@ -127,7 +127,8 @@ export async function getAdminOrders(query: OrdersQuery = {}): Promise<AdminOrde
   if (!hasWooCredentials()) {
     return {
       orders: [],
-      error: "مفاتيح WooCommerce REST API غير موجودة في .env.local.",
+      error:
+        "مفاتيح WooCommerce REST API غير موجودة. أضف WOOCOMMERCE_STORE_URL و WOOCOMMERCE_CONSUMER_KEY و WOOCOMMERCE_CONSUMER_SECRET في Vercel Environment Variables ثم اعمل Redeploy.",
     };
   }
 
