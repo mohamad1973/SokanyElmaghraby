@@ -19,6 +19,7 @@ export async function GET(request: Request) {
       perPage: searchParams.get("per_page") || "50",
       status: searchParams.get("status") || "all",
       search: searchParams.get("search") || "",
+      after: searchParams.get("after") || "",
     }),
   );
 }

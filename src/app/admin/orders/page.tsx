@@ -1,4 +1,5 @@
 import { getAdminOrders } from "@/lib/orders";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,12 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
           <button className="rounded-md bg-[#2271b1] px-4 py-2 text-sm font-bold text-white" type="submit">
             Filter
           </button>
+          <Link
+            href="/admin/orders"
+            className="rounded-md border border-black/10 bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
+          >
+            Clear
+          </Link>
         </form>
       </div>
 

@@ -59,6 +59,7 @@ export type OrdersQuery = {
   perPage?: string;
   status?: string;
   search?: string;
+  after?: string;
 };
 
 export type AdminOrdersResult = {
@@ -191,6 +192,10 @@ export async function getAdminOrders(query: OrdersQuery = {}): Promise<AdminOrde
 
   if (query.search) {
     params.set("search", query.search);
+  }
+
+  if (query.after) {
+    params.set("after", query.after);
   }
 
   const result = await wooOrdersFetch<WooOrder[]>(`orders?${params.toString()}`);
