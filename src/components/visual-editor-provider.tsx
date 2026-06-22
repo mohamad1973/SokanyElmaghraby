@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { ThemeSettings, VisualTextStyle } from "@/lib/theme-settings";
 
@@ -47,6 +47,8 @@ export function VisualEditorProvider({
   const [styles, setStyles] = useState(settings.visualTextStyles || {});
   const [status, setStatus] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const hasPendingChangesRef = useRef(false);
+  const visualEditorEnabled = settings.visualEditor.enabled;
 
   useEffect(() => {
     let isMounted = true;
@@ -58,9 +60,9 @@ export function VisualEditorProvider({
         if (isMounted) {
           const canEdit = response.ok;
           setIsAdmin(canEdit);
+          setEditMode(canEdit && visualEditorEnabled);
 
-          if (!canEdit) {
-            setEditMode(false);
+          if (!canEdit || !visualEditorEnabled) {
             setSelectedKey(null);
           }
         }
@@ -78,13 +80,14 @@ export function VisualEditorProvider({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [visualEditorEnabled]);
 
   const updateStyle = useCallback((key: string, style: VisualTextStyle) => {
     setStyles((currentStyles) => ({
       ...currentStyles,
       [key]: style,
     }));
+    hasPendingChangesRef.current = true;
   }, []);
 
   const selectText = useCallback((key: string) => {
@@ -138,6 +141,7 @@ export function VisualEditorProvider({
       }
 
       event.preventDefault();
+      hasPendingChangesRef.current = true;
 
       setStyles((currentStyles) => {
         const currentStyle = getVisualTextStyle(currentStyles[activeKey]);
@@ -172,6 +176,21 @@ export function VisualEditorProvider({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [editMode, selectedKey]);
+
+  useEffect(() => {
+    if (!editMode || !isAdmin || !visualEditorEnabled || !hasPendingChangesRef.current) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      hasPendingChangesRef.current = false;
+      void save();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [editMode, isAdmin, save, styles, visualEditorEnabled]);
 
   const value = useMemo<VisualEditorContextValue>(
     () => ({

@@ -76,6 +76,9 @@ export type ThemeSettings = {
     description: string;
     copyright: string;
   };
+  visualEditor: {
+    enabled: boolean;
+  };
   visualTextStyles: Record<string, VisualTextStyle>;
 };
 
@@ -147,6 +150,9 @@ export const defaultThemeSettings: ThemeSettings = {
       "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
     copyright: "SOKANY Egypt. جميع الحقوق محفوظة.",
   },
+  visualEditor: {
+    enabled: false,
+  },
   visualTextStyles: {},
 };
 
@@ -183,6 +189,10 @@ function mergeSettings(settings: unknown): ThemeSettings {
       },
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
+    visualEditor: {
+      ...defaultThemeSettings.visualEditor,
+      ...(isObject(settings.visualEditor) ? settings.visualEditor : {}),
+    },
     visualTextStyles: isObject(settings.visualTextStyles)
       ? Object.fromEntries(
           Object.entries(settings.visualTextStyles).filter(([, value]) => isObject(value)),

@@ -231,6 +231,19 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
           </Field>
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold lg:col-span-2">
+            <input
+              type="checkbox"
+              checked={settings.visualEditor.enabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  visualEditor: { ...settings.visualEditor, enabled: event.target.checked },
+                })
+              }
+            />
+            تفعيل تعديل النص في الفرونت اند للأدمن فقط
+          </label>
         </section>
       ) : null}
 
