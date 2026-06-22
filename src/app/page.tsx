@@ -61,91 +61,104 @@ export default async function Home() {
     getThemeSettings(),
   ]);
   const categoriesWithImages = categories.filter((category) => category.image);
+  const heroHasImage = Boolean(
+    settings.hero.desktopImage || settings.hero.tabletImage || settings.hero.mobileImage,
+  );
+  const heroTextClass = settings.hero.textTone === "dark" ? "text-zinc-950" : "text-white";
+  const heroSubtextClass = settings.hero.textTone === "dark" ? "text-zinc-700" : "text-white/85";
 
   return (
     <>
-      {settings.hero.enabled ? <section className="relative overflow-hidden bg-white">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
-        <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_0.85fr] lg:px-8 lg:py-28">
-          <div className="flex flex-col justify-center">
-            <p className="mb-5 inline-flex w-fit rounded-full border border-brand-gold/40 bg-brand-cream px-4 py-2 text-sm font-medium text-zinc-950">
-              {settings.hero.eyebrow}
-            </p>
-            <h1 className="max-w-4xl text-4xl font-bold leading-tight tracking-tight text-zinc-950 sm:text-6xl">
-              {settings.hero.title}
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-9 text-zinc-600">
-              {settings.hero.subtitle}
-            </p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href={settings.hero.primaryCtaUrl}
-                className="rounded-full bg-brand-gold px-8 py-4 text-center text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+      {settings.hero.enabled ? (
+        heroHasImage ? (
+          <section className="relative min-h-[640px] overflow-hidden bg-zinc-950">
+            {settings.hero.desktopImage ? (
+              <Image
+                src={settings.hero.desktopImage}
+                alt={settings.hero.title}
+                fill
+                priority
+                sizes="100vw"
+                className="hidden object-cover lg:block"
+                unoptimized
+              />
+            ) : null}
+            {settings.hero.tabletImage ? (
+              <Image
+                src={settings.hero.tabletImage}
+                alt={settings.hero.title}
+                fill
+                sizes="100vw"
+                className={`hidden object-cover sm:block ${settings.hero.desktopImage ? "lg:hidden" : ""}`}
+                unoptimized
+              />
+            ) : null}
+            {!settings.hero.tabletImage && settings.hero.desktopImage ? (
+              <Image
+                src={settings.hero.desktopImage}
+                alt={settings.hero.title}
+                fill
+                sizes="100vw"
+                className="hidden object-cover sm:block lg:hidden"
+                unoptimized
+              />
+            ) : null}
+            {settings.hero.mobileImage || settings.hero.tabletImage || settings.hero.desktopImage ? (
+              <Image
+                src={settings.hero.mobileImage || settings.hero.tabletImage || settings.hero.desktopImage}
+                alt={settings.hero.title}
+                fill
+                sizes="100vw"
+                className={settings.hero.tabletImage || settings.hero.desktopImage ? "object-cover sm:hidden" : "object-cover"}
+                unoptimized
+              />
+            ) : null}
+            {settings.hero.overlayEnabled ? <div className="absolute inset-0 bg-black/35" /> : null}
+            <div className="relative mx-auto flex min-h-[640px] max-w-7xl items-center px-4 py-24 sm:px-6 lg:px-8">
+              <div
+                className={`max-w-3xl ${settings.hero.frameEnabled ? "rounded-[2rem] border border-white/20 bg-black/25 p-8 backdrop-blur-sm" : ""}`}
               >
-                {settings.hero.primaryCtaText}
-              </Link>
-              <Link
-                href={settings.hero.secondaryCtaUrl}
-                className="rounded-full border border-black/10 bg-white px-8 py-4 text-center text-sm font-bold text-zinc-950 transition hover:border-brand-gold hover:text-brand-gold"
-              >
-                {settings.hero.secondaryCtaText}
-              </Link>
-            </div>
-          </div>
-
-          <div className="rounded-[2.5rem] border border-black/10 bg-white p-5 shadow-2xl">
-            {settings.hero.desktopImage || settings.hero.tabletImage || settings.hero.mobileImage ? (
-              <div className="relative min-h-[420px] overflow-hidden rounded-[2rem] bg-brand-cream">
-                {settings.hero.desktopImage ? (
-                  <Image
-                    src={settings.hero.desktopImage}
-                    alt={settings.hero.title}
-                    fill
-                    sizes="(min-width: 1024px) 45vw, 100vw"
-                    className="hidden object-cover lg:block"
-                    unoptimized
-                  />
-                ) : null}
-                {settings.hero.tabletImage ? (
-                  <Image
-                    src={settings.hero.tabletImage}
-                    alt={settings.hero.title}
-                    fill
-                    sizes="(min-width: 640px) 100vw, 0vw"
-                    className="hidden object-cover sm:block lg:hidden"
-                    unoptimized
-                  />
-                ) : null}
-                {settings.hero.mobileImage ? (
-                  <Image
-                    src={settings.hero.mobileImage}
-                    alt={settings.hero.title}
-                    fill
-                    sizes="100vw"
-                    className="object-cover sm:hidden"
-                    unoptimized
-                  />
-                ) : null}
-              </div>
-            ) : (
-              <div className="rounded-[2rem] bg-brand-cream p-8 text-zinc-950">
-                <p className="text-sm font-bold text-brand-gold">منتج مميز</p>
-                <h2 className="mt-3 text-3xl font-bold leading-tight">
-                  أجهزة منزلية وعناية شخصية مناسبة لكل بيت مصري
-                </h2>
-                <div className="mt-8 grid grid-cols-2 gap-4">
-                  {["أجهزة مطبخ", "عناية شخصية", "تنظيف بالبخار", "عروض"].map((item) => (
-                    <div key={item} className="rounded-3xl bg-white p-5 shadow-sm">
-                      <div className="mb-8 h-20 rounded-2xl bg-gradient-to-br from-brand-gold to-zinc-950" />
-                      <p className="font-bold">{item}</p>
-                    </div>
-                  ))}
+                <p className="mb-5 inline-flex w-fit rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-black">
+                  {settings.hero.eyebrow}
+                </p>
+                <h1 className={`text-4xl font-bold leading-tight tracking-tight sm:text-6xl ${heroTextClass}`}>
+                  {settings.hero.title}
+                </h1>
+                <p className={`mt-6 max-w-2xl text-lg leading-9 ${heroSubtextClass}`}>
+                  {settings.hero.subtitle}
+                </p>
+                <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href={settings.hero.primaryCtaUrl}
+                    className="rounded-full bg-brand-gold px-8 py-4 text-center text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+                  >
+                    {settings.hero.primaryCtaText}
+                  </Link>
+                  <Link
+                    href={settings.hero.secondaryCtaUrl}
+                    className="rounded-full border border-white/30 bg-white/10 px-8 py-4 text-center text-sm font-bold text-white transition hover:border-brand-gold hover:text-brand-gold"
+                  >
+                    {settings.hero.secondaryCtaText}
+                  </Link>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      </section> : null}
+            </div>
+          </section>
+        ) : (
+          <section className="relative overflow-hidden bg-white">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
+            <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
+              <p className="mb-5 inline-flex w-fit rounded-full border border-brand-gold/40 bg-brand-cream px-4 py-2 text-sm font-medium text-zinc-950">
+                {settings.hero.eyebrow}
+              </p>
+              <h1 className="max-w-4xl text-4xl font-bold leading-tight tracking-tight text-zinc-950 sm:text-6xl">
+                {settings.hero.title}
+              </h1>
+              <p className="mt-6 max-w-2xl text-lg leading-9 text-zinc-600">{settings.hero.subtitle}</p>
+            </div>
+          </section>
+        )
+      ) : null}
 
       {settings.sections.trustBadges ? <section className="bg-white py-8">
         <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">

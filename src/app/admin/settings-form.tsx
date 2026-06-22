@@ -60,13 +60,12 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
     return titles[focus];
   }, [focus]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveSettings(nextSettings: ThemeSettings, successMessage: string) {
     setIsSaving(true);
     setStatus("");
 
     const payload = {
-      ...settings,
+      ...nextSettings,
       navigation: textToNavigation(navigationText),
     };
 
@@ -89,7 +88,12 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
     const savedSettings = (await response.json()) as ThemeSettings;
     setSettings(savedSettings);
     setNavigationText(navigationToText(savedSettings.navigation));
-    setStatus("تم حفظ الإعدادات بنجاح. افتح الفرونت أو اعمل Refresh لرؤية التغييرات.");
+    setStatus(successMessage);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveSettings(settings, "تم حفظ الإعدادات بنجاح. افتح الفرونت أو اعمل Refresh لرؤية التغييرات.");
   }
 
   return (
@@ -229,174 +233,304 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
       ) : null}
 
       {focus === "banners" ? (
-        <section className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
-          <ImageUploadField
-            label="صورة بنر أعلى الهيدر - ديسكتوب"
-            value={settings.topBanner.desktopImage}
-            purpose="top-banner-desktop"
-            recommendation="1920x120px"
-            aspectRatio="16:1"
-            onUploaded={(url) =>
-              setSettings({ ...settings, topBanner: { ...settings.topBanner, desktopImage: url } })
-            }
-          />
-          <ImageUploadField
-            label="صورة بنر أعلى الهيدر - موبايل"
-            value={settings.topBanner.mobileImage}
-            purpose="top-banner-mobile"
-            recommendation="750x160px"
-            aspectRatio="4.7:1"
-            onUploaded={(url) =>
-              setSettings({ ...settings, topBanner: { ...settings.topBanner, mobileImage: url } })
-            }
-          />
-          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={settings.topBanner.enabled}
-              onChange={(event) =>
-                setSettings({ ...settings, topBanner: { ...settings.topBanner, enabled: event.target.checked } })
+        <section className="grid gap-6">
+          <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-zinc-950">بنر الواجهة الرئيسي</h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  يظهر كصورة كبيرة في صدر الموقع مثل واجهة sokany.com.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => {
+                    const nextSettings = { ...settings, hero: { ...settings.hero, enabled: false } };
+                    setSettings(nextSettings);
+                    void saveSettings(nextSettings, "تمت إزالة بنر الواجهة الرئيسي من الفرونت اند.");
+                  }}
+                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                >
+                  إزالة من الفرونت اند
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => saveSettings(settings, "تم حفظ بنر الواجهة الرئيسي.")}
+                  className="rounded-xl bg-brand-gold px-4 py-2 text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+                >
+                  حفظ هذا البنر
+                </button>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+              <input
+                type="checkbox"
+                checked={settings.hero.enabled}
+                onChange={(event) =>
+                  setSettings({ ...settings, hero: { ...settings.hero, enabled: event.target.checked } })
+                }
+              />
+              إظهار بنر الواجهة الرئيسي
+            </label>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Field label="عنوان البنر">
+                <input
+                  value={settings.hero.title}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, title: event.target.value } })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+              <Field label="النص الصغير فوق العنوان">
+                <input
+                  value={settings.hero.eyebrow}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, eyebrow: event.target.value } })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+            </div>
+            <Field label="وصف البنر">
+              <textarea
+                value={settings.hero.subtitle}
+                onChange={(event) =>
+                  setSettings({ ...settings, hero: { ...settings.hero, subtitle: event.target.value } })
+                }
+                className="min-h-28 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+            <div className="grid gap-5 lg:grid-cols-3">
+              <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+                <input
+                  type="checkbox"
+                  checked={settings.hero.overlayEnabled}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, overlayEnabled: event.target.checked } })
+                  }
+                />
+                تفعيل طبقة غامقة فوق الصورة
+              </label>
+              <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+                <input
+                  type="checkbox"
+                  checked={settings.hero.frameEnabled}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, frameEnabled: event.target.checked } })
+                  }
+                />
+                إظهار إطار حول نص البنر
+              </label>
+              <Field label="لون النص فوق الصورة">
+                <select
+                  value={settings.hero.textTone}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      hero: { ...settings.hero, textTone: event.target.value as "light" | "dark" },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                >
+                  <option value="light">فاتح للصورة الغامقة</option>
+                  <option value="dark">غامق للصورة الفاتحة</option>
+                </select>
+              </Field>
+            </div>
+            <ImageUploadField
+              label="صورة Hero - ديسكتوب"
+              value={settings.hero.desktopImage}
+              purpose="hero-desktop"
+              recommendation="1920x720px"
+              aspectRatio="8:3"
+              onUploaded={(url) =>
+                setSettings({ ...settings, hero: { ...settings.hero, desktopImage: url, enabled: true } })
               }
             />
-            إظهار بنر أعلى الهيدر
-          </label>
-          <Field label="نص بنر أعلى الهيدر">
-            <input
-              value={settings.topBanner.text}
-              onChange={(event) =>
-                setSettings({ ...settings, topBanner: { ...settings.topBanner, text: event.target.value } })
-              }
-              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-            />
-          </Field>
-          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={settings.hero.enabled}
-              onChange={(event) =>
-                setSettings({ ...settings, hero: { ...settings.hero, enabled: event.target.checked } })
+            <ImageUploadField
+              label="صورة Hero - تابلت"
+              value={settings.hero.tabletImage}
+              purpose="hero-tablet"
+              recommendation="1200x600px"
+              aspectRatio="2:1"
+              onUploaded={(url) =>
+                setSettings({ ...settings, hero: { ...settings.hero, tabletImage: url, enabled: true } })
               }
             />
-            إظهار Hero Section في الصفحة الرئيسية
-          </label>
-          <Field label="عنوان Hero">
-            <input
-              value={settings.hero.title}
-              onChange={(event) =>
-                setSettings({ ...settings, hero: { ...settings.hero, title: event.target.value } })
+            <ImageUploadField
+              label="صورة Hero - موبايل"
+              value={settings.hero.mobileImage}
+              purpose="hero-mobile"
+              recommendation="750x900px"
+              aspectRatio="5:6"
+              onUploaded={(url) =>
+                setSettings({ ...settings, hero: { ...settings.hero, mobileImage: url, enabled: true } })
               }
-              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
-          </Field>
-          <Field label="وصف Hero">
-            <textarea
-              value={settings.hero.subtitle}
-              onChange={(event) =>
-                setSettings({ ...settings, hero: { ...settings.hero, subtitle: event.target.value } })
+          </article>
+
+          <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-zinc-950">بنر أعلى الهيدر</h2>
+                <p className="mt-1 text-sm text-zinc-500">بنر رفيع أعلى الموقع.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => {
+                    const nextSettings = { ...settings, topBanner: { ...settings.topBanner, enabled: false } };
+                    setSettings(nextSettings);
+                    void saveSettings(nextSettings, "تمت إزالة بنر أعلى الهيدر من الفرونت اند.");
+                  }}
+                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                >
+                  إزالة من الفرونت اند
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => saveSettings(settings, "تم حفظ بنر أعلى الهيدر.")}
+                  className="rounded-xl bg-brand-gold px-4 py-2 text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+                >
+                  حفظ هذا البنر
+                </button>
+              </div>
+            </div>
+            <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+              <input
+                type="checkbox"
+                checked={settings.topBanner.enabled}
+                onChange={(event) =>
+                  setSettings({ ...settings, topBanner: { ...settings.topBanner, enabled: event.target.checked } })
+                }
+              />
+              إظهار بنر أعلى الهيدر
+            </label>
+            <Field label="نص بنر أعلى الهيدر">
+              <input
+                value={settings.topBanner.text}
+                onChange={(event) =>
+                  setSettings({ ...settings, topBanner: { ...settings.topBanner, text: event.target.value } })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+            <ImageUploadField
+              label="صورة بنر أعلى الهيدر - ديسكتوب"
+              value={settings.topBanner.desktopImage}
+              purpose="top-banner-desktop"
+              recommendation="1920x120px"
+              aspectRatio="16:1"
+              onUploaded={(url) =>
+                setSettings({ ...settings, topBanner: { ...settings.topBanner, desktopImage: url, enabled: true } })
               }
-              className="min-h-28 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
-          </Field>
-          <ImageUploadField
-            label="صورة Hero - ديسكتوب"
-            value={settings.hero.desktopImage}
-            purpose="hero-desktop"
-            recommendation="1920x720px"
-            aspectRatio="8:3"
-            onUploaded={(url) =>
-              setSettings({ ...settings, hero: { ...settings.hero, desktopImage: url } })
-            }
-          />
-          <ImageUploadField
-            label="صورة Hero - تابلت"
-            value={settings.hero.tabletImage}
-            purpose="hero-tablet"
-            recommendation="1200x600px"
-            aspectRatio="2:1"
-            onUploaded={(url) =>
-              setSettings({ ...settings, hero: { ...settings.hero, tabletImage: url } })
-            }
-          />
-          <ImageUploadField
-            label="صورة Hero - موبايل"
-            value={settings.hero.mobileImage}
-            purpose="hero-mobile"
-            recommendation="750x900px"
-            aspectRatio="5:6"
-            onUploaded={(url) =>
-              setSettings({ ...settings, hero: { ...settings.hero, mobileImage: url } })
-            }
-          />
-          <ImageUploadField
-            label="بنر عروض عام - ديسكتوب"
-            value={settings.sections.customBanner.desktopImage}
-            purpose="custom-banner-desktop"
-            recommendation="1600x500px"
-            aspectRatio="16:5"
-            onUploaded={(url) =>
-              setSettings({
-                ...settings,
-                sections: {
-                  ...settings.sections,
-                  customBanner: { ...settings.sections.customBanner, desktopImage: url },
-                },
-              })
-            }
-          />
-          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={settings.sections.customBanner.enabled}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  sections: {
-                    ...settings.sections,
-                    customBanner: {
-                      ...settings.sections.customBanner,
-                      enabled: event.target.checked,
+            <ImageUploadField
+              label="صورة بنر أعلى الهيدر - موبايل"
+              value={settings.topBanner.mobileImage}
+              purpose="top-banner-mobile"
+              recommendation="750x160px"
+              aspectRatio="4.7:1"
+              onUploaded={(url) =>
+                setSettings({ ...settings, topBanner: { ...settings.topBanner, mobileImage: url, enabled: true } })
+              }
+            />
+          </article>
+
+          <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-zinc-950">بنر العروض العام</h2>
+                <p className="mt-1 text-sm text-zinc-500">بنر عريض داخل الصفحة الرئيسية.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => {
+                    const nextSettings = {
+                      ...settings,
+                      sections: {
+                        ...settings.sections,
+                        customBanner: { ...settings.sections.customBanner, enabled: false },
+                      },
+                    };
+                    setSettings(nextSettings);
+                    void saveSettings(nextSettings, "تمت إزالة بنر العروض العام من الفرونت اند.");
+                  }}
+                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                >
+                  إزالة من الفرونت اند
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => saveSettings(settings, "تم حفظ بنر العروض العام.")}
+                  className="rounded-xl bg-brand-gold px-4 py-2 text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+                >
+                  حفظ هذا البنر
+                </button>
+              </div>
+            </div>
+            <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+              <input
+                type="checkbox"
+                checked={settings.sections.customBanner.enabled}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    sections: {
+                      ...settings.sections,
+                      customBanner: {
+                        ...settings.sections.customBanner,
+                        enabled: event.target.checked,
+                      },
                     },
-                  },
-                })
-              }
-            />
-            إظهار بنر العروض العام في الصفحة الرئيسية
-          </label>
-          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={settings.sections.competitiveBanner}
-              onChange={(event) =>
+                  })
+                }
+              />
+              إظهار بنر العروض العام
+            </label>
+            <ImageUploadField
+              label="بنر عروض عام - ديسكتوب"
+              value={settings.sections.customBanner.desktopImage}
+              purpose="custom-banner-desktop"
+              recommendation="1600x500px"
+              aspectRatio="16:5"
+              onUploaded={(url) =>
                 setSettings({
                   ...settings,
                   sections: {
                     ...settings.sections,
-                    competitiveBanner: event.target.checked,
+                    customBanner: { ...settings.sections.customBanner, desktopImage: url, enabled: true },
                   },
                 })
               }
             />
-            إظهار سكشن الميزة التنافسية
-          </label>
-          <ImageUploadField
-            label="بنر عروض عام - موبايل"
-            value={settings.sections.customBanner.mobileImage}
-            purpose="custom-banner-mobile"
-            recommendation="750x750px"
-            aspectRatio="1:1"
-            onUploaded={(url) =>
-              setSettings({
-                ...settings,
-                sections: {
-                  ...settings.sections,
-                  customBanner: { ...settings.sections.customBanner, mobileImage: url },
-                },
-              })
-            }
-          />
-          <div className="rounded-xl bg-zinc-50 p-4 text-sm leading-7 text-zinc-600">
-            مقاس صور المنتجات المقترح عند رفعها من WooCommerce: 1000x1000px بنسبة 1:1.
-          </div>
+            <ImageUploadField
+              label="بنر عروض عام - موبايل"
+              value={settings.sections.customBanner.mobileImage}
+              purpose="custom-banner-mobile"
+              recommendation="750x750px"
+              aspectRatio="1:1"
+              onUploaded={(url) =>
+                setSettings({
+                  ...settings,
+                  sections: {
+                    ...settings.sections,
+                    customBanner: { ...settings.sections.customBanner, mobileImage: url, enabled: true },
+                  },
+                })
+              }
+            />
+          </article>
         </section>
       ) : null}
 
@@ -437,13 +571,15 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
 
       {status ? <p className="rounded-xl bg-zinc-950 px-4 py-3 text-sm text-white">{status}</p> : null}
 
-      <button
-        type="submit"
-        disabled={isSaving}
-        className="rounded-xl bg-brand-gold px-6 py-3 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:opacity-60"
-      >
-        {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
-      </button>
+      {focus !== "banners" ? (
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="rounded-xl bg-brand-gold px-6 py-3 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:opacity-60"
+        >
+          {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
+        </button>
+      ) : null}
     </form>
   );
 }

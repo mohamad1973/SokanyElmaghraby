@@ -46,6 +46,9 @@ export type ThemeSettings = {
     desktopImage: string;
     tabletImage: string;
     mobileImage: string;
+    textTone: "light" | "dark";
+    overlayEnabled: boolean;
+    frameEnabled: boolean;
   };
   sections: {
     trustBadges: boolean;
@@ -111,6 +114,9 @@ export const defaultThemeSettings: ThemeSettings = {
     desktopImage: "",
     tabletImage: "",
     mobileImage: "",
+    textTone: "light",
+    overlayEnabled: true,
+    frameEnabled: false,
   },
   sections: {
     trustBadges: true,
