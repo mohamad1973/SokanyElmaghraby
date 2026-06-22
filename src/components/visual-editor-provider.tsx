@@ -52,10 +52,24 @@ export function VisualEditorProvider({
     let isMounted = true;
 
     async function checkAdminSession() {
-      const response = await fetch("/api/admin/theme-settings", { cache: "no-store" });
+      try {
+        const response = await fetch("/api/admin/theme-settings", { cache: "no-store", credentials: "same-origin" });
 
-      if (isMounted) {
-        setIsAdmin(response.ok);
+        if (isMounted) {
+          const canEdit = response.ok;
+          setIsAdmin(canEdit);
+
+          if (!canEdit) {
+            setEditMode(false);
+            setSelectedKey(null);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setIsAdmin(false);
+          setEditMode(false);
+          setSelectedKey(null);
+        }
       }
     }
 

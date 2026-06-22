@@ -6,8 +6,9 @@ import { getThemeSettings, updateThemeSettings, type ThemeSettings } from "@/lib
 
 async function requireSession() {
   const session = await getServerSession(authOptions);
+  const adminEmail = process.env.ADMIN_EMAIL || "admin@sokany-eg.com";
 
-  if (!session) {
+  if (!session?.user?.email || session.user.email !== adminEmail) {
     return false;
   }
 

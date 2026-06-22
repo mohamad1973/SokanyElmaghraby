@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useId, useMemo, useRef, useState } from "react";
 
 import type { MenuItem, ThemeSettings } from "@/lib/theme-settings";
 
@@ -23,6 +23,61 @@ function Field({
       {label}
       {children}
     </label>
+  );
+}
+
+function MultilineTextField({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const id = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function addNewLine() {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      onChange(`${value}\n`);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? value.length;
+    const nextValue = `${value.slice(0, start)}\n${value.slice(end)}`;
+
+    onChange(nextValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + 1, start + 1);
+    });
+  }
+
+  return (
+    <div className="grid gap-2 text-sm font-bold text-zinc-700">
+      <label htmlFor={id}>{label}</label>
+      <textarea
+        id={id}
+        ref={textareaRef}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={className || "min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"}
+      />
+      <button
+        type="button"
+        onClick={addNewLine}
+        className="w-fit rounded-full border border-black/10 bg-zinc-50 px-4 py-2 text-xs font-bold text-zinc-700 transition hover:bg-brand-gold hover:text-black"
+      >
+        + إضافة سطر جديد
+      </button>
+    </div>
   );
 }
 
@@ -277,49 +332,31 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               إظهار بنر الواجهة الرئيسي
             </label>
             <div className="grid gap-5 lg:grid-cols-2">
-              <Field label="عنوان البنر">
-                <textarea
-                  value={settings.hero.title}
-                  onChange={(event) =>
-                    setSettings({ ...settings, hero: { ...settings.hero, title: event.target.value } })
-                  }
-                  className="min-h-24 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                />
-                <p className="text-xs leading-6 text-zinc-500">اضغط Enter لبدء سطر جديد داخل العنوان.</p>
-              </Field>
-              <Field label="النص الصغير فوق العنوان">
-                <textarea
-                  value={settings.hero.eyebrow}
-                  onChange={(event) =>
-                    setSettings({ ...settings, hero: { ...settings.hero, eyebrow: event.target.value } })
-                  }
-                  className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                />
-                <p className="text-xs leading-6 text-zinc-500">
-                  هذا هو نص مؤسسة المغربي أعلى البنر. اضغط Enter لو تريد تقسيمه على أكثر من سطر.
-                </p>
-              </Field>
-            </div>
-            <Field label="وصف البنر">
-              <textarea
-                value={settings.hero.subtitle}
-                onChange={(event) =>
-                  setSettings({ ...settings, hero: { ...settings.hero, subtitle: event.target.value } })
-                }
-                className="min-h-28 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              <MultilineTextField
+                label="عنوان البنر"
+                value={settings.hero.title}
+                onChange={(value) => setSettings({ ...settings, hero: { ...settings.hero, title: value } })}
+                className="min-h-24 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
               />
-              <p className="text-xs leading-6 text-zinc-500">اضغط Enter لكتابة كل جملة في سطر جديد.</p>
-            </Field>
+              <MultilineTextField
+                label="النص الصغير فوق العنوان"
+                value={settings.hero.eyebrow}
+                onChange={(value) => setSettings({ ...settings, hero: { ...settings.hero, eyebrow: value } })}
+                className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </div>
+            <MultilineTextField
+              label="وصف البنر"
+              value={settings.hero.subtitle}
+              onChange={(value) => setSettings({ ...settings, hero: { ...settings.hero, subtitle: value } })}
+              className="min-h-28 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
             <div className="grid gap-5 lg:grid-cols-2">
-              <Field label="نص زر التسوق">
-                <textarea
-                  value={settings.hero.primaryCtaText}
-                  onChange={(event) =>
-                    setSettings({ ...settings, hero: { ...settings.hero, primaryCtaText: event.target.value } })
-                  }
-                  className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                />
-              </Field>
+              <MultilineTextField
+                label="نص زر التسوق"
+                value={settings.hero.primaryCtaText}
+                onChange={(value) => setSettings({ ...settings, hero: { ...settings.hero, primaryCtaText: value } })}
+              />
               <Field label="رابط زر التسوق">
                 <input
                   value={settings.hero.primaryCtaUrl}
@@ -329,15 +366,13 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                   className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
               </Field>
-              <Field label="نص زر التواصل">
-                <textarea
-                  value={settings.hero.secondaryCtaText}
-                  onChange={(event) =>
-                    setSettings({ ...settings, hero: { ...settings.hero, secondaryCtaText: event.target.value } })
-                  }
-                  className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                />
-              </Field>
+              <MultilineTextField
+                label="نص زر التواصل"
+                value={settings.hero.secondaryCtaText}
+                onChange={(value) =>
+                  setSettings({ ...settings, hero: { ...settings.hero, secondaryCtaText: value } })
+                }
+              />
               <Field label="رابط زر التواصل">
                 <input
                   value={settings.hero.secondaryCtaUrl}
@@ -475,18 +510,11 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               />
               إظهار بنر أعلى الهيدر
             </label>
-            <Field label="نص بنر أعلى الهيدر">
-              <textarea
-                value={settings.topBanner.text}
-                onChange={(event) =>
-                  setSettings({ ...settings, topBanner: { ...settings.topBanner, text: event.target.value } })
-                }
-                className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-              />
-              <p className="text-xs leading-6 text-zinc-500">
-                هذا النص يتحرك تلقائياً أعلى الهيدر. اضغط Enter لو تريد أكثر من سطر.
-              </p>
-            </Field>
+            <MultilineTextField
+              label="نص بنر أعلى الهيدر"
+              value={settings.topBanner.text}
+              onChange={(value) => setSettings({ ...settings, topBanner: { ...settings.topBanner, text: value } })}
+            />
             <ImageUploadField
               label="صورة بنر أعلى الهيدر - ديسكتوب"
               value={settings.topBanner.desktopImage}
