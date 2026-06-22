@@ -5,8 +5,8 @@ import { CategoryScroller } from "@/components/category-scroller";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
-import { getThemeSettings } from "@/lib/theme-settings";
-import { getCategories, getFeaturedProducts } from "@/lib/woocommerce";
+import { getThemeSettings, type HomeSectionId } from "@/lib/theme-settings";
+import { getCategories, getFeaturedProducts, getProducts } from "@/lib/woocommerce";
 
 const trustItems = [
   { title: "الوكيل الحصري", text: "منتجات أصلية من مؤسسة المغربي في مصر", icon: "shield" },
@@ -62,6 +62,14 @@ export default async function Home() {
     getThemeSettings(),
   ]);
   const categoriesWithImages = categories.filter((category) => category.image);
+  const customSectionProducts = new Map(
+    await Promise.all(
+      settings.customSections.map(async (section) => [
+        section.id,
+        section.categorySlug ? await getProducts(section.productLimit, section.categorySlug) : [],
+      ] as const),
+    ),
+  );
   const heroHasImage = Boolean(
     settings.hero.desktopImage || settings.hero.tabletImage || settings.hero.mobileImage,
   );
@@ -82,12 +90,16 @@ export default async function Home() {
     center: "sm:justify-center",
     left: "sm:justify-start",
   }[settings.hero.contentAlign];
+  const sectionOrder = (sectionId: HomeSectionId) => {
+    const order = settings.homeSectionsOrder.indexOf(sectionId);
+    return order === -1 ? 100 : order;
+  };
 
   return (
-    <>
+    <div className="flex flex-col">
       {settings.hero.enabled ? (
         heroHasImage ? (
-          <section className="relative min-h-[640px] overflow-hidden bg-zinc-950">
+          <section className="relative min-h-[640px] overflow-hidden bg-zinc-950" style={{ order: sectionOrder("hero") }}>
             {settings.hero.desktopImage ? (
               <Image
                 src={settings.hero.desktopImage}
@@ -163,7 +175,7 @@ export default async function Home() {
             </div>
           </section>
         ) : (
-          <section className="relative overflow-hidden bg-white">
+          <section className="relative overflow-hidden bg-white" style={{ order: sectionOrder("hero") }}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
             <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
               <p className="mb-5 inline-flex w-fit rounded-full border border-brand-gold/40 bg-brand-cream px-4 py-2 text-sm font-medium text-zinc-950">
@@ -180,7 +192,7 @@ export default async function Home() {
         )
       ) : null}
 
-      {settings.sections.trustBadges ? <section className="bg-white py-8">
+      {settings.sections.trustBadges ? <section className="bg-white py-8" style={{ order: sectionOrder("trustBadges") }}>
         <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
           {trustItems.map((item) => (
             <div key={item.title} className="rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-sm">
@@ -198,11 +210,11 @@ export default async function Home() {
         </div>
       </section> : null}
 
-      {settings.sections.categories && categoriesWithImages.length ? <section className="py-16">
+      {settings.sections.categories && categoriesWithImages.length ? <section className="py-16" style={{ order: sectionOrder("categories") }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionTitle
             textKeyPrefix="home.categories"
-            eyebrow="Categories"
+            eyebrow="التصنيفات"
             title="تسوق حسب التصنيف"
             description="تنظيم واضح للمنتجات يساعد العميل يوصل للمنتج المناسب بسرعة من الموبايل أو الكمبيوتر."
           />
@@ -210,13 +222,13 @@ export default async function Home() {
         </div>
       </section> : null}
 
-      {settings.sections.bestSellers ? <section className="bg-white py-16">
+      {settings.sections.bestSellers ? <section className="bg-white py-16" style={{ order: sectionOrder("bestSellers") }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionTitle
             textKeyPrefix="home.bestSellers"
-            eyebrow="Best Sellers"
+            eyebrow="الأكثر طلباً"
             title="الأكثر مبيعاً"
-            description="منتجات مختارة لإظهار شكل المتجر النهائي، وستتحدث تلقائياً من WooCommerce عند إضافة مفاتيح API."
+            description="منتجات مختارة لإظهار شكل المتجر النهائي، وستتحدث تلقائياً من ووكومرس عند إضافة مفاتيح الربط."
           />
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {featuredProducts.map((product) => (
@@ -226,7 +238,68 @@ export default async function Home() {
         </div>
       </section> : null}
 
-      {settings.sections.competitiveBanner ? <section className="py-16">
+      {settings.customSections
+        .filter((section) => section.enabled)
+        .map((section) => {
+          const sectionProducts = customSectionProducts.get(section.id) || [];
+          const backgroundImage = section.mobileImage || section.tabletImage || section.desktopImage;
+
+          return (
+            <section key={section.id} className="py-16" style={{ order: sectionOrder("customBanner") }}>
+              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <Link
+                  href={section.linkUrl || "/shop"}
+                  className="relative block min-h-[320px] overflow-hidden rounded-[2.5rem] p-8 shadow-sm lg:min-h-[420px] lg:p-12"
+                  style={{ backgroundColor: section.backgroundColor, color: section.textColor }}
+                >
+                  {backgroundImage ? (
+                    <Image
+                      src={backgroundImage}
+                      alt={section.title}
+                      fill
+                      sizes="100vw"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : null}
+                  <div className="absolute inset-0 bg-black/25" />
+                  <div className="relative z-10 flex min-h-[260px] max-w-3xl flex-col justify-center lg:min-h-[360px]">
+                    <p className="text-sm font-bold text-brand-gold">
+                      <VisualEditableText textKey={`customSection.${section.id}.subtitle`}>
+                        {section.subtitle}
+                      </VisualEditableText>
+                    </p>
+                    <h2
+                      className="mt-3 font-bold leading-tight"
+                      style={{
+                        fontSize: `clamp(${section.fontSizeMobile}px, 5vw, ${section.fontSizeDesktop}px)`,
+                      }}
+                    >
+                      <VisualEditableText textKey={`customSection.${section.id}.title`}>
+                        {section.title}
+                      </VisualEditableText>
+                    </h2>
+                    <p className="mt-5 max-w-2xl leading-8">
+                      <VisualEditableText textKey={`customSection.${section.id}.text`}>
+                        {section.text}
+                      </VisualEditableText>
+                    </p>
+                  </div>
+                </Link>
+
+                {sectionProducts.length ? (
+                  <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                    {sectionProducts.map((product) => (
+                      <ProductCard key={product.id} product={product} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          );
+        })}
+
+      {settings.sections.competitiveBanner ? <section className="py-16" style={{ order: sectionOrder("competitiveBanner") }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {settings.sections.customBanner.enabled &&
           (settings.sections.customBanner.desktopImage || settings.sections.customBanner.mobileImage) ? (
@@ -268,13 +341,13 @@ export default async function Home() {
               </h2>
               <p className="mt-5 max-w-2xl leading-8 text-zinc-300">
                 <VisualEditableText textKey="competitive.description">
-                  المرحلة القادمة تضيف البحث السريع، الفلاتر المتقدمة، wishlist،
-                  المقارنة، وربط checkout حقيقي مع WooCommerce وفوري.
+                  المرحلة القادمة تضيف البحث السريع، الفلاتر المتقدمة، المفضلة،
+                  المقارنة، وربط إتمام الطلب الحقيقي مع ووكومرس وفوري.
                 </VisualEditableText>
               </p>
             </div>
             <div className="grid gap-3 text-sm font-bold text-zinc-200">
-              {["SEO عربي للمنتجات", "Schema للمنتج والسعر", "Checkout فوري + COD", "تصميم Mobile-first"].map(
+              {["تحسين ظهور المنتجات في البحث", "بيانات منظمة للمنتج والسعر", "إتمام طلب فوري أو كاش", "تصميم يبدأ من الموبايل"].map(
                 (item) => (
                   <div key={item} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <VisualEditableText textKey={`competitive.feature.${item}`}>{item}</VisualEditableText>
@@ -285,6 +358,6 @@ export default async function Home() {
           </div>
         </div>
       </section> : null}
-    </>
+    </div>
   );
 }

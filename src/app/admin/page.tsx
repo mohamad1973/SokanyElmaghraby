@@ -2,18 +2,18 @@ import Link from "next/link";
 
 const cards = [
   {
-    title: "Appearance",
+    title: "المظهر",
     description: "تحكم في الألوان، الفونتات، اللوجو، والهوية العامة.",
     href: "/admin/theme",
   },
   {
-    title: "Header & Mobile",
+    title: "الهيدر والموبايل",
     description: "إدارة الهيدر، بنر أعلى الموقع، وإعدادات الموبايل.",
     href: "/admin/header",
   },
   {
-    title: "Orders",
-    description: "عرض طلبات WooCommerce بنفس طريقة لوحة WordPress.",
+    title: "الطلبات",
+    description: "عرض طلبات ووكومرس بنفس طريقة لوحة ووردبريس.",
     href: "/admin/orders",
   },
 ];
@@ -24,7 +24,7 @@ export default function AdminDashboardPage() {
       <div>
         <h1 className="text-3xl font-bold text-zinc-950">لوحة التحكم</h1>
         <p className="mt-2 text-sm text-zinc-600">
-          إدارة واجهة Next.js ومتابعة طلبات WooCommerce من مكان واحد.
+          إدارة واجهة المتجر ومتابعة طلبات ووكومرس من مكان واحد.
         </p>
       </div>
 
@@ -44,9 +44,9 @@ export default function AdminDashboardPage() {
       <div className="rounded-xl border border-black/10 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold text-zinc-950">مصادر البيانات الحالية</h2>
         <ol className="mt-4 list-decimal space-y-2 pr-5 text-sm leading-7 text-zinc-700">
-          <li>المنتجات والطلبات تأتي من WooCommerce REST API.</li>
-          <li>منيو الهيدر تأتي من تصنيفات WooCommerce بدون أي WordPress plugin.</li>
-          <li>إعدادات الشكل تستخدم القيم الافتراضية داخل مشروع Next.js حتى نضيف تخزين دائم لاحقاً.</li>
+          <li>المنتجات والطلبات تأتي من ووكومرس.</li>
+          <li>منيو الهيدر تأتي من تصنيفات ووكومرس بدون أي إضافة ووردبريس.</li>
+          <li>إعدادات الشكل يتم حفظها في قاعدة البيانات الخاصة بالمشروع.</li>
         </ol>
       </div>
     </div>

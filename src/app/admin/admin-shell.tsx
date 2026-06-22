@@ -8,15 +8,15 @@ import type { ReactNode } from "react";
 import { OrderNotificationBar } from "./order-notification-bar";
 
 const navItems = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/theme", label: "Appearance" },
-  { href: "/admin/header", label: "Header" },
-  { href: "/admin/footer", label: "Footer" },
-  { href: "/admin/banners", label: "Banners" },
-  { href: "/admin/navigation", label: "Menus" },
-  { href: "/admin/products", label: "Products" },
-  { href: "/admin/categories", label: "Categories" },
-  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin", label: "لوحة التحكم" },
+  { href: "/admin/theme", label: "المظهر" },
+  { href: "/admin/header", label: "الهيدر" },
+  { href: "/admin/footer", label: "الفوتر" },
+  { href: "/admin/banners", label: "البنرات" },
+  { href: "/admin/navigation", label: "المنيو" },
+  { href: "/admin/products", label: "المنتجات" },
+  { href: "/admin/categories", label: "التصنيفات" },
+  { href: "/admin/orders", label: "الطلبات" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -30,8 +30,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[#f0f0f1] text-[#1d2327]" dir="ltr">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 bg-[#1d2327] text-white lg:block">
         <div className="border-b border-white/10 px-5 py-5">
-          <p className="text-lg font-bold">SOKANY Admin</p>
-          <p className="text-xs text-zinc-400">Headless dashboard</p>
+          <p className="text-lg font-bold">إدارة سوكاني</p>
+          <p className="text-xs text-zinc-400">لوحة تحكم الواجهة</p>
         </div>
         <nav className="space-y-1 p-3 text-sm">
           {navItems.map((item) => {
@@ -56,8 +56,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <OrderNotificationBar />
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-black/10 bg-white px-4 shadow-sm">
           <div>
-            <p className="text-sm font-bold">SOKANY Frontend Control</p>
-            <p className="text-xs text-zinc-500">WordPress-like dashboard for the Next.js storefront</p>
+            <p className="text-sm font-bold">تحكم واجهة سوكاني</p>
+            <p className="text-xs text-zinc-500">لوحة تحكم للمتجر والواجهة الأمامية</p>
           </div>
           <button
             type="button"

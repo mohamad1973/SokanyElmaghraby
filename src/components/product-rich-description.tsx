@@ -76,7 +76,7 @@ export function ProductRichDescription({ html, fallbackText }: ProductRichDescri
   return (
     <section className="mt-16 rounded-[2rem] bg-white p-5 shadow-sm sm:p-8" dir="rtl">
       <div className="mb-6">
-        <p className="text-sm font-bold uppercase tracking-[0.25em] text-brand-gold">Details</p>
+        <p className="text-sm font-bold tracking-[0.25em] text-brand-gold">التفاصيل</p>
         <h2 className="mt-2 text-2xl font-bold text-zinc-950">تفاصيل ومواصفات المنتج</h2>
       </div>
 
@@ -101,7 +101,7 @@ export function ProductRichDescription({ html, fallbackText }: ProductRichDescri
                   {youtubeEmbedUrl ? (
                     <iframe
                       src={youtubeEmbedUrl}
-                      title="Product video"
+                      title="فيديو المنتج"
                       className="aspect-video w-full"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen

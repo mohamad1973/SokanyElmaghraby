@@ -9,9 +9,11 @@ type VisualEditorContextValue = {
   editMode: boolean;
   selectedKey: string | null;
   styles: Record<string, VisualTextStyle>;
+  content: Record<string, string>;
   setEditMode: (value: boolean) => void;
   selectText: (key: string) => void;
   updateStyle: (key: string, style: VisualTextStyle) => void;
+  updateContent: (key: string, value: string) => void;
   resetSelected: () => void;
   save: () => Promise<void>;
   status: string;
@@ -45,6 +47,7 @@ export function VisualEditorProvider({
   const [editMode, setEditMode] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [styles, setStyles] = useState(settings.visualTextStyles || {});
+  const [content, setContent] = useState(settings.visualTextContent || {});
   const [status, setStatus] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const hasPendingChangesRef = useRef(false);
@@ -90,6 +93,14 @@ export function VisualEditorProvider({
     hasPendingChangesRef.current = true;
   }, []);
 
+  const updateContent = useCallback((key: string, value: string) => {
+    setContent((currentContent) => ({
+      ...currentContent,
+      [key]: value,
+    }));
+    hasPendingChangesRef.current = true;
+  }, []);
+
   const selectText = useCallback((key: string) => {
     setSelectedKey(key);
   }, []);
@@ -114,6 +125,7 @@ export function VisualEditorProvider({
       body: JSON.stringify({
         ...settings,
         visualTextStyles: styles,
+        visualTextContent: content,
       }),
     });
 
@@ -126,7 +138,7 @@ export function VisualEditorProvider({
     }
 
     setStatus("تم حفظ تعديلات النصوص.");
-  }, [settings, styles]);
+  }, [content, settings, styles]);
 
   useEffect(() => {
     if (!editMode || !selectedKey) {
@@ -190,7 +202,7 @@ export function VisualEditorProvider({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [editMode, isAdmin, save, styles, visualEditorEnabled]);
+  }, [content, editMode, isAdmin, save, styles, visualEditorEnabled]);
 
   const value = useMemo<VisualEditorContextValue>(
     () => ({
@@ -198,15 +210,17 @@ export function VisualEditorProvider({
       editMode,
       selectedKey,
       styles,
+      content,
       setEditMode,
       selectText,
       updateStyle,
+      updateContent,
       resetSelected,
       save,
       status,
       isSaving,
     }),
-    [editMode, isAdmin, isSaving, resetSelected, save, selectText, selectedKey, status, styles, updateStyle],
+    [content, editMode, isAdmin, isSaving, resetSelected, save, selectText, selectedKey, status, styles, updateContent, updateStyle],
   );
 
   return <VisualEditorContext.Provider value={value}>{children}</VisualEditorContext.Provider>;

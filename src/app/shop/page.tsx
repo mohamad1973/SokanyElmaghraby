@@ -28,12 +28,12 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     <div className="py-12">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionTitle
-          eyebrow="Shop"
+          eyebrow="المتجر"
           title={selectedCategory ? selectedCategory.name : "متجر سوكاني مصر"}
           description={
             selectedCategory
               ? `${selectedCategory.description} - ${products.length} منتج داخل هذه المجموعة.`
-              : "واجهة سريعة للمنتجات الحالية، جاهزة للربط المباشر مع WooCommerce والفلاتر المتقدمة."
+              : "واجهة سريعة للمنتجات الحالية، جاهزة للربط المباشر مع ووكومرس والفلاتر المتقدمة."
           }
         />
 
@@ -67,7 +67,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               المنتجات المعروضة حالياً تخص مجموعة: {selectedCategory?.name || selectedCategorySlug}
             </p>
             <p className="mt-1 text-sm text-zinc-500">
-              يتم جلب المنتجات مباشرة من WooCommerce، ولو المجموعة تحتوي sub categories يتم تضمين منتجاتها أيضاً.
+              يتم جلب المنتجات مباشرة من ووكومرس، ولو المجموعة تحتوي تصنيفات فرعية يتم تضمين منتجاتها أيضاً.
             </p>
           </div>
         ) : null}

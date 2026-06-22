@@ -44,14 +44,23 @@ html {
 .top-banner-marquee-track {
   display: inline-flex;
   min-width: max-content;
-  animation: top-banner-marquee 18s linear infinite;
+  animation: top-banner-marquee 22s linear infinite;
 }
 
 .top-banner-marquee-item {
-  display: inline-flex;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(30vw, 1fr);
   min-width: 100vw;
-  justify-content: center;
-  padding-inline: 2rem;
+  align-items: center;
+  justify-items: center;
+  gap: clamp(3rem, 8vw, 9rem);
+  padding-inline: clamp(2rem, 8vw, 8rem);
+}
+
+.top-banner-marquee-phrase {
+  display: inline-flex;
+  white-space: nowrap;
 }
 
 @keyframes top-banner-marquee {

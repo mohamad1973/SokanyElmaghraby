@@ -15,6 +15,27 @@ export type VisualTextStyle = {
   fontSizeDelta: number;
 };
 
+export type HomeSectionId = "hero" | "trustBadges" | "categories" | "bestSellers" | "customBanner" | "competitiveBanner";
+
+export type CustomHomeSection = {
+  id: string;
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  text: string;
+  backgroundColor: string;
+  textColor: string;
+  linkUrl: string;
+  desktopImage: string;
+  tabletImage: string;
+  mobileImage: string;
+  categorySlug: string;
+  productLimit: number;
+  fontSizeDesktop: number;
+  fontSizeTablet: number;
+  fontSizeMobile: number;
+};
+
 export type ThemeSettings = {
   brand: {
     logoUrl: string;
@@ -76,11 +97,23 @@ export type ThemeSettings = {
     description: string;
     copyright: string;
   };
+  homeSectionsOrder: HomeSectionId[];
+  customSections: CustomHomeSection[];
   visualEditor: {
     enabled: boolean;
   };
   visualTextStyles: Record<string, VisualTextStyle>;
+  visualTextContent: Record<string, string>;
 };
+
+export const defaultHomeSectionsOrder: HomeSectionId[] = [
+  "hero",
+  "trustBadges",
+  "categories",
+  "bestSellers",
+  "customBanner",
+  "competitiveBanner",
+];
 
 export const defaultThemeSettings: ThemeSettings = {
   brand: {
@@ -150,14 +183,54 @@ export const defaultThemeSettings: ThemeSettings = {
       "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
     copyright: "SOKANY Egypt. جميع الحقوق محفوظة.",
   },
+  homeSectionsOrder: defaultHomeSectionsOrder,
+  customSections: [],
   visualEditor: {
     enabled: false,
   },
   visualTextStyles: {},
+  visualTextContent: {},
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function mergeHomeSectionsOrder(value: unknown) {
+  if (!Array.isArray(value)) {
+    return defaultThemeSettings.homeSectionsOrder;
+  }
+
+  const allowedSections = new Set<HomeSectionId>(defaultHomeSectionsOrder);
+  const selectedSections = value.filter((section): section is HomeSectionId => allowedSections.has(section));
+  const missingSections = defaultHomeSectionsOrder.filter((section) => !selectedSections.includes(section));
+
+  return [...selectedSections, ...missingSections];
+}
+
+function mergeCustomSections(value: unknown): CustomHomeSection[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(isObject).map((section, index) => ({
+    id: typeof section.id === "string" ? section.id : `custom-section-${index + 1}`,
+    enabled: typeof section.enabled === "boolean" ? section.enabled : true,
+    title: typeof section.title === "string" ? section.title : "سكشن مخصص",
+    subtitle: typeof section.subtitle === "string" ? section.subtitle : "",
+    text: typeof section.text === "string" ? section.text : "",
+    backgroundColor: typeof section.backgroundColor === "string" ? section.backgroundColor : "#101010",
+    textColor: typeof section.textColor === "string" ? section.textColor : "#ffffff",
+    linkUrl: typeof section.linkUrl === "string" ? section.linkUrl : "/shop",
+    desktopImage: typeof section.desktopImage === "string" ? section.desktopImage : "",
+    tabletImage: typeof section.tabletImage === "string" ? section.tabletImage : "",
+    mobileImage: typeof section.mobileImage === "string" ? section.mobileImage : "",
+    categorySlug: typeof section.categorySlug === "string" ? section.categorySlug : "",
+    productLimit: typeof section.productLimit === "number" ? section.productLimit : 4,
+    fontSizeDesktop: typeof section.fontSizeDesktop === "number" ? section.fontSizeDesktop : 56,
+    fontSizeTablet: typeof section.fontSizeTablet === "number" ? section.fontSizeTablet : 42,
+    fontSizeMobile: typeof section.fontSizeMobile === "number" ? section.fontSizeMobile : 32,
+  }));
 }
 
 function mergeSettings(settings: unknown): ThemeSettings {
@@ -189,6 +262,8 @@ function mergeSettings(settings: unknown): ThemeSettings {
       },
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
+    homeSectionsOrder: mergeHomeSectionsOrder(settings.homeSectionsOrder),
+    customSections: mergeCustomSections(settings.customSections),
     visualEditor: {
       ...defaultThemeSettings.visualEditor,
       ...(isObject(settings.visualEditor) ? settings.visualEditor : {}),
@@ -198,6 +273,11 @@ function mergeSettings(settings: unknown): ThemeSettings {
           Object.entries(settings.visualTextStyles).filter(([, value]) => isObject(value)),
         ) as Record<string, VisualTextStyle>
       : defaultThemeSettings.visualTextStyles,
+    visualTextContent: isObject(settings.visualTextContent)
+      ? Object.fromEntries(
+          Object.entries(settings.visualTextContent).filter(([, value]) => typeof value === "string"),
+        ) as Record<string, string>
+      : defaultThemeSettings.visualTextContent,
   };
 }
 

@@ -5,7 +5,43 @@ import { useState } from "react";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
+import { HeaderProductSearch } from "./header-product-search";
 import { VisualEditableText } from "./visual-editable-text";
+
+function HeaderIcon({ icon }: { icon: "account" | "cart" | "favorite" | "compare" }) {
+  const className = "h-5 w-5";
+
+  if (icon === "cart") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M6 7h15l-2 8H8L6 7ZM6 7 5 4H2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M9 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM18 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+      </svg>
+    );
+  }
+
+  if (icon === "favorite") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M12 20s-7.5-4.4-9.2-9.1C1.5 7.4 3.7 4.5 7 4.5c2 0 3.5 1.1 5 3 1.5-1.9 3-3 5-3 3.3 0 5.5 2.9 4.2 6.4C19.5 15.6 12 20 12 20Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "compare") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M7 4v14M7 18l-3-3M7 18l3-3M17 20V6M17 6l-3 3M17 6l3 3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function DesktopMenu({ menu }: { menu: MenuNode[] }) {
   return (
@@ -57,22 +93,12 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
   );
 }
 
-function MobileMenu({ menu, settings }: { menu: MenuNode[]; settings: ThemeSettings }) {
+function MobileMenu({ menu }: { menu: MenuNode[] }) {
   const [openId, setOpenId] = useState<number | null>(null);
 
   return (
     <div className="border-t border-black/5 px-4 py-3 lg:hidden">
       <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto text-sm font-bold text-zinc-700">
-        {settings.header.mobileShowSearch ? (
-          <Link href="/shop" className="rounded-full bg-brand-cream px-4 py-2 text-zinc-950">
-            <VisualEditableText textKey="mobile.search">بحث</VisualEditableText>
-          </Link>
-        ) : null}
-        {settings.header.mobileShowCart ? (
-          <Link href="/cart" className="rounded-full bg-white px-4 py-2 text-zinc-950">
-            <VisualEditableText textKey="mobile.cart">السلة</VisualEditableText>
-          </Link>
-        ) : null}
         {menu.map((item) => (
           <button
             key={item.id}
@@ -116,6 +142,17 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     slug: "",
     children: [],
   }));
+  const topBannerPhrases = settings.topBanner.text
+    .split(/•|\n/)
+    .map((phrase) => phrase.trim())
+    .filter(Boolean);
+  const topBannerItems = topBannerPhrases.length ? topBannerPhrases : [settings.topBanner.text];
+  const headerActions = [
+    { href: "/admin/login", label: "الحساب", icon: "account" as const },
+    { href: "/cart", label: "السلة", icon: "cart" as const },
+    { href: "/offers", label: "المفضلة", icon: "favorite" as const },
+    { href: "/shop", label: "مقارنة المنتجات", icon: "compare" as const },
+  ];
 
   return (
     <header className="sticky top-0 z-50 border-b border-black/10 bg-white/95 backdrop-blur-xl">
@@ -156,7 +193,11 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               <span className="top-banner-marquee-track">
                 {[0, 1].map((item) => (
                   <span key={item} className="top-banner-marquee-item">
-                    <VisualEditableText textKey="topBanner.text">{settings.topBanner.text}</VisualEditableText>
+                    {topBannerItems.map((phrase, index) => (
+                      <span key={`${phrase}-${index}`} className="top-banner-marquee-phrase">
+                        <VisualEditableText textKey={`topBanner.text.${index}`}>{phrase}</VisualEditableText>
+                      </span>
+                    ))}
                   </span>
                 ))}
               </span>
@@ -193,34 +234,29 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-7 text-sm font-bold text-zinc-700 lg:flex">
-          {settings.navigation.map((item) => (
-            <Link key={item.href} href={item.href} className="transition hover:text-brand-gold">
-              <VisualEditableText textKey={`navigation.${item.href}`}>{item.label}</VisualEditableText>
-            </Link>
-          ))}
-        </nav>
+        <HeaderProductSearch />
 
         <div className="flex items-center gap-2">
-          {settings.header.showCart ? (
+          {headerActions.map((action) => (
             <Link
-              href="/cart"
-              className="hidden rounded-full border border-black/10 px-4 py-2 text-sm font-bold text-zinc-900 transition hover:border-brand-gold hover:text-brand-gold sm:inline-flex"
+              key={action.label}
+              href={action.href}
+              aria-label={action.label}
+              title={action.label}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-950 transition hover:border-brand-gold hover:bg-brand-gold"
             >
-              <VisualEditableText textKey="header.cart">السلة</VisualEditableText>
+              <HeaderIcon icon={action.icon} />
             </Link>
-          ) : null}
-          <Link
-            href={settings.header.ctaUrl}
-            className="rounded-full bg-brand-gold px-5 py-2.5 text-sm font-bold text-black shadow-sm transition hover:bg-brand-gold-dark"
-          >
-            <VisualEditableText textKey="header.ctaText">{settings.header.ctaText}</VisualEditableText>
-          </Link>
+          ))}
         </div>
       </div>
 
+      <div className="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:hidden">
+        <HeaderProductSearch className="relative block w-full" />
+      </div>
+
       <DesktopMenu menu={headerMenu} />
-      <MobileMenu menu={headerMenu} settings={settings} />
+      <MobileMenu menu={headerMenu} />
     </header>
   );
 }

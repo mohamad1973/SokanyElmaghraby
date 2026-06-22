@@ -332,6 +332,40 @@ export async function getFeaturedProducts(): Promise<Product[]> {
   return fallbackProducts.filter((product) => product.featured);
 }
 
+export async function searchProducts(query: string, limit = 8): Promise<Product[]> {
+  const trimmedQuery = query.trim();
+
+  if (trimmedQuery.length < 2) {
+    return [];
+  }
+
+  const data = await wooFetch<WooProduct[]>(
+    `products?per_page=${limit}&status=publish&search=${encodeURIComponent(trimmedQuery)}`,
+  );
+
+  if (data?.length) {
+    return data.map(mapProduct);
+  }
+
+  const storeData = await storeFetch<StoreApiProduct[]>(
+    `products?per_page=${limit}&search=${encodeURIComponent(trimmedQuery)}`,
+  );
+
+  if (storeData?.length) {
+    return storeData.map(mapStoreProduct);
+  }
+
+  const normalizedQuery = trimmedQuery.toLowerCase();
+
+  return fallbackProducts
+    .filter((product) =>
+      [product.name, product.sku, product.category, product.shortDescription].some((value) =>
+        value.toLowerCase().includes(normalizedQuery),
+      ),
+    )
+    .slice(0, limit);
+}
+
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   const data = await wooFetch<WooProduct[]>(`products?slug=${slug}&status=publish`);
 

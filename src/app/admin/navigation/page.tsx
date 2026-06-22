@@ -83,10 +83,10 @@ export default async function AdminNavigationPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-zinc-950">منيو الكاتيجوري من WordPress</h1>
+        <h1 className="text-3xl font-bold text-zinc-950">منيو التصنيفات من ووردبريس</h1>
         <p className="mt-2 text-sm leading-7 text-zinc-600">
-          هذه الصفحة تستدعي الكاتيجوري والـ sub category مباشرة من WooCommerce REST API
-          وتعرضها كشجرة داخل داشبورد Next.js.
+          هذه الصفحة تستدعي التصنيفات والتصنيفات الفرعية مباشرة من ووكومرس
+          وتعرضها كشجرة داخل الداشبورد.
         </p>
       </div>
 
@@ -100,22 +100,22 @@ export default async function AdminNavigationPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Main Categories</p>
+          <p className="text-xs font-bold tracking-wide text-zinc-500">التصنيفات الرئيسية</p>
           <p className="mt-2 text-3xl font-bold text-zinc-950">{categories.length}</p>
         </div>
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">All Categories</p>
+          <p className="text-xs font-bold tracking-wide text-zinc-500">كل التصنيفات</p>
           <p className="mt-2 text-3xl font-bold text-zinc-950">{totalCategories}</p>
         </div>
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">In Menu</p>
+          <p className="text-xs font-bold tracking-wide text-zinc-500">داخل المنيو</p>
           <p className="mt-2 text-3xl font-bold text-zinc-950">{selectedCategoriesCount}</p>
         </div>
       </div>
 
       {!categories.length ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-          لم يتم العثور على كاتيجوري من WordPress حالياً. تأكد من أن WooCommerce Store API متاح.
+          لم يتم العثور على تصنيفات من ووردبريس حالياً. تأكد من أن ووكومرس متاح.
         </div>
       ) : (
         <div className="grid gap-5">

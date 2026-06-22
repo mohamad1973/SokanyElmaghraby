@@ -78,26 +78,26 @@ export default async function AdminCategoriesPage() {
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-950">Categories</h1>
+          <h1 className="text-3xl font-bold text-zinc-950">التصنيفات</h1>
           <p className="mt-2 text-sm leading-7 text-zinc-600">
-            عرض مباشر لكل الكاتيجوري والـ sub category من WooCommerce داخل داشبورد Next.js.
+            عرض مباشر لكل التصنيفات والتصنيفات الفرعية من ووكومرس داخل الداشبورد.
           </p>
         </div>
-        <ImportButton endpoint="/api/admin/import/categories" label="Import categories from WordPress" />
+        <ImportButton endpoint="/api/admin/import/categories" label="استيراد التصنيفات من ووردبريس" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Main Categories</p>
+          <p className="text-xs font-bold tracking-wide text-zinc-500">التصنيفات الرئيسية</p>
           <p className="mt-2 text-3xl font-bold text-zinc-950">{categories.length}</p>
         </div>
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">All Categories</p>
+          <p className="text-xs font-bold tracking-wide text-zinc-500">كل التصنيفات</p>
           <p className="mt-2 text-3xl font-bold text-zinc-950">{totalCategories}</p>
         </div>
         <div className="rounded-xl border border-black/10 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Source</p>
-          <p className="mt-2 text-lg font-bold text-zinc-950">WooCommerce</p>
+          <p className="text-xs font-bold tracking-wide text-zinc-500">المصدر</p>
+          <p className="mt-2 text-lg font-bold text-zinc-950">ووكومرس</p>
         </div>
       </div>
 
