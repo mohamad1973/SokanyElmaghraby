@@ -1,5 +1,7 @@
 import { getAdminOrders } from "@/lib/orders";
 
+import { OrdersSyncButton } from "./orders-sync-button";
+
 export const dynamic = "force-dynamic";
 
 type OrdersPageProps = {
@@ -20,9 +22,20 @@ const statuses = [
   { label: "Failed", value: "failed" },
 ];
 
+function formatSyncDate(value?: string | null) {
+  if (!value) {
+    return "لم يتم التحديث بعد";
+  }
+
+  return new Intl.DateTimeFormat("ar-EG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 export default async function AdminOrdersPage({ searchParams }: OrdersPageProps) {
   const params = await searchParams;
-  const { orders, error } = await getAdminOrders({
+  const { orders, error, warning, lastSuccessAt, lastAttemptAt, source } = await getAdminOrders({
     page: params.page,
     perPage: params.per_page || "50",
     status: params.status,
@@ -36,6 +49,10 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
           <h1 className="text-3xl font-bold text-zinc-950">Orders</h1>
           <p className="mt-2 text-sm text-zinc-600">
             عرض الطلبات من WooCommerce بنفس بيانات WordPress الأساسية.
+          </p>
+          <p className="mt-2 text-xs font-bold text-zinc-500">
+            مصدر العرض: {source === "mysql" ? "MySQL snapshot" : "WooCommerce مباشر"} | آخر تحديث ناجح:{" "}
+            {formatSyncDate(lastSuccessAt)} | آخر محاولة: {formatSyncDate(lastAttemptAt)}
           </p>
         </div>
 
@@ -72,9 +89,22 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
         </form>
       </div>
 
+      <div className="rounded-md border border-[#c3c4c7] bg-white p-4">
+        <OrdersSyncButton />
+        <p className="mt-2 text-xs leading-6 text-zinc-500">
+          بعد أول تحديث ناجح سيتم عرض الطلبات من MySQL، لذلك لا تختفي الطلبات لو WooCommerce أو الاستضافة تعطلت مؤقتاً.
+        </p>
+      </div>
+
       {error ? (
         <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm leading-7 text-red-700">
           {error}
+        </div>
+      ) : null}
+
+      {!error && warning ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-800">
+          آخر تحديث من WooCommerce فشل، لكن الطلبات المحفوظة ما زالت ظاهرة من MySQL. السبب: {warning}
         </div>
       ) : null}
 
