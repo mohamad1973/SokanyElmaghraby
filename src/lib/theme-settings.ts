@@ -9,6 +9,12 @@ export type MenuItem = {
   href: string;
 };
 
+export type VisualTextStyle = {
+  x: number;
+  y: number;
+  fontSizeDelta: number;
+};
+
 export type ThemeSettings = {
   brand: {
     logoUrl: string;
@@ -70,6 +76,7 @@ export type ThemeSettings = {
     description: string;
     copyright: string;
   };
+  visualTextStyles: Record<string, VisualTextStyle>;
 };
 
 export const defaultThemeSettings: ThemeSettings = {
@@ -140,6 +147,7 @@ export const defaultThemeSettings: ThemeSettings = {
       "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
     copyright: "SOKANY Egypt. جميع الحقوق محفوظة.",
   },
+  visualTextStyles: {},
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -175,6 +183,11 @@ function mergeSettings(settings: unknown): ThemeSettings {
       },
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
+    visualTextStyles: isObject(settings.visualTextStyles)
+      ? Object.fromEntries(
+          Object.entries(settings.visualTextStyles).filter(([, value]) => isObject(value)),
+        ) as Record<string, VisualTextStyle>
+      : defaultThemeSettings.visualTextStyles,
   };
 }
 

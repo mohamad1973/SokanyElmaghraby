@@ -5,6 +5,8 @@ import { useState } from "react";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
+import { VisualEditableText } from "./visual-editable-text";
+
 function DesktopMenu({ menu }: { menu: MenuNode[] }) {
   return (
     <nav className="hidden border-t border-black/10 bg-brand-gold lg:block">
@@ -63,12 +65,12 @@ function MobileMenu({ menu, settings }: { menu: MenuNode[]; settings: ThemeSetti
       <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto text-sm font-bold text-zinc-700">
         {settings.header.mobileShowSearch ? (
           <Link href="/shop" className="rounded-full bg-brand-cream px-4 py-2 text-zinc-950">
-            بحث
+            <VisualEditableText textKey="mobile.search">بحث</VisualEditableText>
           </Link>
         ) : null}
         {settings.header.mobileShowCart ? (
           <Link href="/cart" className="rounded-full bg-white px-4 py-2 text-zinc-950">
-            السلة
+            <VisualEditableText textKey="mobile.cart">السلة</VisualEditableText>
           </Link>
         ) : null}
         {menu.map((item) => (
@@ -150,7 +152,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               ) : null}
             </>
           ) : (
-            settings.topBanner.text
+            <VisualEditableText textKey="topBanner.text">{settings.topBanner.text}</VisualEditableText>
           )}
         </Link>
       ) : null}
@@ -175,16 +177,18 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
           )}
           <span className="leading-tight">
             <span className="block text-xl font-bold tracking-tight text-zinc-950">
-              {settings.brand.logoText}
+              <VisualEditableText textKey="header.logoText">{settings.brand.logoText}</VisualEditableText>
             </span>
-            <span className="block text-xs font-semibold text-zinc-500">{settings.brand.tagline}</span>
+            <span className="block text-xs font-semibold text-zinc-500">
+              <VisualEditableText textKey="header.tagline">{settings.brand.tagline}</VisualEditableText>
+            </span>
           </span>
         </Link>
 
         <nav className="hidden items-center gap-7 text-sm font-bold text-zinc-700 lg:flex">
           {settings.navigation.map((item) => (
             <Link key={item.href} href={item.href} className="transition hover:text-brand-gold">
-              {item.label}
+              <VisualEditableText textKey={`navigation.${item.href}`}>{item.label}</VisualEditableText>
             </Link>
           ))}
         </nav>
@@ -195,14 +199,14 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               href="/cart"
               className="hidden rounded-full border border-black/10 px-4 py-2 text-sm font-bold text-zinc-900 transition hover:border-brand-gold hover:text-brand-gold sm:inline-flex"
             >
-              السلة
+              <VisualEditableText textKey="header.cart">السلة</VisualEditableText>
             </Link>
           ) : null}
           <Link
             href={settings.header.ctaUrl}
             className="rounded-full bg-brand-gold px-5 py-2.5 text-sm font-bold text-black shadow-sm transition hover:bg-brand-gold-dark"
           >
-            {settings.header.ctaText}
+            <VisualEditableText textKey="header.ctaText">{settings.header.ctaText}</VisualEditableText>
           </Link>
         </div>
       </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CategoryScroller } from "@/components/category-scroller";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
+import { VisualEditableText } from "@/components/visual-editable-text";
 import { getThemeSettings } from "@/lib/theme-settings";
 import { getCategories, getFeaturedProducts } from "@/lib/woocommerce";
 
@@ -136,26 +137,26 @@ export default async function Home() {
                 className={`flex max-w-3xl flex-col ${heroContentTextAlignClass} ${settings.hero.frameEnabled ? "rounded-[2rem] border border-white/20 bg-black/25 p-8 backdrop-blur-sm" : ""}`}
               >
                 <p className="mb-5 inline-flex w-fit rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-black">
-                  {settings.hero.eyebrow}
+                  <VisualEditableText textKey="hero.eyebrow">{settings.hero.eyebrow}</VisualEditableText>
                 </p>
                 <h1 className={`text-4xl font-bold leading-tight tracking-tight sm:text-6xl ${heroTextClass}`}>
-                  {settings.hero.title}
+                  <VisualEditableText textKey="hero.title">{settings.hero.title}</VisualEditableText>
                 </h1>
                 <p className={`mt-6 max-w-2xl text-lg leading-9 ${heroSubtextClass}`}>
-                  {settings.hero.subtitle}
+                  <VisualEditableText textKey="hero.subtitle">{settings.hero.subtitle}</VisualEditableText>
                 </p>
                 <div className={`mt-9 flex w-full flex-col gap-3 sm:flex-row ${heroButtonAlignClass}`}>
                   <Link
                     href={settings.hero.primaryCtaUrl}
                     className="rounded-full bg-brand-gold px-8 py-4 text-center text-sm font-bold text-black transition hover:bg-brand-gold-dark"
                   >
-                    {settings.hero.primaryCtaText}
+                    <VisualEditableText textKey="hero.primaryCtaText">{settings.hero.primaryCtaText}</VisualEditableText>
                   </Link>
                   <Link
                     href={settings.hero.secondaryCtaUrl}
                     className="rounded-full border border-white/30 bg-white/10 px-8 py-4 text-center text-sm font-bold text-white transition hover:border-brand-gold hover:text-brand-gold"
                   >
-                    {settings.hero.secondaryCtaText}
+                    <VisualEditableText textKey="hero.secondaryCtaText">{settings.hero.secondaryCtaText}</VisualEditableText>
                   </Link>
                 </div>
               </div>
@@ -166,12 +167,14 @@ export default async function Home() {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
             <div className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-28">
               <p className="mb-5 inline-flex w-fit rounded-full border border-brand-gold/40 bg-brand-cream px-4 py-2 text-sm font-medium text-zinc-950">
-                {settings.hero.eyebrow}
+                <VisualEditableText textKey="hero.eyebrow">{settings.hero.eyebrow}</VisualEditableText>
               </p>
               <h1 className="max-w-4xl text-4xl font-bold leading-tight tracking-tight text-zinc-950 sm:text-6xl">
-                {settings.hero.title}
+                <VisualEditableText textKey="hero.title">{settings.hero.title}</VisualEditableText>
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-9 text-zinc-600">{settings.hero.subtitle}</p>
+              <p className="mt-6 max-w-2xl text-lg leading-9 text-zinc-600">
+                <VisualEditableText textKey="hero.subtitle">{settings.hero.subtitle}</VisualEditableText>
+              </p>
             </div>
           </section>
         )
@@ -184,8 +187,12 @@ export default async function Home() {
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-gold/10 text-brand-gold">
                 <TrustIcon icon={item.icon} />
               </div>
-              <h3 className="font-bold text-white">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-300">{item.text}</p>
+              <h3 className="font-bold text-white">
+                <VisualEditableText textKey={`trust.${item.icon}.title`}>{item.title}</VisualEditableText>
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-300">
+                <VisualEditableText textKey={`trust.${item.icon}.text`}>{item.text}</VisualEditableText>
+              </p>
             </div>
           ))}
         </div>
@@ -194,6 +201,7 @@ export default async function Home() {
       {settings.sections.categories && categoriesWithImages.length ? <section className="py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionTitle
+            textKeyPrefix="home.categories"
             eyebrow="Categories"
             title="تسوق حسب التصنيف"
             description="تنظيم واضح للمنتجات يساعد العميل يوصل للمنتج المناسب بسرعة من الموبايل أو الكمبيوتر."
@@ -205,6 +213,7 @@ export default async function Home() {
       {settings.sections.bestSellers ? <section className="bg-white py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionTitle
+            textKeyPrefix="home.bestSellers"
             eyebrow="Best Sellers"
             title="الأكثر مبيعاً"
             description="منتجات مختارة لإظهار شكل المتجر النهائي، وستتحدث تلقائياً من WooCommerce عند إضافة مفاتيح API."
@@ -249,20 +258,26 @@ export default async function Home() {
           ) : null}
           <div className="grid gap-8 rounded-[2.5rem] bg-zinc-950 p-8 text-white lg:grid-cols-[1fr_0.8fr] lg:p-12">
             <div>
-              <p className="text-sm font-bold text-brand-gold">ميزة تنافسية</p>
+              <p className="text-sm font-bold text-brand-gold">
+                <VisualEditableText textKey="competitive.eyebrow">ميزة تنافسية</VisualEditableText>
+              </p>
               <h2 className="mt-3 text-3xl font-bold leading-tight sm:text-4xl">
-                موقع أسرع، صفحات منتجات أغنى، وثقة أوضح من الواجهات السريعة
+                <VisualEditableText textKey="competitive.title">
+                  موقع أسرع، صفحات منتجات أغنى، وثقة أوضح من الواجهات السريعة
+                </VisualEditableText>
               </h2>
               <p className="mt-5 max-w-2xl leading-8 text-zinc-300">
-                المرحلة القادمة تضيف البحث السريع، الفلاتر المتقدمة، wishlist،
-                المقارنة، وربط checkout حقيقي مع WooCommerce وفوري.
+                <VisualEditableText textKey="competitive.description">
+                  المرحلة القادمة تضيف البحث السريع، الفلاتر المتقدمة، wishlist،
+                  المقارنة، وربط checkout حقيقي مع WooCommerce وفوري.
+                </VisualEditableText>
               </p>
             </div>
             <div className="grid gap-3 text-sm font-bold text-zinc-200">
               {["SEO عربي للمنتجات", "Schema للمنتج والسعر", "Checkout فوري + COD", "تصميم Mobile-first"].map(
                 (item) => (
                   <div key={item} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    {item}
+                    <VisualEditableText textKey={`competitive.feature.${item}`}>{item}</VisualEditableText>
                   </div>
                 ),
               )}

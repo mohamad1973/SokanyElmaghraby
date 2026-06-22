@@ -278,21 +278,21 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             </label>
             <div className="grid gap-5 lg:grid-cols-2">
               <Field label="عنوان البنر">
-                <input
+                <textarea
                   value={settings.hero.title}
                   onChange={(event) =>
                     setSettings({ ...settings, hero: { ...settings.hero, title: event.target.value } })
                   }
-                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  className="min-h-24 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
               </Field>
               <Field label="النص الصغير فوق العنوان">
-                <input
+                <textarea
                   value={settings.hero.eyebrow}
                   onChange={(event) =>
                     setSettings({ ...settings, hero: { ...settings.hero, eyebrow: event.target.value } })
                   }
-                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
               </Field>
             </div>
@@ -307,12 +307,12 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             </Field>
             <div className="grid gap-5 lg:grid-cols-2">
               <Field label="نص زر التسوق">
-                <input
+                <textarea
                   value={settings.hero.primaryCtaText}
                   onChange={(event) =>
                     setSettings({ ...settings, hero: { ...settings.hero, primaryCtaText: event.target.value } })
                   }
-                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
               </Field>
               <Field label="رابط زر التسوق">
@@ -325,12 +325,12 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 />
               </Field>
               <Field label="نص زر التواصل">
-                <input
+                <textarea
                   value={settings.hero.secondaryCtaText}
                   onChange={(event) =>
                     setSettings({ ...settings, hero: { ...settings.hero, secondaryCtaText: event.target.value } })
                   }
-                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
               </Field>
               <Field label="رابط زر التواصل">
