@@ -66,6 +66,21 @@ export default async function Home() {
   );
   const heroTextClass = settings.hero.textTone === "dark" ? "text-zinc-950" : "text-white";
   const heroSubtextClass = settings.hero.textTone === "dark" ? "text-zinc-700" : "text-white/85";
+  const heroContentJustifyClass = {
+    right: "justify-end",
+    center: "justify-center",
+    left: "justify-start",
+  }[settings.hero.contentAlign];
+  const heroContentTextAlignClass = {
+    right: "text-right items-end",
+    center: "text-center items-center",
+    left: "text-left items-start",
+  }[settings.hero.contentAlign];
+  const heroButtonAlignClass = {
+    right: "sm:justify-end",
+    center: "sm:justify-center",
+    left: "sm:justify-start",
+  }[settings.hero.contentAlign];
 
   return (
     <>
@@ -114,9 +129,11 @@ export default async function Home() {
               />
             ) : null}
             {settings.hero.overlayEnabled ? <div className="absolute inset-0 bg-black/35" /> : null}
-            <div className="relative mx-auto flex min-h-[640px] max-w-7xl items-center px-4 py-24 sm:px-6 lg:px-8">
+            <div
+              className={`relative mx-auto flex min-h-[640px] max-w-7xl items-center px-4 py-24 sm:px-6 lg:px-8 ${heroContentJustifyClass}`}
+            >
               <div
-                className={`max-w-3xl ${settings.hero.frameEnabled ? "rounded-[2rem] border border-white/20 bg-black/25 p-8 backdrop-blur-sm" : ""}`}
+                className={`flex max-w-3xl flex-col ${heroContentTextAlignClass} ${settings.hero.frameEnabled ? "rounded-[2rem] border border-white/20 bg-black/25 p-8 backdrop-blur-sm" : ""}`}
               >
                 <p className="mb-5 inline-flex w-fit rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-black">
                   {settings.hero.eyebrow}
@@ -127,7 +144,7 @@ export default async function Home() {
                 <p className={`mt-6 max-w-2xl text-lg leading-9 ${heroSubtextClass}`}>
                   {settings.hero.subtitle}
                 </p>
-                <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <div className={`mt-9 flex w-full flex-col gap-3 sm:flex-row ${heroButtonAlignClass}`}>
                   <Link
                     href={settings.hero.primaryCtaUrl}
                     className="rounded-full bg-brand-gold px-8 py-4 text-center text-sm font-bold text-black transition hover:bg-brand-gold-dark"

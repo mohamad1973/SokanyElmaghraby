@@ -305,7 +305,64 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 className="min-h-28 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
               />
             </Field>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Field label="نص زر التسوق">
+                <input
+                  value={settings.hero.primaryCtaText}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, primaryCtaText: event.target.value } })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+              <Field label="رابط زر التسوق">
+                <input
+                  value={settings.hero.primaryCtaUrl}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, primaryCtaUrl: event.target.value } })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+              <Field label="نص زر التواصل">
+                <input
+                  value={settings.hero.secondaryCtaText}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, secondaryCtaText: event.target.value } })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+              <Field label="رابط زر التواصل">
+                <input
+                  value={settings.hero.secondaryCtaUrl}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, secondaryCtaUrl: event.target.value } })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+            </div>
             <div className="grid gap-5 lg:grid-cols-3">
+              <Field label="مكان كتلة النص">
+                <select
+                  value={settings.hero.contentAlign}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      hero: {
+                        ...settings.hero,
+                        contentAlign: event.target.value as "right" | "center" | "left",
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                >
+                  <option value="right">يمين</option>
+                  <option value="center">وسط</option>
+                  <option value="left">يسار</option>
+                </select>
+              </Field>
               <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
                 <input
                   type="checkbox"

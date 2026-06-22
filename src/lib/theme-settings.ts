@@ -49,6 +49,7 @@ export type ThemeSettings = {
     textTone: "light" | "dark";
     overlayEnabled: boolean;
     frameEnabled: boolean;
+    contentAlign: "right" | "center" | "left";
   };
   sections: {
     trustBadges: boolean;
@@ -117,6 +118,7 @@ export const defaultThemeSettings: ThemeSettings = {
     textTone: "light",
     overlayEnabled: true,
     frameEnabled: false,
+    contentAlign: "right",
   },
   sections: {
     trustBadges: true,
