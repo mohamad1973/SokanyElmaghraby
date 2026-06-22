@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { CategoryScroller } from "@/components/category-scroller";
 import { ProductCard } from "@/components/product-card";
+import { ProductRowScroller } from "@/components/product-row-scroller";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { getThemeSettings, type HomeSectionId } from "@/lib/theme-settings";
@@ -249,7 +250,7 @@ export default async function Home() {
               <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <Link
                   href={section.linkUrl || "/shop"}
-                  className="relative block min-h-[320px] overflow-hidden rounded-[2.5rem] p-8 shadow-sm lg:min-h-[420px] lg:p-12"
+                  className="relative block min-h-[320px] overflow-hidden rounded-2xl p-8 shadow-sm lg:min-h-[420px] lg:p-12"
                   style={{ backgroundColor: section.backgroundColor, color: section.textColor }}
                 >
                   {backgroundImage ? (
@@ -264,13 +265,8 @@ export default async function Home() {
                   ) : null}
                   <div className="absolute inset-0 bg-black/25" />
                   <div className="relative z-10 flex min-h-[260px] max-w-3xl flex-col justify-center lg:min-h-[360px]">
-                    <p className="text-sm font-bold text-brand-gold">
-                      <VisualEditableText textKey={`customSection.${section.id}.subtitle`}>
-                        {section.subtitle}
-                      </VisualEditableText>
-                    </p>
                     <h2
-                      className="mt-3 font-bold leading-tight"
+                      className="font-bold leading-tight"
                       style={{
                         fontSize: `clamp(${section.fontSizeMobile}px, 5vw, ${section.fontSizeDesktop}px)`,
                       }}
@@ -288,10 +284,8 @@ export default async function Home() {
                 </Link>
 
                 {sectionProducts.length ? (
-                  <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    {sectionProducts.map((product) => (
-                      <ProductCard key={product.id} product={product} />
-                    ))}
+                  <div className="mt-8">
+                    <ProductRowScroller products={sectionProducts} />
                   </div>
                 ) : null}
               </div>

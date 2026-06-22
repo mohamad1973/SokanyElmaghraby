@@ -67,10 +67,10 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
           }
         }}
         placeholder="ابحث عن منتجك"
-        className="w-full rounded-full border border-black/10 bg-zinc-50 px-5 py-3 text-sm font-bold text-zinc-950 outline-none transition focus:border-brand-gold focus:bg-white"
+        className="w-full rounded-full border border-black/10 bg-zinc-50 px-4 py-2.5 text-sm font-bold text-zinc-950 outline-none transition focus:border-brand-gold focus:bg-white sm:px-5 sm:py-3"
       />
       {query.trim().length >= 2 ? (
-        <div className="absolute left-0 right-0 top-full z-[70] mt-3 overflow-hidden rounded-3xl border border-black/10 bg-white shadow-2xl">
+        <div className="absolute left-0 right-0 top-full z-[70] mt-3 max-h-[70vh] overflow-y-auto rounded-3xl border border-black/10 bg-white shadow-2xl">
           {isLoading ? <p className="px-5 py-4 text-sm font-bold text-zinc-500">جاري البحث...</p> : null}
           {!isLoading && products.length === 0 ? (
             <p className="px-5 py-4 text-sm font-bold text-zinc-500">لا توجد منتجات مطابقة.</p>
@@ -80,7 +80,7 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
               key={product.id}
               href={`/product/${product.slug}`}
               onClick={() => setQuery("")}
-              className="flex items-center gap-3 border-b border-black/5 px-4 py-3 transition last:border-b-0 hover:bg-brand-cream"
+              className="flex items-center gap-2 border-b border-black/5 px-3 py-3 transition last:border-b-0 hover:bg-brand-cream sm:gap-3 sm:px-4"
             >
               <span className="relative h-14 w-14 overflow-hidden rounded-2xl bg-zinc-100">
                 <Image src={product.image} alt={product.name} fill sizes="56px" className="object-contain p-2" />
@@ -89,7 +89,7 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
                 <span className="line-clamp-1 block text-sm font-bold text-zinc-950">{product.name}</span>
                 <span className="mt-1 block text-xs font-bold text-zinc-500">{product.sku}</span>
               </span>
-              <span className="text-sm font-bold text-zinc-950">{product.price} ج.م</span>
+              <span className="whitespace-nowrap text-xs font-bold text-zinc-950 sm:text-sm">{product.price} ج.م</span>
             </Link>
           ))}
         </div>

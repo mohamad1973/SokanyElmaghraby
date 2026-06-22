@@ -94,39 +94,84 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
 }
 
 function MobileMenu({ menu }: { menu: MenuNode[] }) {
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [openId, setOpenId] = useState<number | null>(menu[0]?.id || null);
 
   return (
-    <div className="border-t border-black/5 px-4 py-3 lg:hidden">
-      <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto text-sm font-bold text-zinc-700">
-        {menu.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setOpenId(openId === item.id ? null : item.id)}
-            className="whitespace-nowrap rounded-full bg-brand-gold px-4 py-2 text-black"
-          >
-            {item.title}
-          </button>
-        ))}
-      </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black text-white lg:hidden"
+        aria-label="فتح المنيو"
+      >
+        <span className="grid gap-1">
+          <span className="block h-0.5 w-5 rounded-full bg-current" />
+          <span className="block h-0.5 w-5 rounded-full bg-current" />
+          <span className="block h-0.5 w-5 rounded-full bg-current" />
+        </span>
+      </button>
 
-      {openId ? (
-        <div className="mt-3 rounded-2xl bg-zinc-950 p-3 text-white">
-          {menu
-            .find((item) => item.id === openId)
-            ?.children.map((child) => (
-              <Link
-                key={child.id}
-                href={child.href}
-                className="block rounded-xl px-4 py-3 text-sm font-bold hover:bg-brand-gold hover:text-black"
+      {isOpen ? (
+        <div className="fixed inset-0 z-[90] lg:hidden">
+          <button
+            type="button"
+            aria-label="إغلاق المنيو"
+            onClick={() => setIsOpen(false)}
+            className="absolute inset-0 bg-black/45"
+          />
+          <aside className="absolute bottom-0 right-0 top-0 w-80 max-w-[86vw] overflow-y-auto bg-white p-5 shadow-2xl" dir="rtl">
+            <div className="mb-5 flex items-center justify-between border-b border-black/10 pb-4">
+              <p className="text-lg font-bold text-zinc-950">القائمة</p>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-xl font-bold"
+                aria-label="إغلاق"
               >
-                {child.title}
-              </Link>
-            ))}
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-2">
+              {menu.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-black/10">
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(openId === item.id ? null : item.id)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-right text-sm font-bold text-zinc-950"
+                  >
+                    <span>{item.title}</span>
+                    <span>{openId === item.id ? "−" : "+"}</span>
+                  </button>
+                  {openId === item.id ? (
+                    <div className="border-t border-black/5 bg-zinc-50 p-2">
+                      <Link
+                        href={item.href}
+                        onClick={() => setIsOpen(false)}
+                        className="block rounded-xl px-4 py-3 text-sm font-bold text-zinc-700 hover:bg-brand-gold hover:text-black"
+                      >
+                        عرض الكل
+                      </Link>
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.id}
+                          href={child.href}
+                          onClick={() => setIsOpen(false)}
+                          className="block rounded-xl px-4 py-3 text-sm font-bold text-zinc-700 hover:bg-brand-gold hover:text-black"
+                        >
+                          {child.title}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -206,10 +251,12 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </Link>
       ) : null}
 
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-3" aria-label="Sokany Egypt home">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 lg:px-8 lg:py-4">
+        <div className="flex items-center gap-2">
+          <MobileMenu menu={headerMenu} />
+          <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-3" aria-label="الرئيسية">
           {settings.brand.logoUrl ? (
-            <span className="relative block h-12 w-36">
+            <span className="relative block h-10 w-24 sm:h-12 sm:w-36">
               <Image
                 src={settings.brand.logoUrl}
                 alt={settings.brand.logoText}
@@ -224,26 +271,27 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               {settings.brand.logoText.slice(0, 2)}
             </span>
           )}
-          <span className="leading-tight">
-            <span className="block text-xl font-bold tracking-tight text-zinc-950">
+          <span className="hidden leading-tight sm:block">
+            <span className="block text-lg font-bold tracking-tight text-zinc-950 lg:text-xl">
               <VisualEditableText textKey="header.logoText">{settings.brand.logoText}</VisualEditableText>
             </span>
             <span className="block text-xs font-semibold text-zinc-500">
               <VisualEditableText textKey="header.tagline">{settings.brand.tagline}</VisualEditableText>
             </span>
           </span>
-        </Link>
+          </Link>
+        </div>
 
         <HeaderProductSearch />
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {headerActions.map((action) => (
             <Link
               key={action.label}
               href={action.href}
               aria-label={action.label}
               title={action.label}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-950 transition hover:border-brand-gold hover:bg-brand-gold"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white text-zinc-950 transition hover:border-brand-gold hover:bg-brand-gold sm:h-10 sm:w-10"
             >
               <HeaderIcon icon={action.icon} />
             </Link>
@@ -256,7 +304,6 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
       </div>
 
       <DesktopMenu menu={headerMenu} />
-      <MobileMenu menu={headerMenu} />
     </header>
   );
 }

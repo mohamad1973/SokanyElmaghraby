@@ -222,6 +222,10 @@ function mapStoreProduct(product: StoreApiProduct): Product {
   };
 }
 
+function hasRealProductImage(product: Product) {
+  return Boolean(product.images?.length && product.image && !product.image.includes("product-placeholder"));
+}
+
 async function getCategoryIdBySlug(slug?: string) {
   if (!slug) {
     return null;
@@ -296,7 +300,7 @@ export async function getProducts(limit = 12, categorySlug?: string): Promise<Pr
     : await wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish${categoryQuery}`);
 
   if (data?.length) {
-    return uniqueProducts(data.map(mapProduct), limit);
+    return uniqueProducts(data.map(mapProduct).filter(hasRealProductImage), limit);
   }
 
   const storeData = categoryIds.length > 1
@@ -310,26 +314,26 @@ export async function getProducts(limit = 12, categorySlug?: string): Promise<Pr
       );
 
   if (storeData?.length) {
-    return uniqueProducts(storeData.map(mapStoreProduct), limit);
+    return uniqueProducts(storeData.map(mapStoreProduct).filter(hasRealProductImage), limit);
   }
 
-  return fallbackProducts.slice(0, limit);
+  return fallbackProducts.filter(hasRealProductImage).slice(0, limit);
 }
 
 export async function getFeaturedProducts(): Promise<Product[]> {
   const data = await wooFetch<WooProduct[]>("products?featured=true&per_page=8&status=publish");
 
   if (data?.length) {
-    return data.map(mapProduct);
+    return data.map(mapProduct).filter(hasRealProductImage);
   }
 
   const storeData = await storeFetch<StoreApiProduct[]>("products?per_page=8&orderby=popularity");
 
   if (storeData?.length) {
-    return storeData.map(mapStoreProduct);
+    return storeData.map(mapStoreProduct).filter(hasRealProductImage);
   }
 
-  return fallbackProducts.filter((product) => product.featured);
+  return fallbackProducts.filter((product) => product.featured && hasRealProductImage(product));
 }
 
 export async function searchProducts(query: string, limit = 8): Promise<Product[]> {
@@ -344,7 +348,7 @@ export async function searchProducts(query: string, limit = 8): Promise<Product[
   );
 
   if (data?.length) {
-    return data.map(mapProduct);
+    return data.map(mapProduct).filter(hasRealProductImage);
   }
 
   const storeData = await storeFetch<StoreApiProduct[]>(
@@ -352,13 +356,14 @@ export async function searchProducts(query: string, limit = 8): Promise<Product[
   );
 
   if (storeData?.length) {
-    return storeData.map(mapStoreProduct);
+    return storeData.map(mapStoreProduct).filter(hasRealProductImage);
   }
 
   const normalizedQuery = trimmedQuery.toLowerCase();
 
   return fallbackProducts
     .filter((product) =>
+      hasRealProductImage(product) &&
       [product.name, product.sku, product.category, product.shortDescription].some((value) =>
         value.toLowerCase().includes(normalizedQuery),
       ),
