@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { CategoryScroller } from "@/components/category-scroller";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
 import { getThemeSettings } from "@/lib/theme-settings";
@@ -59,6 +60,7 @@ export default async function Home() {
     getCategories(),
     getThemeSettings(),
   ]);
+  const categoriesWithImages = categories.filter((category) => category.image);
 
   return (
     <>
@@ -159,42 +161,14 @@ export default async function Home() {
         </div>
       </section> : null}
 
-      {settings.sections.categories ? <section className="py-16">
+      {settings.sections.categories && categoriesWithImages.length ? <section className="py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionTitle
             eyebrow="Categories"
             title="تسوق حسب التصنيف"
             description="تنظيم واضح للمنتجات يساعد العميل يوصل للمنتج المناسب بسرعة من الموبايل أو الكمبيوتر."
           />
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/shop?category=${category.slug}`}
-                className="group rounded-[2rem] border border-black/10 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
-              >
-                <div className="relative mb-8 h-40 overflow-hidden rounded-[1.5rem] bg-brand-cream">
-                  {category.image ? (
-                    <Image
-                      src={category.image}
-                      alt={category.name}
-                      fill
-                      sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                      className="object-cover transition duration-500 group-hover:scale-105"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="h-full bg-gradient-to-br from-brand-gold to-zinc-950 transition group-hover:from-brand-gold-dark group-hover:to-zinc-900" />
-                  )}
-                </div>
-                <h3 className="text-xl font-bold text-zinc-950">{category.name}</h3>
-                <p className="mt-3 min-h-16 text-sm leading-7 text-zinc-600">{category.description}</p>
-                <p className="mt-5 text-sm font-bold text-brand-gold">
-                  {category.productCount} منتج
-                </p>
-              </Link>
-            ))}
-          </div>
+          <CategoryScroller categories={categoriesWithImages} />
         </div>
       </section> : null}
 
