@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { OrderNotificationBar } from "./order-notification-bar";
+
 const navItems = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/theme", label: "Appearance" },
@@ -51,6 +53,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="lg:pl-56">
+        <OrderNotificationBar />
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-black/10 bg-white px-4 shadow-sm">
           <div>
             <p className="text-sm font-bold">SOKANY Frontend Control</p>
