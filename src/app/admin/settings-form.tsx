@@ -285,6 +285,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                   }
                   className="min-h-24 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
+                <p className="text-xs leading-6 text-zinc-500">اضغط Enter لبدء سطر جديد داخل العنوان.</p>
               </Field>
               <Field label="النص الصغير فوق العنوان">
                 <textarea
@@ -294,6 +295,9 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                   }
                   className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
+                <p className="text-xs leading-6 text-zinc-500">
+                  هذا هو نص مؤسسة المغربي أعلى البنر. اضغط Enter لو تريد تقسيمه على أكثر من سطر.
+                </p>
               </Field>
             </div>
             <Field label="وصف البنر">
@@ -304,6 +308,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 }
                 className="min-h-28 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
               />
+              <p className="text-xs leading-6 text-zinc-500">اضغط Enter لكتابة كل جملة في سطر جديد.</p>
             </Field>
             <div className="grid gap-5 lg:grid-cols-2">
               <Field label="نص زر التسوق">
@@ -471,13 +476,16 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               إظهار بنر أعلى الهيدر
             </label>
             <Field label="نص بنر أعلى الهيدر">
-              <input
+              <textarea
                 value={settings.topBanner.text}
                 onChange={(event) =>
                   setSettings({ ...settings, topBanner: { ...settings.topBanner, text: event.target.value } })
                 }
-                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                className="min-h-20 rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
               />
+              <p className="text-xs leading-6 text-zinc-500">
+                هذا النص يتحرك تلقائياً أعلى الهيدر. اضغط Enter لو تريد أكثر من سطر.
+              </p>
             </Field>
             <ImageUploadField
               label="صورة بنر أعلى الهيدر - ديسكتوب"

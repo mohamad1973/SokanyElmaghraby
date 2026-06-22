@@ -25,6 +25,8 @@ export function VisualEditableText({ textKey, children, className }: VisualEdita
     <span
       role={editor?.editMode ? "button" : undefined}
       tabIndex={editor?.editMode ? 0 : undefined}
+      title={editor?.editMode ? `Editable text: ${textKey}` : undefined}
+      data-text-key={editor?.editMode ? textKey : undefined}
       onClick={(event) => {
         if (!editor?.editMode) {
           return;
@@ -35,9 +37,9 @@ export function VisualEditableText({ textKey, children, className }: VisualEdita
         editor.selectText(textKey);
       }}
       className={[
-        "inline-block transition-transform",
-        editor?.editMode ? "cursor-move rounded-sm outline outline-1 outline-dashed outline-brand-gold/70" : "",
-        isSelected ? "bg-brand-gold/20 outline-2 outline-black" : "",
+        "relative inline-block transition-transform",
+        editor?.editMode ? "cursor-move rounded-md px-1 outline outline-2 outline-dashed outline-brand-gold/80 hover:bg-brand-gold/15" : "",
+        isSelected ? "bg-brand-gold/25 outline-4 outline-black ring-4 ring-brand-gold/40" : "",
         className || "",
       ].join(" ")}
       style={visualStyle}

@@ -152,7 +152,15 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               ) : null}
             </>
           ) : (
-            <VisualEditableText textKey="topBanner.text">{settings.topBanner.text}</VisualEditableText>
+            <span className="top-banner-marquee" aria-label={settings.topBanner.text}>
+              <span className="top-banner-marquee-track">
+                {[0, 1].map((item) => (
+                  <span key={item} className="top-banner-marquee-item">
+                    <VisualEditableText textKey="topBanner.text">{settings.topBanner.text}</VisualEditableText>
+                  </span>
+                ))}
+              </span>
+            </span>
           )}
         </Link>
       ) : null}

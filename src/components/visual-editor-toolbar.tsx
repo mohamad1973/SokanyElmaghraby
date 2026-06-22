@@ -39,6 +39,10 @@ export function VisualEditorToolbar() {
       <p className="mt-3 leading-6 text-zinc-600">
         حدد النص ثم استخدم الأسهم للتحريك. اضغط Shift مع الأسهم للحركة الأسرع. Ctrl + سهم فوق/تحت للتكبير والتصغير.
       </p>
+      <p className="mt-2 rounded-xl bg-zinc-50 p-3 text-xs leading-6 text-zinc-600">
+        نص مؤسسة المغربي الوكيل الحصري هو الشارة الخضراء أعلى البنر واسمها: <span className="font-bold">hero.eyebrow</span>.
+        فعّل التعديل ثم اضغط عليها مرة واحدة للتحكم بها.
+      </p>
       {editor.selectedKey ? <p className="mt-2 text-xs font-bold text-zinc-500">النص المحدد: {editor.selectedKey}</p> : null}
       {editor.status ? <p className="mt-2 text-xs font-bold text-zinc-950">{editor.status}</p> : null}
     </div>

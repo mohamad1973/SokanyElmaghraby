@@ -34,3 +34,38 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+.top-banner-marquee {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.top-banner-marquee-track {
+  display: inline-flex;
+  min-width: max-content;
+  animation: top-banner-marquee 18s linear infinite;
+}
+
+.top-banner-marquee-item {
+  display: inline-flex;
+  min-width: 100vw;
+  justify-content: center;
+  padding-inline: 2rem;
+}
+
+@keyframes top-banner-marquee {
+  from {
+    transform: translateX(-50%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-banner-marquee-track {
+    animation: none;
+  }
+}
