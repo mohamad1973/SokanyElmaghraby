@@ -7,9 +7,12 @@ export type Product = {
   regularPrice?: string;
   salePrice?: string;
   image: string;
+  images?: string[];
   category: string;
   shortDescription: string;
+  shortDescriptionHtml?: string;
   description: string;
+  descriptionHtml?: string;
   stockStatus: "instock" | "outofstock" | "onbackorder";
   rating: string;
   attributes: Record<string, string>;

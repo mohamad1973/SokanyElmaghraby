@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProductCard } from "@/components/product-card";
+import { ProductRichDescription } from "@/components/product-rich-description";
 import { getProductBySlug, getProducts } from "@/lib/woocommerce";
 
 type ProductPageProps = {
@@ -66,6 +67,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       url: `https://sokany-eg.com/product/${product.slug}`,
     },
   };
+  const galleryImages = Array.from(new Set([product.image, ...(product.images || [])])).filter(Boolean);
 
   return (
     <div className="py-12">
@@ -78,7 +80,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <div className="rounded-[2.5rem] bg-white p-5 shadow-sm">
             <div className="relative aspect-square overflow-hidden rounded-[2rem] bg-brand-cream">
               <Image
-                src={product.image}
+                src={galleryImages[0] || product.image}
                 alt={product.name}
                 fill
                 priority
@@ -86,6 +88,21 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 className="object-cover p-10"
               />
             </div>
+            {galleryImages.length > 1 ? (
+              <div className="mt-4 grid grid-cols-4 gap-3">
+                {galleryImages.slice(1, 5).map((image, index) => (
+                  <div key={`${image}-${index}`} className="relative aspect-square overflow-hidden rounded-2xl bg-brand-cream">
+                    <Image
+                      src={image}
+                      alt={`${product.name} ${index + 2}`}
+                      fill
+                      sizes="(min-width: 1024px) 12vw, 25vw"
+                      className="object-contain p-3"
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-col justify-center">
@@ -137,6 +154,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
             </div>
           </div>
         </div>
+
+        <ProductRichDescription html={product.descriptionHtml} fallbackText={product.description} />
 
         <section className="mt-16">
           <h2 className="mb-6 text-2xl font-bold text-zinc-950">منتجات مشابهة</h2>

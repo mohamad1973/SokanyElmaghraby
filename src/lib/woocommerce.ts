@@ -135,6 +135,8 @@ async function storeFetch<T>(path: string): Promise<T | null> {
 }
 
 function mapProduct(product: WooProduct): Product {
+  const images = product.images?.map((image) => image.src).filter((src): src is string => Boolean(src)) || [];
+
   return {
     id: product.id,
     name: product.name,
@@ -143,12 +145,15 @@ function mapProduct(product: WooProduct): Product {
     price: product.price || product.sale_price || product.regular_price || "0",
     regularPrice: product.regular_price,
     salePrice: product.sale_price,
-    image: product.images?.[0]?.src || "/product-placeholder.svg",
+    image: images[0] || "/product-placeholder.svg",
+    images,
     category: product.categories?.[0]?.name || "منتجات سوكاني",
     shortDescription:
       stripHtml(product.short_description) || "منتج أصلي من سوكاني بضمان مؤسسة المغربي.",
+    shortDescriptionHtml: product.short_description || "",
     description:
       stripHtml(product.description) || "تفاصيل المنتج يتم تحديثها من لوحة WooCommerce.",
+    descriptionHtml: product.description || "",
     stockStatus: product.stock_status || "instock",
     rating: product.average_rating || "0",
     attributes:
@@ -182,6 +187,9 @@ function mapStoreProduct(product: StoreApiProduct): Product {
     product.prices?.currency_minor_unit,
   );
   const salePrice = formatStorePrice(product.prices?.sale_price, product.prices?.currency_minor_unit);
+  const images = product.images
+    ?.map((image) => image.src || image.thumbnail)
+    .filter((src): src is string => Boolean(src)) || [];
 
   return {
     id: product.id,
@@ -191,12 +199,15 @@ function mapStoreProduct(product: StoreApiProduct): Product {
     price,
     regularPrice,
     salePrice: product.on_sale ? salePrice : undefined,
-    image: product.images?.[0]?.src || product.images?.[0]?.thumbnail || "/product-placeholder.svg",
+    image: images[0] || "/product-placeholder.svg",
+    images,
     category: product.categories?.[0]?.name || "منتجات سوكاني",
     shortDescription:
       stripHtml(product.short_description) || "منتج أصلي من سوكاني بضمان مؤسسة المغربي.",
+    shortDescriptionHtml: product.short_description || "",
     description:
       stripHtml(product.description) || "تفاصيل المنتج يتم تحديثها من لوحة WooCommerce.",
+    descriptionHtml: product.description || "",
     stockStatus: product.is_on_backorder
       ? "onbackorder"
       : product.is_in_stock
