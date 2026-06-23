@@ -19,6 +19,9 @@ export default function CheckoutPage() {
             للوحة WordPress، وعند اختيار فوري سيتم تحويل العميل لمسار الدفع وتأكيد
             الحالة عبر callback/webhook.
           </p>
+          <p className="mt-3 rounded-2xl bg-brand-cream p-4 text-sm leading-7 text-zinc-700">
+            عند تسجيل دخول العميل سيتم ربط الطلب بحسابه في ووردبريس، ويمكن لاحقاً استخدام نقاط الولاء كخصم من إجمالي الطلب.
+          </p>
 
           <form className="mt-8 grid gap-5">
             {fields.map((field) => (

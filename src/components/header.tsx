@@ -193,7 +193,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     .filter(Boolean);
   const topBannerItems = topBannerPhrases.length ? topBannerPhrases : [settings.topBanner.text];
   const headerActions = [
-    { href: "/admin/login", label: "الحساب", icon: "account" as const },
+    { href: "/account", label: "الحساب", icon: "account" as const },
     { href: "/cart", label: "السلة", icon: "cart" as const },
     { href: "/offers", label: "المفضلة", icon: "favorite" as const },
     { href: "/shop", label: "مقارنة المنتجات", icon: "compare" as const },
