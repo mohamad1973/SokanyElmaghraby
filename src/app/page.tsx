@@ -229,7 +229,7 @@ export default async function Home() {
             textKeyPrefix="home.bestSellers"
             eyebrow="الأكثر طلباً"
             title="الأكثر مبيعاً"
-            description="منتجات مختارة لإظهار شكل المتجر النهائي، وستتحدث تلقائياً من ووكومرس عند إضافة مفاتيح الربط."
+            description="تعرف على اكثر المنتجات مبيعا لدى العملاء."
           />
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {featuredProducts.map((product) => (
