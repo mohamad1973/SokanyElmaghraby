@@ -217,7 +217,7 @@ export default async function Home() {
             textKeyPrefix="home.categories"
             eyebrow="التصنيفات"
             title="تسوق حسب التصنيف"
-            description="يمكنك الوصووصول الى المنتج الذى تريده عن طريق الضغط على القسم الذى ينتمى اليه"
+            description="يمكنك الوصول الى المنتج الذى تريده عن طريق الضغط على القسم الذى ينتمى اليه"
           />
         </div>
         <CategoryScroller categories={categoriesWithImages} />
@@ -341,10 +341,15 @@ export default async function Home() {
               </p>
             </div>
             <div className="grid gap-3 text-sm font-bold text-zinc-200">
-              {["تحسين ظهور المنتجات في البحث", "بيانات منظمة للمنتج والسعر", "إتمام طلب فوري أو كاش", "تصميم يبدأ من الموبايل"].map(
+              {[
+                { key: "search", text: "تحسين ظهور المنتجات في البحث" },
+                { key: "structuredData", text: "بيانات منظمة للمنتج والسعر" },
+                { key: "checkout", text: "إتمام طلب فوري أو كاش" },
+                { key: "mobile", text: "تصميم يبدأ من الموبايل" },
+              ].map(
                 (item) => (
-                  <div key={item} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <VisualEditableText textKey={`competitive.feature.${item}`}>{item}</VisualEditableText>
+                  <div key={item.key} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <VisualEditableText textKey={`competitive.feature.${item.key}`}>{item.text}</VisualEditableText>
                   </div>
                 ),
               )}

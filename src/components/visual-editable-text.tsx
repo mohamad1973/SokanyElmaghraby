@@ -39,6 +39,13 @@ export function VisualEditableText({ textKey, children, className }: VisualEdita
         event.stopPropagation();
         editor.selectText(textKey);
       }}
+      onFocus={() => {
+        if (!editor?.editMode) {
+          return;
+        }
+
+        editor.selectText(textKey);
+      }}
       onInput={(event) => {
         if (!editor?.editMode) {
           return;
@@ -48,7 +55,7 @@ export function VisualEditableText({ textKey, children, className }: VisualEdita
       }}
       className={[
         "relative inline-block transition-transform",
-        editor?.editMode ? "cursor-text rounded-md px-1 outline outline-2 outline-dashed outline-brand-gold/80 hover:bg-brand-gold/15" : "",
+        editor?.editMode ? "min-w-4 cursor-text rounded-md px-1 outline outline-2 outline-dashed outline-brand-gold/80 hover:bg-brand-gold/15 focus:bg-brand-gold/20 focus:outline-black" : "",
         isSelected ? "bg-brand-gold/25 outline-4 outline-black ring-4 ring-brand-gold/40" : "",
         className || "",
       ].join(" ")}

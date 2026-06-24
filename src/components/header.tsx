@@ -122,7 +122,9 @@ function MobileMenu({ menu }: { menu: MenuNode[] }) {
           />
           <aside className="absolute bottom-0 right-0 top-0 w-80 max-w-[86vw] overflow-y-auto bg-white p-5 shadow-2xl" dir="rtl">
             <div className="mb-5 flex items-center justify-between border-b border-black/10 pb-4">
-              <p className="text-lg font-bold text-zinc-950">القائمة</p>
+              <p className="text-lg font-bold text-zinc-950">
+                <VisualEditableText textKey="header.mobileMenu.title">القائمة</VisualEditableText>
+              </p>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -151,7 +153,7 @@ function MobileMenu({ menu }: { menu: MenuNode[] }) {
                         onClick={() => setIsOpen(false)}
                         className="block rounded-xl px-4 py-3 text-sm font-bold text-zinc-700 hover:bg-brand-gold hover:text-black"
                       >
-                        عرض الكل
+                        <VisualEditableText textKey="header.mobileMenu.viewAll">عرض الكل</VisualEditableText>
                       </Link>
                       {item.children.map((child) => (
                         <Link

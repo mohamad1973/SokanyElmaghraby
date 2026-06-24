@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { ProductCard } from "@/components/product-card";
 import { ProductRichDescription } from "@/components/product-rich-description";
+import { VisualEditableText } from "@/components/visual-editable-text";
 import { getProductBySlug, getProducts } from "@/lib/woocommerce";
 
 type ProductPageProps = {
@@ -120,7 +121,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 </span>
               ) : null}
               <span className="rounded-full bg-green-100 px-4 py-2 text-sm font-bold text-green-700">
-                {product.stockStatus === "instock" ? "متوفر" : "متاح بالحجز"}
+                {product.stockStatus === "instock" ? (
+                  <VisualEditableText textKey="product.stock.instock">متوفر</VisualEditableText>
+                ) : (
+                  <VisualEditableText textKey="product.stock.backorder">متاح بالحجز</VisualEditableText>
+                )}
               </span>
             </div>
 
@@ -129,18 +134,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 href="/checkout"
                 className="rounded-full bg-brand-gold px-8 py-4 text-center text-sm font-bold text-black transition hover:bg-brand-gold-dark"
               >
-                شراء الآن
+                <VisualEditableText textKey="product.buyNow">شراء الآن</VisualEditableText>
               </Link>
               <Link
                 href="/cart"
                 className="rounded-full border border-black/10 bg-white px-8 py-4 text-center text-sm font-bold text-zinc-950 transition hover:border-brand-gold hover:text-brand-gold"
               >
-                أضف للسلة
+                <VisualEditableText textKey="product.addToCart">أضف للسلة</VisualEditableText>
               </Link>
             </div>
 
             <div className="mt-8 grid gap-3 rounded-[2rem] bg-white p-5 shadow-sm">
-              <p className="text-sm font-bold text-zinc-950">المواصفات</p>
+              <p className="text-sm font-bold text-zinc-950">
+                <VisualEditableText textKey="product.specifications">المواصفات</VisualEditableText>
+              </p>
               {Object.entries(product.attributes).map(([key, value]) => (
                 <div key={key} className="flex justify-between gap-4 border-b border-black/5 py-3 text-sm">
                   <span className="font-bold text-zinc-500">{key}</span>
@@ -148,7 +155,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 </div>
               ))}
               <div className="flex justify-between gap-4 py-3 text-sm">
-                <span className="font-bold text-zinc-500">SKU</span>
+                <span className="font-bold text-zinc-500">
+                  <VisualEditableText textKey="product.skuLabel">SKU</VisualEditableText>
+                </span>
                 <span className="font-bold text-zinc-950">{product.sku}</span>
               </div>
             </div>
@@ -158,7 +167,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <ProductRichDescription html={product.descriptionHtml} fallbackText={product.description} />
 
         <section className="mt-16">
-          <h2 className="mb-6 text-2xl font-bold text-zinc-950">منتجات مشابهة</h2>
+          <h2 className="mb-6 text-2xl font-bold text-zinc-950">
+            <VisualEditableText textKey="product.relatedProducts">منتجات مشابهة</VisualEditableText>
+          </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {relatedProducts
               .filter((related) => related.slug !== product.slug)

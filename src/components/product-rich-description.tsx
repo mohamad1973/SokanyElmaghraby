@@ -1,3 +1,5 @@
+import { VisualEditableText } from "./visual-editable-text";
+
 type ProductRichDescriptionProps = {
   html?: string;
   fallbackText?: string;
@@ -76,8 +78,12 @@ export function ProductRichDescription({ html, fallbackText }: ProductRichDescri
   return (
     <section className="mt-16 rounded-[2rem] bg-white p-5 shadow-sm sm:p-8" dir="rtl">
       <div className="mb-6">
-        <p className="text-sm font-bold tracking-[0.25em] text-brand-gold">التفاصيل</p>
-        <h2 className="mt-2 text-2xl font-bold text-zinc-950">تفاصيل ومواصفات المنتج</h2>
+        <p className="text-sm font-bold tracking-[0.25em] text-brand-gold">
+          <VisualEditableText textKey="product.richDetails.eyebrow">التفاصيل</VisualEditableText>
+        </p>
+        <h2 className="mt-2 text-2xl font-bold text-zinc-950">
+          <VisualEditableText textKey="product.richDetails.title">تفاصيل ومواصفات المنتج</VisualEditableText>
+        </h2>
       </div>
 
       {hasContent ? (
@@ -91,7 +97,9 @@ export function ProductRichDescription({ html, fallbackText }: ProductRichDescri
 
       {mediaLinks.length ? (
         <div className="mt-8 grid gap-4">
-          <h3 className="text-lg font-bold text-zinc-950">روابط وفيديوهات المنتج</h3>
+          <h3 className="text-lg font-bold text-zinc-950">
+            <VisualEditableText textKey="product.richDetails.mediaTitle">روابط وفيديوهات المنتج</VisualEditableText>
+          </h3>
           <div className="grid gap-4 lg:grid-cols-2">
             {mediaLinks.map((url) => {
               const youtubeEmbedUrl = getYouTubeEmbedUrl(url);
@@ -113,7 +121,7 @@ export function ProductRichDescription({ html, fallbackText }: ProductRichDescri
                     rel="noopener noreferrer"
                     className="block px-5 py-4 text-sm font-bold text-zinc-950 transition hover:text-brand-gold"
                   >
-                    مشاهدة الرابط أو الفيديو
+                    <VisualEditableText textKey="product.richDetails.watchMedia">مشاهدة الرابط أو الفيديو</VisualEditableText>
                   </a>
                 </div>
               );

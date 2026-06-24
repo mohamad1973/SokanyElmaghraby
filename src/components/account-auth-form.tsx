@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { VisualEditableText } from "./visual-editable-text";
+
 type AccountAuthFormProps = {
   mode: "login" | "register";
 };
@@ -56,27 +58,27 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
       {mode === "register" ? (
         <>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            الاسم بالكامل
+            <VisualEditableText textKey="account.form.name">الاسم بالكامل</VisualEditableText>
             <input name="name" required className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
           </label>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            رقم الموبايل
+            <VisualEditableText textKey="account.form.phone">رقم الموبايل</VisualEditableText>
             <input name="phone" required inputMode="tel" className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
           </label>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            البريد الإلكتروني
+            <VisualEditableText textKey="account.form.email">البريد الإلكتروني</VisualEditableText>
             <input name="email" required type="email" className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
           </label>
         </>
       ) : (
         <label className="grid gap-2 text-sm font-bold text-zinc-700">
-          البريد الإلكتروني أو اسم المستخدم
+          <VisualEditableText textKey="account.form.username">البريد الإلكتروني أو اسم المستخدم</VisualEditableText>
           <input name="username" required className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
         </label>
       )}
 
       <label className="grid gap-2 text-sm font-bold text-zinc-700">
-        كلمة المرور
+        <VisualEditableText textKey="account.form.password">كلمة المرور</VisualEditableText>
         <input name="password" required type="password" minLength={8} className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
       </label>
 
@@ -87,7 +89,13 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
         disabled={isSubmitting}
         className="rounded-full bg-brand-gold px-6 py-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:opacity-60"
       >
-        {isSubmitting ? "جاري التنفيذ..." : mode === "register" ? "إنشاء الحساب" : "تسجيل الدخول"}
+        {isSubmitting ? (
+          <VisualEditableText textKey="account.form.submitting">جاري التنفيذ...</VisualEditableText>
+        ) : mode === "register" ? (
+          <VisualEditableText textKey="account.form.registerSubmit">إنشاء الحساب</VisualEditableText>
+        ) : (
+          <VisualEditableText textKey="account.form.loginSubmit">تسجيل الدخول</VisualEditableText>
+        )}
       </button>
     </form>
   );

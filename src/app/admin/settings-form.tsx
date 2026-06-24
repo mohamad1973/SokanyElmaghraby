@@ -293,7 +293,8 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               تفعيل تعديل النص في الفرونت اند للأدمن فقط
             </label>
             <p className="mt-3 text-sm leading-6 text-zinc-500">
-              بعد التفعيل افتح الصفحة الرئيسية كأدمن، حدد أي نص مثل وصف التصنيفات أو وصف الأكثر مبيعاً، عدله مباشرة ثم اضغط زر حفظ أعلى الصفحة.
+              بعد التفعيل افتح الموقع كأدمن، حدد أي نص ثابت مثل العناوين والأوصاف والأزرار، عدله مباشرة ثم اضغط زر حفظ أعلى الصفحة.
+              أسماء المنتجات والتصنيفات والأسعار يتم تعديلها من WooCommerce لأنها بيانات متجر وليست نصوص واجهة ثابتة.
             </p>
           </div>
           <div className="grid gap-3 rounded-xl border border-black/10 bg-white p-4 lg:col-span-2">

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
+import { VisualEditableText } from "@/components/visual-editable-text";
 import { getCategories, getProducts } from "@/lib/woocommerce";
 
 export const metadata: Metadata = {
@@ -29,11 +30,15 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionTitle
           eyebrow="المتجر"
-          title={selectedCategory ? selectedCategory.name : "متجر سوكاني مصر"}
+          title={selectedCategory ? <>{selectedCategory.name}</> : <VisualEditableText textKey="shop.title">متجر سوكاني مصر</VisualEditableText>}
           description={
             selectedCategory
-              ? `${selectedCategory.description} - ${products.length} منتج داخل هذه المجموعة.`
-              : "واجهة سريعة للمنتجات الحالية، جاهزة للربط المباشر مع ووكومرس والفلاتر المتقدمة."
+              ? <>{selectedCategory.description} - {products.length} منتج داخل هذه المجموعة.</>
+              : (
+                <VisualEditableText textKey="shop.description">
+                  واجهة سريعة للمنتجات الحالية، جاهزة للربط المباشر مع ووكومرس والفلاتر المتقدمة.
+                </VisualEditableText>
+              )
           }
         />
 
@@ -44,7 +49,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               selectedCategorySlug ? "bg-white text-zinc-700" : "bg-black text-white"
             }`}
           >
-            كل المنتجات
+            <VisualEditableText textKey="shop.allProducts">كل المنتجات</VisualEditableText>
           </a>
           {categories.map((category) => (
             <a
@@ -64,10 +69,13 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
         {selectedCategorySlug ? (
           <div className="mb-6 rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
             <p className="text-sm font-bold text-zinc-950">
-              المنتجات المعروضة حالياً تخص مجموعة: {selectedCategory?.name || selectedCategorySlug}
+              <VisualEditableText textKey="shop.selectedCategoryPrefix">المنتجات المعروضة حالياً تخص مجموعة:</VisualEditableText>{" "}
+              {selectedCategory?.name || selectedCategorySlug}
             </p>
             <p className="mt-1 text-sm text-zinc-500">
-              يتم جلب المنتجات مباشرة من ووكومرس، ولو المجموعة تحتوي تصنيفات فرعية يتم تضمين منتجاتها أيضاً.
+              <VisualEditableText textKey="shop.selectedCategoryDescription">
+                يتم جلب المنتجات مباشرة من ووكومرس، ولو المجموعة تحتوي تصنيفات فرعية يتم تضمين منتجاتها أيضاً.
+              </VisualEditableText>
             </p>
           </div>
         ) : null}
@@ -80,7 +88,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
           </div>
         ) : (
           <div className="rounded-2xl border border-black/10 bg-white p-10 text-center text-sm font-semibold text-zinc-600">
-            لا توجد منتجات داخل هذه المجموعة حالياً.
+            <VisualEditableText textKey="shop.emptyProducts">لا توجد منتجات داخل هذه المجموعة حالياً.</VisualEditableText>
           </div>
         )}
       </div>

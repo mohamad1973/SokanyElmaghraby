@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { VisualEditableText } from "./visual-editable-text";
+
 export function AccountLogoutButton() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -21,7 +23,11 @@ export function AccountLogoutButton() {
       disabled={isLoading}
       className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold text-zinc-700 transition hover:border-brand-gold hover:text-black disabled:opacity-60"
     >
-      {isLoading ? "جاري الخروج..." : "تسجيل الخروج"}
+      {isLoading ? (
+        <VisualEditableText textKey="account.logout.loading">جاري الخروج...</VisualEditableText>
+      ) : (
+        <VisualEditableText textKey="account.logout.default">تسجيل الخروج</VisualEditableText>
+      )}
     </button>
   );
 }

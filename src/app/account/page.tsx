@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AccountLogoutButton } from "@/components/account-logout-button";
+import { VisualEditableText } from "@/components/visual-editable-text";
 import {
   calculateLoyaltySummary,
   getActiveOrder,
@@ -35,7 +36,9 @@ export default async function AccountPage() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-zinc-950">حسابي</h1>
+            <h1 className="text-4xl font-bold text-zinc-950">
+              <VisualEditableText textKey="account.dashboard.title">حسابي</VisualEditableText>
+            </h1>
             <p className="mt-2 text-sm text-zinc-600">{session.name} - {session.phone || session.email}</p>
           </div>
           <AccountLogoutButton />
@@ -43,18 +46,26 @@ export default async function AccountPage() {
 
         <div className="grid gap-5 lg:grid-cols-3">
           <article className="rounded-[2rem] bg-zinc-950 p-6 text-white shadow-sm">
-            <p className="text-sm font-bold text-brand-gold">محفظة الولاء</p>
+            <p className="text-sm font-bold text-brand-gold">
+              <VisualEditableText textKey="account.dashboard.loyaltyTitle">محفظة الولاء</VisualEditableText>
+            </p>
             <p className="mt-4 text-4xl font-bold">{loyalty.points.toLocaleString("ar-EG")} نقطة</p>
             <p className="mt-2 text-sm leading-7 text-zinc-300">
-              قيمة خصم تقريبية: {loyalty.discountValue.toLocaleString("ar-EG")} جنيه.
+              <VisualEditableText textKey="account.dashboard.discountPrefix">قيمة خصم تقريبية:</VisualEditableText>{" "}
+              {loyalty.discountValue.toLocaleString("ar-EG")}{" "}
+              <VisualEditableText textKey="account.dashboard.currency">جنيه.</VisualEditableText>
             </p>
           </article>
           <article className="rounded-[2rem] bg-white p-6 shadow-sm">
-            <p className="text-sm font-bold text-zinc-500">إجمالي مشتريات مكتملة</p>
+            <p className="text-sm font-bold text-zinc-500">
+              <VisualEditableText textKey="account.dashboard.completedTotal">إجمالي مشتريات مكتملة</VisualEditableText>
+            </p>
             <p className="mt-4 text-3xl font-bold text-zinc-950">{loyalty.completedOrdersTotal.toLocaleString("ar-EG")} جنيه</p>
           </article>
           <article className="rounded-[2rem] bg-white p-6 shadow-sm">
-            <p className="text-sm font-bold text-zinc-500">عدد الطلبات</p>
+            <p className="text-sm font-bold text-zinc-500">
+              <VisualEditableText textKey="account.dashboard.orderCount">عدد الطلبات</VisualEditableText>
+            </p>
             <p className="mt-4 text-3xl font-bold text-zinc-950">{orders.length.toLocaleString("ar-EG")}</p>
           </article>
         </div>
@@ -63,11 +74,16 @@ export default async function AccountPage() {
           <section className="rounded-[2rem] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-bold text-zinc-950">الطلب الحالي #{activeOrder.number}</h2>
-                <p className="mt-1 text-sm text-zinc-500">آخر تحديث: {formatDate(activeOrder.dateCreated)}</p>
+                <h2 className="text-2xl font-bold text-zinc-950">
+                  <VisualEditableText textKey="account.dashboard.currentOrder">الطلب الحالي</VisualEditableText> #{activeOrder.number}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  <VisualEditableText textKey="account.dashboard.lastUpdate">آخر تحديث:</VisualEditableText>{" "}
+                  {formatDate(activeOrder.dateCreated)}
+                </p>
               </div>
               <Link href={`/account/orders/${activeOrder.id}`} className="rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-black">
-                تفاصيل الطلب
+                <VisualEditableText textKey="account.dashboard.orderDetails">تفاصيل الطلب</VisualEditableText>
               </Link>
             </div>
             <div className="mt-8 grid gap-4 md:grid-cols-5">
@@ -81,22 +97,24 @@ export default async function AccountPage() {
           </section>
         ) : (
           <section className="rounded-[2rem] bg-white p-8 text-center text-sm font-bold text-zinc-600 shadow-sm">
-            لا توجد طلبات حتى الآن.
+            <VisualEditableText textKey="account.dashboard.noOrders">لا توجد طلبات حتى الآن.</VisualEditableText>
           </section>
         )}
 
         <section className="rounded-[2rem] bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold text-zinc-950">طلباتي السابقة</h2>
+          <h2 className="text-2xl font-bold text-zinc-950">
+            <VisualEditableText textKey="account.dashboard.previousOrders">طلباتي السابقة</VisualEditableText>
+          </h2>
           <div className="mt-5 overflow-x-auto">
             <table className="w-full min-w-[720px] text-right text-sm">
               <thead className="bg-zinc-50 text-zinc-500">
                 <tr>
-                  <th className="px-4 py-3">رقم الطلب</th>
-                  <th className="px-4 py-3">التاريخ</th>
-                  <th className="px-4 py-3">الحالة</th>
-                  <th className="px-4 py-3">الإجمالي</th>
-                  <th className="px-4 py-3">النقاط</th>
-                  <th className="px-4 py-3">التفاصيل</th>
+                  <th className="px-4 py-3"><VisualEditableText textKey="account.dashboard.table.orderNumber">رقم الطلب</VisualEditableText></th>
+                  <th className="px-4 py-3"><VisualEditableText textKey="account.dashboard.table.date">التاريخ</VisualEditableText></th>
+                  <th className="px-4 py-3"><VisualEditableText textKey="account.dashboard.table.status">الحالة</VisualEditableText></th>
+                  <th className="px-4 py-3"><VisualEditableText textKey="account.dashboard.table.total">الإجمالي</VisualEditableText></th>
+                  <th className="px-4 py-3"><VisualEditableText textKey="account.dashboard.table.points">النقاط</VisualEditableText></th>
+                  <th className="px-4 py-3"><VisualEditableText textKey="account.dashboard.table.details">التفاصيل</VisualEditableText></th>
                 </tr>
               </thead>
               <tbody>
@@ -112,7 +130,7 @@ export default async function AccountPage() {
                       <td className="px-4 py-4">{points.toLocaleString("ar-EG")}</td>
                       <td className="px-4 py-4">
                         <Link href={`/account/orders/${order.id}`} className="font-bold text-zinc-950 underline">
-                          عرض
+                          <VisualEditableText textKey="account.dashboard.table.view">عرض</VisualEditableText>
                         </Link>
                       </td>
                     </tr>

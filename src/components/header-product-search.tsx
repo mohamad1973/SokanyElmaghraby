@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { VisualEditableText } from "./visual-editable-text";
+
 type SearchProduct = {
   id: number;
   name: string;
@@ -71,9 +73,15 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
       />
       {query.trim().length >= 2 ? (
         <div className="absolute left-0 right-0 top-full z-[70] mt-3 max-h-[70vh] overflow-y-auto rounded-3xl border border-black/10 bg-white shadow-2xl">
-          {isLoading ? <p className="px-5 py-4 text-sm font-bold text-zinc-500">جاري البحث...</p> : null}
+          {isLoading ? (
+            <p className="px-5 py-4 text-sm font-bold text-zinc-500">
+              <VisualEditableText textKey="header.search.loading">جاري البحث...</VisualEditableText>
+            </p>
+          ) : null}
           {!isLoading && products.length === 0 ? (
-            <p className="px-5 py-4 text-sm font-bold text-zinc-500">لا توجد منتجات مطابقة.</p>
+            <p className="px-5 py-4 text-sm font-bold text-zinc-500">
+              <VisualEditableText textKey="header.search.empty">لا توجد منتجات مطابقة.</VisualEditableText>
+            </p>
           ) : null}
           {products.map((product) => (
             <Link
