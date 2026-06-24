@@ -17,8 +17,11 @@ export function VisualEditableText({ textKey, children, className }: VisualEdita
   const editableText = editor?.content[textKey] ?? (typeof children === "string" ? children : undefined);
 
   const visualStyle = {
+    direction: "rtl",
     transform: `translate(${style.x}px, ${style.y}px)`,
     fontSize: style.fontSizeDelta ? `calc(1em + ${style.fontSizeDelta}px)` : undefined,
+    textAlign: "inherit",
+    unicodeBidi: "plaintext",
     whiteSpace: "pre-line",
   } satisfies CSSProperties;
 
@@ -27,6 +30,7 @@ export function VisualEditableText({ textKey, children, className }: VisualEdita
       role={editor?.editMode ? "button" : undefined}
       tabIndex={editor?.editMode ? 0 : undefined}
       contentEditable={editor?.editMode || undefined}
+      dir="rtl"
       suppressContentEditableWarning
       title={editor?.editMode ? `Editable text: ${textKey}` : undefined}
       data-text-key={editor?.editMode ? textKey : undefined}
