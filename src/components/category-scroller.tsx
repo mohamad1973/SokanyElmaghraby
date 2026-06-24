@@ -43,7 +43,7 @@ export function CategoryScroller({ categories }: CategoryScrollerProps) {
     <div
       ref={scrollerRef}
       dir="ltr"
-      className="flex snap-x gap-4 overflow-x-auto scroll-smooth pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex w-full snap-x gap-4 overflow-x-auto scroll-smooth px-4 pb-4 sm:px-6 lg:px-8 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {categories.map((category) => (
         <Link

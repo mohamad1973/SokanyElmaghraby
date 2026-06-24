@@ -10,6 +10,7 @@ import { Footer } from "./footer";
 import { Header } from "./header";
 import { PwaInstallPrompt } from "./pwa-install-prompt";
 import { VisualEditorProvider } from "./visual-editor-provider";
+import { VisualEditorToolbar } from "./visual-editor-toolbar";
 
 export function SiteChrome({
   children,
@@ -29,6 +30,7 @@ export function SiteChrome({
   return (
     <VisualEditorProvider settings={settings}>
       <Header settings={settings} menu={menu} />
+      <VisualEditorToolbar />
       <main className="flex-1">{children}</main>
       <Footer settings={settings} />
       <PwaInstallPrompt />

@@ -320,20 +320,48 @@ export async function getProducts(limit = 12, categorySlug?: string): Promise<Pr
   return fallbackProducts.filter(hasRealProductImage).slice(0, limit);
 }
 
-export async function getFeaturedProducts(): Promise<Product[]> {
-  const data = await wooFetch<WooProduct[]>("products?featured=true&per_page=8&status=publish");
+export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<Product[]> {
+  const data = await wooFetch<WooProduct[]>(`products?featured=true&per_page=${limit}&status=publish`);
 
   if (data?.length) {
-    return data.map(mapProduct).filter(hasRealProductImage);
+    const featuredProducts = data.map(mapProduct).filter(hasRealProductImage);
+
+    if (featuredProducts.length >= minimumCount) {
+      return featuredProducts.slice(0, limit);
+    }
+
+    const supplementalData = await wooFetch<WooProduct[]>(
+      `products?per_page=${limit}&status=publish&orderby=popularity`,
+    );
+
+    return uniqueProducts(
+      [
+        ...featuredProducts,
+        ...(supplementalData?.map(mapProduct).filter(hasRealProductImage) || []),
+      ],
+      limit,
+    );
   }
 
-  const storeData = await storeFetch<StoreApiProduct[]>("products?per_page=8&orderby=popularity");
+  const storeData = await storeFetch<StoreApiProduct[]>(`products?per_page=${limit}&orderby=popularity`);
 
   if (storeData?.length) {
-    return storeData.map(mapStoreProduct).filter(hasRealProductImage);
+    return storeData.map(mapStoreProduct).filter(hasRealProductImage).slice(0, limit);
   }
 
-  return fallbackProducts.filter((product) => product.featured && hasRealProductImage(product));
+  const featuredFallbackProducts = fallbackProducts.filter((product) => product.featured && hasRealProductImage(product));
+
+  if (featuredFallbackProducts.length >= minimumCount) {
+    return featuredFallbackProducts.slice(0, limit);
+  }
+
+  return uniqueProducts(
+    [
+      ...featuredFallbackProducts,
+      ...fallbackProducts.filter(hasRealProductImage),
+    ],
+    limit,
+  );
 }
 
 export async function searchProducts(query: string, limit = 8): Promise<Product[]> {

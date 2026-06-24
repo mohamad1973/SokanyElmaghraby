@@ -278,19 +278,24 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
           </Field>
-          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold lg:col-span-2">
-            <input
-              type="checkbox"
-              checked={settings.visualEditor.enabled}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  visualEditor: { ...settings.visualEditor, enabled: event.target.checked },
-                })
-              }
-            />
-            تفعيل تعديل النص في الفرونت اند للأدمن فقط
-          </label>
+          <div className="rounded-xl bg-zinc-50 p-4 lg:col-span-2">
+            <label className="flex items-center gap-3 text-sm font-bold">
+              <input
+                type="checkbox"
+                checked={settings.visualEditor.enabled}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    visualEditor: { ...settings.visualEditor, enabled: event.target.checked },
+                  })
+                }
+              />
+              تفعيل تعديل النص في الفرونت اند للأدمن فقط
+            </label>
+            <p className="mt-3 text-sm leading-6 text-zinc-500">
+              بعد التفعيل افتح الصفحة الرئيسية كأدمن، حدد أي نص مثل وصف التصنيفات أو وصف الأكثر مبيعاً، عدله مباشرة ثم اضغط زر حفظ أعلى الصفحة.
+            </p>
+          </div>
           <div className="grid gap-3 rounded-xl border border-black/10 bg-white p-4 lg:col-span-2">
             <div>
               <h2 className="text-lg font-bold text-zinc-950">ترتيب سكشنات الصفحة الرئيسية</h2>

@@ -211,7 +211,7 @@ export default async function Home() {
         </div>
       </section> : null}
 
-      {settings.sections.categories && categoriesWithImages.length ? <section className="py-16" style={{ order: sectionOrder("categories") }}>
+      {settings.sections.categories && categoriesWithImages.length ? <section className="overflow-hidden py-16" style={{ order: sectionOrder("categories") }}>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SectionTitle
             textKeyPrefix="home.categories"
@@ -219,8 +219,8 @@ export default async function Home() {
             title="تسوق حسب التصنيف"
             description="تنظيم واضح للمنتجات يساعد العميل يوصل للمنتج المناسب بسرعة من الموبايل أو الكمبيوتر."
           />
-          <CategoryScroller categories={categoriesWithImages} />
         </div>
+        <CategoryScroller categories={categoriesWithImages} />
       </section> : null}
 
       {settings.sections.bestSellers ? <section className="bg-white py-16" style={{ order: sectionOrder("bestSellers") }}>
