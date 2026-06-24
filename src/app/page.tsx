@@ -217,7 +217,7 @@ export default async function Home() {
             textKeyPrefix="home.categories"
             eyebrow="التصنيفات"
             title="تسوق حسب التصنيف"
-            description="تنظيم واضح للمنتجات يساعد العميل يوصل للمنتج المناسب بسرعة من الموبايل أو الكمبيوتر."
+            description="يمكنك الوصووصول الى المنتج الذى تريده عن طريق الضغط على القسم الذى ينتمى اليه"
           />
         </div>
         <CategoryScroller categories={categoriesWithImages} />
