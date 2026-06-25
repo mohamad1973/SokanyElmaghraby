@@ -119,10 +119,28 @@ function moveItem<T>(items: T[], index: number, direction: -1 | 1) {
   return nextItems;
 }
 
+function extractCategorySlug(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmedValue);
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts.at(-1) || trimmedValue;
+  } catch {
+    const parts = trimmedValue.split("/").filter(Boolean);
+    return parts.at(-1) || trimmedValue;
+  }
+}
+
 function createCustomSection(): CustomHomeSection {
   return {
     id: `custom-${Date.now()}`,
     enabled: true,
+    sectionType: "bannerWithProducts",
     title: "سكشن جديد",
     subtitle: "",
     text: "اكتب النص الذي يظهر فوق الصورة",
@@ -134,6 +152,11 @@ function createCustomSection(): CustomHomeSection {
     mobileImage: "",
     categorySlug: "",
     productLimit: 4,
+    desktopColumns: 4,
+    tabletColumns: 2,
+    mobileColumns: 1,
+    rowCount: 1,
+    displayMode: "grid",
     fontSizeDesktop: 56,
     fontSizeTablet: 42,
     fontSizeMobile: 32,
@@ -345,7 +368,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               <div>
                 <h2 className="text-lg font-bold text-zinc-950">السكشنات المخصصة</h2>
                 <p className="mt-1 text-sm leading-6 text-zinc-500">
-                  يمكنك إنشاء سكشن بصورة خلفية ونص ورابط ومنتجات تصنيف مثل القلايات أو الخلاطات.
+                  يمكنك إنشاء سكشن بصورة خلفية ونص ورابط ومنتجات تصنيف مثل الكبات أو القلايات. ضع رابط التصنيف الكامل أو الـ slug، ثم اختر الأعمدة والصفوف وطريقة العرض.
                 </p>
               </div>
               <button
@@ -381,6 +404,40 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                         className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold"
                       >
                         {section.enabled ? "إخفاء" : "إظهار"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === 0}
+                        onClick={() =>
+                          setSettings({
+                            ...settings,
+                            customSections: moveItem(settings.customSections, index, -1),
+                          })
+                        }
+                        className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold disabled:opacity-40"
+                      >
+                        رفع
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === settings.customSections.length - 1}
+                        onClick={() =>
+                          setSettings({
+                            ...settings,
+                            customSections: moveItem(settings.customSections, index, 1),
+                          })
+                        }
+                        className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold disabled:opacity-40"
+                      >
+                        نزول
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => saveSettings(settings, `تم حفظ سكشن ${section.title || index + 1}.`)}
+                        className="rounded-full bg-brand-gold px-3 py-2 text-xs font-bold text-black disabled:opacity-60"
+                      >
+                        حفظ السكشن
                       </button>
                       <button
                         type="button"
@@ -486,18 +543,18 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                         className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                       />
                     </Field>
-                    <Field label="slug التصنيف">
+                    <Field label="رابط أو slug التصنيف">
                       <input
                         value={section.categorySlug}
                         onChange={(event) =>
                           setSettings({
                             ...settings,
                             customSections: settings.customSections.map((item) =>
-                              item.id === section.id ? { ...item, categorySlug: event.target.value } : item,
+                              item.id === section.id ? { ...item, categorySlug: extractCategorySlug(event.target.value) } : item,
                             ),
                           })
                         }
-                        placeholder="مثال: air-fryers"
+                        placeholder="مثال: cups أو رابط تصنيف الكبات"
                         className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                       />
                     </Field>
@@ -508,7 +565,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                       <input
                         type="number"
                         min={1}
-                        max={12}
+                        max={24}
                         value={section.productLimit}
                         onChange={(event) =>
                           setSettings({
@@ -521,6 +578,63 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                         className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                       />
                     </Field>
+                    <Field label="عدد الصفوف">
+                      <input
+                        type="number"
+                        min={1}
+                        max={6}
+                        value={section.rowCount}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            customSections: settings.customSections.map((item) =>
+                              item.id === section.id ? { ...item, rowCount: Number(event.target.value) } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <Field label="طريقة عرض المنتجات">
+                      <select
+                        value={section.displayMode}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            customSections: settings.customSections.map((item) =>
+                              item.id === section.id ? { ...item, displayMode: event.target.value as "grid" | "carousel" } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      >
+                        <option value="grid">شبكة منتجات</option>
+                        <option value="carousel">صف سكرول</option>
+                      </select>
+                    </Field>
+                    {[
+                      ["أعمدة ديسكتوب", "desktopColumns", 4],
+                      ["أعمدة تابلت", "tabletColumns", 2],
+                      ["أعمدة موبايل", "mobileColumns", 1],
+                    ].map(([label, key, max]) => (
+                      <Field key={key} label={String(label)}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={Number(max)}
+                          value={section[key as "desktopColumns" | "tabletColumns" | "mobileColumns"]}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id ? { ...item, [key]: Number(event.target.value) } : item,
+                              ),
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                    ))}
                     {[
                       ["فونت ديسكتوب", "fontSizeDesktop", "48-64px"],
                       ["فونت تابلت", "fontSizeTablet", "36-48px"],

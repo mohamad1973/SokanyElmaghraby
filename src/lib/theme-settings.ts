@@ -17,9 +17,13 @@ export type VisualTextStyle = {
 
 export type HomeSectionId = "hero" | "trustBadges" | "categories" | "bestSellers" | "customBanner" | "competitiveBanner";
 
+export type CustomHomeSectionDisplayMode = "grid" | "carousel";
+export type CustomHomeSectionType = "bannerWithProducts";
+
 export type CustomHomeSection = {
   id: string;
   enabled: boolean;
+  sectionType: CustomHomeSectionType;
   title: string;
   subtitle: string;
   text: string;
@@ -31,6 +35,11 @@ export type CustomHomeSection = {
   mobileImage: string;
   categorySlug: string;
   productLimit: number;
+  desktopColumns: number;
+  tabletColumns: number;
+  mobileColumns: number;
+  rowCount: number;
+  displayMode: CustomHomeSectionDisplayMode;
   fontSizeDesktop: number;
   fontSizeTablet: number;
   fontSizeMobile: number;
@@ -216,6 +225,7 @@ function mergeCustomSections(value: unknown): CustomHomeSection[] {
   return value.filter(isObject).map((section, index) => ({
     id: typeof section.id === "string" ? section.id : `custom-section-${index + 1}`,
     enabled: typeof section.enabled === "boolean" ? section.enabled : true,
+    sectionType: section.sectionType === "bannerWithProducts" ? "bannerWithProducts" : "bannerWithProducts",
     title: typeof section.title === "string" ? section.title : "سكشن مخصص",
     subtitle: typeof section.subtitle === "string" ? section.subtitle : "",
     text: typeof section.text === "string" ? section.text : "",
@@ -227,6 +237,11 @@ function mergeCustomSections(value: unknown): CustomHomeSection[] {
     mobileImage: typeof section.mobileImage === "string" ? section.mobileImage : "",
     categorySlug: typeof section.categorySlug === "string" ? section.categorySlug : "",
     productLimit: typeof section.productLimit === "number" ? section.productLimit : 4,
+    desktopColumns: typeof section.desktopColumns === "number" ? section.desktopColumns : 4,
+    tabletColumns: typeof section.tabletColumns === "number" ? section.tabletColumns : 2,
+    mobileColumns: typeof section.mobileColumns === "number" ? section.mobileColumns : 1,
+    rowCount: typeof section.rowCount === "number" ? section.rowCount : 1,
+    displayMode: section.displayMode === "carousel" ? "carousel" : "grid",
     fontSizeDesktop: typeof section.fontSizeDesktop === "number" ? section.fontSizeDesktop : 56,
     fontSizeTablet: typeof section.fontSizeTablet === "number" ? section.fontSizeTablet : 42,
     fontSizeMobile: typeof section.fontSizeMobile === "number" ? section.fontSizeMobile : 32,

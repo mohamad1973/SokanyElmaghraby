@@ -4,9 +4,10 @@ import Link from "next/link";
 import { CategoryScroller } from "@/components/category-scroller";
 import { ProductCard } from "@/components/product-card";
 import { ProductRowScroller } from "@/components/product-row-scroller";
+import { ProductSectionGrid } from "@/components/product-section-grid";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
-import { getThemeSettings, type HomeSectionId } from "@/lib/theme-settings";
+import { getThemeSettings, type CustomHomeSection, type HomeSectionId } from "@/lib/theme-settings";
 import { getCategories, getFeaturedProducts, getProducts } from "@/lib/woocommerce";
 
 const trustItems = [
@@ -15,6 +16,12 @@ const trustItems = [
   { title: "دفع مرن", text: "فوري للدفع الإلكتروني أو كاش عند الاستلام", icon: "card" },
   { title: "شحن داخل مصر", text: "تأكيد الطلب قبل الشحن ومتابعة العميل", icon: "truck" },
 ];
+
+function getCustomSectionProductLimit(section: CustomHomeSection) {
+  const gridLimit = (section.desktopColumns || 4) * (section.rowCount || 1);
+
+  return Math.max(section.productLimit || 4, gridLimit);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +74,7 @@ export default async function Home() {
     await Promise.all(
       settings.customSections.map(async (section) => [
         section.id,
-        section.categorySlug ? await getProducts(section.productLimit, section.categorySlug) : [],
+        section.categorySlug ? await getProducts(getCustomSectionProductLimit(section), section.categorySlug) : [],
       ] as const),
     ),
   );
@@ -285,7 +292,22 @@ export default async function Home() {
 
                 {sectionProducts.length ? (
                   <div className="mt-8">
-                    <ProductRowScroller products={sectionProducts} />
+                    {section.displayMode === "carousel" ? (
+                      <ProductRowScroller
+                        products={sectionProducts.slice(0, section.productLimit)}
+                        desktopColumns={section.desktopColumns}
+                        tabletColumns={section.tabletColumns}
+                        mobileColumns={section.mobileColumns}
+                      />
+                    ) : (
+                      <ProductSectionGrid
+                        products={sectionProducts}
+                        desktopColumns={section.desktopColumns}
+                        tabletColumns={section.tabletColumns}
+                        mobileColumns={section.mobileColumns}
+                        rowCount={section.rowCount}
+                      />
+                    )}
                   </div>
                 ) : null}
               </div>
