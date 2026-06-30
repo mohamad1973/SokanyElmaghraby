@@ -10,12 +10,12 @@ if (!process.env.DATABASE_URL) {
 }
 
 try {
-  console.log("[prepare-db] Syncing Prisma schema to MySQL...");
-  run("npx prisma db push --accept-data-loss");
+  console.log("[prepare-db] Syncing Prisma schema to MySQL (safe mode, no data loss)...");
+  run("npx prisma db push");
   console.log("[prepare-db] Seeding default delivery zones if needed...");
   run("npx prisma db seed");
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.warn(`[prepare-db] Skipping DB sync during build: ${message}`);
-  console.warn("[prepare-db] Tables will be created at runtime from /admin/dispatch/setup.");
+  console.warn("[prepare-db] Use /admin/dispatch/setup to initialize shipping tables at runtime.");
 }
