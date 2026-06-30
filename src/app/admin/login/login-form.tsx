@@ -16,7 +16,7 @@ export function LoginForm() {
     setIsLoading(true);
 
     const formData = new FormData(event.currentTarget);
-    const result = await signIn("credentials", {
+    const result = await signIn("admin-credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
       redirect: false,

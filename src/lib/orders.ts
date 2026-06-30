@@ -1,5 +1,8 @@
 import "server-only";
 
+import { resolveFulfillmentMode } from "@/lib/shipping/bosta-zones";
+import type { OrderShippingInfo } from "@/lib/shipping/shipments";
+
 const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
 const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY;
 const consumerSecret = process.env.WOOCOMMERCE_CONSUMER_SECRET;
@@ -44,6 +47,8 @@ export type AdminOrder = {
   total: string;
   currency: string;
   dateCreated: string;
+  fulfillmentMode: "internal" | "bosta";
+  shipping?: OrderShippingInfo;
   items: Array<{
     id: number;
     name: string;
@@ -60,6 +65,7 @@ export type OrdersQuery = {
   status?: string;
   search?: string;
   after?: string;
+  before?: string;
 };
 
 export type AdminOrdersResult = {
@@ -151,8 +157,9 @@ async function wooOrdersFetch<T>(path: string): Promise<WooFetchResult<T>> {
   }
 }
 
-export function mapOrder(order: WooOrder): AdminOrder {
+export function mapOrder(order: WooOrder, shipping?: OrderShippingInfo): AdminOrder {
   const customerName = `${order.billing.first_name || ""} ${order.billing.last_name || ""}`.trim();
+  const governorate = order.billing.state || "غير محدد";
 
   return {
     id: order.id,
@@ -160,13 +167,15 @@ export function mapOrder(order: WooOrder): AdminOrder {
     customerName: customerName || "غير محدد",
     phone: order.billing.phone || "غير محدد",
     address: [order.billing.address_1, order.billing.address_2].filter(Boolean).join(" - ") || "غير محدد",
-    governorate: order.billing.state || "غير محدد",
+    governorate,
     area: order.billing.city || "غير محدد",
     status: order.status,
     paymentMethod: order.payment_method_title || "غير محدد",
     total: order.total,
     currency: order.currency,
     dateCreated: order.date_created,
+    fulfillmentMode: resolveFulfillmentMode(governorate),
+    shipping,
     items: order.line_items.map((item) => ({
       id: item.id,
       name: item.name,
@@ -177,6 +186,24 @@ export function mapOrder(order: WooOrder): AdminOrder {
     })),
   };
 }
+
+function formatOrderDateBoundary(value: string | undefined, boundary: "start" | "end") {
+  if (!value) {
+    return "";
+  }
+
+  const dateValue = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T${boundary === "start" ? "00:00:00.000" : "23:59:59.999"}`)
+    : new Date(value);
+
+  if (Number.isNaN(dateValue.getTime())) {
+    return "";
+  }
+
+  return dateValue.toISOString();
+}
+
+import { getShipmentsByOrderIds, shipmentToOrderShipping } from "@/lib/shipping/shipments";
 
 export async function getAdminOrders(query: OrdersQuery = {}): Promise<AdminOrdersResult> {
   const params = new URLSearchParams({
@@ -194,8 +221,15 @@ export async function getAdminOrders(query: OrdersQuery = {}): Promise<AdminOrde
     params.set("search", query.search);
   }
 
-  if (query.after) {
-    params.set("after", query.after);
+  const after = formatOrderDateBoundary(query.after, "start");
+  const before = formatOrderDateBoundary(query.before, "end");
+
+  if (after) {
+    params.set("after", after);
+  }
+
+  if (before) {
+    params.set("before", before);
   }
 
   const result = await wooOrdersFetch<WooOrder[]>(`orders?${params.toString()}`);
@@ -204,8 +238,13 @@ export async function getAdminOrders(query: OrdersQuery = {}): Promise<AdminOrde
     return { orders: [], error: result.message, source: "woocommerce" };
   }
 
+  const shipmentMap = await getShipmentsByOrderIds(result.data.map((order) => order.id));
+
   return {
-    orders: result.data.map(mapOrder),
+    orders: result.data.map((order) => {
+      const shipment = shipmentMap.get(order.id);
+      return mapOrder(order, shipment ? shipmentToOrderShipping(shipment) : undefined);
+    }),
     source: "woocommerce",
   };
 }
@@ -217,5 +256,8 @@ export async function getAdminOrder(id: string) {
     return null;
   }
 
-  return mapOrder(order.data);
+  const { getShipmentByOrderId } = await import("@/lib/shipping/shipments");
+  const shipment = await getShipmentByOrderId(order.data.id);
+
+  return mapOrder(order.data, shipment ? shipmentToOrderShipping(shipment) : undefined);
 }

@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       status: searchParams.get("status") || "all",
       search: searchParams.get("search") || "",
       after: searchParams.get("after") || "",
+      before: searchParams.get("before") || "",
     }),
   );
 }

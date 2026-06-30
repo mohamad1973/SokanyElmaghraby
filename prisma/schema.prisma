@@ -18,3 +18,104 @@ model CategoryMenuSelection {
   @@index([slug])
   @@index([showInMenu])
 }
+
+model Shipment {
+  id              Int                 @id @default(autoincrement())
+  wooOrderId      Int                 @unique
+  wooOrderNumber  String
+  provider        String
+  externalId      String?
+  trackingNumber  String?
+  status          String              @default("pending")
+  codAmount       Decimal             @db.Decimal(10, 2)
+  governorate     String
+  area            String
+  addressLine     String              @db.Text
+  receiverName    String
+  receiverPhone   String
+  lat             Decimal?            @db.Decimal(10, 7)
+  lng             Decimal?            @db.Decimal(10, 7)
+  rawPayload      Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  assignment      DeliveryAssignment?
+
+  @@index([provider])
+  @@index([status])
+  @@index([trackingNumber])
+}
+
+model Driver {
+  id           Int           @id @default(autoincrement())
+  name         String
+  phone        String        @unique
+  email        String?       @unique
+  passwordHash String
+  isActive     Boolean       @default(true)
+  maxOrders    Int           @default(20)
+  maxCodValue  Decimal       @default(50000) @db.Decimal(12, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  zones        DriverZone[]
+  runs         DeliveryRun[]
+}
+
+model DeliveryZone {
+  id          Int          @id @default(autoincrement())
+  name        String
+  governorate String
+  polygon     Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  drivers     DriverZone[]
+
+  @@index([governorate])
+}
+
+model DriverZone {
+  driverId Int
+  zoneId   Int
+  driver   Driver       @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  zone     DeliveryZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@id([driverId, zoneId])
+}
+
+model DeliveryRun {
+  id            Int                  @id @default(autoincrement())
+  driverId      Int
+  runDate       DateTime             @db.Date
+  status        String               @default("draft")
+  routePolyline String?              @db.Text
+  totalOrders   Int                  @default(0)
+  totalCod      Decimal              @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  driver        Driver               @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  assignments   DeliveryAssignment[]
+
+  @@unique([driverId, runDate])
+  @@index([runDate])
+  @@index([status])
+}
+
+model DeliveryAssignment {
+  id          Int       @id @default(autoincrement())
+  runId       Int
+  shipmentId  Int       @unique
+  sequence    Int       @default(0)
+  status      String    @default("pending")
+  otpHash     String?
+  otpSentAt   DateTime?
+  deliveredAt DateTime?
+  failReason  String?   @db.Text
+  lat         Decimal?  @db.Decimal(10, 7)
+  lng         Decimal?  @db.Decimal(10, 7)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  run         DeliveryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  shipment    Shipment    @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([status])
+}

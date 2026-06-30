@@ -1,6 +1,8 @@
 import { getAdminOrders } from "@/lib/orders";
+import { listDrivers } from "@/lib/dispatch/drivers";
 import Link from "next/link";
-
+import { OrdersExportActions } from "./orders-export-actions";
+import { OrderShippingActions } from "./order-shipping-actions";
 export const dynamic = "force-dynamic";
 
 type OrdersPageProps = {
@@ -9,6 +11,8 @@ type OrdersPageProps = {
     per_page?: string;
     status?: string;
     search?: string;
+    after?: string;
+    before?: string;
   }>;
 };
 
@@ -28,13 +32,16 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
     perPage: params.per_page || "50",
     status: params.status,
     search: params.search,
+    after: params.after,
+    before: params.before,
   });
-
+  const drivers = await listDrivers();
+  const activeDrivers = drivers.filter((driver) => driver.isActive).map((driver) => ({ id: driver.id, name: driver.name }));
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
-          <h1 className="text-3xl font-bold text-zinc-950">Orders</h1>
+          <h1 className="text-3xl font-bold text-zinc-950">الطلبات</h1>
           <p className="mt-2 text-sm text-zinc-600">
             عرض الطلبات من WooCommerce بنفس بيانات WordPress الأساسية.
           </p>
@@ -67,14 +74,32 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
             <option value="25">آخر 25</option>
             <option value="50">آخر 50</option>
           </select>
+          <label className="grid gap-1 text-xs font-bold text-zinc-600">
+            من تاريخ
+            <input
+              type="date"
+              name="after"
+              defaultValue={params.after || ""}
+              className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-gold"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-bold text-zinc-600">
+            إلى تاريخ
+            <input
+              type="date"
+              name="before"
+              defaultValue={params.before || ""}
+              className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-gold"
+            />
+          </label>
           <button className="rounded-md bg-[#2271b1] px-4 py-2 text-sm font-bold text-white" type="submit">
-            Filter
+            فلترة
           </button>
           <Link
             href="/admin/orders"
             className="rounded-md border border-black/10 bg-white px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50"
           >
-            Clear
+            مسح الفلاتر
           </Link>
         </form>
       </div>
@@ -91,34 +116,35 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
         </div>
       ) : null}
 
+      {orders.length > 0 ? <OrdersExportActions orders={orders} /> : null}
+
       {orders.length > 0 ? <div className="overflow-hidden rounded-md border border-[#c3c4c7] bg-white shadow-sm">
         <div className="border-b border-[#c3c4c7] bg-[#f6f7f7] px-4 py-2 text-xs font-bold text-zinc-600">
           اسحب يمين/شمال لرؤية كل بيانات الطلب، واسحب لأعلى/أسفل عند كثرة الطلبات.
         </div>
         <div className="max-h-[70vh] overflow-auto">
-          <table className="min-w-[1700px] border-collapse text-right text-sm">
+          <table className="min-w-[2100px] border-collapse text-right text-sm">
             <thead className="bg-[#f6f7f7] text-[#1d2327]">
               <tr>
-                <th className="border-b border-[#c3c4c7] px-3 py-3">Order #</th>
+                <th className="border-b border-[#c3c4c7] px-3 py-3">رقم الأوردر</th>
                 <th className="border-b border-[#c3c4c7] px-3 py-3">اسم العميل</th>
                 <th className="border-b border-[#c3c4c7] px-3 py-3">رقم التليفون</th>
                 <th className="border-b border-[#c3c4c7] px-3 py-3">العنوان بالتفصيل</th>
                 <th className="border-b border-[#c3c4c7] px-3 py-3">المحافظة</th>
                 <th className="border-b border-[#c3c4c7] px-3 py-3">المنطقة</th>
-                <th className="border-b border-[#c3c4c7] px-3 py-3">الأصناف والكميات</th>
-                <th className="border-b border-[#c3c4c7] px-3 py-3">Total</th>
-                <th className="border-b border-[#c3c4c7] px-3 py-3">Payment</th>
-                <th className="border-b border-[#c3c4c7] px-3 py-3">Status</th>
-                <th className="border-b border-[#c3c4c7] px-3 py-3">Date</th>
+                <th className="border-b border-[#c3c4c7] px-3 py-3">التوصيل / الشحن</th>
+                <th className="border-b border-[#c3c4c7] px-3 py-3">الأصناف والكميات</th>                <th className="border-b border-[#c3c4c7] px-3 py-3">الإجمالي</th>
+                <th className="border-b border-[#c3c4c7] px-3 py-3">طريقة الدفع</th>
+                <th className="border-b border-[#c3c4c7] px-3 py-3">حالة الطلب</th>
+                <th className="border-b border-[#c3c4c7] px-3 py-3">التاريخ</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((order) => (
                 <tr key={order.id} className="odd:bg-white even:bg-[#f6f7f7]">
                   <td className="border-b border-[#dcdcde] px-3 py-4 font-bold text-[#2271b1]">
-                    #{order.number}
-                  </td>
-                  <td className="border-b border-[#dcdcde] px-3 py-4">{order.customerName}</td>
+                    <Link href={`/admin/orders/${order.id}`}>#{order.number}</Link>
+                  </td>                  <td className="border-b border-[#dcdcde] px-3 py-4">{order.customerName}</td>
                   <td className="border-b border-[#dcdcde] px-3 py-4" dir="ltr">
                     {order.phone}
                   </td>
@@ -126,7 +152,17 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
                   <td className="border-b border-[#dcdcde] px-3 py-4">{order.governorate}</td>
                   <td className="border-b border-[#dcdcde] px-3 py-4">{order.area}</td>
                   <td className="border-b border-[#dcdcde] px-3 py-4">
-                    <div className="space-y-2">
+                    <OrderShippingActions
+                      orderId={order.id}
+                      orderNumber={order.number}
+                      fulfillmentMode={order.fulfillmentMode}
+                      trackingNumber={order.shipping?.trackingNumber}
+                      shippingStatus={order.shipping?.status}
+                      shippingStatusLabel={order.shipping?.statusLabelAr}
+                      drivers={activeDrivers}
+                    />
+                  </td>
+                  <td className="border-b border-[#dcdcde] px-3 py-4">                    <div className="space-y-2">
                       {order.items.map((item) => (
                         <div key={item.id} className="rounded bg-zinc-50 p-2">
                           <p className="font-bold">{item.name}</p>

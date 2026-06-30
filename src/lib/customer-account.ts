@@ -222,7 +222,7 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
 export async function getCustomerOrders(customerId: number) {
   const orders = await wooFetch<WooOrder[]>(`orders?customer=${customerId}&per_page=100&orderby=date&order=desc`).catch(() => []);
 
-  return (orders || []).map(mapOrder);
+  return (orders || []).map((order) => mapOrder(order));
 }
 
 export function getActiveOrder(orders: AdminOrder[]) {

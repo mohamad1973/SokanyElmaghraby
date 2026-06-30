@@ -34,6 +34,64 @@ export function formatNewOrderWhatsAppMessage(order: AdminOrder) {
   ].join("\n");
 }
 
+function normalizeWhatsAppRecipient(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+
+  if (digits.startsWith("20")) {
+    return digits;
+  }
+
+  if (digits.startsWith("0")) {
+    return `20${digits.slice(1)}`;
+  }
+
+  return `20${digits}`;
+}
+
+async function sendWhatsAppText(to: string, body: string): Promise<WhatsAppSendResult> {
+  if (!whatsappAccessToken || !whatsappPhoneNumberId) {
+    return {
+      ok: false,
+      message:
+        "WhatsApp Cloud API غير مكتمل. أضف WHATSAPP_ACCESS_TOKEN و WHATSAPP_PHONE_NUMBER_ID في Vercel.",
+    };
+  }
+
+  const url = `https://graph.facebook.com/v20.0/${whatsappPhoneNumberId}/messages`;
+  const payload = {
+    messaging_product: "whatsapp",
+    to: normalizeWhatsAppRecipient(to),
+    type: "text",
+    text: {
+      preview_url: false,
+      body,
+    },
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${whatsappAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+
+    return {
+      ok: false,
+      message: `تعذر إرسال واتساب. Meta API status: ${response.status}. ${errorBody.slice(0, 250)}`,
+    };
+  }
+
+  return {
+    ok: true,
+    message: "تم إرسال رسالة واتساب.",
+  };
+}
+
 export async function sendNewOrderWhatsApp(order: AdminOrder): Promise<WhatsAppSendResult> {
   if (!whatsappAccessToken || !whatsappPhoneNumberId) {
     return {
@@ -97,4 +155,19 @@ export async function sendNewOrderWhatsApp(order: AdminOrder): Promise<WhatsAppS
     ok: true,
     message: "تم إرسال رسالة واتساب للطلب الجديد.",
   };
+}
+
+export async function sendDeliveryOtp(phone: string, orderNumber: string, otpCode: string) {
+  const message = [
+    "SOKANY Egypt — تأكيد التسليم",
+    `طلبك #${orderNumber}`,
+    `كود الاستلام: ${otpCode}`,
+    "أعطِ هذا الكود للمندوب عند استلام الطلب.",
+  ].join("\n");
+
+  return sendWhatsAppText(phone, message);
+}
+
+export async function resendDeliveryOtp(phone: string, orderNumber: string, otpCode: string) {
+  return sendDeliveryOtp(phone, orderNumber, otpCode);
 }

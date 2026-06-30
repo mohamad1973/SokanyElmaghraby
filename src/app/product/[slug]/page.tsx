@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ProductImageGallery } from "@/components/product-image-gallery";
 import { ProductCard } from "@/components/product-card";
 import { ProductRichDescription } from "@/components/product-rich-description";
 import { VisualEditableText } from "@/components/visual-editable-text";
@@ -78,36 +78,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
       />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-2">
-          <div className="rounded-[2.5rem] bg-white p-5 shadow-sm">
-            <div className="relative aspect-square overflow-hidden rounded-[2rem] bg-brand-cream">
-              <Image
-                src={galleryImages[0] || product.image}
-                alt={product.name}
-                fill
-                priority
-                sizes="(min-width: 1024px) 50vw, 100vw"
-                className="object-cover p-10"
-              />
-            </div>
-            {galleryImages.length > 1 ? (
-              <div className="mt-4 grid grid-cols-4 gap-3">
-                {galleryImages.slice(1, 5).map((image, index) => (
-                  <div key={`${image}-${index}`} className="relative aspect-square overflow-hidden rounded-2xl bg-brand-cream">
-                    <Image
-                      src={image}
-                      alt={`${product.name} ${index + 2}`}
-                      fill
-                      sizes="(min-width: 1024px) 12vw, 25vw"
-                      className="object-contain p-3"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <ProductImageGallery images={galleryImages} productName={product.name} />
 
           <div className="flex flex-col justify-center">
-            <p className="mb-4 text-sm font-bold text-brand-gold">{product.category}</p>
+            <p className="mb-4 inline-flex w-fit rounded-full bg-black px-4 py-2 text-sm font-bold text-brand-gold">
+              {product.category}
+            </p>
             <h1 className="text-3xl font-bold leading-tight text-zinc-950 sm:text-5xl">
               {product.name}
             </h1>
@@ -120,7 +96,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   {product.regularPrice} ج.م
                 </span>
               ) : null}
-              <span className="rounded-full bg-green-100 px-4 py-2 text-sm font-bold text-green-700">
+              <span className="rounded-full border border-brand-gold/40 bg-brand-gold/20 px-4 py-2 text-sm font-bold text-zinc-950">
                 {product.stockStatus === "instock" ? (
                   <VisualEditableText textKey="product.stock.instock">متوفر</VisualEditableText>
                 ) : (

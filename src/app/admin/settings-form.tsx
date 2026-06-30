@@ -2,7 +2,15 @@
 
 import { FormEvent, useId, useMemo, useRef, useState } from "react";
 
-import type { CustomHomeSection, HomeSectionId, MenuItem, ThemeSettings } from "@/lib/theme-settings";
+import type {
+  CustomHomeSection,
+  HomeSectionGroupStyle,
+  HomeSectionId,
+  HomeSectionOrderItem,
+  HomeSectionStyle,
+  MenuItem,
+  ThemeSettings,
+} from "@/lib/theme-settings";
 
 import { ImageUploadField } from "./image-upload-field";
 
@@ -19,6 +27,60 @@ const sectionLabels: Record<HomeSectionId, string> = {
   customBanner: "بنر العروض العام",
   competitiveBanner: "سكشن الميزة التنافسية",
 };
+
+function getCustomSectionOrderId(sectionId: string): HomeSectionOrderItem {
+  return `custom:${sectionId}`;
+}
+
+function getHomeSectionLabel(sectionId: HomeSectionOrderItem, customSections: CustomHomeSection[]) {
+  if (sectionId.startsWith("custom:")) {
+    const customSectionId = sectionId.replace("custom:", "");
+    const customSection = customSections.find((section) => section.id === customSectionId);
+    const customSectionIndex = customSections.findIndex((section) => section.id === customSectionId);
+
+    if (!customSection) {
+      return "سكشن مخصص غير موجود";
+    }
+
+    const title = customSection.title.trim() || `سكشن مخصص رقم ${customSectionIndex + 1}`;
+    const categoryLabel = customSection.categorySlug ? ` - ${customSection.categorySlug}` : "";
+
+    return `${title}${categoryLabel}`;
+  }
+
+  return sectionLabels[sectionId as HomeSectionId];
+}
+
+function createHomeSectionStyle(): HomeSectionStyle {
+  return {
+    spacingTop: 64,
+    spacingBottom: 64,
+    widthMode: "contained",
+    borderEnabled: false,
+    borderColor: "#111111",
+    borderWidth: 1,
+    borderRadius: 24,
+    groupId: "",
+  };
+}
+
+function createHomeSectionGroup(): HomeSectionGroupStyle {
+  return {
+    id: `group-${Date.now()}`,
+    label: "مجموعة جديدة",
+    sectionIds: [],
+    borderEnabled: true,
+    borderColor: "#111111",
+    borderWidth: 1,
+    borderRadius: 24,
+    spacingTop: 64,
+    spacingBottom: 64,
+  };
+}
+
+function getSectionStyle(settings: ThemeSettings, sectionId: HomeSectionOrderItem) {
+  return settings.homeSectionStyles[sectionId] || createHomeSectionStyle();
+}
 
 function Field({
   label,
@@ -141,9 +203,10 @@ function createCustomSection(): CustomHomeSection {
     id: `custom-${Date.now()}`,
     enabled: true,
     sectionType: "bannerWithProducts",
-    title: "سكشن جديد",
+    showMainBanner: false,
+    title: "سكشن منتجات جديد",
     subtitle: "",
-    text: "اكتب النص الذي يظهر فوق الصورة",
+    text: "",
     backgroundColor: "#101010",
     textColor: "#ffffff",
     linkUrl: "/shop",
@@ -154,9 +217,16 @@ function createCustomSection(): CustomHomeSection {
     productLimit: 4,
     desktopColumns: 4,
     tabletColumns: 2,
-    mobileColumns: 1,
+    mobileColumns: 2,
     rowCount: 1,
     displayMode: "grid",
+    sideBanner: {
+      enabled: false,
+      image: "",
+      linkUrl: "",
+      position: "right",
+      showOnMobile: false,
+    },
     fontSizeDesktop: 56,
     fontSizeTablet: 42,
     fontSizeMobile: 32,
@@ -244,6 +314,32 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             مقاسات مقترحة عامة: ديسكتوب 1920x600 أو 1600x500، تابلت 1200x600، موبايل 750x900.
             مقاسات العنوان المقترحة: ديسكتوب 48-64px، تابلت 36-48px، موبايل 28-36px.
           </div>
+          <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:col-span-2 lg:grid-cols-4">
+            {[
+              ["عرض اللوجو موبايل px", "logoMobileWidth"],
+              ["ارتفاع اللوجو موبايل px", "logoMobileHeight"],
+              ["عرض اللوجو ديسكتوب px", "logoDesktopWidth"],
+              ["ارتفاع اللوجو ديسكتوب px", "logoDesktopHeight"],
+            ].map(([label, key]) => (
+              <Field key={key} label={label}>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.brand[key as "logoMobileWidth" | "logoMobileHeight" | "logoDesktopWidth" | "logoDesktopHeight"]}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      brand: {
+                        ...settings.brand,
+                        [key]: Number(event.target.value),
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+            ))}
+          </div>
           <Field label="نص اللوجو">
             <input
               value={settings.brand.logoText}
@@ -301,6 +397,34 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
           </Field>
+          <Field label="سمك بوردر كارت المنتج px">
+            <input
+              type="number"
+              min={0}
+              value={settings.productCard.borderWidth}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  productCard: { ...settings.productCard, borderWidth: Number(event.target.value) },
+                })
+              }
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
+          <Field label="Radius كارت المنتج px">
+            <input
+              type="number"
+              min={0}
+              value={settings.productCard.borderRadius}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  productCard: { ...settings.productCard, borderRadius: Number(event.target.value) },
+                })
+              }
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
           <div className="rounded-xl bg-zinc-50 p-4 lg:col-span-2">
             <label className="flex items-center gap-3 text-sm font-bold">
               <input
@@ -328,38 +452,350 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               </p>
             </div>
             <div className="grid gap-2">
-              {settings.homeSectionsOrder.map((sectionId, index) => (
-                <div key={sectionId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-zinc-50 p-3">
-                  <span className="text-sm font-bold text-zinc-800">{sectionLabels[sectionId]}</span>
-                  <div className="flex gap-2">
+              {settings.homeSectionsOrder.map((sectionId, index) => {
+                const sectionStyle = getSectionStyle(settings, sectionId);
+
+                return (
+                  <div key={sectionId} className="grid gap-4 rounded-xl bg-zinc-50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-zinc-800">{getHomeSectionLabel(sectionId, settings.customSections)}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              homeSectionsOrder: moveItem(settings.homeSectionsOrder, index, -1),
+                            })
+                          }
+                          className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold disabled:opacity-40"
+                        >
+                          رفع
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === settings.homeSectionsOrder.length - 1}
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              homeSectionsOrder: moveItem(settings.homeSectionsOrder, index, 1),
+                            })
+                          }
+                          className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold disabled:opacity-40"
+                        >
+                          نزول
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 rounded-xl border border-black/10 bg-white p-3 lg:grid-cols-4">
+                      <Field label="عرض السكشن">
+                        <select
+                          value={sectionStyle.widthMode}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, widthMode: event.target.value as "contained" | "full" },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        >
+                          <option value="contained">عرض عادي داخل الصفحة</option>
+                          <option value="full">عرض كامل بعرض الشاشة</option>
+                        </select>
+                      </Field>
+                      <Field label="المسافة فوق السكشن px">
+                        <input
+                          type="number"
+                          min={0}
+                          value={sectionStyle.spacingTop}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, spacingTop: Number(event.target.value) },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                      <Field label="المسافة تحت السكشن px">
+                        <input
+                          type="number"
+                          min={0}
+                          value={sectionStyle.spacingBottom}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, spacingBottom: Number(event.target.value) },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                      <Field label="لون البوردر">
+                        <input
+                          type="color"
+                          value={sectionStyle.borderColor}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, borderColor: event.target.value },
+                              },
+                            })
+                          }
+                          className="h-12 rounded-xl border border-black/10 px-2"
+                        />
+                      </Field>
+                      <label className="flex items-center gap-3 text-sm font-bold text-zinc-800">
+                        <input
+                          type="checkbox"
+                          checked={sectionStyle.borderEnabled}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, borderEnabled: event.target.checked },
+                              },
+                            })
+                          }
+                        />
+                        تفعيل بوردر حول السكشن
+                      </label>
+                      <Field label="سمك البوردر px">
+                        <input
+                          type="number"
+                          min={0}
+                          value={sectionStyle.borderWidth}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, borderWidth: Number(event.target.value) },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                      <Field label="Radius البوردر px">
+                        <input
+                          type="number"
+                          min={0}
+                          value={sectionStyle.borderRadius}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, borderRadius: Number(event.target.value) },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid gap-4 rounded-xl border border-black/10 bg-white p-4 lg:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-zinc-950">مجموعات البوردر للسكشنات</h2>
+                <p className="mt-1 text-sm leading-6 text-zinc-500">
+                  استخدمها لعمل بوردر واحد حول سكشنين أو أكثر. الأفضل اختيار سكشنات متجاورة في ترتيب الصفحة.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    homeSectionGroups: [...settings.homeSectionGroups, createHomeSectionGroup()],
+                  })
+                }
+                className="rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-black"
+              >
+                إضافة مجموعة بوردر
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              {settings.homeSectionGroups.map((group) => (
+                <article key={group.id} className="grid gap-4 rounded-2xl bg-zinc-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="font-bold text-zinc-950">{group.label}</h3>
                     <button
                       type="button"
-                      disabled={index === 0}
                       onClick={() =>
                         setSettings({
                           ...settings,
-                          homeSectionsOrder: moveItem(settings.homeSectionsOrder, index, -1),
+                          homeSectionGroups: settings.homeSectionGroups.filter((item) => item.id !== group.id),
                         })
                       }
-                      className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold disabled:opacity-40"
+                      className="rounded-full border border-red-200 px-3 py-2 text-xs font-bold text-red-700"
                     >
-                      رفع
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === settings.homeSectionsOrder.length - 1}
-                      onClick={() =>
-                        setSettings({
-                          ...settings,
-                          homeSectionsOrder: moveItem(settings.homeSectionsOrder, index, 1),
-                        })
-                      }
-                      className="rounded-full border border-black/10 px-3 py-2 text-xs font-bold disabled:opacity-40"
-                    >
-                      نزول
+                      حذف المجموعة
                     </button>
                   </div>
-                </div>
+
+                  <div className="grid gap-4 lg:grid-cols-4">
+                    <Field label="اسم المجموعة">
+                      <input
+                        value={group.label}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, label: event.target.value } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <Field label="لون البوردر">
+                      <input
+                        type="color"
+                        value={group.borderColor}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, borderColor: event.target.value } : item,
+                            ),
+                          })
+                        }
+                        className="h-12 rounded-xl border border-black/10 px-2"
+                      />
+                    </Field>
+                    <Field label="سمك البوردر px">
+                      <input
+                        type="number"
+                        min={0}
+                        value={group.borderWidth}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, borderWidth: Number(event.target.value) } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <Field label="Radius البوردر px">
+                      <input
+                        type="number"
+                        min={0}
+                        value={group.borderRadius}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, borderRadius: Number(event.target.value) } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <Field label="المسافة فوق المجموعة px">
+                      <input
+                        type="number"
+                        min={0}
+                        value={group.spacingTop}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, spacingTop: Number(event.target.value) } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <Field label="المسافة تحت المجموعة px">
+                      <input
+                        type="number"
+                        min={0}
+                        value={group.spacingBottom}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, spacingBottom: Number(event.target.value) } : item,
+                            ),
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <label className="flex items-center gap-3 text-sm font-bold text-zinc-800">
+                      <input
+                        type="checkbox"
+                        checked={group.borderEnabled}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                              item.id === group.id ? { ...item, borderEnabled: event.target.checked } : item,
+                            ),
+                          })
+                        }
+                      />
+                      تفعيل بوردر المجموعة
+                    </label>
+                  </div>
+
+                  <div className="grid gap-2 rounded-xl border border-black/10 bg-white p-3">
+                    <p className="text-sm font-bold text-zinc-800">السكشنات داخل المجموعة</p>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {settings.homeSectionsOrder.map((sectionId) => (
+                        <label key={sectionId} className="flex items-center gap-3 rounded-xl bg-zinc-50 p-3 text-sm font-bold text-zinc-700">
+                          <input
+                            type="checkbox"
+                            checked={group.sectionIds.includes(sectionId)}
+                            onChange={(event) =>
+                              setSettings({
+                                ...settings,
+                                homeSectionGroups: settings.homeSectionGroups.map((item) =>
+                                  item.id === group.id
+                                    ? {
+                                        ...item,
+                                        sectionIds: event.target.checked
+                                          ? [...item.sectionIds, sectionId]
+                                          : item.sectionIds.filter((selectedSectionId) => selectedSectionId !== sectionId),
+                                      }
+                                    : item,
+                                ),
+                              })
+                            }
+                          />
+                          {getHomeSectionLabel(sectionId, settings.customSections)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </article>
               ))}
             </div>
           </div>
@@ -368,17 +804,25 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               <div>
                 <h2 className="text-lg font-bold text-zinc-950">السكشنات المخصصة</h2>
                 <p className="mt-1 text-sm leading-6 text-zinc-500">
-                  يمكنك إنشاء سكشن بصورة خلفية ونص ورابط ومنتجات تصنيف مثل الكبات أو القلايات. ضع رابط التصنيف الكامل أو الـ slug، ثم اختر الأعمدة والصفوف وطريقة العرض.
+                  يمكنك إنشاء سكشن منتجات من تصنيف واحد مع بنر جانبي اختياري بحجم كارت المنتج، ثم اختر عدد المنتجات في الصف وطريقة العرض.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  const newSection = createCustomSection();
+                  const newSectionOrderId = getCustomSectionOrderId(newSection.id);
+
                   setSettings({
                     ...settings,
-                    customSections: [...settings.customSections, createCustomSection()],
-                  })
-                }
+                    customSections: [...settings.customSections, newSection],
+                    homeSectionsOrder: [...settings.homeSectionsOrder, newSectionOrderId],
+                    homeSectionStyles: {
+                      ...settings.homeSectionStyles,
+                      [newSectionOrderId]: createHomeSectionStyle(),
+                    },
+                  });
+                }}
                 className="rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-black"
               >
                 إضافة سكشن جديد
@@ -442,9 +886,21 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                       <button
                         type="button"
                         onClick={() =>
-                          setSettings({
-                            ...settings,
-                            customSections: settings.customSections.filter((item) => item.id !== section.id),
+                          setSettings(() => {
+                            const deletedSectionOrderId = getCustomSectionOrderId(section.id);
+                            const { [deletedSectionOrderId]: _deletedStyle, ...nextHomeSectionStyles } = settings.homeSectionStyles;
+                            void _deletedStyle;
+
+                            return {
+                              ...settings,
+                              customSections: settings.customSections.filter((item) => item.id !== section.id),
+                              homeSectionsOrder: settings.homeSectionsOrder.filter((item) => item !== deletedSectionOrderId),
+                              homeSectionStyles: nextHomeSectionStyles,
+                              homeSectionGroups: settings.homeSectionGroups.map((group) => ({
+                                ...group,
+                                sectionIds: group.sectionIds.filter((sectionId) => sectionId !== deletedSectionOrderId),
+                              })),
+                            };
                           })
                         }
                         className="rounded-full border border-red-200 px-3 py-2 text-xs font-bold text-red-700"
@@ -485,80 +941,21 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                     </Field>
                   </div>
 
-                  <MultilineTextField
-                    label="النص فوق الصورة"
-                    value={section.text}
-                    onChange={(value) =>
-                      setSettings({
-                        ...settings,
-                        customSections: settings.customSections.map((item) =>
-                          item.id === section.id ? { ...item, text: value } : item,
-                        ),
-                      })
-                    }
-                  />
-
-                  <div className="grid gap-4 lg:grid-cols-4">
-                    <Field label="لون الخلفية">
-                      <input
-                        type="color"
-                        value={section.backgroundColor}
-                        onChange={(event) =>
-                          setSettings({
-                            ...settings,
-                            customSections: settings.customSections.map((item) =>
-                              item.id === section.id ? { ...item, backgroundColor: event.target.value } : item,
-                            ),
-                          })
-                        }
-                        className="h-12 rounded-xl border border-black/10 px-2"
-                      />
-                    </Field>
-                    <Field label="لون النص">
-                      <input
-                        type="color"
-                        value={section.textColor}
-                        onChange={(event) =>
-                          setSettings({
-                            ...settings,
-                            customSections: settings.customSections.map((item) =>
-                              item.id === section.id ? { ...item, textColor: event.target.value } : item,
-                            ),
-                          })
-                        }
-                        className="h-12 rounded-xl border border-black/10 px-2"
-                      />
-                    </Field>
-                    <Field label="رابط الضغط على الصورة">
-                      <input
-                        value={section.linkUrl}
-                        onChange={(event) =>
-                          setSettings({
-                            ...settings,
-                            customSections: settings.customSections.map((item) =>
-                              item.id === section.id ? { ...item, linkUrl: event.target.value } : item,
-                            ),
-                          })
-                        }
-                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                      />
-                    </Field>
-                    <Field label="رابط أو slug التصنيف">
-                      <input
-                        value={section.categorySlug}
-                        onChange={(event) =>
-                          setSettings({
-                            ...settings,
-                            customSections: settings.customSections.map((item) =>
-                              item.id === section.id ? { ...item, categorySlug: extractCategorySlug(event.target.value) } : item,
-                            ),
-                          })
-                        }
-                        placeholder="مثال: cups أو رابط تصنيف الكبات"
-                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                      />
-                    </Field>
-                  </div>
+                  <Field label="رابط أو slug التصنيف">
+                    <input
+                      value={section.categorySlug}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          customSections: settings.customSections.map((item) =>
+                            item.id === section.id ? { ...item, categorySlug: extractCategorySlug(event.target.value) } : item,
+                          ),
+                        })
+                      }
+                      placeholder="مثال: cups أو رابط تصنيف القهوة"
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                    />
+                  </Field>
 
                   <div className="grid gap-4 lg:grid-cols-4">
                     <Field label="عدد المنتجات">
@@ -613,37 +1010,15 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                       </select>
                     </Field>
                     {[
-                      ["أعمدة ديسكتوب", "desktopColumns", 4],
-                      ["أعمدة تابلت", "tabletColumns", 2],
-                      ["أعمدة موبايل", "mobileColumns", 1],
-                    ].map(([label, key, max]) => (
+                      ["أعمدة ديسكتوب", "desktopColumns"],
+                      ["أعمدة تابلت", "tabletColumns"],
+                      ["أعمدة موبايل", "mobileColumns"],
+                    ].map(([label, key]) => (
                       <Field key={key} label={String(label)}>
                         <input
                           type="number"
                           min={1}
-                          max={Number(max)}
                           value={section[key as "desktopColumns" | "tabletColumns" | "mobileColumns"]}
-                          onChange={(event) =>
-                            setSettings({
-                              ...settings,
-                              customSections: settings.customSections.map((item) =>
-                                item.id === section.id ? { ...item, [key]: Number(event.target.value) } : item,
-                              ),
-                            })
-                          }
-                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                        />
-                      </Field>
-                    ))}
-                    {[
-                      ["فونت ديسكتوب", "fontSizeDesktop", "48-64px"],
-                      ["فونت تابلت", "fontSizeTablet", "36-48px"],
-                      ["فونت موبايل", "fontSizeMobile", "28-36px"],
-                    ].map(([label, key, hint]) => (
-                      <Field key={key} label={`${label} - مقترح ${hint}`}>
-                        <input
-                          type="number"
-                          value={section[key as "fontSizeDesktop" | "fontSizeTablet" | "fontSizeMobile"]}
                           onChange={(event) =>
                             setSettings({
                               ...settings,
@@ -658,51 +1033,249 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                     ))}
                   </div>
 
-                  <ImageUploadField
-                    label="صورة السكشن - ديسكتوب"
-                    value={section.desktopImage}
-                    purpose={`custom-section-${section.id}-desktop`}
-                    recommendation="1600x500px أو 1920x600px"
-                    aspectRatio="16:5"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        customSections: settings.customSections.map((item) =>
-                          item.id === section.id ? { ...item, desktopImage: url } : item,
-                        ),
-                      })
-                    }
-                  />
-                  <ImageUploadField
-                    label="صورة السكشن - تابلت"
-                    value={section.tabletImage}
-                    purpose={`custom-section-${section.id}-tablet`}
-                    recommendation="1200x600px"
-                    aspectRatio="2:1"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        customSections: settings.customSections.map((item) =>
-                          item.id === section.id ? { ...item, tabletImage: url } : item,
-                        ),
-                      })
-                    }
-                  />
-                  <ImageUploadField
-                    label="صورة السكشن - موبايل"
-                    value={section.mobileImage}
-                    purpose={`custom-section-${section.id}-mobile`}
-                    recommendation="750x900px"
-                    aspectRatio="5:6"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        customSections: settings.customSections.map((item) =>
-                          item.id === section.id ? { ...item, mobileImage: url } : item,
-                        ),
-                      })
-                    }
-                  />
+                  <div className="grid gap-4 rounded-2xl border border-black/10 bg-white p-4">
+                    <label className="flex items-center gap-3 text-sm font-bold text-zinc-800">
+                      <input
+                        type="checkbox"
+                        checked={section.sideBanner.enabled}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            customSections: settings.customSections.map((item) =>
+                              item.id === section.id
+                                ? { ...item, sideBanner: { ...item.sideBanner, enabled: event.target.checked } }
+                                : item,
+                            ),
+                          })
+                        }
+                      />
+                      تفعيل بنر جانبي صغير بجانب منتجات السكشن
+                    </label>
+                    <p className="text-sm leading-6 text-zinc-500">
+                      مقاس مقترح: 400x500px أو 500x650px. يظهر بحجم قريب من كارت المنتج، ويمكن وضعه يمين أو يسار المنتجات. أعداد الأعمدة مفتوحة، لكن الأرقام الكبيرة تجعل الكروت أصغر.
+                    </p>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field label="موضع البنر الجانبي">
+                        <select
+                          value={section.sideBanner.position}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id
+                                  ? { ...item, sideBanner: { ...item.sideBanner, position: event.target.value as "left" | "right" } }
+                                  : item,
+                              ),
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        >
+                          <option value="right">يمين المنتجات</option>
+                          <option value="left">يسار المنتجات</option>
+                        </select>
+                      </Field>
+                      <Field label="رابط البنر الجانبي - اختياري">
+                        <input
+                          value={section.sideBanner.linkUrl}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id
+                                  ? { ...item, sideBanner: { ...item.sideBanner, linkUrl: event.target.value } }
+                                  : item,
+                              ),
+                            })
+                          }
+                          placeholder="/shop أو رابط تصنيف"
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                    </div>
+                    <label className="flex items-center gap-3 text-sm font-bold text-zinc-800">
+                      <input
+                        type="checkbox"
+                        checked={section.sideBanner.showOnMobile}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            customSections: settings.customSections.map((item) =>
+                              item.id === section.id
+                                ? { ...item, sideBanner: { ...item.sideBanner, showOnMobile: event.target.checked } }
+                                : item,
+                            ),
+                          })
+                        }
+                      />
+                      إظهار البنر الجانبي في الموبايل
+                    </label>
+                    <ImageUploadField
+                      label="صورة البنر الجانبي"
+                      value={section.sideBanner.image}
+                      purpose={`custom-section-${section.id}-side-banner`}
+                      recommendation="400x500px أو 500x650px"
+                      aspectRatio="4:5"
+                      onUploaded={(url) =>
+                        setSettings({
+                          ...settings,
+                          customSections: settings.customSections.map((item) =>
+                            item.id === section.id
+                              ? { ...item, sideBanner: { ...item.sideBanner, image: url } }
+                              : item,
+                          ),
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="grid gap-4 rounded-2xl border border-black/10 bg-white p-4">
+                    <label className="flex items-center gap-3 text-sm font-bold text-zinc-800">
+                      <input
+                        type="checkbox"
+                        checked={section.showMainBanner}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            customSections: settings.customSections.map((item) =>
+                              item.id === section.id ? { ...item, showMainBanner: event.target.checked } : item,
+                            ),
+                          })
+                        }
+                      />
+                      إظهار بنر كبير فوق منتجات السكشن
+                    </label>
+
+                    {section.showMainBanner ? (
+                      <div className="grid gap-4">
+                        <MultilineTextField
+                          label="النص فوق البنر الكبير"
+                          value={section.text}
+                          onChange={(value) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id ? { ...item, text: value } : item,
+                              ),
+                            })
+                          }
+                        />
+
+                        <div className="grid gap-4 lg:grid-cols-4">
+                          <Field label="لون خلفية البنر">
+                            <input
+                              type="color"
+                              value={section.backgroundColor}
+                              onChange={(event) =>
+                                setSettings({
+                                  ...settings,
+                                  customSections: settings.customSections.map((item) =>
+                                    item.id === section.id ? { ...item, backgroundColor: event.target.value } : item,
+                                  ),
+                                })
+                              }
+                              className="h-12 rounded-xl border border-black/10 px-2"
+                            />
+                          </Field>
+                          <Field label="لون نص البنر">
+                            <input
+                              type="color"
+                              value={section.textColor}
+                              onChange={(event) =>
+                                setSettings({
+                                  ...settings,
+                                  customSections: settings.customSections.map((item) =>
+                                    item.id === section.id ? { ...item, textColor: event.target.value } : item,
+                                  ),
+                                })
+                              }
+                              className="h-12 rounded-xl border border-black/10 px-2"
+                            />
+                          </Field>
+                          <Field label="رابط الضغط على البنر الكبير">
+                            <input
+                              value={section.linkUrl}
+                              onChange={(event) =>
+                                setSettings({
+                                  ...settings,
+                                  customSections: settings.customSections.map((item) =>
+                                    item.id === section.id ? { ...item, linkUrl: event.target.value } : item,
+                                  ),
+                                })
+                              }
+                              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                            />
+                          </Field>
+                          {[
+                            ["فونت ديسكتوب", "fontSizeDesktop", "48-64px"],
+                            ["فونت تابلت", "fontSizeTablet", "36-48px"],
+                            ["فونت موبايل", "fontSizeMobile", "28-36px"],
+                          ].map(([label, key, hint]) => (
+                            <Field key={key} label={`${label} - مقترح ${hint}`}>
+                              <input
+                                type="number"
+                                value={section[key as "fontSizeDesktop" | "fontSizeTablet" | "fontSizeMobile"]}
+                                onChange={(event) =>
+                                  setSettings({
+                                    ...settings,
+                                    customSections: settings.customSections.map((item) =>
+                                      item.id === section.id ? { ...item, [key]: Number(event.target.value) } : item,
+                                    ),
+                                  })
+                                }
+                                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                              />
+                            </Field>
+                          ))}
+                        </div>
+
+                        <ImageUploadField
+                          label="صورة البنر الكبير - ديسكتوب"
+                          value={section.desktopImage}
+                          purpose={`custom-section-${section.id}-desktop`}
+                          recommendation="1600x500px أو 1920x600px"
+                          aspectRatio="16:5"
+                          onUploaded={(url) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id ? { ...item, desktopImage: url } : item,
+                              ),
+                            })
+                          }
+                        />
+                        <ImageUploadField
+                          label="صورة البنر الكبير - تابلت"
+                          value={section.tabletImage}
+                          purpose={`custom-section-${section.id}-tablet`}
+                          recommendation="1200x600px"
+                          aspectRatio="2:1"
+                          onUploaded={(url) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id ? { ...item, tabletImage: url } : item,
+                              ),
+                            })
+                          }
+                        />
+                        <ImageUploadField
+                          label="صورة البنر الكبير - موبايل"
+                          value={section.mobileImage}
+                          purpose={`custom-section-${section.id}-mobile`}
+                          recommendation="750x900px"
+                          aspectRatio="5:6"
+                          onUploaded={(url) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id ? { ...item, mobileImage: url } : item,
+                              ),
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </article>
               ))}
             </div>
@@ -806,6 +1379,16 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 }
               />
               إظهار بنر الواجهة الرئيسي
+            </label>
+            <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+              <input
+                type="checkbox"
+                checked={settings.hero.showTextOnDesktop}
+                onChange={(event) =>
+                  setSettings({ ...settings, hero: { ...settings.hero, showTextOnDesktop: event.target.checked } })
+                }
+              />
+              إظهار نصوص البنر على الديسكتوب
             </label>
             <div className="grid gap-5 lg:grid-cols-2">
               <MultilineTextField
@@ -915,6 +1498,68 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 </select>
               </Field>
             </div>
+            <div className="grid gap-5 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:grid-cols-3">
+              <div className="lg:col-span-3">
+                <h3 className="text-lg font-bold text-zinc-950">إعدادات البنر على الموبايل</h3>
+                <p className="mt-1 text-sm leading-6 text-zinc-500">
+                  هذه الإعدادات تتحكم في مكان وحجم النص والأزرار على الموبايل فقط بدون التأثير على الديسكتوب.
+                </p>
+              </div>
+              <label className="flex items-center gap-3 rounded-xl bg-white p-4 text-sm font-bold">
+                <input
+                  type="checkbox"
+                  checked={settings.hero.showTextOnMobile}
+                  onChange={(event) =>
+                    setSettings({ ...settings, hero: { ...settings.hero, showTextOnMobile: event.target.checked } })
+                  }
+                />
+                إظهار نصوص البنر على الموبايل
+              </label>
+              <Field label="مكان النص على الموبايل">
+                <select
+                  value={settings.hero.mobileContentAlign}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      hero: {
+                        ...settings.hero,
+                        mobileContentAlign: event.target.value as "right" | "center" | "left",
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                >
+                  <option value="right">يمين</option>
+                  <option value="center">وسط</option>
+                  <option value="left">يسار</option>
+                </select>
+              </Field>
+              {[
+                ["حجم عنوان الموبايل px", "mobileTitleFontSize"],
+                ["حجم وصف الموبايل px", "mobileSubtitleFontSize"],
+                ["حجم خط أزرار الموبايل px", "mobileButtonFontSize"],
+                ["عرض Padding أزرار الموبايل px", "mobileButtonPaddingX"],
+                ["ارتفاع Padding أزرار الموبايل px", "mobileButtonPaddingY"],
+              ].map(([label, key]) => (
+                <Field key={key} label={label}>
+                  <input
+                    type="number"
+                    min={1}
+                    value={settings.hero[key as "mobileTitleFontSize" | "mobileSubtitleFontSize" | "mobileButtonFontSize" | "mobileButtonPaddingX" | "mobileButtonPaddingY"]}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        hero: {
+                          ...settings.hero,
+                          [key]: Number(event.target.value),
+                        },
+                      })
+                    }
+                    className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  />
+                </Field>
+              ))}
+            </div>
             <ImageUploadField
               label="صورة Hero - ديسكتوب"
               value={settings.hero.desktopImage}
@@ -987,10 +1632,72 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               إظهار بنر أعلى الهيدر
             </label>
             <MultilineTextField
-              label="نص بنر أعلى الهيدر"
+              label="جمل التوب بار أعلى الهيدر"
               value={settings.topBanner.text}
               onChange={(value) => setSettings({ ...settings, topBanner: { ...settings.topBanner, text: value } })}
             />
+            <p className="-mt-3 text-xs font-semibold text-zinc-500">
+              اكتب كل جملة في سطر مستقل، أو افصل بين الجمل بعلامة •، وستظهر في التوب بار المتحرك أعلى الهيدر.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="سرعة حركة التوب بار بالثواني">
+                <input
+                  type="number"
+                  min={10}
+                  max={120}
+                  value={settings.topBanner.speedSeconds}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      topBanner: {
+                        ...settings.topBanner,
+                        speedSeconds: Math.min(120, Math.max(10, Number(event.target.value) || 40)),
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+              <Field label="طريقة تكرار الجمل">
+                <select
+                  value={settings.topBanner.gapMode}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      topBanner: {
+                        ...settings.topBanner,
+                        gapMode: event.target.value === "spaced" ? "spaced" : "continuous",
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                >
+                  <option value="continuous">لوب مستمر بدون فجوة</option>
+                  <option value="spaced">وجود فجوة بين نهاية وبداية الجمل</option>
+                </select>
+              </Field>
+              <Field label="حجم الفجوة بالبكسل">
+                <input
+                  type="number"
+                  min={0}
+                  max={1000}
+                  value={settings.topBanner.gapWidth}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      topBanner: {
+                        ...settings.topBanner,
+                        gapWidth: Math.min(1000, Math.max(0, Number(event.target.value) || 0)),
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+            </div>
+            <p className="-mt-2 text-xs font-semibold text-zinc-500">
+              عند اختيار لوب مستمر بدون فجوة سيتم تجاهل حجم الفجوة ويظل الكلام متتابعاً دائماً.
+            </p>
             <ImageUploadField
               label="صورة بنر أعلى الهيدر - ديسكتوب"
               value={settings.topBanner.desktopImage}

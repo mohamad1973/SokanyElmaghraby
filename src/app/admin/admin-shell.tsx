@@ -17,6 +17,11 @@ const navItems = [
   { href: "/admin/products", label: "المنتجات" },
   { href: "/admin/categories", label: "التصنيفات" },
   { href: "/admin/orders", label: "الطلبات" },
+  { href: "/admin/dispatch/setup", label: "إعداد الشحن" },
+  { href: "/admin/dispatch/board", label: "التوزيع" },
+  { href: "/admin/dispatch/drivers", label: "المندوبين" },
+  { href: "/admin/dispatch/zones", label: "المناطق" },
+  { href: "/admin/dispatch/reports", label: "تقارير التوصيل" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -35,7 +40,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="space-y-1 p-3 text-sm">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
 
             return (
               <Link

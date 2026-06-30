@@ -78,7 +78,7 @@ export function ProductRichDescription({ html, fallbackText }: ProductRichDescri
   return (
     <section className="mt-16 rounded-[2rem] bg-white p-5 shadow-sm sm:p-8" dir="rtl">
       <div className="mb-6">
-        <p className="text-sm font-bold tracking-[0.25em] text-brand-gold">
+        <p className="inline-flex rounded-full bg-black px-4 py-2 text-sm font-bold tracking-[0.18em] text-brand-gold">
           <VisualEditableText textKey="product.richDetails.eyebrow">التفاصيل</VisualEditableText>
         </p>
         <h2 className="mt-2 text-2xl font-bold text-zinc-950">

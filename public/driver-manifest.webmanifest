@@ -1,0 +1,19 @@
+{
+  "name": "SOKANY Driver",
+  "short_name": "SOKANY",
+  "description": "تطبيق مندوب التوصيل — SOKANY Egypt",
+  "start_url": "/driver/today",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}

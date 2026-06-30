@@ -16,6 +16,11 @@ const cards = [
     description: "عرض طلبات ووكومرس بنفس طريقة لوحة ووردبريس.",
     href: "/admin/orders",
   },
+  {
+    title: "إعداد الشحن",
+    description: "فحص Bosta وقاعدة البيانات وتهيئة مناطق التوصيل.",
+    href: "/admin/dispatch/setup",
+  },
 ];
 
 export default function AdminDashboardPage() {

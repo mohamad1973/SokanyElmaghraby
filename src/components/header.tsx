@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { useState } from "react";
 
 import type { ThemeSettings } from "@/lib/theme-settings";
@@ -7,6 +8,71 @@ import type { MenuNode } from "@/lib/types";
 
 import { HeaderProductSearch } from "./header-product-search";
 import { VisualEditableText } from "./visual-editable-text";
+
+type TopBannerIconName = "quality" | "shipping" | "price" | "secure" | "support" | "warranty";
+type TopBannerStyle = CSSProperties & {
+  "--top-banner-duration": string;
+  "--top-banner-gap-width": string;
+};
+
+const topBannerIconOrder: TopBannerIconName[] = ["quality", "shipping", "price", "secure", "support", "warranty"];
+const topBannerContentLoops = [0, 1, 2, 3];
+
+function TopBannerIcon({ icon }: { icon: TopBannerIconName }) {
+  const className = "top-banner-icon";
+
+  if (icon === "shipping") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M3 7h11v9H3V7ZM14 10h3.6l2.4 3v3h-6v-6Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+      </svg>
+    );
+  }
+
+  if (icon === "price") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M4 12V6h6l9.5 9.5-6 6L4 12Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M8 9h.01" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "secure") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M6 11V8a6 6 0 0 1 12 0v3" strokeLinecap="round" />
+        <path d="M5 11h14v10H5V11Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 15v2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "support") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M4 12a8 8 0 1 1 16 0v4a3 3 0 0 1-3 3h-2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4 12v3a2 2 0 0 0 2 2h1v-6H6a2 2 0 0 0-2 1ZM20 12v3a2 2 0 0 1-2 2h-1v-6h1a2 2 0 0 1 2 1Z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "warranty") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+        <path d="M12 3 19 6v5c0 4.5-2.8 8.5-7 10-4.2-1.5-7-5.5-7-10V6l7-3Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m9 12 2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+      <path d="m12 3 2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.3 6.7 19l1-5.8-4.2-4.1 5.9-.9L12 3Z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function HeaderIcon({ icon }: { icon: "account" | "cart" | "favorite" | "compare" }) {
   const className = "h-5 w-5";
@@ -93,91 +159,60 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
   );
 }
 
-function MobileMenu({ menu }: { menu: MenuNode[] }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [openId, setOpenId] = useState<number | null>(menu[0]?.id || null);
+function MobileMenuTree({
+  items,
+  depth = 0,
+  onNavigate,
+}: {
+  items: MenuNode[];
+  depth?: number;
+  onNavigate: () => void;
+}) {
+  if (!items.length) {
+    return null;
+  }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black text-white lg:hidden"
-        aria-label="فتح المنيو"
-      >
-        <span className="grid gap-1">
-          <span className="block h-0.5 w-5 rounded-full bg-current" />
-          <span className="block h-0.5 w-5 rounded-full bg-current" />
-          <span className="block h-0.5 w-5 rounded-full bg-current" />
-        </span>
-      </button>
+    <ul className={depth ? "mt-2 grid gap-2 border-r border-black/10 pr-3" : "grid gap-2"}>
+      {items.map((item) => (
+        <li key={item.id} className={depth ? "" : "rounded-[5px] border border-black/10 bg-white p-2"}>
+          <Link
+            href={item.href}
+            onClick={onNavigate}
+            className={[
+              "block rounded-[5px] px-4 py-3 font-bold transition hover:bg-brand-gold hover:text-black",
+              depth ? "bg-zinc-50 text-sm text-zinc-700" : "bg-white text-sm text-zinc-950",
+            ].join(" ")}
+          >
+            {item.title}
+          </Link>
+          <MobileMenuTree items={item.children} depth={depth + 1} onNavigate={onNavigate} />
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-      {isOpen ? (
-        <div className="fixed inset-0 z-[90] lg:hidden">
-          <button
-            type="button"
-            aria-label="إغلاق المنيو"
-            onClick={() => setIsOpen(false)}
-            className="absolute inset-0 bg-black/45"
-          />
-          <aside className="absolute bottom-0 right-0 top-0 w-80 max-w-[86vw] overflow-y-auto bg-white p-5 shadow-2xl" dir="rtl">
-            <div className="mb-5 flex items-center justify-between border-b border-black/10 pb-4">
-              <p className="text-lg font-bold text-zinc-950">
-                <VisualEditableText textKey="header.mobileMenu.title">القائمة</VisualEditableText>
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-xl font-bold"
-                aria-label="إغلاق"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="grid gap-2">
-              {menu.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-black/10">
-                  <button
-                    type="button"
-                    onClick={() => setOpenId(openId === item.id ? null : item.id)}
-                    className="flex w-full items-center justify-between px-4 py-3 text-right text-sm font-bold text-zinc-950"
-                  >
-                    <span>{item.title}</span>
-                    <span>{openId === item.id ? "−" : "+"}</span>
-                  </button>
-                  {openId === item.id ? (
-                    <div className="border-t border-black/5 bg-zinc-50 p-2">
-                      <Link
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className="block rounded-xl px-4 py-3 text-sm font-bold text-zinc-700 hover:bg-brand-gold hover:text-black"
-                      >
-                        <VisualEditableText textKey="header.mobileMenu.viewAll">عرض الكل</VisualEditableText>
-                      </Link>
-                      {item.children.map((child) => (
-                        <Link
-                          key={child.id}
-                          href={child.href}
-                          onClick={() => setIsOpen(false)}
-                          className="block rounded-xl px-4 py-3 text-sm font-bold text-zinc-700 hover:bg-brand-gold hover:text-black"
-                        >
-                          {child.title}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </aside>
-        </div>
-      ) : null}
-    </>
+function MobileMenuButton({ isOpen, onClick }: { isOpen: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black text-white lg:hidden"
+      aria-label={isOpen ? "إغلاق المنيو" : "فتح المنيو"}
+      aria-expanded={isOpen}
+    >
+      <span className="grid gap-1">
+        <span className="block h-0.5 w-5 rounded-full bg-current" />
+        <span className="block h-0.5 w-5 rounded-full bg-current" />
+        <span className="block h-0.5 w-5 rounded-full bg-current" />
+      </span>
+    </button>
   );
 }
 
 export function Header({ settings, menu }: { settings: ThemeSettings; menu: MenuNode[] }) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const headerMenu = menu.length ? menu : settings.navigation.map((item, index) => ({
     id: index + 1,
     title: item.label,
@@ -193,20 +228,35 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     .split(/•|\n/)
     .map((phrase) => phrase.trim())
     .filter(Boolean);
-  const topBannerItems = topBannerPhrases.length ? topBannerPhrases : [settings.topBanner.text];
+  const topBannerItems = (topBannerPhrases.length ? topBannerPhrases : [settings.topBanner.text]).map((label, index) => ({
+    icon: topBannerIconOrder[index % topBannerIconOrder.length],
+    label,
+  }));
+  const topBannerSegments = [0, 1];
   const headerActions = [
     { href: "/account", label: "الحساب", icon: "account" as const },
     { href: "/cart", label: "السلة", icon: "cart" as const },
     { href: "/offers", label: "المفضلة", icon: "favorite" as const },
     { href: "/shop", label: "مقارنة المنتجات", icon: "compare" as const },
   ];
+  const logoStyle = {
+    "--logo-mobile-width": `${settings.brand.logoMobileWidth}px`,
+    "--logo-mobile-height": `${settings.brand.logoMobileHeight}px`,
+    "--logo-desktop-width": `${settings.brand.logoDesktopWidth}px`,
+    "--logo-desktop-height": `${settings.brand.logoDesktopHeight}px`,
+  } as CSSProperties;
+  const topBannerStyle = {
+    "--top-banner-duration": `${settings.topBanner.speedSeconds}s`,
+    "--top-banner-gap-width": settings.topBanner.gapMode === "spaced" ? `${settings.topBanner.gapWidth}px` : "0px",
+  } as TopBannerStyle;
 
   return (
     <header className="sticky top-0 z-50 border-b border-black/10 bg-white/95 backdrop-blur-xl">
       {settings.topBanner.enabled ? (
         <Link
           href={settings.topBanner.url}
-          className="relative block overflow-hidden bg-zinc-950 px-4 py-2 text-center text-xs font-bold text-brand-gold"
+          className="custom-topbar"
+          style={topBannerStyle}
         >
           {settings.topBanner.desktopImage || settings.topBanner.mobileImage ? (
             <>
@@ -236,15 +286,21 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               ) : null}
             </>
           ) : (
-            <span className="top-banner-marquee" aria-label={settings.topBanner.text}>
+            <span className="top-banner-marquee" aria-label={topBannerItems.map((item) => item.label).join(" - ")}>
               <span className="top-banner-marquee-track">
-                {[0, 1].map((item) => (
-                  <span key={item} className="top-banner-marquee-item">
-                    {topBannerItems.map((phrase, index) => (
-                      <span key={`${phrase}-${index}`} className="top-banner-marquee-phrase">
-                        <VisualEditableText textKey={`topBanner.text.${index}`}>{phrase}</VisualEditableText>
-                      </span>
-                    ))}
+                {topBannerSegments.map((segment) => (
+                  <span key={segment} className="top-banner-marquee-content" aria-hidden={segment > 0}>
+                    {topBannerContentLoops.map((loopIndex) =>
+                      topBannerItems.map((item, itemIndex) => (
+                        <span key={`${segment}-${loopIndex}-${itemIndex}`} className="top-banner-marquee-item">
+                          <TopBannerIcon icon={item.icon} />
+                          <span>{item.label}</span>
+                        </span>
+                      )),
+                    )}
+                    {settings.topBanner.gapMode === "spaced" ? (
+                      <span className="top-banner-marquee-gap" aria-hidden="true" />
+                    ) : null}
                   </span>
                 ))}
               </span>
@@ -255,15 +311,17 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
 
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 lg:px-8 lg:py-4">
         <div className="flex items-center gap-2">
-          <MobileMenu menu={headerMenu} />
           <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-3" aria-label="الرئيسية">
           {settings.brand.logoUrl ? (
-            <span className="relative block h-10 w-24 sm:h-12 sm:w-36">
+            <span
+              className="relative block h-[var(--logo-mobile-height)] w-[var(--logo-mobile-width)] sm:h-[var(--logo-desktop-height)] sm:w-[var(--logo-desktop-width)]"
+              style={logoStyle}
+            >
               <Image
                 src={settings.brand.logoUrl}
                 alt={settings.brand.logoText}
                 fill
-                sizes="144px"
+                sizes={`(min-width: 640px) ${settings.brand.logoDesktopWidth}px, ${settings.brand.logoMobileWidth}px`}
                 className="object-contain object-right"
                 unoptimized
               />
@@ -273,11 +331,11 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               {settings.brand.logoText.slice(0, 2)}
             </span>
           )}
-          <span className="hidden leading-tight sm:block">
-            <span className="block text-lg font-bold tracking-tight text-zinc-950 lg:text-xl">
+          <span className="block min-w-0 leading-tight">
+            <span className="block truncate text-sm font-bold tracking-tight text-zinc-950 sm:text-lg lg:text-xl">
               <VisualEditableText textKey="header.logoText">{settings.brand.logoText}</VisualEditableText>
             </span>
-            <span className="block text-xs font-semibold text-zinc-500">
+            <span className="block truncate text-[10px] font-semibold text-zinc-500 sm:text-xs">
               <VisualEditableText textKey="header.tagline">{settings.brand.tagline}</VisualEditableText>
             </span>
           </span>
@@ -301,8 +359,35 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:hidden">
-        <HeaderProductSearch className="relative block w-full" />
+      <div className="relative mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:hidden">
+        <div className="flex items-center gap-2">
+          <HeaderProductSearch className="relative block min-w-0 flex-1" />
+          <MobileMenuButton
+            isOpen={isMobileMenuOpen}
+            onClick={() => setIsMobileMenuOpen((currentValue) => !currentValue)}
+          />
+        </div>
+
+        {isMobileMenuOpen ? (
+          <div className="absolute right-4 top-full z-[80] w-2/3 max-w-sm sm:right-6" dir="rtl">
+          <div className="max-h-[70vh] overflow-y-auto rounded-[5px] border border-black/10 bg-white p-3 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between border-b border-black/10 pb-3">
+              <p className="text-base font-bold text-zinc-950">
+                <VisualEditableText textKey="header.mobileMenu.title">القائمة</VisualEditableText>
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-lg font-bold"
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+            <MobileMenuTree items={headerMenu} onNavigate={() => setIsMobileMenuOpen(false)} />
+          </div>
+          </div>
+        ) : null}
       </div>
 
       <DesktopMenu menu={headerMenu} />

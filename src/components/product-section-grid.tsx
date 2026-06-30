@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { ProductCard } from "@/components/product-card";
 import type { Product } from "@/lib/types";
 
@@ -9,25 +13,49 @@ type ProductSectionGridProps = {
   rowCount: number;
 };
 
-const columnClasses = {
-  mobile: {
-    1: "grid-cols-1",
-    2: "grid-cols-2",
-  },
-  tablet: {
-    1: "sm:grid-cols-1",
-    2: "sm:grid-cols-2",
-  },
-  desktop: {
-    1: "lg:grid-cols-1",
-    2: "lg:grid-cols-2",
-    3: "lg:grid-cols-3",
-    4: "lg:grid-cols-4",
-  },
-};
+function getSafeColumnCount(value: number | undefined, fallback: number) {
+  const parsedValue = Number(value || fallback);
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
+  if (!Number.isFinite(parsedValue)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.floor(parsedValue));
+}
+
+function useResponsiveColumns({
+  desktopColumns,
+  tabletColumns,
+  mobileColumns,
+}: {
+  desktopColumns: number;
+  tabletColumns: number;
+  mobileColumns: number;
+}) {
+  const [columns, setColumns] = useState(() => Math.max(2, getSafeColumnCount(mobileColumns, 2)));
+
+  useEffect(() => {
+    function updateColumns() {
+      if (window.matchMedia("(min-width: 1024px)").matches) {
+        setColumns(getSafeColumnCount(desktopColumns, 4));
+        return;
+      }
+
+      if (window.matchMedia("(min-width: 640px)").matches) {
+        setColumns(getSafeColumnCount(tabletColumns, 2));
+        return;
+      }
+
+      setColumns(Math.max(2, getSafeColumnCount(mobileColumns, 2)));
+    }
+
+    updateColumns();
+    window.addEventListener("resize", updateColumns);
+
+    return () => window.removeEventListener("resize", updateColumns);
+  }, [desktopColumns, tabletColumns, mobileColumns]);
+
+  return columns;
 }
 
 export function ProductSectionGrid({
@@ -37,13 +65,11 @@ export function ProductSectionGrid({
   mobileColumns,
   rowCount,
 }: ProductSectionGridProps) {
-  const safeDesktopColumns = clamp(desktopColumns || 4, 1, 4) as 1 | 2 | 3 | 4;
-  const safeTabletColumns = clamp(tabletColumns || 2, 1, 2) as 1 | 2;
-  const safeMobileColumns = clamp(mobileColumns || 1, 1, 2) as 1 | 2;
-  const safeRowCount = clamp(rowCount || 1, 1, 6);
+  const columns = useResponsiveColumns({ desktopColumns, tabletColumns, mobileColumns });
+  const safeRowCount = getSafeColumnCount(rowCount, 1);
   const productsWithImages = products
     .filter((product) => product.images?.length && !product.image.includes("product-placeholder"))
-    .slice(0, safeDesktopColumns * safeRowCount);
+    .slice(0, columns * safeRowCount);
 
   if (!productsWithImages.length) {
     return null;
@@ -51,12 +77,8 @@ export function ProductSectionGrid({
 
   return (
     <div
-      className={[
-        "grid gap-6",
-        columnClasses.mobile[safeMobileColumns],
-        columnClasses.tablet[safeTabletColumns],
-        columnClasses.desktop[safeDesktopColumns],
-      ].join(" ")}
+      className="grid gap-6"
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {productsWithImages.map((product) => (
         <ProductCard key={product.id} product={product} />
