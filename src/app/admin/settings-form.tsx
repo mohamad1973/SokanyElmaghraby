@@ -485,6 +485,27 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
             />
           </Field>
+          <Field label="طريقة عرض رمز المنتج">
+            <select
+              value={settings.productCard.codeMode}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  productCard: {
+                    ...settings.productCard,
+                    codeMode: event.target.value === "titleModel" ? "titleModel" : "titleSk",
+                  },
+                })
+              }
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            >
+              <option value="titleSk">كود SK من العنوان</option>
+              <option value="titleModel">الموديل من العنوان (بعد كلمة موديل)</option>
+            </select>
+          </Field>
+          <p className="-mt-2 text-xs font-semibold text-zinc-500 lg:col-span-2">
+            يظهر الرمز في كارت المنتج وصفحة المنتج والبحث. إن لم يُعثر على قيمة في العنوان يُستخدم SKU من WooCommerce.
+          </p>
           <div className="rounded-xl bg-zinc-50 p-4 lg:col-span-2">
             <label className="flex items-center gap-3 text-sm font-bold">
               <input

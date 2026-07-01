@@ -3,10 +3,12 @@ import "server-only";
 import type { CSSProperties } from "react";
 
 import { defaultBannerSpacing, defaultSideBannerSpacing, mergeBannerSpacing, type BannerSpacing } from "./banner-spacing";
+import type { ProductCodeMode } from "./product-display-code";
 import { getPrismaClient } from "./db";
 
 export type { BannerSpacing };
 export { defaultBannerSpacing, defaultSideBannerSpacing, mergeBannerSpacing };
+export type { ProductCodeMode };
 
 export type MenuItem = {
   label: string;
@@ -182,6 +184,7 @@ export type ThemeSettings = {
   productCard: {
     borderWidth: number;
     borderRadius: number;
+    codeMode: ProductCodeMode;
   };
   homeSectionsOrder: HomeSectionOrderItem[];
   homeSectionStyles: Record<string, HomeSectionStyle>;
@@ -292,6 +295,7 @@ export const defaultThemeSettings: ThemeSettings = {
   productCard: {
     borderWidth: 1,
     borderRadius: 0,
+    codeMode: "titleSk",
   },
   homeSectionsOrder: defaultHomeSectionsOrder,
   homeSectionStyles: {},
@@ -481,6 +485,24 @@ function mergeCustomBannerSettings(value: unknown): ThemeSettings["sections"]["c
   };
 }
 
+function mergeProductCardSettings(value: unknown): ThemeSettings["productCard"] {
+  const productCard = isObject(value) ? value : {};
+
+  return {
+    ...defaultThemeSettings.productCard,
+    ...productCard,
+    borderWidth:
+      typeof productCard.borderWidth === "number"
+        ? Math.max(0, productCard.borderWidth)
+        : defaultThemeSettings.productCard.borderWidth,
+    borderRadius:
+      typeof productCard.borderRadius === "number"
+        ? Math.max(0, productCard.borderRadius)
+        : defaultThemeSettings.productCard.borderRadius,
+    codeMode: productCard.codeMode === "titleModel" ? "titleModel" : "titleSk",
+  };
+}
+
 function mergeSettings(settings: unknown): ThemeSettings {
   if (!isObject(settings)) {
     return defaultThemeSettings;
@@ -507,18 +529,7 @@ function mergeSettings(settings: unknown): ThemeSettings {
       ),
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
-    productCard: {
-      ...defaultThemeSettings.productCard,
-      ...(isObject(settings.productCard) ? settings.productCard : {}),
-      borderWidth:
-        isObject(settings.productCard) && typeof settings.productCard.borderWidth === "number"
-          ? Math.max(0, settings.productCard.borderWidth)
-          : defaultThemeSettings.productCard.borderWidth,
-      borderRadius:
-        isObject(settings.productCard) && typeof settings.productCard.borderRadius === "number"
-          ? Math.max(0, settings.productCard.borderRadius)
-          : defaultThemeSettings.productCard.borderRadius,
-    },
+    productCard: mergeProductCardSettings(settings.productCard),
     homeSectionsOrder,
     homeSectionStyles: mergeHomeSectionStyles(settings.homeSectionStyles, homeSectionsOrder),
     homeSectionGroups: mergeHomeSectionGroups(settings.homeSectionGroups, homeSectionsOrder),

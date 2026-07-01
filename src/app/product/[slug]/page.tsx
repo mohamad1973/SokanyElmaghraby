@@ -6,6 +6,8 @@ import { ProductImageGallery } from "@/components/product-image-gallery";
 import { ProductCard } from "@/components/product-card";
 import { ProductRichDescription } from "@/components/product-rich-description";
 import { VisualEditableText } from "@/components/visual-editable-text";
+import { getProductCodeLabel, getProductDisplayCode } from "@/lib/product-display-code";
+import { getThemeSettings } from "@/lib/theme-settings";
 import { getProductBySlug, getProducts } from "@/lib/woocommerce";
 
 type ProductPageProps = {
@@ -35,11 +37,19 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const [product, relatedProducts] = await Promise.all([getProductBySlug(slug), getProducts(4)]);
+  const [product, relatedProducts, settings] = await Promise.all([
+    getProductBySlug(slug),
+    getProducts(4),
+    getThemeSettings(),
+  ]);
 
   if (!product) {
     notFound();
   }
+
+  const codeMode = settings.productCard.codeMode;
+  const displayCode = getProductDisplayCode(product, codeMode);
+  const codeLabel = getProductCodeLabel(codeMode);
 
   const structuredData = {
     "@context": "https://schema.org",
@@ -132,9 +142,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
               ))}
               <div className="flex justify-between gap-4 py-3 text-sm">
                 <span className="font-bold text-zinc-500">
-                  <VisualEditableText textKey="product.skuLabel">SKU</VisualEditableText>
+                  <VisualEditableText textKey="product.skuLabel">{codeLabel}</VisualEditableText>
                 </span>
-                <span className="font-bold text-zinc-950">{product.sku}</span>
+                <span className="font-bold text-zinc-950">{displayCode}</span>
               </div>
             </div>
           </div>

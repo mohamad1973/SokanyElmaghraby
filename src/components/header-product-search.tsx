@@ -11,6 +11,7 @@ type SearchProduct = {
   name: string;
   slug: string;
   sku: string;
+  displayCode: string;
   price: string;
   image: string;
 };
@@ -95,7 +96,7 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
               </span>
               <span className="min-w-0 flex-1">
                 <span className="line-clamp-1 block text-sm font-bold text-zinc-950">{product.name}</span>
-                <span className="mt-1 block text-xs font-bold text-zinc-500">{product.sku}</span>
+                <span className="mt-1 block text-xs font-bold text-zinc-500">{product.displayCode || product.sku}</span>
               </span>
               <span className="whitespace-nowrap text-xs font-bold text-zinc-950 sm:text-sm">{product.price} ج.م</span>
             </Link>

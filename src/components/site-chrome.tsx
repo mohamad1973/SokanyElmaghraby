@@ -8,6 +8,7 @@ import type { MenuNode } from "@/lib/types";
 
 import { Footer } from "./footer";
 import { Header } from "./header";
+import { ProductDisplayProvider } from "./product-display-context";
 import { PwaInstallPrompt } from "./pwa-install-prompt";
 import { VisualEditorProvider } from "./visual-editor-provider";
 import { VisualEditorToolbar } from "./visual-editor-toolbar";
@@ -28,13 +29,15 @@ export function SiteChrome({
   }
 
   return (
-    <VisualEditorProvider settings={settings}>
-      <Header settings={settings} menu={menu} />
-      <VisualEditorToolbar />
-      <main className="flex-1">{children}</main>
-      <Footer settings={settings} />
-      <PwaInstallPrompt />
-    </VisualEditorProvider>
+    <ProductDisplayProvider codeMode={settings.productCard.codeMode}>
+      <VisualEditorProvider settings={settings}>
+        <Header settings={settings} menu={menu} />
+        <VisualEditorToolbar />
+        <main className="flex-1">{children}</main>
+        <Footer settings={settings} />
+        <PwaInstallPrompt />
+      </VisualEditorProvider>
+    </ProductDisplayProvider>
   );
 }
 

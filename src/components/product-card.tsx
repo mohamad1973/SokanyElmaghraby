@@ -1,20 +1,20 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 
+import { getProductDisplayCode } from "@/lib/product-display-code";
 import type { Product } from "@/lib/types";
+
+import { useProductCodeMode } from "./product-display-context";
 
 type ProductCardProps = {
   product: Product;
 };
 
-function getProductTitleCode(product: Product) {
-  const match = product.name.match(/\b[A-Z]{1,6}-?\d{3,8}\b/i);
-
-  return match?.[0]?.toUpperCase() || product.sku;
-}
-
 export function ProductCard({ product }: ProductCardProps) {
-  const productCode = getProductTitleCode(product);
+  const codeMode = useProductCodeMode();
+  const productCode = getProductDisplayCode(product, codeMode);
 
   return (
     <article
@@ -52,4 +52,3 @@ export function ProductCard({ product }: ProductCardProps) {
     </article>
   );
 }
-
