@@ -1,0 +1,30 @@
+---
+description: Auto-commit, push to GitHub, and deploy to Vercel after implementing user-requested changes
+alwaysApply: true
+---
+
+# Auto-deploy after implementation
+
+When the user requests a change and you implement it in this project (`sokany-storefront`), complete the delivery pipeline yourself without waiting for a separate "push" or "deploy" request.
+
+## Workflow
+
+After finishing implementation and verifying the build passes (`npm run build`):
+
+1. **Commit** all relevant changes with a clear message focused on why.
+2. **Push** to `origin/master` on GitHub.
+3. **Deploy** to Vercel production with `npx vercel --prod --yes`.
+
+## Rules
+
+- Do not push secrets (`.env`, credentials).
+- Do not force-push to `master`.
+- Only skip deploy if the user explicitly says not to deploy, or if build/tests fail and cannot be fixed in the same session.
+- If push or deploy fails, report the error and retry or fix before ending the turn.
+- Mention the GitHub push and Vercel production URL in the final summary.
+
+## Project defaults
+
+- Git remote: `origin` → GitHub (`mohamad1973/SokanyElmaghraby`)
+- Vercel project: `tooliano-store/sokany-storefront`
+- Production URL: `https://sokany-storefront.vercel.app`
