@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
+import { buildBostaWebhookUrl } from "@/lib/shipping/bosta-client";
 
 const defaultZones = [
   { name: "مدينة نصر", governorate: "القاهرة" },
@@ -166,9 +167,7 @@ export async function initializeShippingDatabase() {
 export async function getShippingBootstrapStatus(): Promise<ShippingBootstrapStatus> {
   const databaseConfigured = Boolean(process.env.DATABASE_URL);
   const bostaConfigured = Boolean(process.env.BOSTA_API_KEY);
-  const siteUrl = (process.env.NEXTAUTH_URL || "https://sokany-storefront.vercel.app").replace(/\/$/, "");
-  const webhookSecret = process.env.BOSTA_WEBHOOK_SECRET || "sokany-bosta-webhook-secret";
-  const bostaWebhookUrl = `${siteUrl}/api/webhooks/bosta/${webhookSecret}`;
+  const bostaWebhookUrl = buildBostaWebhookUrl();
 
   if (!databaseConfigured) {
     return {

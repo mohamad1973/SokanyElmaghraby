@@ -83,9 +83,13 @@ export function ShippingSetupPanel() {
           <dt className="font-bold">الأحياء / المندوبين / الشحنات</dt>
           <dd>{status.zoneCount} / {status.driverCount} / {status.shipmentCount}</dd>
         </div>
-        <div className="rounded bg-zinc-50 p-3">
+        <div className="rounded bg-zinc-50 p-3 md:col-span-2">
           <dt className="font-bold">Webhook Bosta</dt>
           <dd className="mt-1 break-all text-xs" dir="ltr">{status.bostaWebhookUrl}</dd>
+          <p className="mt-2 text-xs leading-6 text-zinc-600">
+            لا يوجد إعداد Webhook في لوحة Bosta. يُرسل هذا الرابط تلقائياً مع كل شحنة تُنشأ من لوحة الطلبات
+            (زر «إنشاء Bosta»). يُعرض هنا للمراجعة فقط.
+          </p>
         </div>
       </dl>
 
@@ -118,8 +122,8 @@ export function ShippingSetupPanel() {
       {actionMessage ? <p className="text-sm text-zinc-600">{actionMessage}</p> : null}
 
       <ol className="list-decimal space-y-2 pr-5 text-sm leading-7 text-zinc-700">
-        <li>تأكد أن `DATABASE_URL` و `BOSTA_API_KEY` موجودان في Vercel ثم Redeploy.</li>
-        <li>انسخ رابط Webhook أعلاه وسجّله في لوحة Bosta Business.</li>
+        <li>تأكد أن `DATABASE_URL` و `BOSTA_API_KEY` و `NEXTAUTH_URL` موجودان في Vercel ثم Redeploy.</li>
+        <li>أنشئ شحنات Bosta من لوحة الطلبات — الرابط أعلاه يُرسل تلقائياً مع كل شحنة (لا تسجيل يدوي في Bosta).</li>
         <li>أنشئ الأحياء الافتراضية، ثم أضف المندوبين من صفحة المندوبين.</li>
         <li>جرّب «إنشاء Bosta» لطلب خارج القاهرة/الجيزة من صفحة الطلبات.</li>
       </ol>

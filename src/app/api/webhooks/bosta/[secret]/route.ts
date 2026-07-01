@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getBostaWebhookSecret } from "@/lib/shipping/bosta-client";
 import { updateShipmentFromBostaWebhook } from "@/lib/shipping/shipments";
 import { markWooOrderDelivered } from "@/lib/woocommerce-update";
 
@@ -9,7 +10,7 @@ type RouteContext = {
 
 export async function POST(request: Request, context: RouteContext) {
   const { secret } = await context.params;
-  const expectedSecret = process.env.BOSTA_WEBHOOK_SECRET || "sokany-bosta-webhook";
+  const expectedSecret = getBostaWebhookSecret();
 
   if (secret !== expectedSecret) {
     return NextResponse.json({ message: "Invalid webhook secret." }, { status: 401 });

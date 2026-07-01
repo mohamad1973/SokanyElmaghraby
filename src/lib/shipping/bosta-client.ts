@@ -108,14 +108,15 @@ function normalizePhone(phone: string) {
   return digits;
 }
 
-export function buildBostaWebhookUrl() {
-  const secret = process.env.BOSTA_WEBHOOK_SECRET || "sokany-bosta-webhook";
-  const siteUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
+export const DEFAULT_BOSTA_WEBHOOK_SECRET = "sokany-bosta-webhook-secret";
 
-  const base = process.env.NEXTAUTH_URL || siteUrl;
-  return `${base.replace(/\/$/, "")}/api/webhooks/bosta/${secret}`;
+export function getBostaWebhookSecret() {
+  return process.env.BOSTA_WEBHOOK_SECRET || DEFAULT_BOSTA_WEBHOOK_SECRET;
+}
+
+export function buildBostaWebhookUrl() {
+  const base = (process.env.NEXTAUTH_URL || "https://sokany-storefront.vercel.app").replace(/\/$/, "");
+  return `${base}/api/webhooks/bosta/${getBostaWebhookSecret()}`;
 }
 
 export async function createBostaDelivery(order: AdminOrder, codAmount?: number): Promise<BostaDeliveryResult> {
