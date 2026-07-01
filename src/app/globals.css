@@ -104,6 +104,19 @@ html {
   }
 }
 
+.top-banner-static {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.top-banner-static .top-banner-marquee-item {
+  padding: 0 24px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .top-banner-marquee-track {
     animation: none;

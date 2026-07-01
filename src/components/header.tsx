@@ -6,6 +6,8 @@ import { useState } from "react";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
+import { bannerSpacingStyle } from "@/lib/banner-spacing";
+
 import { HeaderProductSearch } from "./header-product-search";
 import { VisualEditableText } from "./visual-editable-text";
 
@@ -246,6 +248,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     "--logo-desktop-height": `${settings.brand.logoDesktopHeight}px`,
   } as CSSProperties;
   const topBannerStyle = {
+    ...bannerSpacingStyle(settings.topBanner.spacing),
     "--top-banner-duration": `${settings.topBanner.speedSeconds}s`,
     "--top-banner-gap-width": settings.topBanner.gapMode === "spaced" ? `${settings.topBanner.gapWidth}px` : "0px",
   } as TopBannerStyle;
@@ -285,6 +288,15 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
                 </span>
               ) : null}
             </>
+          ) : settings.topBanner.textAnimation === "static" ? (
+            <span className="top-banner-static" aria-label={topBannerItems.map((item) => item.label).join(" - ")}>
+              {topBannerItems.map((item, itemIndex) => (
+                <span key={`static-${itemIndex}-${item.label}`} className="top-banner-marquee-item">
+                  <TopBannerIcon icon={item.icon} />
+                  <span>{item.label}</span>
+                </span>
+              ))}
+            </span>
           ) : (
             <span className="top-banner-marquee" aria-label={topBannerItems.map((item) => item.label).join(" - ")}>
               <span className="top-banner-marquee-track">

@@ -11,6 +11,7 @@ import type {
   MenuItem,
   ThemeSettings,
 } from "@/lib/theme-settings";
+import { defaultBannerSpacing, defaultSideBannerSpacing, type BannerSpacing } from "@/lib/banner-spacing";
 
 import { ImageUploadField } from "./image-upload-field";
 
@@ -55,6 +56,8 @@ function createHomeSectionStyle(): HomeSectionStyle {
   return {
     spacingTop: 64,
     spacingBottom: 64,
+    paddingLeft: 0,
+    paddingRight: 0,
     widthMode: "contained",
     borderEnabled: false,
     borderColor: "#111111",
@@ -94,6 +97,61 @@ function Field({
       {label}
       {children}
     </label>
+  );
+}
+
+function BannerSpacingFields({
+  label,
+  spacing,
+  onChange,
+  showGapToContent = false,
+}: {
+  label?: string;
+  spacing: BannerSpacing;
+  onChange: (spacing: BannerSpacing) => void;
+  showGapToContent?: boolean;
+}) {
+  const fields: Array<{ key: keyof BannerSpacing; label: string }> = [
+    { key: "spacingTop", label: "مسافة فوق البنر (px)" },
+    { key: "spacingBottom", label: "مسافة تحت البنر (px)" },
+    { key: "paddingLeft", label: "بادنج يسار (px)" },
+    { key: "paddingRight", label: "بادنج يمين (px)" },
+  ];
+
+  if (showGapToContent) {
+    fields.push({ key: "gapToContent", label: "المسافة بين البنر والمحتوى التالي (px)" });
+  }
+
+  return (
+    <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
+      {label ? (
+        <div>
+          <h3 className="text-base font-bold text-zinc-950">{label}</h3>
+          <p className="mt-1 text-sm leading-6 text-zinc-500">
+            تحكم في صعود وهبوط البنر وأبعاده يميناً ويساراً عن حافة الصفحة.
+          </p>
+        </div>
+      ) : null}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {fields.map((field) => (
+          <Field key={field.key} label={field.label}>
+            <input
+              type="number"
+              min={0}
+              max={field.key === "gapToContent" ? 120 : 200}
+              value={spacing[field.key]}
+              onChange={(event) =>
+                onChange({
+                  ...spacing,
+                  [field.key]: Number(event.target.value),
+                })
+              }
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -204,6 +262,7 @@ function createCustomSection(): CustomHomeSection {
     enabled: true,
     sectionType: "bannerWithProducts",
     showMainBanner: false,
+    mainBannerSpacing: defaultBannerSpacing,
     title: "سكشن منتجات جديد",
     subtitle: "",
     text: "",
@@ -226,6 +285,7 @@ function createCustomSection(): CustomHomeSection {
       linkUrl: "",
       position: "right",
       showOnMobile: false,
+      spacing: defaultSideBannerSpacing,
     },
     fontSizeDesktop: 56,
     fontSizeTablet: 42,
@@ -536,6 +596,42 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                               homeSectionStyles: {
                                 ...settings.homeSectionStyles,
                                 [sectionId]: { ...sectionStyle, spacingBottom: Number(event.target.value) },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                      <Field label="بادنج يسار px">
+                        <input
+                          type="number"
+                          min={0}
+                          max={200}
+                          value={sectionStyle.paddingLeft}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, paddingLeft: Number(event.target.value) },
+                              },
+                            })
+                          }
+                          className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                        />
+                      </Field>
+                      <Field label="بادنج يمين px">
+                        <input
+                          type="number"
+                          min={0}
+                          max={200}
+                          value={sectionStyle.paddingRight}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              homeSectionStyles: {
+                                ...settings.homeSectionStyles,
+                                [sectionId]: { ...sectionStyle, paddingRight: Number(event.target.value) },
                               },
                             })
                           }
@@ -1109,6 +1205,19 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                       />
                       إظهار البنر الجانبي في الموبايل
                     </label>
+                    <BannerSpacingFields
+                      label="مسافات البنر الجانبي"
+                      spacing={section.sideBanner.spacing}
+                      showGapToContent
+                      onChange={(spacing) =>
+                        setSettings({
+                          ...settings,
+                          customSections: settings.customSections.map((item) =>
+                            item.id === section.id ? { ...item, sideBanner: { ...item.sideBanner, spacing } } : item,
+                          ),
+                        })
+                      }
+                    />
                     <ImageUploadField
                       label="صورة البنر الجانبي"
                       value={section.sideBanner.image}
@@ -1147,6 +1256,19 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
 
                     {section.showMainBanner ? (
                       <div className="grid gap-4">
+                        <BannerSpacingFields
+                          label="مسافات البنر الكبير"
+                          spacing={section.mainBannerSpacing}
+                          showGapToContent
+                          onChange={(mainBannerSpacing) =>
+                            setSettings({
+                              ...settings,
+                              customSections: settings.customSections.map((item) =>
+                                item.id === section.id ? { ...item, mainBannerSpacing } : item,
+                              ),
+                            })
+                          }
+                        />
                         <MultilineTextField
                           label="النص فوق البنر الكبير"
                           value={section.text}
@@ -1560,6 +1682,32 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 </Field>
               ))}
             </div>
+            <BannerSpacingFields
+              label="تحريك البنر عمودياً وأفقياً"
+              spacing={{
+                spacingTop: getSectionStyle(settings, "hero").spacingTop,
+                spacingBottom: getSectionStyle(settings, "hero").spacingBottom,
+                paddingLeft: getSectionStyle(settings, "hero").paddingLeft,
+                paddingRight: getSectionStyle(settings, "hero").paddingRight,
+                gapToContent: 0,
+              }}
+              onChange={(spacing) => {
+                const heroStyle = getSectionStyle(settings, "hero");
+                setSettings({
+                  ...settings,
+                  homeSectionStyles: {
+                    ...settings.homeSectionStyles,
+                    hero: {
+                      ...heroStyle,
+                      spacingTop: spacing.spacingTop,
+                      spacingBottom: spacing.spacingBottom,
+                      paddingLeft: spacing.paddingLeft,
+                      paddingRight: spacing.paddingRight,
+                    },
+                  },
+                });
+              }}
+            />
             <ImageUploadField
               label="صورة Hero - ديسكتوب"
               value={settings.hero.desktopImage}
@@ -1631,15 +1779,42 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               />
               إظهار بنر أعلى الهيدر
             </label>
+            <BannerSpacingFields
+              label="مسافات البنر العلوي"
+              spacing={settings.topBanner.spacing}
+              onChange={(spacing) =>
+                setSettings({ ...settings, topBanner: { ...settings.topBanner, spacing } })
+              }
+            />
             <MultilineTextField
               label="جمل التوب بار أعلى الهيدر"
               value={settings.topBanner.text}
               onChange={(value) => setSettings({ ...settings, topBanner: { ...settings.topBanner, text: value } })}
             />
             <p className="-mt-3 text-xs font-semibold text-zinc-500">
-              اكتب كل جملة في سطر مستقل، أو افصل بين الجمل بعلامة •، وستظهر في التوب بار المتحرك أعلى الهيدر.
+              اكتب كل جملة في سطر مستقل، أو افصل بين الجمل بعلامة •. في الوضع الثابت تظهر كل الجمل مرة واحدة في منتصف الشريط.
             </p>
-            <div className="grid gap-4 md:grid-cols-3">
+            <Field label="طريقة عرض الجمل">
+              <select
+                value={settings.topBanner.textAnimation}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    topBanner: {
+                      ...settings.topBanner,
+                      textAnimation: event.target.value === "static" ? "static" : "marquee",
+                    },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              >
+                <option value="marquee">جمل متحركة (ماركوي)</option>
+                <option value="static">جمل ثابتة بدون حركة</option>
+              </select>
+            </Field>
+            <div
+              className={`grid gap-4 md:grid-cols-3 ${settings.topBanner.textAnimation === "static" ? "pointer-events-none opacity-50" : ""}`}
+            >
               <Field label="سرعة حركة التوب بار بالثواني">
                 <input
                   type="number"
@@ -1695,7 +1870,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 />
               </Field>
             </div>
-            <p className="-mt-2 text-xs font-semibold text-zinc-500">
+            <p className={`-mt-2 text-xs font-semibold text-zinc-500 ${settings.topBanner.textAnimation === "static" ? "opacity-50" : ""}`}>
               عند اختيار لوب مستمر بدون فجوة سيتم تجاهل حجم الفجوة ويظل الكلام متتابعاً دائماً.
             </p>
             <ImageUploadField
@@ -1774,6 +1949,23 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               />
               إظهار بنر العروض العام
             </label>
+            <BannerSpacingFields
+              label="مسافات بنر العروض"
+              spacing={settings.sections.customBanner.spacing}
+              showGapToContent
+              onChange={(spacing) =>
+                setSettings({
+                  ...settings,
+                  sections: {
+                    ...settings.sections,
+                    customBanner: {
+                      ...settings.sections.customBanner,
+                      spacing,
+                    },
+                  },
+                })
+              }
+            />
             <ImageUploadField
               label="بنر عروض عام - ديسكتوب"
               value={settings.sections.customBanner.desktopImage}

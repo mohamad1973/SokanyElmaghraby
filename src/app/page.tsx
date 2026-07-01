@@ -7,7 +7,8 @@ import { CustomProductSection } from "@/components/custom-product-section";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
-import { getThemeSettings, type CustomHomeSection, type HomeSectionId, type HomeSectionOrderItem } from "@/lib/theme-settings";
+import { bannerHorizontalPaddingStyle, bannerSpacingStyle } from "@/lib/banner-spacing";
+import { getThemeSettings, type CustomHomeSection, type HomeSectionOrderItem } from "@/lib/theme-settings";
 import { getCategories, getFeaturedProducts, getProducts } from "@/lib/woocommerce";
 
 const trustItems = [
@@ -242,13 +243,14 @@ export default async function Home() {
     "--hero-mobile-button-px": `${settings.hero.mobileButtonPaddingX}px`,
     "--hero-mobile-button-py": `${settings.hero.mobileButtonPaddingY}px`,
   } as CSSProperties;
+  const heroPaddingStyle = bannerHorizontalPaddingStyle(getSectionStyle(settings, "hero") || { paddingLeft: 0, paddingRight: 0 });
   const homeSections: HomeSectionEntry[] = [];
 
   if (settings.hero.enabled) {
     homeSections.push({
       id: "hero",
       node: heroHasImage ? (
-        <section className="relative min-h-[640px] overflow-hidden bg-zinc-950">
+        <section className="relative min-h-[640px] overflow-hidden bg-zinc-950" style={heroPaddingStyle}>
             {settings.hero.desktopImage ? (
               <Image
                 src={settings.hero.desktopImage}
@@ -327,7 +329,7 @@ export default async function Home() {
             </div>
           </section>
       ) : (
-        <section className="relative overflow-hidden bg-white">
+        <section className="relative overflow-hidden bg-white" style={heroPaddingStyle}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
             <div
               className={`relative py-20 lg:py-28 ${getSectionContainerClass(settings, "hero")}`}
@@ -446,8 +448,12 @@ export default async function Home() {
                 {section.showMainBanner ? (
                   <Link
                     href={section.linkUrl || "/shop"}
-                    className="relative mb-8 block min-h-[320px] overflow-hidden rounded-2xl p-8 shadow-sm lg:min-h-[420px] lg:p-12"
-                    style={{ backgroundColor: section.backgroundColor, color: section.textColor }}
+                    className="relative block min-h-[320px] overflow-hidden rounded-2xl p-8 shadow-sm lg:min-h-[420px] lg:p-12"
+                    style={{
+                      backgroundColor: section.backgroundColor,
+                      color: section.textColor,
+                      ...bannerSpacingStyle(section.mainBannerSpacing, { useGapToContent: true }),
+                    }}
                   >
                     {backgroundImage ? (
                       <Image
@@ -499,7 +505,8 @@ export default async function Home() {
           (settings.sections.customBanner.desktopImage || settings.sections.customBanner.mobileImage) ? (
             <Link
               href={settings.sections.customBanner.ctaUrl}
-              className="relative mb-8 block min-h-[260px] overflow-hidden rounded-[2.5rem] bg-zinc-950"
+              className="relative block min-h-[260px] overflow-hidden rounded-[2.5rem] bg-zinc-950"
+              style={bannerSpacingStyle(settings.sections.customBanner.spacing, { useGapToContent: true })}
             >
               {settings.sections.customBanner.desktopImage ? (
                 <Image

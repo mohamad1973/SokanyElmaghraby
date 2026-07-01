@@ -2,7 +2,11 @@ import "server-only";
 
 import type { CSSProperties } from "react";
 
+import { defaultBannerSpacing, defaultSideBannerSpacing, mergeBannerSpacing, type BannerSpacing } from "./banner-spacing";
 import { getPrismaClient } from "./db";
+
+export type { BannerSpacing };
+export { defaultBannerSpacing, defaultSideBannerSpacing, mergeBannerSpacing };
 
 export type MenuItem = {
   label: string;
@@ -33,6 +37,8 @@ export type HomeSectionOrderItem = HomeSectionId | `custom:${string}`;
 export type HomeSectionStyle = {
   spacingTop: number;
   spacingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
   widthMode: "contained" | "full";
   borderEnabled: boolean;
   borderColor: string;
@@ -62,6 +68,7 @@ export type CustomHomeSection = {
   enabled: boolean;
   sectionType: CustomHomeSectionType;
   showMainBanner: boolean;
+  mainBannerSpacing: BannerSpacing;
   title: string;
   subtitle: string;
   text: string;
@@ -84,11 +91,14 @@ export type CustomHomeSection = {
     linkUrl: string;
     position: CustomHomeSectionSideBannerPosition;
     showOnMobile: boolean;
+    spacing: BannerSpacing;
   };
   fontSizeDesktop: number;
   fontSizeTablet: number;
   fontSizeMobile: number;
 };
+
+export type TopBannerTextAnimation = "marquee" | "static";
 
 export type ThemeSettings = {
   brand: {
@@ -113,6 +123,8 @@ export type ThemeSettings = {
     speedSeconds: number;
     gapMode: "continuous" | "spaced";
     gapWidth: number;
+    textAnimation: TopBannerTextAnimation;
+    spacing: BannerSpacing;
   };
   header: {
     ctaText: string;
@@ -160,6 +172,7 @@ export type ThemeSettings = {
       mobileImage: string;
       ctaText: string;
       ctaUrl: string;
+      spacing: BannerSpacing;
     };
   };
   footer: {
@@ -213,6 +226,8 @@ export const defaultThemeSettings: ThemeSettings = {
     speedSeconds: 40,
     gapMode: "continuous",
     gapWidth: 160,
+    textAnimation: "marquee",
+    spacing: defaultBannerSpacing,
   },
   header: {
     ctaText: "اطلب الآن",
@@ -266,6 +281,7 @@ export const defaultThemeSettings: ThemeSettings = {
       mobileImage: "",
       ctaText: "تسوق الآن",
       ctaUrl: "/offers",
+      spacing: defaultBannerSpacing,
     },
   },
   footer: {
@@ -327,6 +343,8 @@ function mergeHomeSectionStyle(value: unknown): HomeSectionStyle {
   return {
     spacingTop: typeof style.spacingTop === "number" ? Math.max(0, style.spacingTop) : 64,
     spacingBottom: typeof style.spacingBottom === "number" ? Math.max(0, style.spacingBottom) : 64,
+    paddingLeft: typeof style.paddingLeft === "number" ? Math.max(0, Math.min(200, style.paddingLeft)) : 0,
+    paddingRight: typeof style.paddingRight === "number" ? Math.max(0, Math.min(200, style.paddingRight)) : 0,
     widthMode: style.widthMode === "full" ? "full" : "contained",
     borderEnabled: typeof style.borderEnabled === "boolean" ? style.borderEnabled : false,
     borderColor: typeof style.borderColor === "string" ? style.borderColor : "#111111",
@@ -388,6 +406,7 @@ function mergeCustomSections(value: unknown): CustomHomeSection[] {
       enabled: typeof section.enabled === "boolean" ? section.enabled : true,
       sectionType: section.sectionType === "bannerWithProducts" ? "bannerWithProducts" : "bannerWithProducts",
       showMainBanner: typeof section.showMainBanner === "boolean" ? section.showMainBanner : hasMainBannerImage,
+      mainBannerSpacing: mergeBannerSpacing(section.mainBannerSpacing),
       title: typeof section.title === "string" ? section.title : "سكشن مخصص",
       subtitle: typeof section.subtitle === "string" ? section.subtitle : "",
       text: typeof section.text === "string" ? section.text : "",
@@ -410,6 +429,7 @@ function mergeCustomSections(value: unknown): CustomHomeSection[] {
         linkUrl: typeof sideBanner.linkUrl === "string" ? sideBanner.linkUrl : "",
         position: sideBanner.position === "left" ? "left" : "right",
         showOnMobile: typeof sideBanner.showOnMobile === "boolean" ? sideBanner.showOnMobile : false,
+        spacing: mergeBannerSpacing(sideBanner.spacing, defaultSideBannerSpacing),
       },
       fontSizeDesktop: typeof section.fontSizeDesktop === "number" ? section.fontSizeDesktop : 56,
       fontSizeTablet: typeof section.fontSizeTablet === "number" ? section.fontSizeTablet : 42,
@@ -446,6 +466,18 @@ function mergeTopBannerSettings(value: unknown): ThemeSettings["topBanner"] {
     speedSeconds: Math.min(120, Math.max(10, speedSeconds)),
     gapMode: topBanner.gapMode === "spaced" ? "spaced" : "continuous",
     gapWidth: Math.min(1000, Math.max(0, gapWidth)),
+    textAnimation: topBanner.textAnimation === "static" ? "static" : "marquee",
+    spacing: mergeBannerSpacing(topBanner.spacing),
+  };
+}
+
+function mergeCustomBannerSettings(value: unknown): ThemeSettings["sections"]["customBanner"] {
+  const customBanner = isObject(value) ? value : {};
+
+  return {
+    ...defaultThemeSettings.sections.customBanner,
+    ...customBanner,
+    spacing: mergeBannerSpacing(customBanner.spacing),
   };
 }
 
@@ -470,12 +502,9 @@ function mergeSettings(settings: unknown): ThemeSettings {
     sections: {
       ...defaultThemeSettings.sections,
       ...(isObject(settings.sections) ? settings.sections : {}),
-      customBanner: {
-        ...defaultThemeSettings.sections.customBanner,
-        ...(isObject(settings.sections) && isObject(settings.sections.customBanner)
-          ? settings.sections.customBanner
-          : {}),
-      },
+      customBanner: mergeCustomBannerSettings(
+        isObject(settings.sections) ? settings.sections.customBanner : undefined,
+      ),
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
     productCard: {

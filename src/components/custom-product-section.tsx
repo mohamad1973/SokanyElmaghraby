@@ -6,6 +6,7 @@ import { ProductRowScroller } from "@/components/product-row-scroller";
 import { ProductSectionGrid } from "@/components/product-section-grid";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
+import { bannerSpacingStyle } from "@/lib/banner-spacing";
 import type { CustomHomeSection } from "@/lib/theme-settings";
 import type { Product } from "@/lib/types";
 
@@ -71,6 +72,11 @@ export function CustomProductSection({ section, products }: CustomProductSection
   const hasSideBanner = Boolean(section.sideBanner.enabled && section.sideBanner.image);
   const sideBannerOrder = section.sideBanner.position === "left" ? "lg:order-1" : "lg:order-2";
   const productsOrder = section.sideBanner.position === "left" ? "lg:order-2" : "lg:order-1";
+  const sideBannerColumnStyle = {
+    ...sideBannerStyle,
+    ...bannerSpacingStyle(section.sideBanner.spacing),
+  } as CSSProperties;
+  const productsGap = section.sideBanner.spacing.gapToContent;
 
   return (
     <div>
@@ -86,11 +92,11 @@ export function CustomProductSection({ section, products }: CustomProductSection
         }
       />
 
-      <div dir="ltr" className="flex flex-col gap-6 lg:flex-row">
+      <div dir="ltr" className="flex flex-col lg:flex-row" style={{ gap: productsGap }}>
         {hasSideBanner ? (
           <div
             className={`w-full shrink-0 lg:w-[var(--side-banner-width)] lg:basis-[var(--side-banner-width)] ${section.sideBanner.showOnMobile ? "" : "hidden sm:block"} ${sideBannerOrder}`}
-            style={sideBannerStyle}
+            style={sideBannerColumnStyle}
           >
             {sideBanner}
           </div>
