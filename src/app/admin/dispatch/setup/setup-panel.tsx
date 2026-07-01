@@ -80,7 +80,7 @@ export function ShippingSetupPanel() {
           <dd>{status.bostaConfigured ? "مُفعّل" : "غير مُفعّل"}</dd>
         </div>
         <div className="rounded bg-zinc-50 p-3">
-          <dt className="font-bold">المناطق / المندوبين / الشحنات</dt>
+          <dt className="font-bold">الأحياء / المندوبين / الشحنات</dt>
           <dd>{status.zoneCount} / {status.driverCount} / {status.shipmentCount}</dd>
         </div>
         <div className="rounded bg-zinc-50 p-3">
@@ -111,7 +111,7 @@ export function ShippingSetupPanel() {
           disabled={!status.databaseConnected || status.zoneCount > 0}
           className="rounded-md bg-[#2271b1] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
         >
-          إنشاء مناطق القاهرة والجيزة الافتراضية
+          إنشاء أحياء القاهرة والجيزة الافتراضية
         </button>
       </div>
 
@@ -120,7 +120,7 @@ export function ShippingSetupPanel() {
       <ol className="list-decimal space-y-2 pr-5 text-sm leading-7 text-zinc-700">
         <li>تأكد أن `DATABASE_URL` و `BOSTA_API_KEY` موجودان في Vercel ثم Redeploy.</li>
         <li>انسخ رابط Webhook أعلاه وسجّله في لوحة Bosta Business.</li>
-        <li>أنشئ المناطق الافتراضية، ثم أضف المندوبين من صفحة المندوبين.</li>
+        <li>أنشئ الأحياء الافتراضية، ثم أضف المندوبين من صفحة المندوبين.</li>
         <li>جرّب «إنشاء Bosta» لطلب خارج القاهرة/الجيزة من صفحة الطلبات.</li>
       </ol>
     </div>

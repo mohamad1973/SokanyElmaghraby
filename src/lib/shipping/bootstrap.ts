@@ -83,13 +83,19 @@ export async function ensureShippingTables(prisma: NonNullable<ReturnType<typeof
       \`id\` INT NOT NULL AUTO_INCREMENT,
       \`name\` VARCHAR(191) NOT NULL,
       \`governorate\` VARCHAR(191) NOT NULL,
+      \`parentId\` INT NULL,
       \`polygon\` JSON NULL,
       \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
       INDEX \`DeliveryZone_governorate_idx\`(\`governorate\`),
+      INDEX \`DeliveryZone_parentId_idx\`(\`parentId\`),
       PRIMARY KEY (\`id\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE \`DeliveryZone\` ADD COLUMN IF NOT EXISTS \`parentId\` INT NULL;
+  `).catch(() => undefined);
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`DriverZone\` (
@@ -243,7 +249,7 @@ export async function seedDefaultDeliveryZones() {
   const existing = await prisma.deliveryZone.count();
 
   if (existing > 0) {
-    return { ok: true as const, created: 0, message: `المناطق موجودة بالفعل (${existing}).` };
+    return { ok: true as const, created: 0, message: `الأحياء موجودة بالفعل (${existing}).` };
   }
 
   await prisma.deliveryZone.createMany({ data: defaultZones });
@@ -251,6 +257,6 @@ export async function seedDefaultDeliveryZones() {
   return {
     ok: true as const,
     created: defaultZones.length,
-    message: `تم إنشاء ${defaultZones.length} منطقة للقاهرة والجيزة.`,
+    message: `تم إنشاء ${defaultZones.length} حي للقاهرة والجيزة.`,
   };
 }

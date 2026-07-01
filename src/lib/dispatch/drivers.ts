@@ -1,14 +1,26 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
+import { driverZoneInclude } from "@/lib/dispatch/zones";
 import { hashPassword, verifyPassword } from "@/lib/security";
+
+export {
+  createArea,
+  createDistrict,
+  createZone,
+  deleteZone,
+  listDistrictsWithAreas,
+  listZones,
+  listZonesForDriverForm,
+  updateZone,
+} from "@/lib/dispatch/zones";
 
 export async function listDrivers() {
   const prisma = getPrismaClient();
   if (!prisma) return [];
 
   return prisma.driver.findMany({
-    include: { zones: { include: { zone: true } } },
+    include: { zones: { include: driverZoneInclude } },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -19,7 +31,7 @@ export async function getDriverByPhone(phone: string) {
 
   return prisma.driver.findUnique({
     where: { phone },
-    include: { zones: { include: { zone: true } } },
+    include: { zones: { include: driverZoneInclude } },
   });
 }
 
@@ -29,7 +41,7 @@ export async function getDriverById(id: number) {
 
   return prisma.driver.findUnique({
     where: { id },
-    include: { zones: { include: { zone: true } } },
+    include: { zones: { include: driverZoneInclude } },
   });
 }
 
@@ -124,58 +136,6 @@ export async function authenticateDriver(phone: string, password: string) {
   }
 
   return driver;
-}
-
-export async function listZones() {
-  const prisma = getPrismaClient();
-  if (!prisma) return [];
-
-  return prisma.deliveryZone.findMany({ orderBy: [{ governorate: "asc" }, { name: "asc" }] });
-}
-
-export async function createZone(input: { name: string; governorate: string; polygon?: unknown }) {
-  const prisma = getPrismaClient();
-  if (!prisma) {
-    return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  }
-
-  const zone = await prisma.deliveryZone.create({
-    data: {
-      name: input.name,
-      governorate: input.governorate,
-      polygon: input.polygon as object | undefined,
-    },
-  });
-
-  return { ok: true as const, zone };
-}
-
-export async function updateZone(id: number, input: { name?: string; governorate?: string; polygon?: unknown }) {
-  const prisma = getPrismaClient();
-  if (!prisma) {
-    return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  }
-
-  const zone = await prisma.deliveryZone.update({
-    where: { id },
-    data: {
-      name: input.name,
-      governorate: input.governorate,
-      polygon: input.polygon as object | undefined,
-    },
-  });
-
-  return { ok: true as const, zone };
-}
-
-export async function deleteZone(id: number) {
-  const prisma = getPrismaClient();
-  if (!prisma) {
-    return { ok: false as const, message: "Database unavailable" };
-  }
-
-  await prisma.deliveryZone.delete({ where: { id } });
-  return { ok: true as const };
 }
 
 export async function getDriverReports(from: Date, to: Date) {

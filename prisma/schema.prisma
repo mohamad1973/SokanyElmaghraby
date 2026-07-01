@@ -61,15 +61,19 @@ model Driver {
 }
 
 model DeliveryZone {
-  id          Int          @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   name        String
   governorate String
+  parentId    Int?
   polygon     Json?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  parent      DeliveryZone?  @relation("ZoneTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    DeliveryZone[] @relation("ZoneTree")
   drivers     DriverZone[]
 
   @@index([governorate])
+  @@index([parentId])
 }
 
 model DriverZone {

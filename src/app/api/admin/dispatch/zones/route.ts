@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createZone, deleteZone, listZones, updateZone } from "@/lib/dispatch/drivers";
+import { createZone, deleteZone, listDistrictsWithAreas, updateZone } from "@/lib/dispatch/zones";
 import { requireAdminSession } from "@/lib/session-guards";
 
 export async function GET() {
@@ -8,8 +8,8 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const zones = await listZones();
-  return NextResponse.json({ zones });
+  const districts = await listDistrictsWithAreas();
+  return NextResponse.json({ districts, zones: districts });
 }
 
 export async function POST(request: Request) {
@@ -17,17 +17,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { name?: string; governorate?: string; polygon?: unknown };
+  const body = (await request.json()) as {
+    name?: string;
+    governorate?: string;
+    parentId?: number | null;
+    polygon?: unknown;
+  };
 
-  if (!body.name || !body.governorate) {
-    return NextResponse.json({ message: "name and governorate are required." }, { status: 400 });
+  if (!body.name) {
+    return NextResponse.json({ message: "name is required." }, { status: 400 });
+  }
+
+  if (!body.parentId && !body.governorate) {
+    return NextResponse.json({ message: "governorate is required for districts." }, { status: 400 });
   }
 
   const result = await createZone({
     name: body.name,
-    governorate: body.governorate,
+    governorate: body.governorate || "",
+    parentId: body.parentId ?? null,
     polygon: body.polygon,
   });
+
   return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }
 

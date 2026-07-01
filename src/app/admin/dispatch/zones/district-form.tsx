@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
-export function ZoneForm() {
+export function DistrictForm() {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,14 +25,17 @@ export function ZoneForm() {
 
     const data = await response.json();
     setLoading(false);
-    setMessage(data.message || (response.ok ? "تم إضافة المنطقة." : "تعذر الإضافة."));
+    setMessage(data.message || (response.ok ? "تم إضافة الحي." : "تعذر الإضافة."));
+    if (response.ok) {
+      event.currentTarget.reset();
+    }
     router.refresh();
   }
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4 rounded-md border border-black/10 bg-white p-5 md:grid-cols-3">
       <label className="grid gap-1 text-sm font-bold">
-        اسم المنطقة
+        اسم الحي
         <input name="name" required placeholder="مدينة نصر" className="rounded border px-3 py-2" />
       </label>
       <label className="grid gap-1 text-sm font-bold">
@@ -44,7 +47,7 @@ export function ZoneForm() {
       </label>
       <div className="flex items-end">
         <button type="submit" disabled={loading} className="rounded bg-brand-gold px-4 py-2 text-sm font-bold text-black disabled:opacity-60">
-          {loading ? "..." : "إضافة منطقة"}
+          {loading ? "..." : "إضافة حي"}
         </button>
       </div>
       {message ? <p className="text-sm text-zinc-600 md:col-span-3">{message}</p> : null}

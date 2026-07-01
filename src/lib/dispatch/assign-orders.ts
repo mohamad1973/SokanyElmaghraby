@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
+import { driverZoneInclude } from "@/lib/dispatch/zones";
+import { driverZoneMatchesShipment } from "@/lib/dispatch/zone-names";
 import { geocodeAddress, optimizeRoute, type RouteStop } from "@/lib/dispatch/route-optimizer";
 import { generateOtpCode, hashOtp } from "@/lib/security";
 import { isInternalGovernorate, resolveFulfillmentMode } from "@/lib/shipping/bosta-zones";
@@ -66,7 +68,7 @@ export async function autoAssignOrders(options?: { runDate?: Date; sendOtp?: boo
 
   const drivers = await prisma.driver.findMany({
     where: { isActive: true },
-    include: { zones: { include: { zone: true } } },
+    include: { zones: { include: driverZoneInclude } },
   });
 
   if (drivers.length === 0) {
@@ -91,8 +93,6 @@ export async function autoAssignOrders(options?: { runDate?: Date; sendOtp?: boo
 
   for (const shipment of shipments) {
     const cod = decimalToNumber(shipment.codAmount);
-    const areaKey = shipment.area.trim().toLowerCase();
-
     const eligibleDrivers = drivers.filter((driver) => {
       const load = loadMap.get(driver.id)!;
 
@@ -104,14 +104,9 @@ export async function autoAssignOrders(options?: { runDate?: Date; sendOtp?: boo
         return false;
       }
 
-      if (driver.zones.length === 0) {
-        return true;
-      }
-
-      return driver.zones.some(({ zone }) => {
-        const zoneName = zone.name.trim().toLowerCase();
-        const governorateMatch = zone.governorate === shipment.governorate;
-        return governorateMatch && (areaKey.includes(zoneName) || zoneName.includes(areaKey));
+      return driverZoneMatchesShipment(driver.zones, {
+        governorate: shipment.governorate,
+        area: shipment.area,
       });
     });
 

@@ -20,7 +20,7 @@ const navItems = [
   { href: "/admin/dispatch/setup", label: "إعداد الشحن" },
   { href: "/admin/dispatch/board", label: "التوزيع" },
   { href: "/admin/dispatch/drivers", label: "المندوبين" },
-  { href: "/admin/dispatch/zones", label: "المناطق" },
+  { href: "/admin/dispatch/zones", label: "الأحياء" },
   { href: "/admin/dispatch/reports", label: "تقارير التوصيل" },
 ];
 

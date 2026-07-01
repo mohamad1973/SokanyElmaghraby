@@ -3,14 +3,20 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
-type ZoneOption = {
+type AreaOption = {
+  id: number;
+  name: string;
+};
+
+type DistrictOption = {
   id: number;
   name: string;
   governorate: string;
+  children: AreaOption[];
 };
 
 type DriverFormProps = {
-  zones: ZoneOption[];
+  districts: DistrictOption[];
   initial?: {
     id: number;
     name: string;
@@ -23,7 +29,7 @@ type DriverFormProps = {
   };
 };
 
-export function DriverForm({ zones, initial }: DriverFormProps) {
+export function DriverForm({ districts, initial }: DriverFormProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -104,17 +110,34 @@ export function DriverForm({ zones, initial }: DriverFormProps) {
       ) : null}
 
       <div>
-        <p className="text-sm font-bold">المناطق</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {zones.map((zone) => (
-            <label key={zone.id} className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                checked={selectedZones.includes(zone.id)}
-                onChange={() => toggleZone(zone.id)}
-              />
-              {zone.name} ({zone.governorate})
-            </label>
+        <p className="text-sm font-bold">الأحياء والمناطق</p>
+        <p className="mt-1 text-xs text-zinc-500">اختيار الحي يغطي كل مناطقه. أو اختر مناطق محددة فقط.</p>
+        <div className="mt-3 space-y-3">
+          {districts.map((district) => (
+            <div key={district.id} className="rounded border border-zinc-200 p-3">
+              <label className="flex items-center gap-2 text-sm font-bold">
+                <input
+                  type="checkbox"
+                  checked={selectedZones.includes(district.id)}
+                  onChange={() => toggleZone(district.id)}
+                />
+                {district.name} ({district.governorate}) — حي
+              </label>
+              {district.children.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2 pr-4">
+                  {district.children.map((area) => (
+                    <label key={area.id} className="flex items-center gap-2 rounded bg-zinc-50 px-2 py-1 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={selectedZones.includes(area.id)}
+                        onChange={() => toggleZone(area.id)}
+                      />
+                      {area.name}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
         </div>
       </div>
