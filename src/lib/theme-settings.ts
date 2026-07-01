@@ -310,7 +310,7 @@ export const defaultThemeSettings: ThemeSettings = {
   footer: {
     description:
       "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
-    copyright: "SOKANY Egypt. جميع الحقوق محفوظة.",
+    copyright: "SOKANY. جميع الحقوق محفوظة.",
   },
   productCard: {
     borderWidth: 1,

@@ -1,21 +1,46 @@
+import Image from "next/image";
 import Link from "next/link";
+import type { CSSProperties } from "react";
 
 import type { ThemeSettings } from "@/lib/theme-settings";
 
 import { VisualEditableText } from "./visual-editable-text";
 
 export function Footer({ settings }: { settings: ThemeSettings }) {
+  const logoStyle = {
+    "--logo-mobile-width": `${settings.brand.logoMobileWidth}px`,
+    "--logo-mobile-height": `${settings.brand.logoMobileHeight}px`,
+    "--logo-desktop-width": `${settings.brand.logoDesktopWidth}px`,
+    "--logo-desktop-height": `${settings.brand.logoDesktopHeight}px`,
+  } as CSSProperties;
+
   return (
     <footer className="border-t border-white/10 bg-zinc-950 text-white">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
         <div>
           <div className="mb-4 flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gold text-sm font-bold text-black">
-              SK
-            </span>
+            {settings.brand.logoUrl ? (
+              <span
+                className="relative block h-[var(--logo-mobile-height)] w-[var(--logo-mobile-width)] sm:h-[var(--logo-desktop-height)] sm:w-[var(--logo-desktop-width)]"
+                style={logoStyle}
+              >
+                <Image
+                  src={settings.brand.logoUrl}
+                  alt={settings.brand.logoText}
+                  fill
+                  sizes={`(min-width: 640px) ${settings.brand.logoDesktopWidth}px, ${settings.brand.logoMobileWidth}px`}
+                  className="object-contain object-right"
+                  unoptimized
+                />
+              </span>
+            ) : (
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gold text-sm font-bold text-black">
+                {settings.brand.logoText.slice(0, 2)}
+              </span>
+            )}
             <div>
               <p className="text-xl font-bold">
-                <VisualEditableText textKey="footer.logoText">{settings.brand.logoText} Egypt</VisualEditableText>
+                <VisualEditableText textKey="footer.logoText">{settings.brand.logoText}</VisualEditableText>
               </p>
               <p className="text-sm text-zinc-400">
                 <VisualEditableText textKey="footer.tagline">{settings.brand.tagline}</VisualEditableText>
@@ -79,4 +104,3 @@ export function Footer({ settings }: { settings: ThemeSettings }) {
     </footer>
   );
 }
-
