@@ -66,6 +66,7 @@ html {
   width: 100%;
   overflow: hidden;
   white-space: nowrap;
+  direction: ltr;
 }
 
 .top-banner-marquee-track {
@@ -112,7 +113,7 @@ html {
   }
 
   to {
-    transform: translateX(-50%);
+    transform: translateX(calc(-1 * var(--top-banner-shift, 50%)));
   }
 }
 

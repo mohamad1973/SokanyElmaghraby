@@ -9,32 +9,15 @@ import type { MenuNode } from "@/lib/types";
 import { bannerSpacingStyle } from "@/lib/banner-spacing";
 
 import { HeaderProductSearch } from "./header-product-search";
+import { TopBannerMarquee, type TopBannerIconName } from "./top-banner-marquee";
 import { VisualEditableText } from "./visual-editable-text";
 
-type TopBannerIconName = "quality" | "shipping" | "price" | "secure" | "support" | "warranty";
 type TopBannerStyle = CSSProperties & {
   "--top-banner-duration": string;
   "--top-banner-gap-width": string;
 };
 
 const topBannerIconOrder: TopBannerIconName[] = ["quality", "shipping", "price", "secure", "support", "warranty"];
-
-function TopBannerMarqueeItems({
-  items,
-}: {
-  items: Array<{ icon: TopBannerIconName; label: string }>;
-}) {
-  return (
-    <>
-      {items.map((item, itemIndex) => (
-        <span key={`${itemIndex}-${item.label}`} className="top-banner-marquee-item">
-          <TopBannerIcon icon={item.icon} />
-          <span>{item.label}</span>
-        </span>
-      ))}
-    </>
-  );
-}
 
 function TopBannerIcon({ icon }: { icon: TopBannerIconName }) {
   const className = "top-banner-icon";
@@ -313,16 +296,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               ))}
             </span>
           ) : (
-            <span className="top-banner-marquee" aria-label={topBannerItems.map((item) => item.label).join(" - ")}>
-              <span className="top-banner-marquee-track">
-                <span className="top-banner-marquee-content">
-                  <TopBannerMarqueeItems items={topBannerItems} />
-                </span>
-                <span className="top-banner-marquee-content" aria-hidden="true">
-                  <TopBannerMarqueeItems items={topBannerItems} />
-                </span>
-              </span>
-            </span>
+            <TopBannerMarquee items={topBannerItems} durationSeconds={settings.topBanner.speedSeconds} />
           )}
         </Link>
       ) : null}
