@@ -4,6 +4,7 @@ import { FormEvent, useId, useMemo, useRef, useState } from "react";
 
 import type {
   CustomHomeSection,
+  HeroSlide,
   HomeSectionGroupStyle,
   HomeSectionId,
   HomeSectionOrderItem,
@@ -153,6 +154,29 @@ function BannerSpacingFields({
       </div>
     </div>
   );
+}
+
+function createHeroSlide(): HeroSlide {
+  return {
+    id: `hero-slide-${Date.now()}`,
+    desktopImage: "",
+    tabletImage: "",
+    mobileImage: "",
+    linkUrl: "",
+  };
+}
+
+function syncHeroWithSlides(hero: ThemeSettings["hero"], slides: HeroSlide[]): ThemeSettings["hero"] {
+  const firstSlide = slides[0];
+
+  return {
+    ...hero,
+    slides,
+    enabled: hero.enabled || slides.some((slide) => slide.desktopImage || slide.tabletImage || slide.mobileImage),
+    desktopImage: firstSlide?.desktopImage || "",
+    tabletImage: firstSlide?.tabletImage || "",
+    mobileImage: firstSlide?.mobileImage || "",
+  };
 }
 
 function MultilineTextField({
@@ -371,7 +395,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             />
           </div>
           <div className="rounded-xl bg-brand-cream p-4 text-sm font-bold leading-7 text-zinc-800 lg:col-span-2">
-            مقاسات مقترحة عامة: ديسكتوب 1920x600 أو 1600x500، تابلت 1200x600، موبايل 750x900.
+            مقاسات مقترحة عامة: ديسكتوب 1920x800 (responsive)، تابلت 1200x600، موبايل 750x900.
             مقاسات العنوان المقترحة: ديسكتوب 48-64px، تابلت 36-48px، موبايل 28-36px.
           </div>
           <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:col-span-2 lg:grid-cols-4">
@@ -1729,36 +1753,139 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 });
               }}
             />
-            <ImageUploadField
-              label="صورة Hero - ديسكتوب"
-              value={settings.hero.desktopImage}
-              purpose="hero-desktop"
-              recommendation="1920x720px"
-              aspectRatio="8:3"
-              onUploaded={(url) =>
-                setSettings({ ...settings, hero: { ...settings.hero, desktopImage: url, enabled: true } })
-              }
-            />
-            <ImageUploadField
-              label="صورة Hero - تابلت"
-              value={settings.hero.tabletImage}
-              purpose="hero-tablet"
-              recommendation="1200x600px"
-              aspectRatio="2:1"
-              onUploaded={(url) =>
-                setSettings({ ...settings, hero: { ...settings.hero, tabletImage: url, enabled: true } })
-              }
-            />
-            <ImageUploadField
-              label="صورة Hero - موبايل"
-              value={settings.hero.mobileImage}
-              purpose="hero-mobile"
-              recommendation="750x900px"
-              aspectRatio="5:6"
-              onUploaded={(url) =>
-                setSettings({ ...settings, hero: { ...settings.hero, mobileImage: url, enabled: true } })
-              }
-            />
+            <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950">شرائح البنر (كاروسيل)</h3>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    أضف أكثر من شريحة لتتحول تلقائياً إلى كاروسيل. النص والأزرار مشتركة فوق كل الشرائح.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSettings({
+                      ...settings,
+                      hero: syncHeroWithSlides(settings.hero, [...settings.hero.slides, createHeroSlide()]),
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-2 text-sm font-bold text-zinc-950 transition hover:border-brand-gold"
+                >
+                  إضافة شريحة
+                </button>
+              </div>
+              <Field label="مدة التبديل بين الشرائح بالثواني">
+                <input
+                  type="number"
+                  min={3}
+                  max={30}
+                  value={settings.hero.carouselIntervalSeconds}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      hero: {
+                        ...settings.hero,
+                        carouselIntervalSeconds: Math.min(30, Math.max(3, Number(event.target.value) || 6)),
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+              {settings.hero.slides.map((slide, slideIndex) => (
+                <div key={slide.id} className="grid gap-4 rounded-2xl border border-black/10 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h4 className="text-base font-bold text-zinc-950">الشريحة {slideIndex + 1}</h4>
+                    {settings.hero.slides.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextSlides = settings.hero.slides.filter((item) => item.id !== slide.id);
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(settings.hero, nextSlides.length ? nextSlides : [createHeroSlide()]),
+                          });
+                        }}
+                        className="rounded-xl border border-red-200 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                      >
+                        حذف الشريحة
+                      </button>
+                    ) : null}
+                  </div>
+                  <Field label="رابط الشريحة - اختياري">
+                    <input
+                      value={slide.linkUrl}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          hero: syncHeroWithSlides(
+                            settings.hero,
+                            settings.hero.slides.map((item) =>
+                              item.id === slide.id ? { ...item, linkUrl: event.target.value } : item,
+                            ),
+                          ),
+                        })
+                      }
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                    />
+                  </Field>
+                  <ImageUploadField
+                    label={`صورة الشريحة ${slideIndex + 1} - ديسكتوب`}
+                    value={slide.desktopImage}
+                    purpose={`hero-desktop-${slide.id}`}
+                    recommendation="1920x800px (responsive)"
+                    aspectRatio="12:5"
+                    onUploaded={(url) =>
+                      setSettings({
+                        ...settings,
+                        hero: syncHeroWithSlides(
+                          settings.hero,
+                          settings.hero.slides.map((item) =>
+                            item.id === slide.id ? { ...item, desktopImage: url } : item,
+                          ),
+                        ),
+                      })
+                    }
+                  />
+                  <ImageUploadField
+                    label={`صورة الشريحة ${slideIndex + 1} - تابلت`}
+                    value={slide.tabletImage}
+                    purpose={`hero-tablet-${slide.id}`}
+                    recommendation="1200x600px"
+                    aspectRatio="2:1"
+                    onUploaded={(url) =>
+                      setSettings({
+                        ...settings,
+                        hero: syncHeroWithSlides(
+                          settings.hero,
+                          settings.hero.slides.map((item) =>
+                            item.id === slide.id ? { ...item, tabletImage: url } : item,
+                          ),
+                        ),
+                      })
+                    }
+                  />
+                  <ImageUploadField
+                    label={`صورة الشريحة ${slideIndex + 1} - موبايل`}
+                    value={slide.mobileImage}
+                    purpose={`hero-mobile-${slide.id}`}
+                    recommendation="750x900px"
+                    aspectRatio="5:6"
+                    onUploaded={(url) =>
+                      setSettings({
+                        ...settings,
+                        hero: syncHeroWithSlides(
+                          settings.hero,
+                          settings.hero.slides.map((item) =>
+                            item.id === slide.id ? { ...item, mobileImage: url } : item,
+                          ),
+                        ),
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </article>
 
           <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
@@ -1834,7 +1961,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               </select>
             </Field>
             <div
-              className={`grid gap-4 md:grid-cols-3 ${settings.topBanner.textAnimation === "static" ? "pointer-events-none opacity-50" : ""}`}
+              className={`grid gap-4 md:grid-cols-1 ${settings.topBanner.textAnimation === "static" ? "pointer-events-none opacity-50" : ""}`}
             >
               <Field label="سرعة حركة التوب بار بالثواني">
                 <input
@@ -1854,45 +1981,9 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                   className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                 />
               </Field>
-              <Field label="طريقة تكرار الجمل">
-                <select
-                  value={settings.topBanner.gapMode}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      topBanner: {
-                        ...settings.topBanner,
-                        gapMode: event.target.value === "spaced" ? "spaced" : "continuous",
-                      },
-                    })
-                  }
-                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                >
-                  <option value="continuous">لوب مستمر بدون فجوة</option>
-                  <option value="spaced">وجود فجوة بين نهاية وبداية الجمل</option>
-                </select>
-              </Field>
-              <Field label="حجم الفجوة بالبكسل">
-                <input
-                  type="number"
-                  min={0}
-                  max={1000}
-                  value={settings.topBanner.gapWidth}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      topBanner: {
-                        ...settings.topBanner,
-                        gapWidth: Math.min(1000, Math.max(0, Number(event.target.value) || 0)),
-                      },
-                    })
-                  }
-                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                />
-              </Field>
             </div>
             <p className={`-mt-2 text-xs font-semibold text-zinc-500 ${settings.topBanner.textAnimation === "static" ? "opacity-50" : ""}`}>
-              عند اختيار لوب مستمر بدون فجوة سيتم تجاهل حجم الفجوة ويظل الكلام متتابعاً دائماً.
+              الجمل تتكرر بشكل متصل بدون فجوة بين آخر جملة وأول جملة.
             </p>
             <ImageUploadField
               label="صورة بنر أعلى الهيدر - ديسكتوب"

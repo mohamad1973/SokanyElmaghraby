@@ -102,6 +102,14 @@ export type CustomHomeSection = {
 
 export type TopBannerTextAnimation = "marquee" | "static";
 
+export type HeroSlide = {
+  id: string;
+  desktopImage: string;
+  tabletImage: string;
+  mobileImage: string;
+  linkUrl: string;
+};
+
 export type ThemeSettings = {
   brand: {
     logoUrl: string;
@@ -160,6 +168,8 @@ export type ThemeSettings = {
     mobileButtonFontSize: number;
     mobileButtonPaddingX: number;
     mobileButtonPaddingY: number;
+    slides: HeroSlide[];
+    carouselIntervalSeconds: number;
   };
   sections: {
     trustBadges: boolean;
@@ -270,6 +280,16 @@ export const defaultThemeSettings: ThemeSettings = {
     mobileButtonFontSize: 14,
     mobileButtonPaddingX: 20,
     mobileButtonPaddingY: 12,
+    slides: [
+      {
+        id: "hero-slide-1",
+        desktopImage: "",
+        tabletImage: "",
+        mobileImage: "",
+        linkUrl: "",
+      },
+    ],
+    carouselIntervalSeconds: 6,
   },
   sections: {
     trustBadges: true,
@@ -485,6 +505,62 @@ function mergeCustomBannerSettings(value: unknown): ThemeSettings["sections"]["c
   };
 }
 
+function mergeHeroSlide(value: unknown, index: number): HeroSlide {
+  const slide = isObject(value) ? value : {};
+
+  return {
+    id: typeof slide.id === "string" ? slide.id : `hero-slide-${index + 1}`,
+    desktopImage: typeof slide.desktopImage === "string" ? slide.desktopImage : "",
+    tabletImage: typeof slide.tabletImage === "string" ? slide.tabletImage : "",
+    mobileImage: typeof slide.mobileImage === "string" ? slide.mobileImage : "",
+    linkUrl: typeof slide.linkUrl === "string" ? slide.linkUrl : "",
+  };
+}
+
+function mergeHeroSettings(value: unknown): ThemeSettings["hero"] {
+  const hero = isObject(value) ? value : {};
+  const merged = {
+    ...defaultThemeSettings.hero,
+    ...hero,
+  };
+
+  let slides = Array.isArray(hero.slides)
+    ? hero.slides.filter(isObject).map((slide, index) => mergeHeroSlide(slide, index))
+    : [];
+
+  const hasLegacyImages = Boolean(merged.desktopImage || merged.tabletImage || merged.mobileImage);
+
+  if (slides.length === 0 && hasLegacyImages) {
+    slides = [
+      {
+        id: "hero-slide-1",
+        desktopImage: merged.desktopImage,
+        tabletImage: merged.tabletImage,
+        mobileImage: merged.mobileImage,
+        linkUrl: "",
+      },
+    ];
+  }
+
+  if (slides.length === 0) {
+    slides = [...defaultThemeSettings.hero.slides];
+  }
+
+  const firstSlide = slides[0];
+
+  return {
+    ...merged,
+    desktopImage: firstSlide.desktopImage || merged.desktopImage,
+    tabletImage: firstSlide.tabletImage || merged.tabletImage,
+    mobileImage: firstSlide.mobileImage || merged.mobileImage,
+    slides,
+    carouselIntervalSeconds:
+      typeof hero.carouselIntervalSeconds === "number"
+        ? Math.min(30, Math.max(3, hero.carouselIntervalSeconds))
+        : defaultThemeSettings.hero.carouselIntervalSeconds,
+  };
+}
+
 function mergeProductCardSettings(value: unknown): ThemeSettings["productCard"] {
   const productCard = isObject(value) ? value : {};
 
@@ -520,7 +596,7 @@ function mergeSettings(settings: unknown): ThemeSettings {
     navigation: Array.isArray(settings.navigation)
       ? settings.navigation.filter((item): item is MenuItem => isObject(item) && typeof item.label === "string" && typeof item.href === "string")
       : defaultThemeSettings.navigation,
-    hero: { ...defaultThemeSettings.hero, ...(isObject(settings.hero) ? settings.hero : {}) },
+    hero: mergeHeroSettings(settings.hero),
     sections: {
       ...defaultThemeSettings.sections,
       ...(isObject(settings.sections) ? settings.sections : {}),

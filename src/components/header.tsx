@@ -18,7 +18,23 @@ type TopBannerStyle = CSSProperties & {
 };
 
 const topBannerIconOrder: TopBannerIconName[] = ["quality", "shipping", "price", "secure", "support", "warranty"];
-const topBannerContentLoops = [0, 1, 2, 3];
+
+function TopBannerMarqueeItems({
+  items,
+}: {
+  items: Array<{ icon: TopBannerIconName; label: string }>;
+}) {
+  return (
+    <>
+      {items.map((item, itemIndex) => (
+        <span key={`${itemIndex}-${item.label}`} className="top-banner-marquee-item">
+          <TopBannerIcon icon={item.icon} />
+          <span>{item.label}</span>
+        </span>
+      ))}
+    </>
+  );
+}
 
 function TopBannerIcon({ icon }: { icon: TopBannerIconName }) {
   const className = "top-banner-icon";
@@ -234,7 +250,6 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     icon: topBannerIconOrder[index % topBannerIconOrder.length],
     label,
   }));
-  const topBannerSegments = [0, 1];
   const headerActions = [
     { href: "/account", label: "الحساب", icon: "account" as const },
     { href: "/cart", label: "السلة", icon: "cart" as const },
@@ -300,21 +315,12 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
           ) : (
             <span className="top-banner-marquee" aria-label={topBannerItems.map((item) => item.label).join(" - ")}>
               <span className="top-banner-marquee-track">
-                {topBannerSegments.map((segment) => (
-                  <span key={segment} className="top-banner-marquee-content" aria-hidden={segment > 0}>
-                    {topBannerContentLoops.map((loopIndex) =>
-                      topBannerItems.map((item, itemIndex) => (
-                        <span key={`${segment}-${loopIndex}-${itemIndex}`} className="top-banner-marquee-item">
-                          <TopBannerIcon icon={item.icon} />
-                          <span>{item.label}</span>
-                        </span>
-                      )),
-                    )}
-                    {settings.topBanner.gapMode === "spaced" ? (
-                      <span className="top-banner-marquee-gap" aria-hidden="true" />
-                    ) : null}
-                  </span>
-                ))}
+                <span className="top-banner-marquee-content">
+                  <TopBannerMarqueeItems items={topBannerItems} />
+                </span>
+                <span className="top-banner-marquee-content" aria-hidden="true">
+                  <TopBannerMarqueeItems items={topBannerItems} />
+                </span>
               </span>
             </span>
           )}

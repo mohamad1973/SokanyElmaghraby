@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
+import { HeroCarousel } from "@/components/hero-carousel";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
@@ -195,9 +196,10 @@ export default async function Home() {
       ] as const),
     ),
   );
-  const heroHasImage = Boolean(
-    settings.hero.desktopImage || settings.hero.tabletImage || settings.hero.mobileImage,
+  const heroSlides = settings.hero.slides.filter(
+    (slide) => slide.desktopImage || slide.tabletImage || slide.mobileImage,
   );
+  const heroHasImage = heroSlides.length > 0;
   const heroTextClass = settings.hero.textTone === "dark" ? "text-zinc-950" : "text-white";
   const heroSubtextClass = settings.hero.textTone === "dark" ? "text-zinc-700" : "text-white/85";
   const heroContentJustifyClass = {
@@ -250,51 +252,16 @@ export default async function Home() {
     homeSections.push({
       id: "hero",
       node: heroHasImage ? (
-        <section className="relative min-h-[640px] overflow-hidden bg-zinc-950" style={heroPaddingStyle}>
-            {settings.hero.desktopImage ? (
-              <Image
-                src={settings.hero.desktopImage}
-                alt={settings.hero.title}
-                fill
-                priority
-                sizes="100vw"
-                className="hidden object-cover lg:block"
-                unoptimized
-              />
-            ) : null}
-            {settings.hero.tabletImage ? (
-              <Image
-                src={settings.hero.tabletImage}
-                alt={settings.hero.title}
-                fill
-                sizes="100vw"
-                className={`hidden object-cover sm:block ${settings.hero.desktopImage ? "lg:hidden" : ""}`}
-                unoptimized
-              />
-            ) : null}
-            {!settings.hero.tabletImage && settings.hero.desktopImage ? (
-              <Image
-                src={settings.hero.desktopImage}
-                alt={settings.hero.title}
-                fill
-                sizes="100vw"
-                className="hidden object-cover sm:block lg:hidden"
-                unoptimized
-              />
-            ) : null}
-            {settings.hero.mobileImage || settings.hero.tabletImage || settings.hero.desktopImage ? (
-              <Image
-                src={settings.hero.mobileImage || settings.hero.tabletImage || settings.hero.desktopImage}
-                alt={settings.hero.title}
-                fill
-                sizes="100vw"
-                className={settings.hero.tabletImage || settings.hero.desktopImage ? "object-cover sm:hidden" : "object-cover"}
-                unoptimized
-              />
-            ) : null}
-            {settings.hero.overlayEnabled ? <div className="absolute inset-0 bg-black/35" /> : null}
+        <section className="relative overflow-hidden bg-zinc-950" style={heroPaddingStyle}>
+          <div className="hero-banner-frame relative w-full">
+            <HeroCarousel
+              slides={heroSlides}
+              alt={settings.hero.title}
+              intervalSeconds={settings.hero.carouselIntervalSeconds}
+            />
+            {settings.hero.overlayEnabled ? <div className="absolute inset-0 z-10 bg-black/35" /> : null}
             <div
-              className={`relative flex min-h-[640px] items-center py-24 ${getSectionContainerClass(settings, "hero")} ${heroMobileContentJustifyClass} ${heroContentJustifyClass}`}
+              className={`absolute inset-0 z-20 flex items-center py-10 sm:py-16 ${getSectionContainerClass(settings, "hero")} ${heroMobileContentJustifyClass} ${heroContentJustifyClass}`}
               style={heroMobileStyle}
             >
               {shouldRenderHeroText ? (
@@ -327,7 +294,8 @@ export default async function Home() {
                 </div>
               ) : null}
             </div>
-          </section>
+          </div>
+        </section>
       ) : (
         <section className="relative overflow-hidden bg-white" style={heroPaddingStyle}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
