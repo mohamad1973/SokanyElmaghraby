@@ -7,6 +7,7 @@ import { CustomProductSection } from "@/components/custom-product-section";
 import { HeroSection } from "@/components/hero-section";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
+import { TrustBadgesSection } from "@/components/trust-badges-section";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { bannerHorizontalPaddingStyle, bannerSpacingStyle } from "@/lib/banner-spacing";
 import { heroSlideHasMedia } from "@/lib/hero-slide-utils";
@@ -140,48 +141,6 @@ function renderHomeSections(homeSections: HomeSectionEntry[], settings: Awaited<
 
 export const dynamic = "force-dynamic";
 
-function TrustIcon({ icon }: { icon: string }) {
-  const className = "h-9 w-9";
-
-  if (icon === "check") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
-        <path d="M12 3.2 19.2 6.4v5.4c0 4.1-2.5 6.9-7.2 8.8-4.7-1.9-7.2-4.7-7.2-8.8V6.4L12 3.2Z" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8.7 12.1 11 14.4 15.7 9.7" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8.4 6.8 12 5.3l3.6 1.5" strokeLinecap="round" opacity="0.55" />
-      </svg>
-    );
-  }
-
-  if (icon === "card") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
-        <path d="M4.5 6.8h15A2.2 2.2 0 0 1 21.7 9v7.8a2.2 2.2 0 0 1-2.2 2.2h-15a2.2 2.2 0 0 1-2.2-2.2V9a2.2 2.2 0 0 1 2.2-2.2Z" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M2.7 11.1h18.6M6.2 15.8h4.8" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M16.2 15.7h2.4" strokeLinecap="round" opacity="0.55" />
-      </svg>
-    );
-  }
-
-  if (icon === "truck") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
-        <path d="M3 7.2h10.8v8.4H3V7.2ZM13.8 10.2h3.8l3.4 3.2v2.2h-7.2v-5.4Z" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M6.5 18.6a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8ZM17.7 18.6a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8Z" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M5 4.8h6.8M4 11.3h5.2" strokeLinecap="round" opacity="0.55" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
-      <path d="M12 3.3 19 6.7v5.1c0 4.3-2.4 7-7 8.9-4.6-1.9-7-4.6-7-8.9V6.7L12 3.3Z" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M9 12.4 11.2 14.6 15.7 10.1" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M7.6 7.7 12 5.6l4.4 2.1" strokeLinecap="round" opacity="0.55" />
-    </svg>
-  );
-}
-
 export default async function Home() {
   const [featuredProducts, categories, settings] = await Promise.all([
     getFeaturedProducts(),
@@ -219,38 +178,7 @@ export default async function Home() {
   if (settings.sections.trustBadges) {
     homeSections.push({
       id: "trustBadges",
-      node: (
-        <section className="bg-white py-8">
-        <div className={getSectionContainerClass(settings, "trustBadges")}>
-          <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950 shadow-2xl">
-            <div className="flex gap-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] lg:grid lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
-              {trustItems.map((item, index) => (
-                <div
-                  key={item.title}
-                  className="flex min-w-[78%] items-center gap-4 border-l border-white/10 p-5 last:border-l-0 sm:min-w-[48%] lg:min-w-0 lg:p-6"
-                >
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-brand-gold/20 bg-brand-gold/10 text-brand-gold shadow-[0_0_30px_rgba(218,255,0,0.08)]">
-                    <TrustIcon icon={item.icon} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-base font-extrabold text-white">
-                      <VisualEditableText textKey={`trust.${item.icon}.title`}>{item.title}</VisualEditableText>
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-300">
-                      <VisualEditableText textKey={`trust.${item.icon}.text`}>{item.text}</VisualEditableText>
-                    </p>
-                    <span className="mt-3 block h-0.5 w-10 rounded-full bg-brand-gold/70 lg:hidden" />
-                  </div>
-                  <span className="pointer-events-none mr-auto hidden text-4xl font-black text-white/5 lg:block">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        </section>
-      ),
+      node: <TrustBadgesSection items={trustItems} />,
     });
   }
 
