@@ -4,27 +4,126 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { heroSlideHasMedia } from "@/lib/hero-slide-utils";
 import type { HeroSlide } from "@/lib/theme-settings";
 
 type HeroCarouselProps = {
   slides: HeroSlide[];
   alt: string;
   intervalSeconds: number;
+  sizes?: string;
 };
 
-function slideHasImage(slide: HeroSlide) {
-  return Boolean(slide.desktopImage || slide.tabletImage || slide.mobileImage);
-}
-
-function HeroSlideImages({
+function HeroSlideMedia({
   slide,
   alt,
   priority = false,
+  sizes = "100vw",
 }: {
   slide: HeroSlide;
   alt: string;
   priority?: boolean;
+  sizes?: string;
 }) {
+  if (slide.mediaType === "video") {
+    return (
+      <>
+        {slide.desktopVideo ? (
+          <video
+            src={slide.desktopVideo}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="hidden h-full w-full object-cover lg:block"
+          />
+        ) : slide.desktopImage ? (
+          <Image
+            src={slide.desktopImage}
+            alt={alt}
+            fill
+            priority={priority}
+            sizes={sizes}
+            className="hidden object-cover lg:block"
+            unoptimized
+          />
+        ) : null}
+        {slide.tabletVideo ? (
+          <video
+            src={slide.tabletVideo}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className={`hidden h-full w-full object-cover sm:block ${slide.desktopVideo || slide.desktopImage ? "lg:hidden" : ""}`}
+          />
+        ) : slide.tabletImage ? (
+          <Image
+            src={slide.tabletImage}
+            alt={alt}
+            fill
+            priority={priority}
+            sizes={sizes}
+            className={`hidden object-cover sm:block ${slide.desktopVideo || slide.desktopImage ? "lg:hidden" : ""}`}
+            unoptimized
+          />
+        ) : null}
+        {!slide.tabletVideo && !slide.tabletImage && (slide.desktopVideo || slide.desktopImage) ? (
+          slide.desktopVideo ? (
+            <video
+              src={slide.desktopVideo}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="hidden h-full w-full object-cover sm:block lg:hidden"
+            />
+          ) : (
+            <Image
+              src={slide.desktopImage}
+              alt={alt}
+              fill
+              priority={priority}
+              sizes={sizes}
+              className="hidden object-cover sm:block lg:hidden"
+              unoptimized
+            />
+          )
+        ) : null}
+        {slide.mobileVideo || slide.tabletVideo || slide.desktopVideo || slide.mobileImage || slide.tabletImage || slide.desktopImage ? (
+          slide.mobileVideo || (!slide.mobileImage && (slide.tabletVideo || slide.desktopVideo)) ? (
+            <video
+              src={slide.mobileVideo || slide.tabletVideo || slide.desktopVideo}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className={
+                slide.tabletVideo || slide.tabletImage || slide.desktopVideo || slide.desktopImage
+                  ? "h-full w-full object-cover sm:hidden"
+                  : "h-full w-full object-cover"
+              }
+            />
+          ) : (
+            <Image
+              src={slide.mobileImage || slide.tabletImage || slide.desktopImage}
+              alt={alt}
+              fill
+              priority={priority}
+              sizes={sizes}
+              className={
+                slide.tabletImage || slide.desktopImage || slide.tabletVideo || slide.desktopVideo
+                  ? "object-cover sm:hidden"
+                  : "object-cover"
+              }
+              unoptimized
+            />
+          )
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <>
       {slide.desktopImage ? (
@@ -33,7 +132,7 @@ function HeroSlideImages({
           alt={alt}
           fill
           priority={priority}
-          sizes="100vw"
+          sizes={sizes}
           className="hidden object-cover lg:block"
           unoptimized
         />
@@ -44,7 +143,7 @@ function HeroSlideImages({
           alt={alt}
           fill
           priority={priority}
-          sizes="100vw"
+          sizes={sizes}
           className={`hidden object-cover sm:block ${slide.desktopImage ? "lg:hidden" : ""}`}
           unoptimized
         />
@@ -55,7 +154,7 @@ function HeroSlideImages({
           alt={alt}
           fill
           priority={priority}
-          sizes="100vw"
+          sizes={sizes}
           className="hidden object-cover sm:block lg:hidden"
           unoptimized
         />
@@ -66,7 +165,7 @@ function HeroSlideImages({
           alt={alt}
           fill
           priority={priority}
-          sizes="100vw"
+          sizes={sizes}
           className={slide.tabletImage || slide.desktopImage ? "object-cover sm:hidden" : "object-cover"}
           unoptimized
         />
@@ -75,8 +174,8 @@ function HeroSlideImages({
   );
 }
 
-export function HeroCarousel({ slides, alt, intervalSeconds }: HeroCarouselProps) {
-  const activeSlides = slides.filter(slideHasImage);
+export function HeroCarousel({ slides, alt, intervalSeconds, sizes = "100vw" }: HeroCarouselProps) {
+  const activeSlides = slides.filter(heroSlideHasMedia);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -107,7 +206,9 @@ export function HeroCarousel({ slides, alt, intervalSeconds }: HeroCarouselProps
     <div className="absolute inset-0">
       {activeSlides.map((slide, slideIndex) => {
         const isActive = slideIndex === index;
-        const content = <HeroSlideImages slide={slide} alt={alt} priority={slideIndex === 0} />;
+        const content = (
+          <HeroSlideMedia slide={slide} alt={alt} priority={slideIndex === 0} sizes={sizes} />
+        );
 
         return (
           <div
@@ -160,3 +261,5 @@ export function HeroCarousel({ slides, alt, intervalSeconds }: HeroCarouselProps
     </div>
   );
 }
+
+export { heroSlideHasMedia } from "@/lib/hero-slide-utils";

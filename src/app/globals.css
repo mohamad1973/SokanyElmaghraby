@@ -47,6 +47,28 @@ html {
   }
 }
 
+.hero-banner-frame-split-main {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 750 / 450;
+}
+
+.hero-banner-frame-split-side {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 750 / 350;
+}
+
+@media (min-width: 640px) {
+  .hero-banner-frame-split-main {
+    aspect-ratio: 1280 / 800;
+  }
+
+  .hero-banner-frame-split-side {
+    aspect-ratio: 640 / 400;
+  }
+}
+
 .custom-topbar {
   position: relative;
   z-index: 999;

@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-const allowedMimeTypes = new Map([
+const imageMimeTypes = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
   ["image/webp", "webp"],
@@ -14,7 +14,12 @@ const allowedMimeTypes = new Map([
   ["image/gif", "gif"],
   ["image/avif", "avif"],
 ]);
-const maxFileSize = 4 * 1024 * 1024;
+const videoMimeTypes = new Map([
+  ["video/mp4", "mp4"],
+  ["video/webm", "webm"],
+]);
+const maxImageFileSize = 4 * 1024 * 1024;
+const maxVideoFileSize = 25 * 1024 * 1024;
 
 function slugify(value: string) {
   return value
@@ -39,18 +44,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "لم يتم إرسال ملف صالح." }, { status: 400 });
   }
 
-  const extension = allowedMimeTypes.get(file.type);
+  const imageExtension = imageMimeTypes.get(file.type);
+  const videoExtension = videoMimeTypes.get(file.type);
+  const extension = imageExtension || videoExtension;
 
   if (!extension) {
     return NextResponse.json(
-      { message: "صيغة الصورة غير مدعومة. الصيغ المتاحة: jpg, png, webp, svg, gif, avif." },
+      {
+        message:
+          "صيغة الملف غير مدعومة. الصيغ المتاحة: jpg, png, webp, svg, gif, avif, mp4, webm.",
+      },
       { status: 400 },
     );
   }
 
+  const maxFileSize = videoExtension ? maxVideoFileSize : maxImageFileSize;
+
   if (file.size > maxFileSize) {
     return NextResponse.json(
-      { message: "حجم الصورة كبير جداً. الحد الأقصى الحالي 4MB." },
+      {
+        message: videoExtension
+          ? "حجم الفيديو كبير جداً. الحد الأقصى الحالي 25MB."
+          : "حجم الصورة كبير جداً. الحد الأقصى الحالي 4MB.",
+      },
       { status: 400 },
     );
   }

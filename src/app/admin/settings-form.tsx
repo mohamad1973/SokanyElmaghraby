@@ -4,6 +4,7 @@ import { FormEvent, useId, useMemo, useRef, useState } from "react";
 
 import type {
   CustomHomeSection,
+  HeroMediaType,
   HeroSlide,
   HomeSectionGroupStyle,
   HomeSectionId,
@@ -12,9 +13,11 @@ import type {
   MenuItem,
   ThemeSettings,
 } from "@/lib/theme-settings";
+import { heroSlideHasMedia } from "@/lib/hero-slide-utils";
 import { defaultBannerSpacing, defaultSideBannerSpacing, type BannerSpacing } from "@/lib/banner-spacing";
 
 import { ImageUploadField } from "./image-upload-field";
+import { MediaUploadField } from "./media-upload-field";
 
 type SettingsFormProps = {
   settings: ThemeSettings;
@@ -159,9 +162,13 @@ function BannerSpacingFields({
 function createHeroSlide(): HeroSlide {
   return {
     id: `hero-slide-${Date.now()}`,
+    mediaType: "image",
     desktopImage: "",
     tabletImage: "",
     mobileImage: "",
+    desktopVideo: "",
+    tabletVideo: "",
+    mobileVideo: "",
     linkUrl: "",
   };
 }
@@ -172,10 +179,32 @@ function syncHeroWithSlides(hero: ThemeSettings["hero"], slides: HeroSlide[]): T
   return {
     ...hero,
     slides,
-    enabled: hero.enabled || slides.some((slide) => slide.desktopImage || slide.tabletImage || slide.mobileImage),
+    enabled: hero.enabled || slides.some(heroSlideHasMedia),
     desktopImage: firstSlide?.desktopImage || "",
     tabletImage: firstSlide?.tabletImage || "",
     mobileImage: firstSlide?.mobileImage || "",
+  };
+}
+
+function getHeroCarouselRecommendations(layoutMode: ThemeSettings["hero"]["layoutMode"]) {
+  if (layoutMode === "split") {
+    return {
+      desktop: "1280x800px",
+      tablet: "800x500px",
+      mobile: "750x450px",
+      desktopRatio: "8:5",
+      tabletRatio: "8:5",
+      mobileRatio: "5:3",
+    };
+  }
+
+  return {
+    desktop: "1920x800px",
+    tablet: "1200x600px",
+    mobile: "750x900px",
+    desktopRatio: "12:5",
+    tabletRatio: "2:1",
+    mobileRatio: "5:6",
   };
 }
 
@@ -1753,6 +1782,109 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 });
               }}
             />
+            <Field label="تخطيط البنر الرئيسي">
+              <select
+                value={settings.hero.layoutMode}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    hero: {
+                      ...settings.hero,
+                      layoutMode: event.target.value as "full" | "split",
+                    },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              >
+                <option value="full">عرض كامل (الوضع الحالي)</option>
+                <option value="split">مقسّم: كاروسيل 2/3 + بنران 1/3</option>
+              </select>
+            </Field>
+            <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-black/10 bg-zinc-50 text-right">
+                    <th className="px-4 py-3 font-bold">العنصر</th>
+                    <th className="px-4 py-3 font-bold">Desktop</th>
+                    <th className="px-4 py-3 font-bold">Tablet</th>
+                    <th className="px-4 py-3 font-bold">Mobile</th>
+                  </tr>
+                </thead>
+                <tbody className="text-zinc-700">
+                  <tr className="border-b border-black/5">
+                    <td className="px-4 py-3">كarousel — وضع full</td>
+                    <td className="px-4 py-3">1920×800</td>
+                    <td className="px-4 py-3">1200×600</td>
+                    <td className="px-4 py-3">750×900</td>
+                  </tr>
+                  <tr className="border-b border-black/5">
+                    <td className="px-4 py-3">كarousel — وضع split (2/3)</td>
+                    <td className="px-4 py-3">1280×800</td>
+                    <td className="px-4 py-3">800×500</td>
+                    <td className="px-4 py-3">750×450</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3">بنر جانبي (كل واحد)</td>
+                    <td className="px-4 py-3">640×400</td>
+                    <td className="px-4 py-3">400×250</td>
+                    <td className="px-4 py-3">750×350</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="border-t border-black/10 px-4 py-3 text-xs leading-6 text-zinc-500">
+                في وضع split: ارتفاع البنرين الجانبيين معاً يساوي ارتفاع الكarousel (400+400=800 على desktop).
+                الفيديو: MP4 أو WebM، مدة قصيرة 5–15 ثانية، بدون صوت.
+                على الموبايل: الكarousel أولاً ثم البنران تحت بعض.
+              </p>
+            </div>
+            {settings.hero.layoutMode === "split" ? (
+              <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950">البنران الجانبيان (1/3 يسار)</h3>
+                  <p className="mt-1 text-sm text-zinc-500">يظهران فقط عند رفع صورة لكل بنر على الأقل.</p>
+                </div>
+                {settings.hero.sideBanners.map((banner, bannerIndex) => (
+                  <div key={banner.id} className="grid gap-4 rounded-2xl border border-black/10 bg-white p-4">
+                    <h4 className="text-base font-bold text-zinc-950">البنر الجانبي {bannerIndex + 1}</h4>
+                    <Field label="رابط البنر - اختياري">
+                      <input
+                        value={banner.linkUrl}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            hero: {
+                              ...settings.hero,
+                              sideBanners: settings.hero.sideBanners.map((item, index) =>
+                                index === bannerIndex ? { ...item, linkUrl: event.target.value } : item,
+                              ) as ThemeSettings["hero"]["sideBanners"],
+                            },
+                          })
+                        }
+                        className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      />
+                    </Field>
+                    <ImageUploadField
+                      label={`صورة البنر الجانبي ${bannerIndex + 1}`}
+                      value={banner.image}
+                      purpose={`hero-side-${banner.id}`}
+                      recommendation="640x400px desktop | 400x250px tablet | 750x350px mobile"
+                      aspectRatio="8:5"
+                      onUploaded={(url) =>
+                        setSettings({
+                          ...settings,
+                          hero: {
+                            ...settings.hero,
+                            sideBanners: settings.hero.sideBanners.map((item, index) =>
+                              index === bannerIndex ? { ...item, image: url } : item,
+                            ) as ThemeSettings["hero"]["sideBanners"],
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -1829,60 +1961,164 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                       className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
                     />
                   </Field>
-                  <ImageUploadField
-                    label={`صورة الشريحة ${slideIndex + 1} - ديسكتوب`}
-                    value={slide.desktopImage}
-                    purpose={`hero-desktop-${slide.id}`}
-                    recommendation="1920x800px (responsive)"
-                    aspectRatio="12:5"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        hero: syncHeroWithSlides(
-                          settings.hero,
-                          settings.hero.slides.map((item) =>
-                            item.id === slide.id ? { ...item, desktopImage: url } : item,
+                  <Field label="نوع الوسائط">
+                    <select
+                      value={slide.mediaType}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          hero: syncHeroWithSlides(
+                            settings.hero,
+                            settings.hero.slides.map((item) =>
+                              item.id === slide.id
+                                ? { ...item, mediaType: event.target.value as HeroMediaType }
+                                : item,
+                            ),
                           ),
-                        ),
-                      })
-                    }
-                  />
-                  <ImageUploadField
-                    label={`صورة الشريحة ${slideIndex + 1} - تابلت`}
-                    value={slide.tabletImage}
-                    purpose={`hero-tablet-${slide.id}`}
-                    recommendation="1200x600px"
-                    aspectRatio="2:1"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        hero: syncHeroWithSlides(
-                          settings.hero,
-                          settings.hero.slides.map((item) =>
-                            item.id === slide.id ? { ...item, tabletImage: url } : item,
-                          ),
-                        ),
-                      })
-                    }
-                  />
-                  <ImageUploadField
-                    label={`صورة الشريحة ${slideIndex + 1} - موبايل`}
-                    value={slide.mobileImage}
-                    purpose={`hero-mobile-${slide.id}`}
-                    recommendation="750x900px"
-                    aspectRatio="5:6"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        hero: syncHeroWithSlides(
-                          settings.hero,
-                          settings.hero.slides.map((item) =>
-                            item.id === slide.id ? { ...item, mobileImage: url } : item,
-                          ),
-                        ),
-                      })
-                    }
-                  />
+                        })
+                      }
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                    >
+                      <option value="image">صورة</option>
+                      <option value="video">فيديو</option>
+                    </select>
+                  </Field>
+                  {slide.mediaType === "video" ? (
+                    <>
+                      <MediaUploadField
+                        label={`فيديو الشريحة ${slideIndex + 1} - ديسكتوب`}
+                        value={slide.desktopVideo}
+                        purpose={`hero-desktop-video-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).desktop}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).desktopRatio}
+                        mediaType="video"
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, desktopVideo: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                      <MediaUploadField
+                        label={`فيديو الشريحة ${slideIndex + 1} - تابلت`}
+                        value={slide.tabletVideo}
+                        purpose={`hero-tablet-video-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).tablet}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).tabletRatio}
+                        mediaType="video"
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, tabletVideo: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                      <MediaUploadField
+                        label={`فيديو الشريحة ${slideIndex + 1} - موبايل`}
+                        value={slide.mobileVideo}
+                        purpose={`hero-mobile-video-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).mobile}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).mobileRatio}
+                        mediaType="video"
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, mobileVideo: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                      <ImageUploadField
+                        label={`صورة بديلة للشريحة ${slideIndex + 1} - ديسكتوب (اختياري)`}
+                        value={slide.desktopImage}
+                        purpose={`hero-desktop-fallback-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).desktop}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).desktopRatio}
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, desktopImage: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <ImageUploadField
+                        label={`صورة الشريحة ${slideIndex + 1} - ديسكتوب`}
+                        value={slide.desktopImage}
+                        purpose={`hero-desktop-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).desktop}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).desktopRatio}
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, desktopImage: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                      <ImageUploadField
+                        label={`صورة الشريحة ${slideIndex + 1} - تابلت`}
+                        value={slide.tabletImage}
+                        purpose={`hero-tablet-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).tablet}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).tabletRatio}
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, tabletImage: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                      <ImageUploadField
+                        label={`صورة الشريحة ${slideIndex + 1} - موبايل`}
+                        value={slide.mobileImage}
+                        purpose={`hero-mobile-${slide.id}`}
+                        recommendation={getHeroCarouselRecommendations(settings.hero.layoutMode).mobile}
+                        aspectRatio={getHeroCarouselRecommendations(settings.hero.layoutMode).mobileRatio}
+                        onUploaded={(url) =>
+                          setSettings({
+                            ...settings,
+                            hero: syncHeroWithSlides(
+                              settings.hero,
+                              settings.hero.slides.map((item) =>
+                                item.id === slide.id ? { ...item, mobileImage: url } : item,
+                              ),
+                            ),
+                          })
+                        }
+                      />
+                    </>
+                  )}
                 </div>
               ))}
             </div>

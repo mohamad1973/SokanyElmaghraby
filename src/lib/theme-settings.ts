@@ -101,14 +101,34 @@ export type CustomHomeSection = {
 };
 
 export type TopBannerTextAnimation = "marquee" | "static";
+export type HeroLayoutMode = "full" | "split";
+export type HeroMediaType = "image" | "video";
 
 export type HeroSlide = {
   id: string;
+  mediaType: HeroMediaType;
   desktopImage: string;
   tabletImage: string;
   mobileImage: string;
+  desktopVideo: string;
+  tabletVideo: string;
+  mobileVideo: string;
   linkUrl: string;
 };
+
+export type HeroSideBanner = {
+  id: string;
+  image: string;
+  linkUrl: string;
+};
+
+
+export function createDefaultHeroSideBanners(): [HeroSideBanner, HeroSideBanner] {
+  return [
+    { id: "hero-side-1", image: "", linkUrl: "" },
+    { id: "hero-side-2", image: "", linkUrl: "" },
+  ];
+}
 
 export type ThemeSettings = {
   brand: {
@@ -170,6 +190,8 @@ export type ThemeSettings = {
     mobileButtonPaddingY: number;
     slides: HeroSlide[];
     carouselIntervalSeconds: number;
+    layoutMode: HeroLayoutMode;
+    sideBanners: [HeroSideBanner, HeroSideBanner];
   };
   sections: {
     trustBadges: boolean;
@@ -283,13 +305,19 @@ export const defaultThemeSettings: ThemeSettings = {
     slides: [
       {
         id: "hero-slide-1",
+        mediaType: "image",
         desktopImage: "",
         tabletImage: "",
         mobileImage: "",
+        desktopVideo: "",
+        tabletVideo: "",
+        mobileVideo: "",
         linkUrl: "",
       },
     ],
     carouselIntervalSeconds: 6,
+    layoutMode: "full",
+    sideBanners: createDefaultHeroSideBanners(),
   },
   sections: {
     trustBadges: true,
@@ -505,14 +533,28 @@ function mergeCustomBannerSettings(value: unknown): ThemeSettings["sections"]["c
   };
 }
 
+function mergeHeroSideBanner(value: unknown, index: number): HeroSideBanner {
+  const banner = isObject(value) ? value : {};
+
+  return {
+    id: typeof banner.id === "string" ? banner.id : `hero-side-${index + 1}`,
+    image: typeof banner.image === "string" ? banner.image : "",
+    linkUrl: typeof banner.linkUrl === "string" ? banner.linkUrl : "",
+  };
+}
+
 function mergeHeroSlide(value: unknown, index: number): HeroSlide {
   const slide = isObject(value) ? value : {};
 
   return {
     id: typeof slide.id === "string" ? slide.id : `hero-slide-${index + 1}`,
+    mediaType: slide.mediaType === "video" ? "video" : "image",
     desktopImage: typeof slide.desktopImage === "string" ? slide.desktopImage : "",
     tabletImage: typeof slide.tabletImage === "string" ? slide.tabletImage : "",
     mobileImage: typeof slide.mobileImage === "string" ? slide.mobileImage : "",
+    desktopVideo: typeof slide.desktopVideo === "string" ? slide.desktopVideo : "",
+    tabletVideo: typeof slide.tabletVideo === "string" ? slide.tabletVideo : "",
+    mobileVideo: typeof slide.mobileVideo === "string" ? slide.mobileVideo : "",
     linkUrl: typeof slide.linkUrl === "string" ? slide.linkUrl : "",
   };
 }
@@ -534,9 +576,13 @@ function mergeHeroSettings(value: unknown): ThemeSettings["hero"] {
     slides = [
       {
         id: "hero-slide-1",
+        mediaType: "image",
         desktopImage: merged.desktopImage,
         tabletImage: merged.tabletImage,
         mobileImage: merged.mobileImage,
+        desktopVideo: "",
+        tabletVideo: "",
+        mobileVideo: "",
         linkUrl: "",
       },
     ];
@@ -547,6 +593,14 @@ function mergeHeroSettings(value: unknown): ThemeSettings["hero"] {
   }
 
   const firstSlide = slides[0];
+  const defaultSideBanners = createDefaultHeroSideBanners();
+  const mergedSideBanners = Array.isArray(hero.sideBanners)
+    ? hero.sideBanners.filter(isObject).map((banner, index) => mergeHeroSideBanner(banner, index))
+    : [];
+  const sideBanners: [HeroSideBanner, HeroSideBanner] = [
+    mergedSideBanners[0] || defaultSideBanners[0],
+    mergedSideBanners[1] || defaultSideBanners[1],
+  ];
 
   return {
     ...merged,
@@ -558,6 +612,8 @@ function mergeHeroSettings(value: unknown): ThemeSettings["hero"] {
       typeof hero.carouselIntervalSeconds === "number"
         ? Math.min(30, Math.max(3, hero.carouselIntervalSeconds))
         : defaultThemeSettings.hero.carouselIntervalSeconds,
+    layoutMode: hero.layoutMode === "split" ? "split" : "full",
+    sideBanners,
   };
 }
 

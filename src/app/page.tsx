@@ -4,11 +4,12 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
-import { HeroCarousel } from "@/components/hero-carousel";
+import { HeroSection } from "@/components/hero-section";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { bannerHorizontalPaddingStyle, bannerSpacingStyle } from "@/lib/banner-spacing";
+import { heroSlideHasMedia } from "@/lib/hero-slide-utils";
 import { getThemeSettings, type CustomHomeSection, type HomeSectionOrderItem } from "@/lib/theme-settings";
 import { getCategories, getFeaturedProducts, getProducts } from "@/lib/woocommerce";
 
@@ -196,128 +197,21 @@ export default async function Home() {
       ] as const),
     ),
   );
-  const heroSlides = settings.hero.slides.filter(
-    (slide) => slide.desktopImage || slide.tabletImage || slide.mobileImage,
-  );
-  const heroHasImage = heroSlides.length > 0;
-  const heroTextClass = settings.hero.textTone === "dark" ? "text-zinc-950" : "text-white";
-  const heroSubtextClass = settings.hero.textTone === "dark" ? "text-zinc-700" : "text-white/85";
-  const heroContentJustifyClass = {
-    right: "sm:justify-end",
-    center: "sm:justify-center",
-    left: "sm:justify-start",
-  }[settings.hero.contentAlign];
-  const heroMobileContentJustifyClass = {
-    right: "justify-end",
-    center: "justify-center",
-    left: "justify-start",
-  }[settings.hero.mobileContentAlign];
-  const heroContentTextAlignClass = {
-    right: "sm:text-right sm:items-end",
-    center: "sm:text-center sm:items-center",
-    left: "sm:text-left sm:items-start",
-  }[settings.hero.contentAlign];
-  const heroMobileContentTextAlignClass = {
-    right: "text-right items-end",
-    center: "text-center items-center",
-    left: "text-left items-start",
-  }[settings.hero.mobileContentAlign];
-  const heroButtonAlignClass = {
-    right: "sm:justify-end",
-    center: "sm:justify-center",
-    left: "sm:justify-start",
-  }[settings.hero.contentAlign];
-  const heroMobileButtonAlignClass = {
-    right: "justify-end",
-    center: "justify-center",
-    left: "justify-start",
-  }[settings.hero.mobileContentAlign];
-  const shouldRenderHeroText = settings.hero.showTextOnMobile || settings.hero.showTextOnDesktop;
-  const heroTextVisibilityClass = settings.hero.showTextOnMobile
-    ? settings.hero.showTextOnDesktop
-      ? "flex"
-      : "flex sm:hidden"
-    : "hidden sm:flex";
-  const heroMobileStyle = {
-    "--hero-mobile-title-size": `${settings.hero.mobileTitleFontSize}px`,
-    "--hero-mobile-subtitle-size": `${settings.hero.mobileSubtitleFontSize}px`,
-    "--hero-mobile-button-size": `${settings.hero.mobileButtonFontSize}px`,
-    "--hero-mobile-button-px": `${settings.hero.mobileButtonPaddingX}px`,
-    "--hero-mobile-button-py": `${settings.hero.mobileButtonPaddingY}px`,
-  } as CSSProperties;
+  const heroSlides = settings.hero.slides.filter(heroSlideHasMedia);
   const heroPaddingStyle = bannerHorizontalPaddingStyle(getSectionStyle(settings, "hero") || { paddingLeft: 0, paddingRight: 0 });
+  const heroSectionContainerClass = getSectionContainerClass(settings, "hero");
   const homeSections: HomeSectionEntry[] = [];
 
   if (settings.hero.enabled) {
     homeSections.push({
       id: "hero",
-      node: heroHasImage ? (
-        <section className="relative overflow-hidden bg-zinc-950" style={heroPaddingStyle}>
-          <div className="hero-banner-frame relative w-full">
-            <HeroCarousel
-              slides={heroSlides}
-              alt={settings.hero.title}
-              intervalSeconds={settings.hero.carouselIntervalSeconds}
-            />
-            {settings.hero.overlayEnabled ? <div className="absolute inset-0 z-10 bg-black/35" /> : null}
-            <div
-              className={`absolute inset-0 z-20 flex items-center py-10 sm:py-16 ${getSectionContainerClass(settings, "hero")} ${heroMobileContentJustifyClass} ${heroContentJustifyClass}`}
-              style={heroMobileStyle}
-            >
-              {shouldRenderHeroText ? (
-                <div
-                  className={`${heroTextVisibilityClass} max-w-3xl flex-col ${heroMobileContentTextAlignClass} ${heroContentTextAlignClass} ${settings.hero.frameEnabled ? "rounded-[2rem] border border-white/20 bg-black/25 p-8 backdrop-blur-sm" : ""}`}
-                >
-                  <p className="mb-5 inline-flex w-fit rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-black">
-                    <VisualEditableText textKey="hero.eyebrow">{settings.hero.eyebrow}</VisualEditableText>
-                  </p>
-                  <h1 className={`text-[length:var(--hero-mobile-title-size)] font-bold leading-tight tracking-tight sm:text-6xl ${heroTextClass}`}>
-                    <VisualEditableText textKey="hero.title">{settings.hero.title}</VisualEditableText>
-                  </h1>
-                  <p className={`mt-6 max-w-2xl text-[length:var(--hero-mobile-subtitle-size)] leading-8 sm:text-lg sm:leading-9 ${heroSubtextClass}`}>
-                    <VisualEditableText textKey="hero.subtitle">{settings.hero.subtitle}</VisualEditableText>
-                  </p>
-                  <div className={`mt-9 flex w-full flex-col gap-3 sm:flex-row ${heroMobileButtonAlignClass} ${heroButtonAlignClass}`}>
-                    <Link
-                      href={settings.hero.primaryCtaUrl}
-                      className="rounded-full bg-brand-gold px-[var(--hero-mobile-button-px)] py-[var(--hero-mobile-button-py)] text-center text-[length:var(--hero-mobile-button-size)] font-bold text-black transition hover:bg-brand-gold-dark sm:px-8 sm:py-4 sm:text-sm"
-                    >
-                      <VisualEditableText textKey="hero.primaryCtaText">{settings.hero.primaryCtaText}</VisualEditableText>
-                    </Link>
-                    <Link
-                      href={settings.hero.secondaryCtaUrl}
-                      className="rounded-full border border-white/30 bg-white/10 px-[var(--hero-mobile-button-px)] py-[var(--hero-mobile-button-py)] text-center text-[length:var(--hero-mobile-button-size)] font-bold text-white transition hover:border-brand-gold hover:text-brand-gold sm:px-8 sm:py-4 sm:text-sm"
-                    >
-                      <VisualEditableText textKey="hero.secondaryCtaText">{settings.hero.secondaryCtaText}</VisualEditableText>
-                    </Link>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : (
-        <section className="relative overflow-hidden bg-white" style={heroPaddingStyle}>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(218,255,0,0.34),_transparent_34%),linear-gradient(135deg,_rgba(0,0,0,0.04),_transparent_45%)]" />
-            <div
-              className={`relative py-20 lg:py-28 ${getSectionContainerClass(settings, "hero")}`}
-              style={heroMobileStyle}
-            >
-              {shouldRenderHeroText ? (
-                <div className={`${heroTextVisibilityClass} flex-col ${heroMobileContentTextAlignClass} ${heroContentTextAlignClass}`}>
-                  <p className="mb-5 inline-flex w-fit rounded-full border border-brand-gold/40 bg-brand-cream px-4 py-2 text-sm font-medium text-zinc-950">
-                    <VisualEditableText textKey="hero.eyebrow">{settings.hero.eyebrow}</VisualEditableText>
-                  </p>
-                  <h1 className="max-w-4xl text-[length:var(--hero-mobile-title-size)] font-bold leading-tight tracking-tight text-zinc-950 sm:text-6xl">
-                    <VisualEditableText textKey="hero.title">{settings.hero.title}</VisualEditableText>
-                  </h1>
-                  <p className="mt-6 max-w-2xl text-[length:var(--hero-mobile-subtitle-size)] leading-8 text-zinc-600 sm:text-lg sm:leading-9">
-                    <VisualEditableText textKey="hero.subtitle">{settings.hero.subtitle}</VisualEditableText>
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </section>
+      node: (
+        <HeroSection
+          hero={settings.hero}
+          slides={heroSlides}
+          sectionContainerClass={heroSectionContainerClass}
+          paddingStyle={heroPaddingStyle}
+        />
       ),
     });
   }
