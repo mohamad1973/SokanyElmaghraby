@@ -26,151 +26,55 @@ function HeroSlideMedia({
   sizes?: string;
 }) {
   if (slide.mediaType === "video") {
-    return (
-      <>
-        {slide.desktopVideo ? (
-          <video
-            src={slide.desktopVideo}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="hidden h-full w-full object-cover lg:block"
-          />
-        ) : slide.desktopImage ? (
-          <Image
-            src={slide.desktopImage}
-            alt={alt}
-            fill
-            priority={priority}
-            sizes={sizes}
-            className="hidden object-cover lg:block"
-            unoptimized
-          />
-        ) : null}
-        {slide.tabletVideo ? (
-          <video
-            src={slide.tabletVideo}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className={`hidden h-full w-full object-cover sm:block ${slide.desktopVideo || slide.desktopImage ? "lg:hidden" : ""}`}
-          />
-        ) : slide.tabletImage ? (
-          <Image
-            src={slide.tabletImage}
-            alt={alt}
-            fill
-            priority={priority}
-            sizes={sizes}
-            className={`hidden object-cover sm:block ${slide.desktopVideo || slide.desktopImage ? "lg:hidden" : ""}`}
-            unoptimized
-          />
-        ) : null}
-        {!slide.tabletVideo && !slide.tabletImage && (slide.desktopVideo || slide.desktopImage) ? (
-          slide.desktopVideo ? (
-            <video
-              src={slide.desktopVideo}
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="hidden h-full w-full object-cover sm:block lg:hidden"
-            />
-          ) : (
-            <Image
-              src={slide.desktopImage}
-              alt={alt}
-              fill
-              priority={priority}
-              sizes={sizes}
-              className="hidden object-cover sm:block lg:hidden"
-              unoptimized
-            />
-          )
-        ) : null}
-        {slide.mobileVideo || slide.tabletVideo || slide.desktopVideo || slide.mobileImage || slide.tabletImage || slide.desktopImage ? (
-          slide.mobileVideo || (!slide.mobileImage && (slide.tabletVideo || slide.desktopVideo)) ? (
-            <video
-              src={slide.mobileVideo || slide.tabletVideo || slide.desktopVideo}
-              autoPlay
-              muted
-              loop
-              playsInline
-              className={
-                slide.tabletVideo || slide.tabletImage || slide.desktopVideo || slide.desktopImage
-                  ? "h-full w-full object-cover sm:hidden"
-                  : "h-full w-full object-cover"
-              }
-            />
-          ) : (
-            <Image
-              src={slide.mobileImage || slide.tabletImage || slide.desktopImage}
-              alt={alt}
-              fill
-              priority={priority}
-              sizes={sizes}
-              className={
-                slide.tabletImage || slide.desktopImage || slide.tabletVideo || slide.desktopVideo
-                  ? "object-cover sm:hidden"
-                  : "object-cover"
-              }
-              unoptimized
-            />
-          )
-        ) : null}
-      </>
-    );
+    const videoSrc = slide.desktopVideo || slide.tabletVideo || slide.mobileVideo;
+    const fallbackImage = slide.desktopImage || slide.tabletImage || slide.mobileImage;
+
+    if (videoSrc) {
+      return (
+        <video
+          src={videoSrc}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="h-full w-full object-cover object-center"
+        />
+      );
+    }
+
+    if (fallbackImage) {
+      return (
+        <Image
+          src={fallbackImage}
+          alt={alt}
+          fill
+          priority={priority}
+          sizes={sizes}
+          className="object-cover object-center"
+          unoptimized
+        />
+      );
+    }
+
+    return null;
+  }
+
+  const imageSrc = slide.desktopImage || slide.tabletImage || slide.mobileImage;
+
+  if (!imageSrc) {
+    return null;
   }
 
   return (
-    <>
-      {slide.desktopImage ? (
-        <Image
-          src={slide.desktopImage}
-          alt={alt}
-          fill
-          priority={priority}
-          sizes={sizes}
-          className="hidden object-cover lg:block"
-          unoptimized
-        />
-      ) : null}
-      {slide.tabletImage ? (
-        <Image
-          src={slide.tabletImage}
-          alt={alt}
-          fill
-          priority={priority}
-          sizes={sizes}
-          className={`hidden object-cover sm:block ${slide.desktopImage ? "lg:hidden" : ""}`}
-          unoptimized
-        />
-      ) : null}
-      {!slide.tabletImage && slide.desktopImage ? (
-        <Image
-          src={slide.desktopImage}
-          alt={alt}
-          fill
-          priority={priority}
-          sizes={sizes}
-          className="hidden object-cover sm:block lg:hidden"
-          unoptimized
-        />
-      ) : null}
-      {slide.mobileImage || slide.tabletImage || slide.desktopImage ? (
-        <Image
-          src={slide.mobileImage || slide.tabletImage || slide.desktopImage}
-          alt={alt}
-          fill
-          priority={priority}
-          sizes={sizes}
-          className={slide.tabletImage || slide.desktopImage ? "object-cover sm:hidden" : "object-cover"}
-          unoptimized
-        />
-      ) : null}
-    </>
+    <Image
+      src={imageSrc}
+      alt={alt}
+      fill
+      priority={priority}
+      sizes={sizes}
+      className="object-cover object-center"
+      unoptimized
+    />
   );
 }
 

@@ -186,25 +186,14 @@ function syncHeroWithSlides(hero: ThemeSettings["hero"], slides: HeroSlide[]): T
   };
 }
 
-function getHeroCarouselRecommendations(layoutMode: ThemeSettings["hero"]["layoutMode"]) {
-  if (layoutMode === "split") {
-    return {
-      desktop: "1280x800px",
-      tablet: "800x500px",
-      mobile: "750x450px",
-      desktopRatio: "8:5",
-      tabletRatio: "8:5",
-      mobileRatio: "5:3",
-    };
-  }
-
+function getHeroCarouselRecommendations(_layoutMode: ThemeSettings["hero"]["layoutMode"]) {
   return {
     desktop: "1920x800px",
-    tablet: "1200x600px",
-    mobile: "750x900px",
+    tablet: "1920x800px",
+    mobile: "1920x800px",
     desktopRatio: "12:5",
-    tabletRatio: "2:1",
-    mobileRatio: "5:6",
+    tabletRatio: "12:5",
+    mobileRatio: "12:5",
   };
 }
 
@@ -1814,14 +1803,14 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                   <tr className="border-b border-black/5">
                     <td className="px-4 py-3">كarousel — وضع full</td>
                     <td className="px-4 py-3">1920×800</td>
-                    <td className="px-4 py-3">1200×600</td>
-                    <td className="px-4 py-3">750×900</td>
+                    <td className="px-4 py-3">1920×800</td>
+                    <td className="px-4 py-3">1920×800</td>
                   </tr>
                   <tr className="border-b border-black/5">
                     <td className="px-4 py-3">كarousel — وضع split (2/3)</td>
-                    <td className="px-4 py-3">1280×800</td>
-                    <td className="px-4 py-3">800×500</td>
-                    <td className="px-4 py-3">750×450</td>
+                    <td className="px-4 py-3">1920×800</td>
+                    <td className="px-4 py-3">1920×800</td>
+                    <td className="px-4 py-3">1920×800</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3">بنر جانبي (كل واحد)</td>
@@ -1832,7 +1821,8 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 </tbody>
               </table>
               <p className="border-t border-black/10 px-4 py-3 text-xs leading-6 text-zinc-500">
-                في وضع split: ارتفاع البنرين الجانبيين معاً يساوي ارتفاع الكarousel (400+400=800 على desktop).
+                صورة واحدة 1920×800 تكفي لكل الأجهزة (موبايل، تابلت، لاب). حقول tablet/mobile اختيارية بنفس المقاس.
+                في وضع split: ارتفاع البنرين الجانبيين يتناسب مع ارتفاع الكarousel تلقائياً.
                 الفيديو: MP4 أو WebM، مدة قصيرة 5–15 ثانية، بدون صوت.
                 على الموبايل: الكarousel أولاً ثم البنران تحت بعض.
               </p>
