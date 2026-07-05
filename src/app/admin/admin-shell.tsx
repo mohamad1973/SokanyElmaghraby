@@ -12,6 +12,7 @@ const navItems = [
   { href: "/admin/theme", label: "المظهر" },
   { href: "/admin/header", label: "الهيدر" },
   { href: "/admin/footer", label: "الفوتر" },
+  { href: "/admin/social-media", label: "السوشيال ميديا" },
   { href: "/admin/banners", label: "البنرات" },
   { href: "/admin/navigation", label: "المنيو" },
   { href: "/admin/products", label: "المنتجات" },

@@ -6,10 +6,12 @@ import type { ReactNode } from "react";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
+import { FloatingActionButtons } from "./floating-action-buttons";
 import { Footer } from "./footer";
 import { Header } from "./header";
 import { ProductDisplayProvider } from "./product-display-context";
 import { PwaInstallPrompt } from "./pwa-install-prompt";
+import { SocialMediaSidebar } from "./social-media-sidebar";
 import { VisualEditorProvider } from "./visual-editor-provider";
 import { VisualEditorToolbar } from "./visual-editor-toolbar";
 
@@ -35,6 +37,8 @@ export function SiteChrome({
         <VisualEditorToolbar />
         <main className="flex-1">{children}</main>
         <Footer settings={settings} />
+        <SocialMediaSidebar settings={settings.socialMedia} />
+        <FloatingActionButtons settings={settings.floatingActions} />
         <PwaInstallPrompt />
       </VisualEditorProvider>
     </ProductDisplayProvider>

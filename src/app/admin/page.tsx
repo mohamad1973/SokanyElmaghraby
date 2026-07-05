@@ -12,6 +12,11 @@ const cards = [
     href: "/admin/header",
   },
   {
+    title: "السوشيال ميديا",
+    description: "روابط فيسبوك وإنستجرام وتيكتوك، واتساب، وزر الصعود للأعلى.",
+    href: "/admin/social-media",
+  },
+  {
     title: "الطلبات",
     description: "عرض طلبات ووكومرس بنفس طريقة لوحة ووردبريس.",
     href: "/admin/orders",

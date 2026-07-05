@@ -130,6 +130,19 @@ export function createDefaultHeroSideBanners(): [HeroSideBanner, HeroSideBanner]
   ];
 }
 
+export type SocialMediaSettings = {
+  enabled: boolean;
+  facebookUrl: string;
+  instagramUrl: string;
+  tiktokUrl: string;
+};
+
+export type FloatingActionsSettings = {
+  whatsappEnabled: boolean;
+  whatsappPhone: string;
+  scrollTopEnabled: boolean;
+};
+
 export type ThemeSettings = {
   brand: {
     logoUrl: string;
@@ -213,6 +226,8 @@ export type ThemeSettings = {
     description: string;
     copyright: string;
   };
+  socialMedia: SocialMediaSettings;
+  floatingActions: FloatingActionsSettings;
   productCard: {
     borderWidth: number;
     borderRadius: number;
@@ -339,6 +354,17 @@ export const defaultThemeSettings: ThemeSettings = {
     description:
       "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
     copyright: "SOKANY. جميع الحقوق محفوظة.",
+  },
+  socialMedia: {
+    enabled: true,
+    facebookUrl: "",
+    instagramUrl: "",
+    tiktokUrl: "",
+  },
+  floatingActions: {
+    whatsappEnabled: true,
+    whatsappPhone: "01101115311",
+    scrollTopEnabled: true,
   },
   productCard: {
     borderWidth: 1,
@@ -635,6 +661,40 @@ function mergeProductCardSettings(value: unknown): ThemeSettings["productCard"] 
   };
 }
 
+function mergeSocialMediaSettings(value: unknown): ThemeSettings["socialMedia"] {
+  const socialMedia = isObject(value) ? value : {};
+
+  return {
+    ...defaultThemeSettings.socialMedia,
+    ...socialMedia,
+    enabled: typeof socialMedia.enabled === "boolean" ? socialMedia.enabled : defaultThemeSettings.socialMedia.enabled,
+    facebookUrl: typeof socialMedia.facebookUrl === "string" ? socialMedia.facebookUrl : "",
+    instagramUrl: typeof socialMedia.instagramUrl === "string" ? socialMedia.instagramUrl : "",
+    tiktokUrl: typeof socialMedia.tiktokUrl === "string" ? socialMedia.tiktokUrl : "",
+  };
+}
+
+function mergeFloatingActionsSettings(value: unknown): ThemeSettings["floatingActions"] {
+  const floatingActions = isObject(value) ? value : {};
+
+  return {
+    ...defaultThemeSettings.floatingActions,
+    ...floatingActions,
+    whatsappEnabled:
+      typeof floatingActions.whatsappEnabled === "boolean"
+        ? floatingActions.whatsappEnabled
+        : defaultThemeSettings.floatingActions.whatsappEnabled,
+    whatsappPhone:
+      typeof floatingActions.whatsappPhone === "string" && floatingActions.whatsappPhone.trim()
+        ? floatingActions.whatsappPhone.trim()
+        : defaultThemeSettings.floatingActions.whatsappPhone,
+    scrollTopEnabled:
+      typeof floatingActions.scrollTopEnabled === "boolean"
+        ? floatingActions.scrollTopEnabled
+        : defaultThemeSettings.floatingActions.scrollTopEnabled,
+  };
+}
+
 function mergeSettings(settings: unknown): ThemeSettings {
   if (!isObject(settings)) {
     return defaultThemeSettings;
@@ -661,6 +721,8 @@ function mergeSettings(settings: unknown): ThemeSettings {
       ),
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
+    socialMedia: mergeSocialMediaSettings(settings.socialMedia),
+    floatingActions: mergeFloatingActionsSettings(settings.floatingActions),
     productCard: mergeProductCardSettings(settings.productCard),
     homeSectionsOrder,
     homeSectionStyles: mergeHomeSectionStyles(settings.homeSectionStyles, homeSectionsOrder),

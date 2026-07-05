@@ -21,7 +21,7 @@ import { MediaUploadField } from "./media-upload-field";
 
 type SettingsFormProps = {
   settings: ThemeSettings;
-  focus: "theme" | "header" | "footer" | "banners" | "navigation";
+  focus: "theme" | "header" | "footer" | "banners" | "navigation" | "socialMedia";
 };
 
 const sectionLabels: Record<HomeSectionId, string> = {
@@ -348,6 +348,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
       footer: "الفوتر",
       banners: "البنرات والسكشنات",
       navigation: "المنيو",
+      socialMedia: "السوشيال ميديا والأزرار العائمة",
     };
 
     return titles[focus];
@@ -2372,6 +2373,123 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               className="min-h-64 rounded-xl border border-black/10 px-4 py-3 font-mono text-sm outline-none focus:border-brand-gold"
             />
           </Field>
+        </section>
+      ) : null}
+
+      {focus === "socialMedia" ? (
+        <section className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+          <div>
+            <h2 className="text-xl font-bold text-zinc-950">شريط السوشيال ميديا (يسار الشاشة)</h2>
+            <p className="mt-2 text-sm leading-7 text-zinc-600">
+              تظهر الأيقونات على يسار الموقع فقط للروابط المملوءة. اترك الرابط فارغاً لإخفاء المنصة.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={settings.socialMedia.enabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  socialMedia: { ...settings.socialMedia, enabled: event.target.checked },
+                })
+              }
+            />
+            تفعيل شريط السوشيال ميديا
+          </label>
+
+          <Field label="رابط Facebook">
+            <input
+              value={settings.socialMedia.facebookUrl}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  socialMedia: { ...settings.socialMedia, facebookUrl: event.target.value },
+                })
+              }
+              placeholder="https://facebook.com/sokany"
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
+
+          <Field label="رابط Instagram">
+            <input
+              value={settings.socialMedia.instagramUrl}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  socialMedia: { ...settings.socialMedia, instagramUrl: event.target.value },
+                })
+              }
+              placeholder="https://instagram.com/sokany"
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
+
+          <Field label="رابط TikTok">
+            <input
+              value={settings.socialMedia.tiktokUrl}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  socialMedia: { ...settings.socialMedia, tiktokUrl: event.target.value },
+                })
+              }
+              placeholder="https://tiktok.com/@sokany"
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
+
+          <div className="border-t border-black/10 pt-5">
+            <h2 className="text-xl font-bold text-zinc-950">الأزرار العائمة (أسفل يمين الشاشة)</h2>
+            <p className="mt-2 text-sm leading-7 text-zinc-600">
+              زر واتساب يفتح محادثة مع رقم الشركة. زر الصعود للأعلى يظهر بعد التمرير لأسفل الصفحة.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={settings.floatingActions.whatsappEnabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  floatingActions: { ...settings.floatingActions, whatsappEnabled: event.target.checked },
+                })
+              }
+            />
+            تفعيل زر واتساب
+          </label>
+
+          <Field label="رقم واتساب الشركة">
+            <input
+              value={settings.floatingActions.whatsappPhone}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  floatingActions: { ...settings.floatingActions, whatsappPhone: event.target.value },
+                })
+              }
+              placeholder="01101115311"
+              dir="ltr"
+              className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+            />
+          </Field>
+
+          <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={settings.floatingActions.scrollTopEnabled}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  floatingActions: { ...settings.floatingActions, scrollTopEnabled: event.target.checked },
+                })
+              }
+            />
+            تفعيل زر الصعود للأعلى
+          </label>
         </section>
       ) : null}
 
