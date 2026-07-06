@@ -12,6 +12,7 @@ type HeroCarouselProps = {
   alt: string;
   intervalSeconds: number;
   sizes?: string;
+  hideNavArrows?: boolean;
 };
 
 function HeroSlideMedia({
@@ -78,7 +79,13 @@ function HeroSlideMedia({
   );
 }
 
-export function HeroCarousel({ slides, alt, intervalSeconds, sizes = "100vw" }: HeroCarouselProps) {
+export function HeroCarousel({
+  slides,
+  alt,
+  intervalSeconds,
+  sizes = "100vw",
+  hideNavArrows = false,
+}: HeroCarouselProps) {
   const activeSlides = slides.filter(heroSlideHasMedia);
   const [index, setIndex] = useState(0);
 
@@ -133,30 +140,36 @@ export function HeroCarousel({ slides, alt, intervalSeconds, sizes = "100vw" }: 
 
       {activeSlides.length > 1 ? (
         <>
-          <button
-            type="button"
-            aria-label="الشريحة السابقة"
-            onClick={() => goTo(index - 1)}
-            className="absolute left-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/35 text-xl font-bold text-white backdrop-blur-sm transition hover:bg-black/55 sm:flex"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            aria-label="الشريحة التالية"
-            onClick={() => goTo(index + 1)}
-            className="absolute right-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/35 text-xl font-bold text-white backdrop-blur-sm transition hover:bg-black/55 sm:flex"
-          >
-            ›
-          </button>
-          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+          {!hideNavArrows ? (
+            <>
+              <button
+                type="button"
+                aria-label="الشريحة السابقة"
+                onClick={() => goTo(index - 1)}
+                className="absolute left-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/35 text-xl font-bold text-white backdrop-blur-sm transition hover:bg-black/55 sm:flex"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label="الشريحة التالية"
+                onClick={() => goTo(index + 1)}
+                className="absolute right-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/35 text-xl font-bold text-white backdrop-blur-sm transition hover:bg-black/55 sm:flex"
+              >
+                ›
+              </button>
+            </>
+          ) : null}
+          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5">
             {activeSlides.map((slide, slideIndex) => (
               <button
                 key={slide.id}
                 type="button"
                 aria-label={`الانتقال إلى الشريحة ${slideIndex + 1}`}
                 onClick={() => goTo(slideIndex)}
-                className={`h-2.5 rounded-full transition ${slideIndex === index ? "w-8 bg-brand-gold" : "w-2.5 bg-white/50"}`}
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  slideIndex === index ? "w-8 bg-brand-gold" : "w-6 bg-white/60 hover:bg-white/80"
+                }`}
               />
             ))}
           </div>

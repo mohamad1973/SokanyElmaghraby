@@ -53,9 +53,68 @@ html {
   aspect-ratio: 750 / 350;
 }
 
+.hero-banner-radius {
+  border-radius: 1.25rem;
+  overflow: hidden;
+}
+
+.hero-split-section {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.hero-split-layout {
+  --hero-split-gap: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--hero-split-gap);
+}
+
 @media (min-width: 640px) {
+  .hero-split-section {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .hero-split-layout {
+    --hero-split-gap: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-split-layout {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    grid-template-rows: 1fr;
+    gap: var(--hero-split-gap);
+    align-items: stretch;
+  }
+
+  .hero-split-main {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .hero-split-side-col {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--hero-split-gap);
+    min-height: 0;
+    height: 100%;
+  }
+
+  .hero-split-side {
+    flex: 1 1 0;
+    min-height: 0;
+    position: relative;
+  }
+
   .hero-banner-frame-split-side {
-    aspect-ratio: 640 / 400;
+    aspect-ratio: unset;
+    height: 100%;
   }
 }
 

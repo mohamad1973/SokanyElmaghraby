@@ -19,8 +19,8 @@ function HeroSideBannerCard({ banner, alt }: { banner: HeroSideBanner; alt: stri
   }
 
   const image = (
-    <div className="relative h-full w-full overflow-hidden rounded-xl bg-zinc-900">
-      <Image src={banner.image} alt={alt} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" unoptimized />
+    <div className="relative h-full w-full bg-zinc-900">
+      <Image src={banner.image} alt={alt} fill sizes="(max-width: 1023px) 100vw, 40vw" className="object-cover" unoptimized />
     </div>
   );
 
@@ -250,11 +250,11 @@ export function HeroSection({ hero, slides, sectionContainerClass, paddingStyle 
   }
 
   return (
-    <section className="relative overflow-hidden bg-zinc-950" style={paddingStyle}>
-      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-3 sm:grid-rows-2 sm:gap-2" dir="ltr">
+    <section className="hero-split-section relative overflow-hidden bg-white px-4 sm:px-5 lg:px-6" style={paddingStyle}>
+      <div className="hero-split-layout" dir="ltr">
         <div
-          className={`relative overflow-hidden rounded-xl bg-zinc-900 ${
-            hasSlides ? "hero-banner-frame-split-main sm:col-span-2 sm:col-start-2 sm:row-span-2" : "sm:col-span-3"
+          className={`hero-split-main hero-banner-radius relative bg-zinc-900 ${
+            hasSlides ? "hero-banner-frame-split-main" : "hero-banner-frame"
           }`}
         >
           {hasSlides ? (
@@ -262,23 +262,22 @@ export function HeroSection({ hero, slides, sectionContainerClass, paddingStyle 
               slides={slides}
               alt={hero.title}
               intervalSeconds={hero.carouselIntervalSeconds}
-              sizes="(max-width: 640px) 100vw, 66vw"
+              sizes="(max-width: 1023px) 100vw, 60vw"
+              hideNavArrows
             />
           ) : null}
-          {hero.overlayEnabled ? <div className="absolute inset-0 z-10 bg-black/35" /> : null}
-          <HeroTextOverlay {...textOverlayProps} />
         </div>
 
-        {sideBanners.map((banner, index) => (
-          <div
-            key={banner.id}
-            className={`hero-banner-frame-split-side relative overflow-hidden rounded-xl bg-zinc-900 sm:col-start-1 ${
-              index === 0 ? "sm:row-start-1" : "sm:row-start-2"
-            }`}
-          >
-            <HeroSideBannerCard banner={banner} alt={`${hero.title} - بنر ${index + 1}`} />
-          </div>
-        ))}
+        <div className="hero-split-side-col">
+          {sideBanners.map((banner, index) => (
+            <div
+              key={banner.id}
+              className="hero-split-side hero-banner-frame-split-side hero-banner-radius bg-zinc-900"
+            >
+              <HeroSideBannerCard banner={banner} alt={`${hero.title} - بنر ${index + 1}`} />
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
