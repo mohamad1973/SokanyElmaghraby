@@ -58,9 +58,17 @@ html {
   overflow: hidden;
 }
 
+.home-edge-padding {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
 .hero-split-section {
   padding-top: 1rem;
   padding-bottom: 1rem;
+}
+
+.hero-split-section.home-edge-padding {
   padding-left: 1rem;
   padding-right: 1rem;
 }
@@ -98,9 +106,17 @@ html {
 }
 
 @media (min-width: 1024px) {
-  .hero-split-section {
+  .home-edge-padding {
     padding-left: 2rem;
     padding-right: 2rem;
+  }
+
+  .hero-split-section.home-edge-padding {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+
+  .hero-split-section {
     padding-top: 1.25rem;
     padding-bottom: 1.25rem;
   }
@@ -142,9 +158,40 @@ html {
 }
 
 @media (min-width: 1280px) {
-  .hero-split-section {
+  .home-edge-padding {
     padding-left: 2.5rem;
     padding-right: 2.5rem;
+  }
+
+  .hero-split-section.home-edge-padding {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+}
+
+.main-groups-section {
+  padding-top: 1rem;
+  padding-bottom: 1.25rem;
+  background: var(--background);
+}
+
+.main-groups-grid {
+  --home-section-gap: 1.25rem;
+  display: grid;
+  gap: var(--home-section-gap);
+}
+
+.main-groups-card {
+  position: relative;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  border-radius: 1.25rem 1.25rem 0 0;
+  background: #18181b;
+}
+
+@media (min-width: 1024px) {
+  .main-groups-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
 import { HeroSection } from "@/components/hero-section";
+import { MainGroupsSection } from "@/components/main-groups-section";
 import { ProductCard } from "@/components/product-card";
 import { SectionTitle } from "@/components/section-title";
 import { TrustBadgesSection } from "@/components/trust-badges-section";
@@ -172,6 +173,13 @@ export default async function Home() {
           paddingStyle={heroPaddingStyle}
         />
       ),
+    });
+  }
+
+  if (settings.sections.mainGroups.enabled && settings.sections.mainGroups.items.some((item) => item.image)) {
+    homeSections.push({
+      id: "mainGroups",
+      node: <MainGroupsSection section={settings.sections.mainGroups} />,
     });
   }
 

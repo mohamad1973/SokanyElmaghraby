@@ -249,8 +249,13 @@ export function HeroSection({ hero, slides, sectionContainerClass, paddingStyle 
     );
   }
 
+  const splitSectionStyle: CSSProperties = {
+    paddingTop: paddingStyle.paddingTop,
+    paddingBottom: paddingStyle.paddingBottom,
+  };
+
   return (
-    <section className="hero-split-section relative overflow-hidden bg-white" style={paddingStyle}>
+    <section className="hero-split-section home-edge-padding relative overflow-hidden bg-white" style={splitSectionStyle}>
       <div className="hero-split-layout" dir="ltr">
         <div
           className={`hero-split-main hero-banner-radius relative bg-zinc-900 ${

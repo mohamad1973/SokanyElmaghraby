@@ -33,7 +33,7 @@ export type VisualTextStyle = {
   align?: VisualTextAlign;
 };
 
-export type HomeSectionId = "hero" | "trustBadges" | "categories" | "bestSellers" | "customBanner" | "competitiveBanner";
+export type HomeSectionId = "hero" | "mainGroups" | "trustBadges" | "categories" | "bestSellers" | "customBanner" | "competitiveBanner";
 export type HomeSectionOrderItem = HomeSectionId | `custom:${string}`;
 
 export type HomeSectionStyle = {
@@ -130,6 +130,26 @@ export function createDefaultHeroSideBanners(): [HeroSideBanner, HeroSideBanner]
   ];
 }
 
+export type MainGroupItem = {
+  id: string;
+  image: string;
+  linkUrl: string;
+  alt: string;
+};
+
+export type MainGroupsSectionSettings = {
+  enabled: boolean;
+  items: [MainGroupItem, MainGroupItem, MainGroupItem];
+};
+
+export function createDefaultMainGroupItems(): [MainGroupItem, MainGroupItem, MainGroupItem] {
+  return [
+    { id: "main-group-1", image: "", linkUrl: "", alt: "" },
+    { id: "main-group-2", image: "", linkUrl: "", alt: "" },
+    { id: "main-group-3", image: "", linkUrl: "", alt: "" },
+  ];
+}
+
 export type SocialMediaSettings = {
   enabled: boolean;
   facebookUrl: string;
@@ -208,6 +228,7 @@ export type ThemeSettings = {
   };
   sections: {
     trustBadges: boolean;
+    mainGroups: MainGroupsSectionSettings;
     categories: boolean;
     bestSellers: boolean;
     competitiveBanner: boolean;
@@ -246,6 +267,7 @@ export type ThemeSettings = {
 
 export const defaultHomeSectionsOrder: HomeSectionOrderItem[] = [
   "hero",
+  "mainGroups",
   "trustBadges",
   "categories",
   "bestSellers",
@@ -336,6 +358,10 @@ export const defaultThemeSettings: ThemeSettings = {
   },
   sections: {
     trustBadges: true,
+    mainGroups: {
+      enabled: true,
+      items: createDefaultMainGroupItems(),
+    },
     categories: true,
     bestSellers: true,
     competitiveBanner: true,
@@ -559,6 +585,36 @@ function mergeCustomBannerSettings(value: unknown): ThemeSettings["sections"]["c
   };
 }
 
+function mergeMainGroupItem(value: unknown, index: number): MainGroupItem {
+  const item = isObject(value) ? value : {};
+
+  return {
+    id: typeof item.id === "string" ? item.id : `main-group-${index + 1}`,
+    image: typeof item.image === "string" ? item.image : "",
+    linkUrl: typeof item.linkUrl === "string" ? item.linkUrl : "",
+    alt: typeof item.alt === "string" ? item.alt : "",
+  };
+}
+
+function mergeMainGroupsSettings(value: unknown): ThemeSettings["sections"]["mainGroups"] {
+  const mainGroups = isObject(value) ? value : {};
+  const mergedItems = Array.isArray(mainGroups.items)
+    ? mainGroups.items.filter(isObject).map((item, index) => mergeMainGroupItem(item, index))
+    : [];
+  const defaultItems = createDefaultMainGroupItems();
+
+  while (mergedItems.length < 3) {
+    mergedItems.push(defaultItems[mergedItems.length]);
+  }
+
+  return {
+    ...defaultThemeSettings.sections.mainGroups,
+    ...mainGroups,
+    enabled: mainGroups.enabled !== false,
+    items: mergedItems.slice(0, 3) as [MainGroupItem, MainGroupItem, MainGroupItem],
+  };
+}
+
 function mergeHeroSideBanner(value: unknown, index: number): HeroSideBanner {
   const banner = isObject(value) ? value : {};
 
@@ -716,6 +772,9 @@ function mergeSettings(settings: unknown): ThemeSettings {
     sections: {
       ...defaultThemeSettings.sections,
       ...(isObject(settings.sections) ? settings.sections : {}),
+      mainGroups: mergeMainGroupsSettings(
+        isObject(settings.sections) ? settings.sections.mainGroups : undefined,
+      ),
       customBanner: mergeCustomBannerSettings(
         isObject(settings.sections) ? settings.sections.customBanner : undefined,
       ),
