@@ -61,13 +61,29 @@ html {
 .hero-split-section {
   padding-top: 1rem;
   padding-bottom: 1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 .hero-split-layout {
-  --hero-split-gap: 1rem;
+  --hero-split-gap: 0.875rem;
   display: flex;
   flex-direction: column;
   gap: var(--hero-split-gap);
+}
+
+@media (max-width: 1023px) {
+  .hero-banner-frame-split-main {
+    aspect-ratio: 1920 / 1080;
+  }
+
+  .hero-split-side-col {
+    gap: 1rem;
+  }
+
+  .hero-banner-frame-split-side {
+    aspect-ratio: 750 / 260;
+  }
 }
 
 @media (min-width: 640px) {
@@ -82,9 +98,16 @@ html {
 }
 
 @media (min-width: 1024px) {
+  .hero-split-section {
+    padding-left: 2rem;
+    padding-right: 2rem;
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+
   .hero-split-layout {
     display: grid;
-    grid-template-columns: 2fr 3fr;
+    grid-template-columns: 3fr 7fr;
     grid-template-rows: 1fr;
     gap: var(--hero-split-gap);
     align-items: stretch;
@@ -115,6 +138,13 @@ html {
   .hero-banner-frame-split-side {
     aspect-ratio: unset;
     height: 100%;
+  }
+}
+
+@media (min-width: 1280px) {
+  .hero-split-section {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
   }
 }
 

@@ -1787,7 +1787,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
               >
                 <option value="full">عرض كامل (الوضع الحالي)</option>
-                <option value="split">مقسّم: كاروسيل 60% + بنران 40%</option>
+                <option value="split">مقسّم: كاروسيل 70% + بنران 30%</option>
               </select>
             </Field>
             <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white">
@@ -1808,21 +1808,21 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                     <td className="px-4 py-3">1920×800</td>
                   </tr>
                   <tr className="border-b border-black/5">
-                    <td className="px-4 py-3">كاروسيل — وضع split (60%)</td>
+                    <td className="px-4 py-3">كاروسيل — وضع split (70%)</td>
                     <td className="px-4 py-3">1920×800</td>
                     <td className="px-4 py-3">1920×800</td>
-                    <td className="px-4 py-3">1920×800</td>
+                    <td className="px-4 py-3">1920×1080</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3">بنر جانبي (كل واحد)</td>
-                    <td className="px-4 py-3">~800×380</td>
-                    <td className="px-4 py-3">~800×380</td>
-                    <td className="px-4 py-3">750×350</td>
+                    <td className="px-4 py-3">ارتفاع تلقائي</td>
+                    <td className="px-4 py-3">ارتفاع تلقائي</td>
+                    <td className="px-4 py-3">~750×260</td>
                   </tr>
                 </tbody>
               </table>
               <p className="border-t border-black/10 px-4 py-3 text-xs leading-6 text-zinc-500">
-                صورة واحدة 1920×800 تكفي لكل الأجهزة (موبايل، تابلت، لاب). حقول tablet/mobile اختيارية بنفس المقاس.
+                صورة كاروسيل 1920×800 للديسكتوب. على الموبايل في وضع split يُعرض الكاروسيل بنسبة 1920×1080.
                 في وضع split: ارتفاع البنرين الجانبيين يتناسب مع ارتفاع الكاروسيل تلقائياً على الديسكتوب.
                 في وضع split لا يظهر النص فوق البنر — ضع النص داخل الصورة.
                 الفيديو: MP4 أو WebM، مدة قصيرة 5–15 ثانية، بدون صوت.
@@ -1832,7 +1832,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             {settings.hero.layoutMode === "split" ? (
               <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
                 <div>
-                  <h3 className="text-lg font-bold text-zinc-950">البنران الجانبيان (40% يسار)</h3>
+                  <h3 className="text-lg font-bold text-zinc-950">البنران الجانبيان (30% يسار)</h3>
                   <p className="mt-1 text-sm text-zinc-500">يظهران فقط عند رفع صورة لكل بنر على الأقل.</p>
                 </div>
                 {settings.hero.sideBanners.map((banner, bannerIndex) => (
@@ -1859,7 +1859,7 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                       label={`صورة البنر الجانبي ${bannerIndex + 1}`}
                       value={banner.image}
                       purpose={`hero-side-${banner.id}`}
-                      recommendation="~800x380px desktop (ارتفاع تلقائي) | 750x350px mobile"
+                      recommendation="ارتفاع تلقائي desktop | ~700x320px mobile"
                       aspectRatio="8:5"
                       onUploaded={(url) =>
                         setSettings({

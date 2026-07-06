@@ -20,7 +20,7 @@ function HeroSideBannerCard({ banner, alt }: { banner: HeroSideBanner; alt: stri
 
   const image = (
     <div className="relative h-full w-full bg-zinc-900">
-      <Image src={banner.image} alt={alt} fill sizes="(max-width: 1023px) 100vw, 40vw" className="object-cover" unoptimized />
+      <Image src={banner.image} alt={alt} fill sizes="(max-width: 1023px) 100vw, 30vw" className="object-cover" unoptimized />
     </div>
   );
 
@@ -250,7 +250,7 @@ export function HeroSection({ hero, slides, sectionContainerClass, paddingStyle 
   }
 
   return (
-    <section className="hero-split-section relative overflow-hidden bg-white px-4 sm:px-5 lg:px-6" style={paddingStyle}>
+    <section className="hero-split-section relative overflow-hidden bg-white" style={paddingStyle}>
       <div className="hero-split-layout" dir="ltr">
         <div
           className={`hero-split-main hero-banner-radius relative bg-zinc-900 ${
@@ -262,7 +262,7 @@ export function HeroSection({ hero, slides, sectionContainerClass, paddingStyle 
               slides={slides}
               alt={hero.title}
               intervalSeconds={hero.carouselIntervalSeconds}
-              sizes="(max-width: 1023px) 100vw, 60vw"
+              sizes="(max-width: 1023px) 100vw, 70vw"
               hideNavArrows
             />
           ) : null}
