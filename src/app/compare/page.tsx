@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { ProductCompareTable } from "@/components/product-compare-table";
 import { useProductLists } from "@/components/product-lists-provider";
+import { orderProductsByIds } from "@/lib/compare-utils";
 import type { Product } from "@/lib/types";
 
 export default function ComparePage() {
@@ -30,8 +31,9 @@ export default function ComparePage() {
           signal: controller.signal,
         });
         const payload = (await response.json()) as { products?: Product[] };
+        const orderedIds = compareList.map((entry) => entry.id);
 
-        setProducts(payload.products || []);
+        setProducts(orderProductsByIds(payload.products || [], orderedIds));
       } catch {
         if (!controller.signal.aborted) {
           setProducts([]);

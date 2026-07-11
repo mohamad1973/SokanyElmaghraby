@@ -6,6 +6,7 @@ import { ProductImageGallery } from "@/components/product-image-gallery";
 import { ProductCard } from "@/components/product-card";
 import { ProductPageActions } from "@/components/product-page-actions";
 import { ProductRichDescription } from "@/components/product-rich-description";
+import { ProductSpecRow } from "@/components/product-spec-row";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { getProductCodeLabel, getProductDisplayCode } from "@/lib/product-display-code";
 import { productToListEntry } from "@/lib/product-lists";
@@ -138,18 +139,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <p className="text-sm font-bold text-zinc-950">
                 <VisualEditableText textKey="product.specifications">المواصفات</VisualEditableText>
               </p>
-              {Object.entries(product.attributes).map(([key, value]) => (
-                <div key={key} className="flex justify-between gap-4 border-b border-black/5 py-3 text-sm">
-                  <span className="font-bold text-zinc-500">{key}</span>
-                  <span className="font-bold text-zinc-950">{value}</span>
-                </div>
+              {Object.entries(product.attributes).map(([key, value], index) => (
+                <ProductSpecRow key={key} label={key} value={value} striped={index % 2 === 1} />
               ))}
-              <div className="flex justify-between gap-4 py-3 text-sm">
-                <span className="font-bold text-zinc-500">
-                  <VisualEditableText textKey="product.skuLabel">{codeLabel}</VisualEditableText>
-                </span>
-                <span className="font-bold text-zinc-950">{displayCode}</span>
-              </div>
+              <ProductSpecRow
+                label={<VisualEditableText textKey="product.skuLabel">{codeLabel}</VisualEditableText>}
+                value={displayCode}
+                striped={Object.keys(product.attributes).length % 2 === 1}
+              />
             </div>
           </div>
         </div>

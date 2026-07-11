@@ -17,53 +17,92 @@ type ProductCompareTableProps = {
 export function ProductCompareTable({ products }: ProductCompareTableProps) {
   const { removeFromCompare } = useProductLists();
   const rows = buildCompareMatrix(products);
+  const productCount = products.length;
+  const attributeColumnWidth = "minmax(9rem, 12rem)";
+  const productColumnWidth = "minmax(10rem, 1fr)";
+  const gridTemplateColumns = `${attributeColumnWidth} ${Array(productCount).fill(productColumnWidth).join(" ")}`;
 
   return (
-    <div className="overflow-x-auto rounded-[2rem] border border-black/10 bg-white shadow-sm" dir="rtl">
-      <table className="min-w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-black/10">
-            <th className="sticky right-0 z-20 min-w-36 bg-zinc-50 px-4 py-5 text-right font-bold text-zinc-700">
-              الخاصية
-            </th>
-            {products.map((product) => (
-              <th key={product.id} className="min-w-52 px-4 py-5 text-center align-top">
-                <div className="mx-auto flex max-w-56 flex-col items-center gap-3">
-                  <Link href={`/product/${product.slug}`} className="relative block h-32 w-32 overflow-hidden rounded-2xl bg-zinc-50">
-                    <Image src={product.image} alt={product.name} fill sizes="128px" className="object-contain p-2" />
-                  </Link>
-                  <Link href={`/product/${product.slug}`} className="line-clamp-2 text-sm font-bold text-zinc-950 hover:text-black">
-                    {product.name}
-                  </Link>
-                  <p className="text-base font-bold text-zinc-950">{product.price} ج.م</p>
-                  <ProductActionButtons entry={productToListEntry(product)} size="sm" />
-                  <button
-                    type="button"
-                    onClick={() => removeFromCompare(product.id)}
-                    className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-bold text-zinc-600 transition hover:border-brand-gold"
-                  >
-                    إزالة
-                  </button>
-                </div>
-              </th>
+    <div className="grid gap-6" dir="rtl">
+      <div
+        className="grid gap-4 rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm"
+        style={{ gridTemplateColumns: `repeat(${productCount}, minmax(0, 1fr))` }}
+      >
+        {products.map((product, index) => (
+          <div key={product.id} className="flex flex-col items-center gap-3 text-center">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-sm font-bold text-white">
+              {index + 1}
+            </span>
+            <Link
+              href={`/product/${product.slug}`}
+              className="relative block h-32 w-32 overflow-hidden rounded-2xl bg-zinc-50"
+            >
+              <Image src={product.image} alt={product.name} fill sizes="128px" className="object-contain p-2" />
+            </Link>
+            <Link
+              href={`/product/${product.slug}`}
+              className="line-clamp-2 min-h-12 text-sm font-bold text-zinc-950 hover:text-black"
+            >
+              {product.name}
+            </Link>
+            <p className="text-base font-bold text-zinc-950">{product.price} ج.م</p>
+            <ProductActionButtons entry={productToListEntry(product)} size="sm" />
+            <button
+              type="button"
+              onClick={() => removeFromCompare(product.id)}
+              className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-bold text-zinc-600 transition hover:border-brand-gold"
+            >
+              إزالة
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+        <p className="mb-4 text-sm font-bold text-zinc-950">المواصفات</p>
+
+        <div className="min-w-max">
+          <div
+            className="grid items-center border-b border-black/10 py-3 text-sm font-bold"
+            style={{ gridTemplateColumns }}
+          >
+            <span className="sticky right-0 z-20 bg-white px-3 text-right text-zinc-700">الخاصية</span>
+            {products.map((product, index) => (
+              <span key={`header-${product.id}`} className="px-3 text-center text-zinc-500">
+                منتج {index + 1}
+              </span>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.attribute} className="border-b border-black/5">
-              <th className="sticky right-0 z-10 bg-zinc-50 px-4 py-4 text-right font-bold text-zinc-600">
+          </div>
+
+          {rows.map((row, rowIndex) => (
+            <div
+              key={row.attribute}
+              className={[
+                "grid items-center border-b border-black/5 py-3 text-sm",
+                rowIndex % 2 === 0 ? "bg-white" : "bg-zinc-50",
+              ].join(" ")}
+              style={{ gridTemplateColumns }}
+            >
+              <span
+                className={[
+                  "sticky right-0 z-10 px-3 text-right font-bold text-zinc-500",
+                  rowIndex % 2 === 0 ? "bg-white" : "bg-zinc-50",
+                ].join(" ")}
+              >
                 {row.attribute}
-              </th>
+              </span>
               {row.values.map((value, index) => (
-                <td key={`${row.attribute}-${products[index]?.id || index}`} className="px-4 py-4 text-center font-bold text-zinc-950">
+                <span
+                  key={`${row.attribute}-${products[index]?.id || index}`}
+                  className="px-3 text-center font-bold text-zinc-950"
+                >
                   {value}
-                </td>
+                </span>
               ))}
-            </tr>
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
     </div>
   );
 }
