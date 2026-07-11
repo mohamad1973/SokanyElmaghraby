@@ -11,7 +11,8 @@ import {
 } from "react";
 
 import {
-  COMPARE_MAX,
+  COMPARE_MAX_DESKTOP,
+  COMPARE_MAX_MOBILE,
   COMPARE_STORAGE_KEY,
   mergeWishlistEntries,
   parseStoredEntries,
@@ -21,9 +22,28 @@ import {
 
 import { CompareReplaceModal } from "./compare-replace-modal";
 
+function useCompareMax() {
+  const [compareMax, setCompareMax] = useState(COMPARE_MAX_DESKTOP);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const updateCompareMax = () => {
+      setCompareMax(mediaQuery.matches ? COMPARE_MAX_DESKTOP : COMPARE_MAX_MOBILE);
+    };
+
+    updateCompareMax();
+    mediaQuery.addEventListener("change", updateCompareMax);
+
+    return () => mediaQuery.removeEventListener("change", updateCompareMax);
+  }, []);
+
+  return compareMax;
+}
+
 type ProductListsContextValue = {
   wishlist: ProductListEntry[];
   compareList: ProductListEntry[];
+  compareMax: number;
   isWishlisted: (productId: number) => boolean;
   isInCompare: (productId: number) => boolean;
   getCompareOrder: (productId: number) => number | null;
@@ -66,6 +86,7 @@ async function saveServerWishlist(entries: ProductListEntry[]) {
 }
 
 export function ProductListsProvider({ children }: { children: ReactNode }) {
+  const compareMax = useCompareMax();
   const [wishlist, setWishlist] = useState<ProductListEntry[]>([]);
   const [compareList, setCompareList] = useState<ProductListEntry[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -170,27 +191,31 @@ export function ProductListsProvider({ children }: { children: ReactNode }) {
     setPendingReplaceEntry(null);
   }, []);
 
-  const toggleCompare = useCallback((entry: ProductListEntry) => {
-    setCompareList((currentCompareList) => {
-      const exists = currentCompareList.some((item) => item.id === entry.id);
+  const toggleCompare = useCallback(
+    (entry: ProductListEntry) => {
+      setCompareList((currentCompareList) => {
+        const exists = currentCompareList.some((item) => item.id === entry.id);
 
-      if (exists) {
-        return currentCompareList.filter((item) => item.id !== entry.id);
-      }
+        if (exists) {
+          return currentCompareList.filter((item) => item.id !== entry.id);
+        }
 
-      if (currentCompareList.length >= COMPARE_MAX) {
-        setPendingReplaceEntry(entry);
-        return currentCompareList;
-      }
+        if (currentCompareList.length >= compareMax) {
+          setPendingReplaceEntry(entry);
+          return currentCompareList;
+        }
 
-      return [...currentCompareList, entry];
-    });
-  }, []);
+        return [...currentCompareList, entry];
+      });
+    },
+    [compareMax],
+  );
 
   const value = useMemo(
     () => ({
       wishlist,
       compareList,
+      compareMax,
       isWishlisted,
       isInCompare,
       getCompareOrder,
@@ -204,6 +229,7 @@ export function ProductListsProvider({ children }: { children: ReactNode }) {
     [
       wishlist,
       compareList,
+      compareMax,
       isWishlisted,
       isInCompare,
       getCompareOrder,

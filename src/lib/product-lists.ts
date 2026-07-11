@@ -1,6 +1,8 @@
 import type { Product } from "@/lib/types";
 
-export const COMPARE_MAX = 4;
+export const COMPARE_MAX_MOBILE = 2;
+export const COMPARE_MAX_DESKTOP = 4;
+export const COMPARE_MAX = COMPARE_MAX_DESKTOP;
 export const WISHLIST_STORAGE_KEY = "sokany-wishlist";
 export const COMPARE_STORAGE_KEY = "sokany-compare";
 

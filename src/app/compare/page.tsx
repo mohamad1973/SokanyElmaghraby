@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { ProductCompareTable } from "@/components/product-compare-table";
@@ -9,12 +9,16 @@ import { orderProductsByIds } from "@/lib/compare-utils";
 import type { Product } from "@/lib/types";
 
 export default function ComparePage() {
-  const { compareList } = useProductLists();
+  const { compareList, compareMax } = useProductLists();
+  const visibleCompareList = useMemo(
+    () => compareList.slice(0, compareMax),
+    [compareList, compareMax],
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (compareList.length < 2) {
+    if (visibleCompareList.length < 2) {
       setProducts([]);
       return;
     }
@@ -25,13 +29,13 @@ export default function ComparePage() {
       setIsLoading(true);
 
       try {
-        const ids = compareList.map((entry) => entry.id).join(",");
+        const ids = visibleCompareList.map((entry) => entry.id).join(",");
         const response = await fetch(`/api/products/compare?ids=${ids}`, {
           cache: "no-store",
           signal: controller.signal,
         });
         const payload = (await response.json()) as { products?: Product[] };
-        const orderedIds = compareList.map((entry) => entry.id);
+        const orderedIds = visibleCompareList.map((entry) => entry.id);
 
         setProducts(orderProductsByIds(payload.products || [], orderedIds));
       } catch {
@@ -48,7 +52,7 @@ export default function ComparePage() {
     void loadProducts();
 
     return () => controller.abort();
-  }, [compareList]);
+  }, [visibleCompareList]);
 
   return (
     <div className="py-12" dir="rtl">
@@ -57,7 +61,7 @@ export default function ComparePage() {
           <p className="text-sm font-bold text-brand-gold">مقارنة المنتجات</p>
           <h1 className="mt-2 text-3xl font-bold text-zinc-950 sm:text-4xl">قارن بين المنتجات</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-600">
-            اختر حتى 4 منتجات من كروت المنتجات أو صفحة المنتج، ثم قارن المواصفات جنباً إلى جنب.
+            اختر منتجات من كروت المنتجات أو صفحة المنتج، ثم قارن المواصفات جنباً إلى جنب.
           </p>
         </div>
 

@@ -24,9 +24,7 @@ export function HeaderCompareLink() {
     >
       <CompareIcon className="h-5 w-5" />
       {compareList.length ? (
-        <span className="absolute -left-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-black px-1 text-[10px] font-bold text-white">
-          {compareList.length}
-        </span>
+        <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-black" />
       ) : null}
     </Link>
   );

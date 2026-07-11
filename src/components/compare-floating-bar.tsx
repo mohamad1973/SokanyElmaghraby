@@ -22,9 +22,6 @@ export function CompareFloatingBar() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold text-zinc-950">قائمة المقارنة</p>
-          <p className="text-xs font-semibold text-zinc-500">
-            {compareList.length} / 4 منتجات
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

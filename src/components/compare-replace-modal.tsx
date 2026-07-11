@@ -28,7 +28,7 @@ export function CompareReplaceModal({
       <div className="w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl">
         <h2 className="text-xl font-bold text-zinc-950">استبدال منتج في المقارنة</h2>
         <p className="mt-2 text-sm leading-7 text-zinc-600">
-          يمكنك مقارنة 4 منتجات كحد أقصى. اختر المنتج الذي تريد استبداله بـ{" "}
+          اختر المنتج الذي تريد استبداله بـ{" "}
           <span className="font-bold text-zinc-950">{pendingEntry.name}</span>.
         </p>
 
