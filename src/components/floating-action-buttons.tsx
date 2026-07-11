@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import type { FloatingActionsSettings } from "@/lib/theme-settings";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-link";
 
-const floatingGreenChipClassName =
-  "flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition duration-300 hover:scale-105 hover:bg-[#20bd5a] hover:shadow-[0_0_14px_rgba(37,211,102,0.4)]";
+const floatingSiteChipClassName =
+  "flex items-center justify-center rounded-full bg-brand-gold text-black shadow-lg transition duration-300 hover:translate-x-1 hover:bg-brand-gold-dark";
 
 function ScrollTopIcon() {
   return (
@@ -59,7 +59,7 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
           type="button"
           aria-label="الصعود إلى أعلى الصفحة"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className={`${floatingGreenChipClassName} h-12 w-12`}
+          className={`${floatingSiteChipClassName} h-12 w-12`}
         >
           <ScrollTopIcon />
         </button>
@@ -71,7 +71,7 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
           target="_blank"
           rel="noopener noreferrer"
           aria-label="تواصل عبر واتساب"
-          className={`${floatingGreenChipClassName} h-14 w-14`}
+          className={`${floatingSiteChipClassName} h-14 w-14`}
         >
           <WhatsAppIcon />
         </a>
