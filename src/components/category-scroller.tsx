@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import type { Category } from "@/lib/types";
 
@@ -11,95 +11,120 @@ type CategoryScrollerProps = {
   fullWidth?: boolean;
 };
 
+const CAROUSEL_INTERVAL_MS = 3000;
+const CAROUSEL_TRANSITION_MS = 600;
+
+function CategoryCard({ category }: { category: Category }) {
+  return (
+    <Link
+      href={`/shop?category=${category.slug}`}
+      dir="rtl"
+      data-category-card
+      className="category-carousel-item group flex w-[35vw] shrink-0 flex-col items-center text-center sm:w-[22vw] lg:w-48"
+    >
+      <span className="relative block aspect-square w-full overflow-hidden rounded-full border border-black/10 bg-white shadow-sm transition group-hover:-translate-y-1 group-hover:shadow-xl">
+        <Image
+          src={category.image || "/product-placeholder.svg"}
+          alt={category.name}
+          fill
+          sizes="(min-width: 1024px) 12rem, (min-width: 640px) 22vw, 35vw"
+          className="object-cover transition duration-500 group-hover:scale-105"
+          unoptimized
+        />
+      </span>
+      <span className="mt-3 line-clamp-2 min-h-10 text-xs font-bold leading-5 text-zinc-950 lg:text-sm">
+        {category.name}
+      </span>
+    </Link>
+  );
+}
+
 export function CategoryScroller({ categories, fullWidth = false }: CategoryScrollerProps) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const activeIndexRef = useRef(0);
-  const [visibleCount, setVisibleCount] = useState(() => Math.min(categories.length, 4));
-  const safeVisibleCount = Math.max(1, visibleCount);
-  const itemBasis = `calc((100% - (${safeVisibleCount} - 1) * 1rem) / ${safeVisibleCount})`;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const stepWidthRef = useRef(0);
+  const positionIndexRef = useRef(0);
+  const loopItemsRef = useRef(categories.length);
 
   useEffect(() => {
-    function updateVisibleCount() {
-      if (window.matchMedia("(min-width: 1024px)").matches) {
-        setVisibleCount(Math.min(categories.length, 10));
-        return;
-      }
+    loopItemsRef.current = categories.length;
+    positionIndexRef.current = 0;
 
-      if (window.matchMedia("(min-width: 640px)").matches) {
-        setVisibleCount(Math.min(categories.length, 6));
-        return;
-      }
+    const track = trackRef.current;
 
-      setVisibleCount(Math.min(categories.length, 4));
+    if (track) {
+      track.style.transition = "none";
+      track.style.transform = "translateX(0)";
     }
-
-    updateVisibleCount();
-    window.addEventListener("resize", updateVisibleCount);
-
-    return () => window.removeEventListener("resize", updateVisibleCount);
   }, [categories.length]);
 
   useEffect(() => {
-    activeIndexRef.current = 0;
-    scrollerRef.current?.scrollTo({ left: 0, behavior: "auto" });
-  }, [visibleCount]);
+    function measureStep() {
+      const track = trackRef.current;
+      const firstCard = track?.querySelector("[data-category-card]") as HTMLElement | null;
+
+      if (!firstCard || !track) {
+        return;
+      }
+
+      const trackStyles = window.getComputedStyle(track);
+      const gap = Number.parseFloat(trackStyles.columnGap || trackStyles.gap || "0") || 0;
+      stepWidthRef.current = firstCard.offsetWidth + gap;
+    }
+
+    measureStep();
+    window.addEventListener("resize", measureStep);
+
+    return () => window.removeEventListener("resize", measureStep);
+  }, [categories.length]);
 
   useEffect(() => {
-    const scroller = scrollerRef.current;
-
-    if (!scroller || categories.length <= visibleCount) {
+    if (categories.length <= 1) {
       return;
     }
 
     const interval = window.setInterval(() => {
-      activeIndexRef.current =
-        activeIndexRef.current >= categories.length - visibleCount ? 0 : activeIndexRef.current + 1;
-      const targetItem = scroller.children[activeIndexRef.current] as HTMLElement | undefined;
+      const track = trackRef.current;
+      const stepWidth = stepWidthRef.current;
+      const loopItems = loopItemsRef.current;
 
-      if (targetItem) {
-        scroller.scrollTo({
-          left: targetItem.offsetLeft,
-          behavior: "smooth",
-        });
+      if (!track || !stepWidth || !loopItems) {
+        return;
       }
-    }, 3000);
+
+      positionIndexRef.current += 1;
+      const offset = positionIndexRef.current * stepWidth;
+
+      track.style.transition = `transform ${CAROUSEL_TRANSITION_MS}ms ease`;
+      track.style.transform = `translateX(${offset}px)`;
+
+      if (positionIndexRef.current >= loopItems) {
+        window.setTimeout(() => {
+          positionIndexRef.current = 0;
+          track.style.transition = "none";
+          track.style.transform = "translateX(0)";
+        }, CAROUSEL_TRANSITION_MS);
+      }
+    }, CAROUSEL_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [categories.length, visibleCount]);
+  }, [categories.length]);
 
   if (!categories.length) {
     return null;
   }
 
+  const duplicatedCategories = [...categories, ...categories];
+
   return (
     <div
-      ref={scrollerRef}
-      dir="rtl"
-      className={`flex w-full snap-x gap-4 overflow-x-auto scroll-smooth pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fullWidth ? "" : "px-4 sm:px-6 lg:px-8"}`}
+      dir="ltr"
+      className={`category-carousel-viewport w-full overflow-hidden pb-4 ${fullWidth ? "" : "px-4 sm:px-6 lg:px-8"}`}
     >
-      {categories.map((category) => (
-        <Link
-          key={category.id}
-          href={`/shop?category=${category.slug}`}
-          dir="rtl"
-          className="group flex shrink-0 snap-start flex-col items-center text-center"
-          style={{ flexBasis: itemBasis }}
-        >
-          <span className="relative block aspect-square w-full overflow-hidden rounded-full border border-black/10 bg-white shadow-sm transition group-hover:-translate-y-1 group-hover:shadow-xl">
-            <Image
-              src={category.image || "/product-placeholder.svg"}
-              alt={category.name}
-              fill
-              sizes={`(min-width: 1024px) ${Math.ceil(100 / safeVisibleCount)}vw, (min-width: 640px) 17vw, 25vw`}
-              className="object-cover transition duration-500 group-hover:scale-105"
-              unoptimized
-            />
-          </span>
-          <span className="mt-3 line-clamp-2 min-h-10 text-xs font-bold leading-5 text-zinc-950 lg:text-sm">
-            {category.name}
-          </span>
-        </Link>
-      ))}
+      <div ref={trackRef} className="flex w-max gap-4 will-change-transform">
+        {duplicatedCategories.map((category, index) => (
+          <CategoryCard key={`${category.id}-${index}`} category={category} />
+        ))}
+      </div>
     </div>
   );
 }
