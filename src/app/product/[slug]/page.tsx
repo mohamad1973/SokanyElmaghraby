@@ -11,7 +11,7 @@ import { VisualEditableText } from "@/components/visual-editable-text";
 import { getProductCodeLabel, getProductDisplayCode } from "@/lib/product-display-code";
 import { productToListEntry } from "@/lib/product-lists";
 import { getThemeSettings } from "@/lib/theme-settings";
-import { getProductBySlug, getProducts } from "@/lib/woocommerce";
+import { getProductBySlug, getRelatedProducts } from "@/lib/woocommerce";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -40,15 +40,16 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const [product, relatedProducts, settings] = await Promise.all([
-    getProductBySlug(slug),
-    getProducts(4),
-    getThemeSettings(),
-  ]);
+  const product = await getProductBySlug(slug);
 
   if (!product) {
     notFound();
   }
+
+  const [relatedProducts, settings] = await Promise.all([
+    getRelatedProducts(product),
+    getThemeSettings(),
+  ]);
 
   const codeMode = settings.productCard.codeMode;
   const displayCode = getProductDisplayCode(product, codeMode);
@@ -158,12 +159,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <VisualEditableText textKey="product.relatedProducts">منتجات مشابهة</VisualEditableText>
           </h2>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {relatedProducts
-              .filter((related) => related.slug !== product.slug)
-              .slice(0, 4)
-              .map((related) => (
-                <ProductCard key={related.id} product={related} />
-              ))}
+            {relatedProducts.map((related) => (
+              <ProductCard key={related.id} product={related} />
+            ))}
           </div>
         </section>
       </div>

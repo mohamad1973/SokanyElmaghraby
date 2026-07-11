@@ -42,6 +42,7 @@ export const products: Product[] = [
     salePrice: "2,650",
     image: "/product-placeholder.svg",
     category: "أجهزة المطبخ",
+    categorySlug: "kitchen-supplies",
     shortDescription:
       "فرن عملي للعائلة بقدرة قوية وتصميم مناسب للاستخدام اليومي.",
     description:
@@ -65,6 +66,7 @@ export const products: Product[] = [
     salePrice: "780",
     image: "/product-placeholder.svg",
     category: "أجهزة المطبخ",
+    categorySlug: "kitchen-supplies",
     shortDescription:
       "غلاية زجاج سريعة الغليان بتصميم أنيق وسعة مناسبة للاستخدام اليومي.",
     description:
@@ -88,6 +90,7 @@ export const products: Product[] = [
     salePrice: "1,150",
     image: "/product-placeholder.svg",
     category: "العناية الشخصية",
+    categorySlug: "personal-care",
     shortDescription:
       "فرشة استشوار عملية لتجفيف وتصفيف الشعر بسرعة مع جراب للحفظ.",
     description:
@@ -111,6 +114,7 @@ export const products: Product[] = [
     salePrice: "2,250",
     image: "/product-placeholder.svg",
     category: "أجهزة منزلية",
+    categorySlug: "home-appliances",
     shortDescription:
       "تنظيف بالبخار للأرضيات والأسطح مع قدرة عالية للاستخدام المنزلي.",
     description:
@@ -132,6 +136,7 @@ export const products: Product[] = [
     price: "980",
     image: "/product-placeholder.svg",
     category: "العناية الشخصية",
+    categorySlug: "personal-care",
     shortDescription:
       "ماكينة عناية ديجيتال بتصميم عملي وشحن مناسب للاستخدام المتكرر.",
     description:
@@ -152,6 +157,7 @@ export const products: Product[] = [
     price: "3,750",
     image: "/product-placeholder.svg",
     category: "أجهزة منزلية",
+    categorySlug: "home-appliances",
     shortDescription:
       "حل قوي لتنظيف بقع السجاد والانتريه داخل البيت بسهولة.",
     description:

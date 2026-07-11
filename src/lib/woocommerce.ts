@@ -148,6 +148,7 @@ function mapProduct(product: WooProduct): Product {
     image: images[0] || "/product-placeholder.svg",
     images,
     category: product.categories?.[0]?.name || "منتجات سوكاني",
+    categorySlug: product.categories?.[0]?.slug,
     shortDescription:
       stripHtml(product.short_description) || "منتج أصلي من سوكاني بضمان مؤسسة المغربي.",
     shortDescriptionHtml: product.short_description || "",
@@ -202,6 +203,7 @@ function mapStoreProduct(product: StoreApiProduct): Product {
     image: images[0] || "/product-placeholder.svg",
     images,
     category: product.categories?.[0]?.name || "منتجات سوكاني",
+    categorySlug: product.categories?.[0]?.slug,
     shortDescription:
       stripHtml(product.short_description) || "منتج أصلي من سوكاني بضمان مؤسسة المغربي.",
     shortDescriptionHtml: product.short_description || "",
@@ -413,6 +415,24 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   }
 
   return fallbackProducts.find((product) => product.slug === slug) || null;
+}
+
+export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
+  const categoryProducts = product.categorySlug
+    ? await getProducts(limit + 1, product.categorySlug)
+    : await getProducts(limit + 1);
+
+  const related = categoryProducts.filter((item) => item.id !== product.id).slice(0, limit);
+
+  if (related.length >= limit || !product.categorySlug) {
+    return related;
+  }
+
+  const supplemental = (await getProducts(limit + 1))
+    .filter((item) => item.id !== product.id && !related.some((existing) => existing.id === item.id))
+    .slice(0, limit - related.length);
+
+  return [...related, ...supplemental];
 }
 
 export async function getProductsByIds(ids: number[]): Promise<Product[]> {
