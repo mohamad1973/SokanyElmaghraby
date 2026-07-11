@@ -54,7 +54,7 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
           target="_blank"
           rel="noopener noreferrer"
           aria-label="تواصل عبر واتساب"
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition hover:scale-105 hover:bg-[#20bd5a]"
+          className="flex h-14 w-14 items-center justify-center rounded-full border border-brand-gold/40 bg-brand-gold/20 text-zinc-950 shadow-lg transition duration-300 hover:scale-105 hover:border-brand-gold/70 hover:shadow-[0_0_14px_rgba(218,255,0,0.35)]"
         >
           <WhatsAppIcon />
         </a>

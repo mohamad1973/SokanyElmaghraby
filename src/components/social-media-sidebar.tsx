@@ -65,7 +65,7 @@ export function SocialMediaSidebar({ settings }: { settings: SocialMediaSettings
             target="_blank"
             rel="noopener noreferrer"
             aria-label={link.label}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[#181818] text-white transition hover:border-brand-gold hover:text-brand-gold"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-brand-gold/40 bg-brand-gold/20 text-zinc-950 transition duration-300 hover:scale-105 hover:border-brand-gold/70 hover:shadow-[0_0_14px_rgba(218,255,0,0.35)]"
           >
             <Icon />
           </a>
