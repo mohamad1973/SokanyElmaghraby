@@ -14,6 +14,57 @@ function stripHtml(value = "") {
 
 const ignoredLabels = new Set(["المواصفات", "الخاصية", "تفاصيل ومواصفات المنتج", "المواصفات الفنية"]);
 
+const knownLabelPatterns = [
+  /^النوع$/i,
+  /^القدرة(?:\s+الكهربائية)?$/i,
+  /^السعة$/i,
+  /^عدد\s+القطع$/i,
+  /^الاستخدامات$/i,
+  /^الحرارة$/i,
+  /^درجة\s+الحرارة$/i,
+  /^السرعات$/i,
+  /^المستويات$/i,
+  /^المميزات$/i,
+  /^الضمان$/i,
+  /^الخامة$/i,
+  /^اللون$/i,
+  /^التشغيل$/i,
+  /^الملحقات$/i,
+  /^الشفرات$/i,
+  /^الموديل$/i,
+  /^الوزن$/i,
+  /^الأبعاد$/i,
+];
+
+function isLikelyLabel(text: string): boolean {
+  const normalized = text.trim();
+
+  if (!normalized || normalized.length > 48) {
+    return false;
+  }
+
+  return knownLabelPatterns.some((pattern) => pattern.test(normalized));
+}
+
+function detectLabelAndValue(first: string, second: string): { label: string; value: string } {
+  const firstIsLabel = isLikelyLabel(first);
+  const secondIsLabel = isLikelyLabel(second);
+
+  if (firstIsLabel && !secondIsLabel) {
+    return { label: first, value: second };
+  }
+
+  if (secondIsLabel && !firstIsLabel) {
+    return { label: second, value: first };
+  }
+
+  if (first.length <= second.length) {
+    return { label: first, value: second };
+  }
+
+  return { label: second, value: first };
+}
+
 function extractTableBlocks(html: string): string[] {
   const tables: string[] = [];
   const tablePattern = /<table[\s\S]*?<\/table>/gi;
@@ -69,18 +120,22 @@ function parseRowToSpec(rowHtml: string): { label: string; value: string } | nul
 
   if (thCells.length && tdCells.length) {
     return {
-      label: thCells[thCells.length - 1].text,
+      label: thCells.map((cell) => cell.text).join(" "),
       value: tdCells.map((cell) => cell.text).join(" "),
     };
   }
 
-  return {
-    label: cells[cells.length - 1].text,
-    value: cells
-      .slice(0, -1)
-      .map((cell) => cell.text)
-      .join(" "),
-  };
+  if (cells.length === 2) {
+    return detectLabelAndValue(cells[0].text, cells[1].text);
+  }
+
+  const first = cells[0].text;
+  const rest = cells
+    .slice(1)
+    .map((cell) => cell.text)
+    .join(" ");
+
+  return detectLabelAndValue(first, rest);
 }
 
 export function parseSpecsFromDescriptionHtml(html: string): Record<string, string> {
