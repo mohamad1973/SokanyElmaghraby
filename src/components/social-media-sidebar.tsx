@@ -53,11 +53,17 @@ export function SocialMediaSidebar({ settings }: { settings: SocialMediaSettings
   }
 
   const iconSize = widgetButtonIconSize(settings.buttonStyle);
+  const sidebarPlacement = settings.desktopSidebarPlacement;
 
   return (
     <aside
       dir="ltr"
-      className="fixed left-3 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-2.5 sm:left-4 sm:gap-3 lg:flex"
+      className="fixed z-40 hidden flex-col gap-2.5 sm:gap-3 lg:flex"
+      style={{
+        left: sidebarPlacement.inset,
+        top: `${sidebarPlacement.topPercent}%`,
+        transform: "translateY(-50%)",
+      }}
       aria-label="روابط السوشيال ميديا"
     >
       {links.map((link) => {

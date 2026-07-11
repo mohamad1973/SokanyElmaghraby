@@ -11,6 +11,7 @@ import type {
   HomeSectionOrderItem,
   HomeSectionStyle,
   MenuItem,
+  ResponsiveWidgetPlacement,
   ThemeSettings,
   WidgetButtonStyle,
 } from "@/lib/theme-settings";
@@ -218,6 +219,77 @@ function WidgetButtonStyleFields({
           className={`${inputClassName} disabled:cursor-not-allowed disabled:bg-zinc-100`}
         />
       </Field>
+    </div>
+  );
+}
+
+function ResponsiveWidgetPlacementFields({
+  title,
+  placement,
+  onChange,
+  insetLabel,
+}: {
+  title: string;
+  placement: ResponsiveWidgetPlacement;
+  onChange: (placement: ResponsiveWidgetPlacement) => void;
+  insetLabel: string;
+}) {
+  const inputClassName = "rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold";
+
+  const updateDevice = (
+    device: "desktop" | "mobile",
+    key: "bottom" | "inset",
+    value: number,
+  ) => {
+    onChange({
+      ...placement,
+      [device]: {
+        ...placement[device],
+        [key]: value,
+      },
+    });
+  };
+
+  return (
+    <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:grid-cols-2">
+      <div className="lg:col-span-2">
+        <h3 className="text-base font-bold text-zinc-950">{title}</h3>
+        <p className="mt-1 text-sm leading-6 text-zinc-500">
+          يمكن ضبط كل زر مستقلاً، أو استخدام نفس القيم لتحريك الأزرار معاً.
+        </p>
+      </div>
+
+      {[
+        ["desktop", "ديسكتوب"],
+        ["mobile", "موبايل"],
+      ].map(([device, label]) => (
+        <div key={device} className="grid gap-4 rounded-xl bg-white p-4 lg:col-span-2 lg:grid-cols-2">
+          <Field label={`المسافة من الأسفل — ${label} (px)`}>
+            <input
+              type="number"
+              min={0}
+              max={300}
+              value={placement[device as "desktop" | "mobile"].bottom}
+              onChange={(event) =>
+                updateDevice(device as "desktop" | "mobile", "bottom", Number(event.target.value))
+              }
+              className={inputClassName}
+            />
+          </Field>
+          <Field label={`${insetLabel} — ${label} (px)`}>
+            <input
+              type="number"
+              min={0}
+              max={300}
+              value={placement[device as "desktop" | "mobile"].inset}
+              onChange={(event) =>
+                updateDevice(device as "desktop" | "mobile", "inset", Number(event.target.value))
+              }
+              className={inputClassName}
+            />
+          </Field>
+        </div>
+      ))}
     </div>
   );
 }
@@ -2092,6 +2164,87 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 </div>
               ))}
             </article>
+            <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-950">تسوق حسب التصنيف</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    التحكم في عدد التصنيفات الظاهرة وسرعة تحريك الكاروسيل على الشاشات المختلفة.
+                  </p>
+                </div>
+                <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={settings.sections.categories.enabled}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        sections: {
+                          ...settings.sections,
+                          categories: {
+                            ...settings.sections.categories,
+                            enabled: event.target.checked,
+                          },
+                        },
+                      })
+                    }
+                  />
+                  تفعيل السكشن
+                </label>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                {[
+                  ["desktopVisibleCount", "عدد التصنيفات — ديسكتوب", 1, 20],
+                  ["tabletVisibleCount", "عدد التصنيفات — تابلت", 1, 12],
+                  ["mobileVisibleCount", "عدد التصنيفات — موبايل", 1, 8],
+                ].map(([key, label, min, max]) => (
+                  <Field key={String(key)} label={String(label)}>
+                    <input
+                      type="number"
+                      min={Number(min)}
+                      max={Number(max)}
+                      value={settings.sections.categories[key as "desktopVisibleCount" | "tabletVisibleCount" | "mobileVisibleCount"]}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          sections: {
+                            ...settings.sections,
+                            categories: {
+                              ...settings.sections.categories,
+                              [key]: Math.min(Number(max), Math.max(Number(min), Number(event.target.value) || Number(min))),
+                            },
+                          },
+                        })
+                      }
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                    />
+                  </Field>
+                ))}
+
+                <Field label="سرعة الكاروسيل (ثوانٍ)">
+                  <input
+                    type="number"
+                    min={2}
+                    max={30}
+                    value={settings.sections.categories.carouselIntervalSeconds}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        sections: {
+                          ...settings.sections,
+                          categories: {
+                            ...settings.sections.categories,
+                            carouselIntervalSeconds: Math.min(30, Math.max(2, Number(event.target.value) || 3)),
+                          },
+                        },
+                      })
+                    }
+                    className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  />
+                </Field>
+              </div>
+            </article>
             <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -2680,6 +2833,102 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             }
           />
 
+          <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:grid-cols-2">
+            <div className="lg:col-span-2">
+              <h3 className="text-base font-bold text-zinc-950">موضع شريط السوشيال على الديسكتوب</h3>
+            </div>
+            <Field label="الموضع العمودي (%)">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={settings.socialMedia.desktopSidebarPlacement.topPercent}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    socialMedia: {
+                      ...settings.socialMedia,
+                      desktopSidebarPlacement: {
+                        ...settings.socialMedia.desktopSidebarPlacement,
+                        topPercent: Math.min(100, Math.max(0, Number(event.target.value) || 50)),
+                      },
+                    },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+            <Field label="المسافة من اليسار (px)">
+              <input
+                type="number"
+                min={0}
+                max={300}
+                value={settings.socialMedia.desktopSidebarPlacement.inset}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    socialMedia: {
+                      ...settings.socialMedia,
+                      desktopSidebarPlacement: {
+                        ...settings.socialMedia.desktopSidebarPlacement,
+                        inset: Math.min(300, Math.max(0, Number(event.target.value) || 0)),
+                      },
+                    },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:grid-cols-2">
+            <div className="lg:col-span-2">
+              <h3 className="text-base font-bold text-zinc-950">موضع زر @ على الموبايل</h3>
+            </div>
+            <Field label="المسافة من الأسفل (px)">
+              <input
+                type="number"
+                min={0}
+                max={300}
+                value={settings.socialMedia.mobileLauncherPlacement.bottom}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    socialMedia: {
+                      ...settings.socialMedia,
+                      mobileLauncherPlacement: {
+                        ...settings.socialMedia.mobileLauncherPlacement,
+                        bottom: Math.min(300, Math.max(0, Number(event.target.value) || 0)),
+                      },
+                    },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+            <Field label="المسافة من اليسار (px)">
+              <input
+                type="number"
+                min={0}
+                max={300}
+                value={settings.socialMedia.mobileLauncherPlacement.inset}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    socialMedia: {
+                      ...settings.socialMedia,
+                      mobileLauncherPlacement: {
+                        ...settings.socialMedia.mobileLauncherPlacement,
+                        inset: Math.min(300, Math.max(0, Number(event.target.value) || 0)),
+                      },
+                    },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+          </div>
+
           <div className="border-t border-black/10 pt-5">
             <h2 className="text-xl font-bold text-zinc-950">الأزرار العائمة (أسفل يمين الشاشة)</h2>
             <p className="mt-2 text-sm leading-7 text-zinc-600">
@@ -2748,6 +2997,30 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               setSettings({
                 ...settings,
                 floatingActions: { ...settings.floatingActions, scrollTopStyle },
+              })
+            }
+          />
+
+          <ResponsiveWidgetPlacementFields
+            title="موضع زر واتساب"
+            placement={settings.floatingActions.whatsappPlacement}
+            insetLabel="المسافة من اليمين"
+            onChange={(whatsappPlacement) =>
+              setSettings({
+                ...settings,
+                floatingActions: { ...settings.floatingActions, whatsappPlacement },
+              })
+            }
+          />
+
+          <ResponsiveWidgetPlacementFields
+            title="موضع زر الصعود للأعلى"
+            placement={settings.floatingActions.scrollTopPlacement}
+            insetLabel="المسافة من اليمين"
+            onChange={(scrollTopPlacement) =>
+              setSettings({
+                ...settings,
+                floatingActions: { ...settings.floatingActions, scrollTopPlacement },
               })
             }
           />

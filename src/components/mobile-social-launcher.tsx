@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { SocialMediaSettings } from "@/lib/theme-settings";
+import { getWidgetPlacementStyle } from "@/lib/widget-placement";
 import { widgetButtonIconSize } from "@/lib/widget-button-style";
 
 import { WidgetActionButton } from "./widget-action-button";
@@ -70,9 +71,17 @@ export function MobileSocialLauncher({ settings }: { settings: SocialMediaSettin
 
   const socialIconSize = widgetButtonIconSize(settings.buttonStyle);
   const launcherIconSize = widgetButtonIconSize(settings.mobileLauncherStyle);
+  const launcherPlacement = {
+    bottom: settings.mobileLauncherPlacement.bottom,
+    inset: settings.mobileLauncherPlacement.inset,
+  };
 
   return (
-    <div dir="ltr" className="fixed bottom-20 left-4 z-40 flex flex-col-reverse items-center gap-2.5 lg:hidden">
+    <div
+      dir="ltr"
+      className="fixed z-40 flex flex-col-reverse items-center gap-2.5 lg:hidden"
+      style={getWidgetPlacementStyle(launcherPlacement, "left")}
+    >
       <WidgetActionButton
         style={settings.mobileLauncherStyle}
         ariaLabel={isOpen ? "إغلاق روابط السوشيال ميديا" : "فتح روابط السوشيال ميديا"}

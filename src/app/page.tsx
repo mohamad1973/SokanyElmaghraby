@@ -190,7 +190,7 @@ export default async function Home() {
     });
   }
 
-  if (settings.sections.categories && categoriesWithImages.length) {
+  if (settings.sections.categories.enabled && categoriesWithImages.length) {
     homeSections.push({
       id: "categories",
       node: (
@@ -203,7 +203,11 @@ export default async function Home() {
             description="يمكنك الوصول الى المنتج الذى تريده عن طريق الضغط على القسم الذى ينتمى اليه"
           />
         </div>
-        <CategoryScroller categories={categoriesWithImages} fullWidth={isFullWidthSection(settings, "categories")} />
+        <CategoryScroller
+          categories={categoriesWithImages}
+          fullWidth={isFullWidthSection(settings, "categories")}
+          settings={settings.sections.categories}
+        />
         </section>
       ),
     });

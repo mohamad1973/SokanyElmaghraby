@@ -5,6 +5,10 @@ import type { CSSProperties } from "react";
 import { defaultBannerSpacing, defaultSideBannerSpacing, mergeBannerSpacing, type BannerSpacing } from "./banner-spacing";
 import type { ProductCodeMode } from "./product-display-code";
 import { getPrismaClient } from "./db";
+import {
+  clampPlacement,
+  mergeResponsiveWidgetPlacement,
+} from "./widget-placement";
 
 export type { BannerSpacing };
 export { defaultBannerSpacing, defaultSideBannerSpacing, mergeBannerSpacing };
@@ -178,6 +182,34 @@ export function createDefaultWidgetButtonStyle(size: number): WidgetButtonStyle 
   };
 }
 
+export type CategoriesSectionSettings = {
+  enabled: boolean;
+  desktopVisibleCount: number;
+  tabletVisibleCount: number;
+  mobileVisibleCount: number;
+  carouselIntervalSeconds: number;
+};
+
+export type WidgetPlacement = {
+  bottom: number;
+  inset: number;
+};
+
+export type ResponsiveWidgetPlacement = {
+  desktop: WidgetPlacement;
+  mobile: WidgetPlacement;
+};
+
+export type DesktopSidebarPlacement = {
+  topPercent: number;
+  inset: number;
+};
+
+export type MobileLauncherPlacement = {
+  bottom: number;
+  inset: number;
+};
+
 export type SocialMediaSettings = {
   enabled: boolean;
   facebookUrl: string;
@@ -185,6 +217,8 @@ export type SocialMediaSettings = {
   tiktokUrl: string;
   buttonStyle: WidgetButtonStyle;
   mobileLauncherStyle: WidgetButtonStyle;
+  desktopSidebarPlacement: DesktopSidebarPlacement;
+  mobileLauncherPlacement: MobileLauncherPlacement;
 };
 
 export type FloatingActionsSettings = {
@@ -193,6 +227,8 @@ export type FloatingActionsSettings = {
   scrollTopEnabled: boolean;
   whatsappStyle: WidgetButtonStyle;
   scrollTopStyle: WidgetButtonStyle;
+  whatsappPlacement: ResponsiveWidgetPlacement;
+  scrollTopPlacement: ResponsiveWidgetPlacement;
 };
 
 export type ThemeSettings = {
@@ -261,7 +297,7 @@ export type ThemeSettings = {
   sections: {
     trustBadges: boolean;
     mainGroups: MainGroupsSectionSettings;
-    categories: boolean;
+    categories: CategoriesSectionSettings;
     bestSellers: boolean;
     competitiveBanner: boolean;
     customBanner: {
@@ -394,7 +430,13 @@ export const defaultThemeSettings: ThemeSettings = {
       enabled: true,
       items: createDefaultMainGroupItems(),
     },
-    categories: true,
+    categories: {
+      enabled: true,
+      desktopVisibleCount: 10,
+      tabletVisibleCount: 6,
+      mobileVisibleCount: 4,
+      carouselIntervalSeconds: 3,
+    },
     bestSellers: true,
     competitiveBanner: true,
     customBanner: {
@@ -420,6 +462,14 @@ export const defaultThemeSettings: ThemeSettings = {
     tiktokUrl: "",
     buttonStyle: createDefaultWidgetButtonStyle(44),
     mobileLauncherStyle: createDefaultWidgetButtonStyle(44),
+    desktopSidebarPlacement: {
+      topPercent: 50,
+      inset: 16,
+    },
+    mobileLauncherPlacement: {
+      bottom: 80,
+      inset: 16,
+    },
   },
   floatingActions: {
     whatsappEnabled: true,
@@ -427,6 +477,14 @@ export const defaultThemeSettings: ThemeSettings = {
     scrollTopEnabled: true,
     whatsappStyle: createDefaultWidgetButtonStyle(56),
     scrollTopStyle: createDefaultWidgetButtonStyle(48),
+    whatsappPlacement: {
+      desktop: { bottom: 24, inset: 24 },
+      mobile: { bottom: 96, inset: 24 },
+    },
+    scrollTopPlacement: {
+      desktop: { bottom: 92, inset: 24 },
+      mobile: { bottom: 164, inset: 24 },
+    },
   },
   productCard: {
     borderWidth: 1,
@@ -791,6 +849,82 @@ function mergeWidgetButtonStyle(value: unknown, defaultStyle: WidgetButtonStyle)
   };
 }
 
+function mergeCategoriesSettings(value: unknown): CategoriesSectionSettings {
+  if (typeof value === "boolean") {
+    return {
+      ...defaultThemeSettings.sections.categories,
+      enabled: value,
+    };
+  }
+
+  const categories = isObject(value) ? value : {};
+
+  return {
+    enabled:
+      typeof categories.enabled === "boolean"
+        ? categories.enabled
+        : defaultThemeSettings.sections.categories.enabled,
+    desktopVisibleCount:
+      typeof categories.desktopVisibleCount === "number"
+        ? Math.min(20, Math.max(1, categories.desktopVisibleCount))
+        : defaultThemeSettings.sections.categories.desktopVisibleCount,
+    tabletVisibleCount:
+      typeof categories.tabletVisibleCount === "number"
+        ? Math.min(12, Math.max(1, categories.tabletVisibleCount))
+        : defaultThemeSettings.sections.categories.tabletVisibleCount,
+    mobileVisibleCount:
+      typeof categories.mobileVisibleCount === "number"
+        ? Math.min(8, Math.max(1, categories.mobileVisibleCount))
+        : defaultThemeSettings.sections.categories.mobileVisibleCount,
+    carouselIntervalSeconds:
+      typeof categories.carouselIntervalSeconds === "number"
+        ? Math.min(30, Math.max(2, categories.carouselIntervalSeconds))
+        : defaultThemeSettings.sections.categories.carouselIntervalSeconds,
+  };
+}
+
+function mergeDesktopSidebarPlacement(value: unknown): DesktopSidebarPlacement {
+  const placement = isObject(value) ? value : {};
+
+  return {
+    topPercent: clampPlacement(
+      typeof placement.topPercent === "number"
+        ? placement.topPercent
+        : defaultThemeSettings.socialMedia.desktopSidebarPlacement.topPercent,
+      0,
+      100,
+    ),
+    inset: clampPlacement(
+      typeof placement.inset === "number"
+        ? placement.inset
+        : defaultThemeSettings.socialMedia.desktopSidebarPlacement.inset,
+      0,
+      300,
+    ),
+  };
+}
+
+function mergeMobileLauncherPlacement(value: unknown): MobileLauncherPlacement {
+  const placement = isObject(value) ? value : {};
+
+  return {
+    bottom: clampPlacement(
+      typeof placement.bottom === "number"
+        ? placement.bottom
+        : defaultThemeSettings.socialMedia.mobileLauncherPlacement.bottom,
+      0,
+      300,
+    ),
+    inset: clampPlacement(
+      typeof placement.inset === "number"
+        ? placement.inset
+        : defaultThemeSettings.socialMedia.mobileLauncherPlacement.inset,
+      0,
+      300,
+    ),
+  };
+}
+
 function mergeSocialMediaSettings(value: unknown): ThemeSettings["socialMedia"] {
   const socialMedia = isObject(value) ? value : {};
 
@@ -809,6 +943,8 @@ function mergeSocialMediaSettings(value: unknown): ThemeSettings["socialMedia"] 
       socialMedia.mobileLauncherStyle,
       defaultThemeSettings.socialMedia.mobileLauncherStyle,
     ),
+    desktopSidebarPlacement: mergeDesktopSidebarPlacement(socialMedia.desktopSidebarPlacement),
+    mobileLauncherPlacement: mergeMobileLauncherPlacement(socialMedia.mobileLauncherPlacement),
   };
 }
 
@@ -837,6 +973,14 @@ function mergeFloatingActionsSettings(value: unknown): ThemeSettings["floatingAc
     scrollTopStyle: mergeWidgetButtonStyle(
       floatingActions.scrollTopStyle,
       defaultThemeSettings.floatingActions.scrollTopStyle,
+    ),
+    whatsappPlacement: mergeResponsiveWidgetPlacement(
+      floatingActions.whatsappPlacement,
+      defaultThemeSettings.floatingActions.whatsappPlacement,
+    ),
+    scrollTopPlacement: mergeResponsiveWidgetPlacement(
+      floatingActions.scrollTopPlacement,
+      defaultThemeSettings.floatingActions.scrollTopPlacement,
     ),
   };
 }
@@ -867,6 +1011,9 @@ function mergeSettings(settings: unknown): ThemeSettings {
       ),
       customBanner: mergeCustomBannerSettings(
         isObject(settings.sections) ? settings.sections.customBanner : undefined,
+      ),
+      categories: mergeCategoriesSettings(
+        isObject(settings.sections) ? settings.sections.categories : undefined,
       ),
     },
     footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },

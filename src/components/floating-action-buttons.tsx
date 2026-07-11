@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { FloatingActionsSettings } from "@/lib/theme-settings";
+import { getWidgetPlacementStyle } from "@/lib/widget-placement";
 import { widgetButtonIconSize } from "@/lib/widget-button-style";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-link";
 
@@ -41,8 +42,26 @@ function WidgetIcon({ size, children }: { size: number; children: ReactNode }) {
   );
 }
 
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    function updateViewport() {
+      setIsDesktop(window.matchMedia("(min-width: 1024px)").matches);
+    }
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  return isDesktop;
+}
+
 export function FloatingActionButtons({ settings }: { settings: FloatingActionsSettings }) {
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const isDesktop = useIsDesktop();
 
   useEffect(() => {
     function handleScroll() {
@@ -65,32 +84,41 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
 
   const whatsappIconSize = widgetButtonIconSize(settings.whatsappStyle);
   const scrollTopIconSize = widgetButtonIconSize(settings.scrollTopStyle);
+  const whatsappPlacement = isDesktop ? settings.whatsappPlacement.desktop : settings.whatsappPlacement.mobile;
+  const scrollTopPlacement = isDesktop ? settings.scrollTopPlacement.desktop : settings.scrollTopPlacement.mobile;
+
+  const whatsappPlacementStyle = getWidgetPlacementStyle(whatsappPlacement, "right");
+  const scrollTopPlacementStyle = getWidgetPlacementStyle(scrollTopPlacement, "right");
 
   return (
-    <div className="fixed bottom-24 right-6 z-40 flex flex-col items-center gap-3 lg:bottom-6">
+    <>
       {showScrollTopButton ? (
-        <WidgetActionButton
-          style={settings.scrollTopStyle}
-          ariaLabel="الصعود إلى أعلى الصفحة"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        >
-          <WidgetIcon size={scrollTopIconSize}>
-            <ScrollTopIcon />
-          </WidgetIcon>
-        </WidgetActionButton>
+        <div className="fixed z-40" style={scrollTopPlacementStyle}>
+          <WidgetActionButton
+            style={settings.scrollTopStyle}
+            ariaLabel="الصعود إلى أعلى الصفحة"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
+            <WidgetIcon size={scrollTopIconSize}>
+              <ScrollTopIcon />
+            </WidgetIcon>
+          </WidgetActionButton>
+        </div>
       ) : null}
 
       {showWhatsApp ? (
-        <WidgetActionButton
-          style={settings.whatsappStyle}
-          href={whatsappUrl}
-          ariaLabel="تواصل عبر واتساب"
-        >
-          <WidgetIcon size={whatsappIconSize}>
-            <WhatsAppIcon />
-          </WidgetIcon>
-        </WidgetActionButton>
+        <div className="fixed z-40" style={whatsappPlacementStyle}>
+          <WidgetActionButton
+            style={settings.whatsappStyle}
+            href={whatsappUrl}
+            ariaLabel="تواصل عبر واتساب"
+          >
+            <WidgetIcon size={whatsappIconSize}>
+              <WhatsAppIcon />
+            </WidgetIcon>
+          </WidgetActionButton>
+        </div>
       ) : null}
-    </div>
+    </>
   );
 }
