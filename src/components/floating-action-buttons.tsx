@@ -5,6 +5,23 @@ import { useEffect, useState } from "react";
 import type { FloatingActionsSettings } from "@/lib/theme-settings";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-link";
 
+const floatingGoldChipClassName =
+  "flex items-center justify-center rounded-full border border-brand-gold/40 bg-brand-gold/20 text-zinc-950 shadow-lg transition duration-300 hover:scale-105 hover:border-brand-gold/70 hover:shadow-[0_0_14px_rgba(218,255,0,0.35)]";
+
+function ScrollTopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-6 w-6">
+      <path
+        d="M12 5v14M12 5l-6 6M12 5l6 6"
+        stroke="currentColor"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function WhatsAppIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden="true">
@@ -42,9 +59,9 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
           type="button"
           aria-label="الصعود إلى أعلى الصفحة"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-gold text-lg font-bold text-black shadow-lg transition hover:bg-brand-gold-dark"
+          className={`${floatingGoldChipClassName} h-12 w-12`}
         >
-          ↑
+          <ScrollTopIcon />
         </button>
       ) : null}
 
@@ -54,7 +71,7 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
           target="_blank"
           rel="noopener noreferrer"
           aria-label="تواصل عبر واتساب"
-          className="flex h-14 w-14 items-center justify-center rounded-full border border-brand-gold/40 bg-brand-gold/20 text-zinc-950 shadow-lg transition duration-300 hover:scale-105 hover:border-brand-gold/70 hover:shadow-[0_0_14px_rgba(218,255,0,0.35)]"
+          className={`${floatingGoldChipClassName} h-14 w-14`}
         >
           <WhatsAppIcon />
         </a>
