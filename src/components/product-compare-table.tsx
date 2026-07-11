@@ -61,6 +61,11 @@ export function ProductCompareTable({ products }: ProductCompareTableProps) {
       <div className="overflow-x-auto rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
         <p className="mb-4 text-sm font-bold text-zinc-950">المواصفات</p>
 
+        {rows.length === 0 ? (
+          <p className="rounded-2xl bg-zinc-50 px-4 py-6 text-center text-sm font-semibold text-zinc-600">
+            لم يتم العثور على مواصفات في وصف المنتجات المختارة.
+          </p>
+        ) : (
         <div className="min-w-max">
           <div
             className="grid items-center border-b border-black/10 py-3 text-sm font-bold"
@@ -102,6 +107,7 @@ export function ProductCompareTable({ products }: ProductCompareTableProps) {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

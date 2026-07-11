@@ -1,3 +1,4 @@
+import { getProductSpecs } from "@/lib/product-spec-parser";
 import type { Product } from "@/lib/types";
 
 export type CompareMatrixRow = {
@@ -22,7 +23,7 @@ export function buildAttributeOrder(products: Product[]): string[] {
   const seen = new Set<string>();
 
   products.forEach((product) => {
-    Object.keys(product.attributes).forEach((attribute) => {
+    Object.keys(getProductSpecs(product)).forEach((attribute) => {
       if (!seen.has(attribute)) {
         seen.add(attribute);
         orderedAttributes.push(attribute);
@@ -36,7 +37,7 @@ export function buildAttributeOrder(products: Product[]): string[] {
 export function buildCompareMatrix(products: Product[]): CompareMatrixRow[] {
   return buildAttributeOrder(products).map((attribute) => ({
     attribute,
-    values: products.map((product) => formatCompareValue(product.attributes[attribute])),
+    values: products.map((product) => formatCompareValue(getProductSpecs(product)[attribute])),
   }));
 }
 
