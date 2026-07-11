@@ -387,3 +387,13 @@ html {
 .product-rich-description tr:nth-child(even) td {
   background: #f8f9f4;
 }
+
+.widget-action-button {
+  background: var(--widget-btn-bg);
+  color: var(--widget-btn-icon);
+}
+
+.widget-action-button:hover {
+  background: var(--widget-btn-bg-hover);
+  transform: translateX(4px);
+}

@@ -12,6 +12,7 @@ import type {
   HomeSectionStyle,
   MenuItem,
   ThemeSettings,
+  WidgetButtonStyle,
 } from "@/lib/theme-settings";
 import { heroSlideHasMedia } from "@/lib/hero-slide-utils";
 import { defaultBannerSpacing, defaultSideBannerSpacing, type BannerSpacing } from "@/lib/banner-spacing";
@@ -102,6 +103,122 @@ function Field({
       {label}
       {children}
     </label>
+  );
+}
+
+function WidgetButtonStyleFields({
+  title,
+  style,
+  onChange,
+}: {
+  title: string;
+  style: WidgetButtonStyle;
+  onChange: (style: WidgetButtonStyle) => void;
+}) {
+  const update = (patch: Partial<WidgetButtonStyle>) => onChange({ ...style, ...patch });
+  const inputClassName = "rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold";
+
+  return (
+    <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:grid-cols-2">
+      <div className="lg:col-span-2">
+        <h3 className="text-base font-bold text-zinc-950">{title}</h3>
+        <p className="mt-1 text-sm leading-6 text-zinc-500">
+          لون الخلفية والأيقونة، المقاس، الشكل، الحدود، وحركة الهوفر.
+        </p>
+      </div>
+
+      <Field label="المقاس px">
+        <input
+          type="number"
+          min={32}
+          max={80}
+          value={style.size}
+          onChange={(event) => update({ size: Number(event.target.value) })}
+          className={inputClassName}
+        />
+      </Field>
+
+      <Field label="الشكل">
+        <select
+          value={style.shape}
+          onChange={(event) => update({ shape: event.target.value === "square" ? "square" : "circle" })}
+          className={inputClassName}
+        >
+          <option value="circle">دائري</option>
+          <option value="square">مربع</option>
+        </select>
+      </Field>
+
+      <Field label="لون الخلفية">
+        <input
+          type="color"
+          value={style.backgroundColor}
+          onChange={(event) => update({ backgroundColor: event.target.value })}
+          className="h-12 w-full cursor-pointer rounded-xl border border-black/10 bg-white"
+        />
+      </Field>
+
+      <Field label="لون الخلفية عند الهوفر">
+        <input
+          type="color"
+          value={style.hoverBackgroundColor}
+          onChange={(event) => update({ hoverBackgroundColor: event.target.value })}
+          className="h-12 w-full cursor-pointer rounded-xl border border-black/10 bg-white"
+        />
+      </Field>
+
+      <Field label="لون الأيقونة">
+        <input
+          type="color"
+          value={style.iconColor}
+          onChange={(event) => update({ iconColor: event.target.value })}
+          className="h-12 w-full cursor-pointer rounded-xl border border-black/10 bg-white"
+        />
+      </Field>
+
+      <Field label="Border radius px">
+        <input
+          type="number"
+          min={0}
+          max={32}
+          value={style.borderRadius}
+          disabled={style.shape === "circle"}
+          onChange={(event) => update({ borderRadius: Number(event.target.value) })}
+          className={`${inputClassName} disabled:cursor-not-allowed disabled:bg-zinc-100`}
+        />
+      </Field>
+
+      <label className="flex items-center gap-3 rounded-xl bg-white p-4 text-sm font-bold lg:col-span-2">
+        <input
+          type="checkbox"
+          checked={style.borderEnabled}
+          onChange={(event) => update({ borderEnabled: event.target.checked })}
+        />
+        تفعيل الحدود
+      </label>
+
+      <Field label="لون الحدود">
+        <input
+          type="color"
+          value={style.borderColor}
+          disabled={!style.borderEnabled}
+          onChange={(event) => update({ borderColor: event.target.value })}
+          className="h-12 w-full cursor-pointer rounded-xl border border-black/10 bg-white disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </Field>
+
+      <Field label="سمك الحدود px">
+        <input
+          type="number"
+          min={0}
+          max={6}
+          value={style.borderWidth}
+          disabled={!style.borderEnabled}
+          onChange={(event) => update({ borderWidth: Number(event.target.value) })}
+          className={`${inputClassName} disabled:cursor-not-allowed disabled:bg-zinc-100`}
+        />
+      </Field>
+    </div>
   );
 }
 
@@ -2540,6 +2657,17 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             />
           </Field>
 
+          <WidgetButtonStyleFields
+            title="تصميم أزرار السوشيال ميديا"
+            style={settings.socialMedia.buttonStyle}
+            onChange={(buttonStyle) =>
+              setSettings({
+                ...settings,
+                socialMedia: { ...settings.socialMedia, buttonStyle },
+              })
+            }
+          />
+
           <div className="border-t border-black/10 pt-5">
             <h2 className="text-xl font-bold text-zinc-950">الأزرار العائمة (أسفل يمين الشاشة)</h2>
             <p className="mt-2 text-sm leading-7 text-zinc-600">
@@ -2589,6 +2717,28 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             />
             تفعيل زر الصعود للأعلى
           </label>
+
+          <WidgetButtonStyleFields
+            title="تصميم زر واتساب"
+            style={settings.floatingActions.whatsappStyle}
+            onChange={(whatsappStyle) =>
+              setSettings({
+                ...settings,
+                floatingActions: { ...settings.floatingActions, whatsappStyle },
+              })
+            }
+          />
+
+          <WidgetButtonStyleFields
+            title="تصميم زر الصعود للأعلى"
+            style={settings.floatingActions.scrollTopStyle}
+            onChange={(scrollTopStyle) =>
+              setSettings({
+                ...settings,
+                floatingActions: { ...settings.floatingActions, scrollTopStyle },
+              })
+            }
+          />
         </section>
       ) : null}
 

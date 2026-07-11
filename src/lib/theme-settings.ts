@@ -150,17 +150,48 @@ export function createDefaultMainGroupItems(): [MainGroupItem, MainGroupItem, Ma
   ];
 }
 
+export type WidgetButtonShape = "circle" | "square";
+
+export type WidgetButtonStyle = {
+  size: number;
+  backgroundColor: string;
+  hoverBackgroundColor: string;
+  iconColor: string;
+  shape: WidgetButtonShape;
+  borderRadius: number;
+  borderEnabled: boolean;
+  borderColor: string;
+  borderWidth: number;
+};
+
+export function createDefaultWidgetButtonStyle(size: number): WidgetButtonStyle {
+  return {
+    size,
+    backgroundColor: "#daff00",
+    hoverBackgroundColor: "#c1e200",
+    iconColor: "#000000",
+    shape: "circle",
+    borderRadius: 12,
+    borderEnabled: false,
+    borderColor: "#000000",
+    borderWidth: 1,
+  };
+}
+
 export type SocialMediaSettings = {
   enabled: boolean;
   facebookUrl: string;
   instagramUrl: string;
   tiktokUrl: string;
+  buttonStyle: WidgetButtonStyle;
 };
 
 export type FloatingActionsSettings = {
   whatsappEnabled: boolean;
   whatsappPhone: string;
   scrollTopEnabled: boolean;
+  whatsappStyle: WidgetButtonStyle;
+  scrollTopStyle: WidgetButtonStyle;
 };
 
 export type ThemeSettings = {
@@ -386,11 +417,14 @@ export const defaultThemeSettings: ThemeSettings = {
     facebookUrl: "",
     instagramUrl: "",
     tiktokUrl: "",
+    buttonStyle: createDefaultWidgetButtonStyle(44),
   },
   floatingActions: {
     whatsappEnabled: true,
     whatsappPhone: "01101115311",
     scrollTopEnabled: true,
+    whatsappStyle: createDefaultWidgetButtonStyle(56),
+    scrollTopStyle: createDefaultWidgetButtonStyle(48),
   },
   productCard: {
     borderWidth: 1,
@@ -717,6 +751,44 @@ function mergeProductCardSettings(value: unknown): ThemeSettings["productCard"] 
   };
 }
 
+function mergeWidgetButtonStyle(value: unknown, defaultStyle: WidgetButtonStyle): WidgetButtonStyle {
+  const style = isObject(value) ? value : {};
+
+  return {
+    ...defaultStyle,
+    size:
+      typeof style.size === "number"
+        ? Math.min(80, Math.max(32, style.size))
+        : defaultStyle.size,
+    backgroundColor:
+      typeof style.backgroundColor === "string" && style.backgroundColor.trim()
+        ? style.backgroundColor
+        : defaultStyle.backgroundColor,
+    hoverBackgroundColor:
+      typeof style.hoverBackgroundColor === "string" && style.hoverBackgroundColor.trim()
+        ? style.hoverBackgroundColor
+        : defaultStyle.hoverBackgroundColor,
+    iconColor:
+      typeof style.iconColor === "string" && style.iconColor.trim()
+        ? style.iconColor
+        : defaultStyle.iconColor,
+    shape: style.shape === "square" ? "square" : "circle",
+    borderRadius:
+      typeof style.borderRadius === "number"
+        ? Math.min(32, Math.max(0, style.borderRadius))
+        : defaultStyle.borderRadius,
+    borderEnabled: typeof style.borderEnabled === "boolean" ? style.borderEnabled : defaultStyle.borderEnabled,
+    borderColor:
+      typeof style.borderColor === "string" && style.borderColor.trim()
+        ? style.borderColor
+        : defaultStyle.borderColor,
+    borderWidth:
+      typeof style.borderWidth === "number"
+        ? Math.min(6, Math.max(0, style.borderWidth))
+        : defaultStyle.borderWidth,
+  };
+}
+
 function mergeSocialMediaSettings(value: unknown): ThemeSettings["socialMedia"] {
   const socialMedia = isObject(value) ? value : {};
 
@@ -727,6 +799,10 @@ function mergeSocialMediaSettings(value: unknown): ThemeSettings["socialMedia"] 
     facebookUrl: typeof socialMedia.facebookUrl === "string" ? socialMedia.facebookUrl : "",
     instagramUrl: typeof socialMedia.instagramUrl === "string" ? socialMedia.instagramUrl : "",
     tiktokUrl: typeof socialMedia.tiktokUrl === "string" ? socialMedia.tiktokUrl : "",
+    buttonStyle: mergeWidgetButtonStyle(
+      socialMedia.buttonStyle,
+      defaultThemeSettings.socialMedia.buttonStyle,
+    ),
   };
 }
 
@@ -748,6 +824,14 @@ function mergeFloatingActionsSettings(value: unknown): ThemeSettings["floatingAc
       typeof floatingActions.scrollTopEnabled === "boolean"
         ? floatingActions.scrollTopEnabled
         : defaultThemeSettings.floatingActions.scrollTopEnabled,
+    whatsappStyle: mergeWidgetButtonStyle(
+      floatingActions.whatsappStyle,
+      defaultThemeSettings.floatingActions.whatsappStyle,
+    ),
+    scrollTopStyle: mergeWidgetButtonStyle(
+      floatingActions.scrollTopStyle,
+      defaultThemeSettings.floatingActions.scrollTopStyle,
+    ),
   };
 }
 
