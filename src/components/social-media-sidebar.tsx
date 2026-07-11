@@ -57,7 +57,7 @@ export function SocialMediaSidebar({ settings }: { settings: SocialMediaSettings
   return (
     <aside
       dir="ltr"
-      className="fixed left-3 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-2.5 sm:left-4 sm:gap-3"
+      className="fixed left-3 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-2.5 sm:left-4 sm:gap-3 lg:flex"
       aria-label="روابط السوشيال ميديا"
     >
       {links.map((link) => {

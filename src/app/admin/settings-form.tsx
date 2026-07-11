@@ -2595,9 +2595,10 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
       {focus === "socialMedia" ? (
         <section className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-xl font-bold text-zinc-950">شريط السوشيال ميديا (يسار الشاشة)</h2>
+            <h2 className="text-xl font-bold text-zinc-950">شريط السوشيال ميديا</h2>
             <p className="mt-2 text-sm leading-7 text-zinc-600">
-              تظهر الأيقونات على يسار الموقع فقط للروابط المملوءة. اترك الرابط فارغاً لإخفاء المنصة.
+              على الديسكتوب تظهر الأيقونات على يسار الشاشة. على الموبايل يظهر زر @ فوق الشريط السفلي ويفتح روابط
+              السوشيال عند الضغط. اترك الرابط فارغاً لإخفاء المنصة.
             </p>
           </div>
 
@@ -2664,6 +2665,17 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
               setSettings({
                 ...settings,
                 socialMedia: { ...settings.socialMedia, buttonStyle },
+              })
+            }
+          />
+
+          <WidgetButtonStyleFields
+            title="تصميم زر @ على الموبايل"
+            style={settings.socialMedia.mobileLauncherStyle}
+            onChange={(mobileLauncherStyle) =>
+              setSettings({
+                ...settings,
+                socialMedia: { ...settings.socialMedia, mobileLauncherStyle },
               })
             }
           />

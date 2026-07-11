@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { useState } from "react";
 
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
@@ -162,71 +161,24 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
   );
 }
 
-function MobileMenuTree({
-  items,
-  depth = 0,
-  onNavigate,
-}: {
-  items: MenuNode[];
-  depth?: number;
-  onNavigate: () => void;
-}) {
-  if (!items.length) {
-    return null;
-  }
-
-  return (
-    <ul className={depth ? "mt-2 grid gap-2 border-r border-black/10 pr-3" : "grid gap-2"}>
-      {items.map((item) => (
-        <li key={item.id} className={depth ? "" : "rounded-[5px] border border-black/10 bg-white p-2"}>
-          <Link
-            href={item.href}
-            onClick={onNavigate}
-            className={[
-              "block rounded-[5px] px-4 py-3 font-bold transition hover:bg-brand-gold hover:text-black",
-              depth ? "bg-zinc-50 text-sm text-zinc-700" : "bg-white text-sm text-zinc-950",
-            ].join(" ")}
-          >
-            {item.title}
-          </Link>
-          <MobileMenuTree items={item.children} depth={depth + 1} onNavigate={onNavigate} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function MobileMenuButton({ isOpen, onClick }: { isOpen: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black text-white lg:hidden"
-      aria-label={isOpen ? "إغلاق المنيو" : "فتح المنيو"}
-      aria-expanded={isOpen}
-    >
-      <span className="grid gap-1">
-        <span className="block h-0.5 w-5 rounded-full bg-current" />
-        <span className="block h-0.5 w-5 rounded-full bg-current" />
-        <span className="block h-0.5 w-5 rounded-full bg-current" />
-      </span>
-    </button>
-  );
+export function buildHeaderMenu(settings: ThemeSettings, menu: MenuNode[]): MenuNode[] {
+  return menu.length
+    ? menu
+    : settings.navigation.map((item, index) => ({
+        id: index + 1,
+        title: item.label,
+        url: item.href,
+        href: item.href,
+        type: "custom",
+        object: "custom",
+        objectId: 0,
+        slug: "",
+        children: [],
+      }));
 }
 
 export function Header({ settings, menu }: { settings: ThemeSettings; menu: MenuNode[] }) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const headerMenu = menu.length ? menu : settings.navigation.map((item, index) => ({
-    id: index + 1,
-    title: item.label,
-    url: item.href,
-    href: item.href,
-    type: "custom",
-    object: "custom",
-    objectId: 0,
-    slug: "",
-    children: [],
-  }));
+  const headerMenu = buildHeaderMenu(settings, menu);
   const topBannerPhrases = settings.topBanner.text
     .split(/•|\n/)
     .map((phrase) => phrase.trim())
@@ -353,39 +305,21 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:hidden">
+      <div className="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:hidden">
         <div className="flex items-center gap-2">
           <HeaderProductSearch className="relative block min-w-0 flex-1" />
-          <MobileMenuButton
-            isOpen={isMobileMenuOpen}
-            onClick={() => setIsMobileMenuOpen((currentValue) => !currentValue)}
-          />
+          <a
+            href="tel:17355"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-brand-gold bg-brand-gold px-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+            dir="ltr"
+            aria-label="الاتصال بالهوت لاين 17355"
+          >
+            17355
+          </a>
         </div>
-
-        {isMobileMenuOpen ? (
-          <div className="absolute right-4 top-full z-[80] w-2/3 max-w-sm sm:right-6" dir="rtl">
-          <div className="max-h-[70vh] overflow-y-auto rounded-[5px] border border-black/10 bg-white p-3 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between border-b border-black/10 pb-3">
-              <p className="text-base font-bold text-zinc-950">
-                <VisualEditableText textKey="header.mobileMenu.title">القائمة</VisualEditableText>
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-lg font-bold"
-                aria-label="إغلاق"
-              >
-                ×
-              </button>
-            </div>
-            <MobileMenuTree items={headerMenu} onNavigate={() => setIsMobileMenuOpen(false)} />
-          </div>
-          </div>
-        ) : null}
       </div>
 
       <DesktopMenu menu={headerMenu} />
     </header>
   );
 }
-

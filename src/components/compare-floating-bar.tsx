@@ -16,7 +16,7 @@ export function CompareFloatingBar() {
 
   return (
     <div
-      className="fixed bottom-24 left-4 right-4 z-40 mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-4 shadow-2xl sm:left-6 sm:right-6"
+      className="fixed bottom-32 left-4 right-4 z-40 mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-4 shadow-2xl sm:left-6 sm:right-6 lg:bottom-24"
       dir="rtl"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">

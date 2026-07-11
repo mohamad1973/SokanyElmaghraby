@@ -6,7 +6,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = "https://sokany-eg.com";
   const products = await getProducts(50);
 
-  const staticRoutes = ["", "/shop", "/offers", "/warranty", "/contact", "/return-policy"].map(
+  const staticRoutes = ["", "/shop", "/offers", "/about", "/warranty", "/contact", "/return-policy"].map(
     (route) => ({
       url: `${baseUrl}${route}`,
       lastModified: new Date(),

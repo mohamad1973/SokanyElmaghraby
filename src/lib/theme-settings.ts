@@ -184,6 +184,7 @@ export type SocialMediaSettings = {
   instagramUrl: string;
   tiktokUrl: string;
   buttonStyle: WidgetButtonStyle;
+  mobileLauncherStyle: WidgetButtonStyle;
 };
 
 export type FloatingActionsSettings = {
@@ -418,6 +419,7 @@ export const defaultThemeSettings: ThemeSettings = {
     instagramUrl: "",
     tiktokUrl: "",
     buttonStyle: createDefaultWidgetButtonStyle(44),
+    mobileLauncherStyle: createDefaultWidgetButtonStyle(44),
   },
   floatingActions: {
     whatsappEnabled: true,
@@ -802,6 +804,10 @@ function mergeSocialMediaSettings(value: unknown): ThemeSettings["socialMedia"] 
     buttonStyle: mergeWidgetButtonStyle(
       socialMedia.buttonStyle,
       defaultThemeSettings.socialMedia.buttonStyle,
+    ),
+    mobileLauncherStyle: mergeWidgetButtonStyle(
+      socialMedia.mobileLauncherStyle,
+      defaultThemeSettings.socialMedia.mobileLauncherStyle,
     ),
   };
 }

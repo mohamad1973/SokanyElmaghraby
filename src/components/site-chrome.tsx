@@ -9,7 +9,11 @@ import type { MenuNode } from "@/lib/types";
 import { CompareFloatingBar } from "./compare-floating-bar";
 import { FloatingActionButtons } from "./floating-action-buttons";
 import { Footer } from "./footer";
-import { Header } from "./header";
+import { buildHeaderMenu, Header } from "./header";
+import { MobileBottomNav } from "./mobile-bottom-nav";
+import { MobileNavProvider } from "./mobile-nav-context";
+import { MobileSideDrawer } from "./mobile-side-drawer";
+import { MobileSocialLauncher } from "./mobile-social-launcher";
 import { ProductDisplayProvider } from "./product-display-context";
 import { ProductListsProvider } from "./product-lists-provider";
 import { PwaInstallPrompt } from "./pwa-install-prompt";
@@ -32,21 +36,27 @@ export function SiteChrome({
     return children;
   }
 
+  const headerMenu = buildHeaderMenu(settings, menu);
+
   return (
     <ProductListsProvider>
       <ProductDisplayProvider codeMode={settings.productCard.codeMode}>
         <VisualEditorProvider settings={settings}>
-          <Header settings={settings} menu={menu} />
-          <VisualEditorToolbar />
-          <main className="flex-1">{children}</main>
-          <Footer settings={settings} />
-          <SocialMediaSidebar settings={settings.socialMedia} />
-          <CompareFloatingBar />
-          <FloatingActionButtons settings={settings.floatingActions} />
-          <PwaInstallPrompt />
+          <MobileNavProvider>
+            <Header settings={settings} menu={menu} />
+            <VisualEditorToolbar />
+            <main className="flex-1 pb-20 lg:pb-0">{children}</main>
+            <Footer settings={settings} />
+            <SocialMediaSidebar settings={settings.socialMedia} />
+            <MobileSocialLauncher settings={settings.socialMedia} />
+            <CompareFloatingBar />
+            <FloatingActionButtons settings={settings.floatingActions} />
+            <MobileSideDrawer menu={headerMenu} />
+            <MobileBottomNav />
+            <PwaInstallPrompt />
+          </MobileNavProvider>
         </VisualEditorProvider>
       </ProductDisplayProvider>
     </ProductListsProvider>
   );
 }
-

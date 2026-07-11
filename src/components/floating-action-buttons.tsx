@@ -67,7 +67,7 @@ export function FloatingActionButtons({ settings }: { settings: FloatingActionsS
   const scrollTopIconSize = widgetButtonIconSize(settings.scrollTopStyle);
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-center gap-3">
+    <div className="fixed bottom-24 right-6 z-40 flex flex-col items-center gap-3 lg:bottom-6">
       {showScrollTopButton ? (
         <WidgetActionButton
           style={settings.scrollTopStyle}
