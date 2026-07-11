@@ -415,6 +415,44 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   return fallbackProducts.find((product) => product.slug === slug) || null;
 }
 
+export async function getProductsByIds(ids: number[]): Promise<Product[]> {
+  const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isFinite(id) && id > 0))).slice(0, 4);
+
+  if (!uniqueIds.length) {
+    return [];
+  }
+
+  const data = await wooFetch<WooProduct[]>(
+    `products?include=${uniqueIds.join(",")}&per_page=${uniqueIds.length}&status=publish`,
+  );
+
+  if (data?.length) {
+    const productsById = new Map(data.map((item) => [item.id, mapProduct(item)]));
+
+    return uniqueIds
+      .map((id) => productsById.get(id))
+      .filter((product): product is Product => Boolean(product));
+  }
+
+  const storeData = await storeFetch<StoreApiProduct[]>(
+    `products?include=${uniqueIds.join(",")}&per_page=${uniqueIds.length}`,
+  );
+
+  if (storeData?.length) {
+    const productsById = new Map(storeData.map((item) => [item.id, mapStoreProduct(item)]));
+
+    return uniqueIds
+      .map((id) => productsById.get(id))
+      .filter((product): product is Product => Boolean(product));
+  }
+
+  const fallbackById = new Map(fallbackProducts.map((product) => [product.id, product]));
+
+  return uniqueIds
+    .map((id) => fallbackById.get(id))
+    .filter((product): product is Product => Boolean(product));
+}
+
 export async function getCategories(): Promise<Category[]> {
   const data = await wooFetch<Array<WooCategory & { count?: number; description?: string }>>(
     "products/categories?per_page=20&hide_empty=true",

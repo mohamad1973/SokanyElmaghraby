@@ -8,7 +8,9 @@ import type { MenuNode } from "@/lib/types";
 
 import { bannerSpacingStyle } from "@/lib/banner-spacing";
 
+import { HeaderCompareLink } from "./header-compare-link";
 import { HeaderProductSearch } from "./header-product-search";
+import { HeaderWishlistMenu } from "./header-wishlist-menu";
 import { TopBannerMarquee, type TopBannerIconName } from "./top-banner-marquee";
 import { VisualEditableText } from "./visual-editable-text";
 
@@ -236,8 +238,6 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
   const headerActions = [
     { href: "/account", label: "الحساب", icon: "account" as const },
     { href: "/cart", label: "السلة", icon: "cart" as const },
-    { href: "/offers", label: "المفضلة", icon: "favorite" as const },
-    { href: "/shop", label: "مقارنة المنتجات", icon: "compare" as const },
   ];
   const logoStyle = {
     "--logo-mobile-width": `${settings.brand.logoMobileWidth}px`,
@@ -348,6 +348,8 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               <HeaderIcon icon={action.icon} />
             </Link>
           ))}
+          <HeaderWishlistMenu />
+          <HeaderCompareLink />
         </div>
       </div>
 

@@ -4,8 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { getProductDisplayCode } from "@/lib/product-display-code";
+import { productToListEntry } from "@/lib/product-lists";
 import type { Product } from "@/lib/types";
 
+import { ProductActionButtons } from "./product-action-buttons";
 import { useProductCodeMode } from "./product-display-context";
 
 type ProductCardProps = {
@@ -15,6 +17,7 @@ type ProductCardProps = {
 export function ProductCard({ product }: ProductCardProps) {
   const codeMode = useProductCodeMode();
   const productCode = getProductDisplayCode(product, codeMode);
+  const listEntry = productToListEntry(product);
 
   return (
     <article
@@ -28,6 +31,10 @@ export function ProductCard({ product }: ProductCardProps) {
     >
       <Link href={`/product/${product.slug}`} className="flex h-full flex-col">
         <div className="relative h-56 shrink-0 overflow-hidden bg-white sm:h-72 lg:h-80">
+          <ProductActionButtons
+            entry={listEntry}
+            className="absolute left-3 top-3 z-10"
+          />
           <Image
             src={product.image}
             alt={product.name}

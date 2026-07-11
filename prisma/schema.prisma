@@ -123,3 +123,9 @@ model DeliveryAssignment {
   @@index([runId])
   @@index([status])
 }
+
+model CustomerWishlist {
+  customerId Int      @id
+  entries    Json
+  updatedAt  DateTime @updatedAt
+}

@@ -4,6 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { productToListEntry } from "@/lib/product-lists";
+
+import { ProductActionButtons } from "./product-action-buttons";
 import { VisualEditableText } from "./visual-editable-text";
 
 type SearchProduct = {
@@ -85,21 +88,30 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
             </p>
           ) : null}
           {products.map((product) => (
-            <Link
+            <div
               key={product.id}
-              href={`/product/${product.slug}`}
-              onClick={() => setQuery("")}
-              className="flex items-center gap-2 border-b border-black/5 px-3 py-3 transition last:border-b-0 hover:bg-brand-cream sm:gap-3 sm:px-4"
+              className="flex items-center gap-2 border-b border-black/5 px-3 py-3 last:border-b-0 sm:gap-3 sm:px-4"
             >
-              <span className="relative h-14 w-14 overflow-hidden rounded-2xl bg-zinc-100">
-                <Image src={product.image} alt={product.name} fill sizes="56px" className="object-contain p-2" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="line-clamp-1 block text-sm font-bold text-zinc-950">{product.name}</span>
-                <span className="mt-1 block text-xs font-bold text-zinc-500">{product.displayCode || product.sku}</span>
-              </span>
-              <span className="whitespace-nowrap text-xs font-bold text-zinc-950 sm:text-sm">{product.price} ج.م</span>
-            </Link>
+              <Link
+                href={`/product/${product.slug}`}
+                onClick={() => setQuery("")}
+                className="flex min-w-0 flex-1 items-center gap-2 transition hover:opacity-90 sm:gap-3"
+              >
+                <span className="relative h-14 w-14 overflow-hidden rounded-2xl bg-zinc-100">
+                  <Image src={product.image} alt={product.name} fill sizes="56px" className="object-contain p-2" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="line-clamp-1 block text-sm font-bold text-zinc-950">{product.name}</span>
+                  <span className="mt-1 block text-xs font-bold text-zinc-500">{product.displayCode || product.sku}</span>
+                </span>
+                <span className="whitespace-nowrap text-xs font-bold text-zinc-950 sm:text-sm">{product.price} ج.م</span>
+              </Link>
+              <ProductActionButtons
+                entry={productToListEntry(product)}
+                size="sm"
+                className="shrink-0"
+              />
+            </div>
           ))}
         </div>
       ) : null}

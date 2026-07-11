@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 
 import { ProductImageGallery } from "@/components/product-image-gallery";
 import { ProductCard } from "@/components/product-card";
+import { ProductPageActions } from "@/components/product-page-actions";
 import { ProductRichDescription } from "@/components/product-rich-description";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { getProductCodeLabel, getProductDisplayCode } from "@/lib/product-display-code";
+import { productToListEntry } from "@/lib/product-lists";
 import { getThemeSettings } from "@/lib/theme-settings";
 import { getProductBySlug, getProducts } from "@/lib/woocommerce";
 
@@ -50,6 +52,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const codeMode = settings.productCard.codeMode;
   const displayCode = getProductDisplayCode(product, codeMode);
   const codeLabel = getProductCodeLabel(codeMode);
+  const listEntry = productToListEntry(product);
 
   const structuredData = {
     "@context": "https://schema.org",
@@ -97,6 +100,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <h1 className="text-3xl font-bold leading-tight text-zinc-950 sm:text-5xl">
               {product.name}
             </h1>
+            <ProductPageActions entry={listEntry} />
             <p className="mt-5 text-lg leading-9 text-zinc-600">{product.shortDescription}</p>
 
             <div className="mt-7 flex flex-wrap items-center gap-4">
