@@ -86,11 +86,13 @@ html {
   }
 
   .hero-split-side-col {
-    gap: 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--hero-split-gap);
   }
 
   .hero-banner-frame-split-side {
-    aspect-ratio: 750 / 260;
+    aspect-ratio: 1920 / 1080;
   }
 }
 
