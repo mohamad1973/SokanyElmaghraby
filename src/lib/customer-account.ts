@@ -338,6 +338,38 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
   throw new Error("تم تسجيل الدخول في ووردبريس لكن لم يتم العثور على عميل ووكومرس مطابق.");
 }
 
+export async function loginCustomerWithOtp(input: { phone: string; otp: string }) {
+  const { verifyOtp, completeOtpLogin } = await import("./whatsapp-otp");
+  const verified = await verifyOtp(input.phone, input.otp, "login");
+  const profile = await completeOtpLogin(verified.phone, verified.token);
+
+  return {
+    customerId: profile.customerId,
+    email: profile.email,
+    name: profile.name,
+    phone: profile.phone,
+  } satisfies CustomerSession;
+}
+
+export async function changeCustomerPassword(input: {
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+}) {
+  const { changePasswordWithCurrent } = await import("./whatsapp-otp");
+  await changePasswordWithCurrent(input.email, input.currentPassword, input.newPassword);
+}
+
+export async function resetCustomerPasswordWithOtp(input: {
+  phone: string;
+  otp: string;
+  newPassword: string;
+}) {
+  const { verifyOtp, resetPasswordWithOtp } = await import("./whatsapp-otp");
+  const verified = await verifyOtp(input.phone, input.otp, "reset_password");
+  await resetPasswordWithOtp(verified.phone, verified.token, input.newPassword);
+}
+
 export async function getCustomerOrders(customerId: number) {
   const orders = await wooFetch<WooOrder[]>(`orders?customer=${customerId}&per_page=100&orderby=date&order=desc`).catch(() => []);
 

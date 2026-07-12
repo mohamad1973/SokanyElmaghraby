@@ -197,6 +197,8 @@ final class Sokany_WhatsApp_OTP {
                 <li><code>POST /wp-json/sokany-otp/v1/verify</code></li>
                 <li><code>POST /wp-json/sokany-otp/v1/reset-password</code></li>
                 <li><code>POST /wp-json/sokany-otp/v1/register</code></li>
+                <li><code>POST /wp-json/sokany-otp/v1/login</code></li>
+                <li><code>POST /wp-json/sokany-otp/v1/change-password</code></li>
             </ul>
         </div>
         <?php
@@ -224,6 +226,18 @@ final class Sokany_WhatsApp_OTP {
         register_rest_route('sokany-otp/v1', '/register', [
             'methods' => WP_REST_Server::CREATABLE,
             'callback' => [__CLASS__, 'register_customer'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('sokany-otp/v1', '/login', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'complete_login'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('sokany-otp/v1', '/change-password', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'change_password'],
             'permission_callback' => '__return_true',
         ]);
     }
@@ -343,6 +357,63 @@ final class Sokany_WhatsApp_OTP {
         return rest_ensure_response([
             'ok' => true,
             'status' => 'password_reset',
+        ]);
+    }
+
+    public static function complete_login(WP_REST_Request $request) {
+        $phone = self::normalize_phone((string) $request->get_param('phone'));
+        $token = (string) $request->get_param('token');
+
+        if (!$phone || !$token) {
+            return new WP_Error('sokany_invalid_login_payload', 'رقم الموبايل ورمز التحقق مطلوبان.', ['status' => 400]);
+        }
+
+        $token_data = self::verify_action_token($token, $phone, 'login');
+
+        if (is_wp_error($token_data)) {
+            return $token_data;
+        }
+
+        $user = self::find_user_by_phone($phone);
+
+        if (!$user) {
+            return new WP_Error('sokany_user_not_found', 'لا يوجد حساب بهذا الرقم.', ['status' => 404]);
+        }
+
+        return rest_ensure_response([
+            'ok' => true,
+            'status' => 'logged_in',
+            'userId' => (int) $user->ID,
+            'email' => $user->user_email,
+            'name' => $user->display_name ?: $user->user_login,
+            'phone' => $phone,
+        ]);
+    }
+
+    public static function change_password(WP_REST_Request $request) {
+        $email = sanitize_email((string) $request->get_param('email'));
+        $current_password = (string) $request->get_param('currentPassword');
+        $new_password = (string) $request->get_param('newPassword');
+
+        if (!$email || !$current_password) {
+            return new WP_Error('sokany_invalid_change_password_payload', 'البريد وكلمة المرور الحالية مطلوبان.', ['status' => 400]);
+        }
+
+        if (strlen($new_password) < 8) {
+            return new WP_Error('sokany_weak_password', 'كلمة المرور يجب ألا تقل عن 8 أحرف.', ['status' => 400]);
+        }
+
+        $user = wp_authenticate($email, $current_password);
+
+        if (is_wp_error($user)) {
+            return new WP_Error('sokany_invalid_current_password', 'كلمة المرور الحالية غير صحيحة.', ['status' => 401]);
+        }
+
+        wp_set_password($new_password, (int) $user->ID);
+
+        return rest_ensure_response([
+            'ok' => true,
+            'status' => 'password_changed',
         ]);
     }
 

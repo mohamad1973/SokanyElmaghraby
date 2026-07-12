@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AccountChangePasswordForm } from "@/components/account-change-password-form";
 import { AccountLogoutButton } from "@/components/account-logout-button";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import {
@@ -100,6 +101,14 @@ export default async function AccountPage() {
             <VisualEditableText textKey="account.dashboard.noOrders">لا توجد طلبات حتى الآن.</VisualEditableText>
           </section>
         )}
+
+        <section className="rounded-[2rem] bg-white p-6 shadow-sm">
+          <h2 className="text-2xl font-bold text-zinc-950">تغيير كلمة المرور</h2>
+          <p className="mt-2 text-sm text-zinc-600">
+            غيّر كلمة المرور باستخدام الكلمة الحالية، أو عبر كود واتساب إذا نسيتها.
+          </p>
+          <AccountChangePasswordForm phone={session.phone || ""} />
+        </section>
 
         <section className="rounded-[2rem] bg-white p-6 shadow-sm">
           <h2 className="text-2xl font-bold text-zinc-950">

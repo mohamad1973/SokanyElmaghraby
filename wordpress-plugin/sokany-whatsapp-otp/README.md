@@ -88,6 +88,35 @@ Content-Type: application/json
 }
 ```
 
+### Complete Login (after OTP verify with purpose `login`)
+
+```http
+POST /login
+Content-Type: application/json
+```
+
+```json
+{
+  "phone": "01000260262",
+  "token": "TOKEN_FROM_VERIFY"
+}
+```
+
+### Change Password (with current password)
+
+```http
+POST /change-password
+Content-Type: application/json
+```
+
+```json
+{
+  "email": "customer@example.com",
+  "currentPassword": "old-password",
+  "newPassword": "new-secure-password"
+}
+```
+
 ## Test Mode
 
 Before Direct Tech provides the API, keep `Mode = Test`.
