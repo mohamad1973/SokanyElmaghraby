@@ -63,9 +63,44 @@ function mapWooCustomerToSession(customer: WooCustomer): CustomerSession {
   };
 }
 
-function buildSessionFromJwt(payload: JwtAuthResponse, username: string): CustomerSession | null {
-  const userId = Number(payload.user_id);
+function extractUserIdFromJwtToken(token: string): number | null {
+  try {
+    const parts = token.split(".");
 
+    if (parts.length < 2) {
+      return null;
+    }
+
+    const segment = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = segment + "=".repeat((4 - (segment.length % 4)) % 4);
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as Record<string, unknown>;
+    const data = payload.data;
+
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const user = (data as Record<string, unknown>).user;
+
+      if (user && typeof user === "object" && !Array.isArray(user)) {
+        const id = Number((user as Record<string, unknown>).id);
+
+        if (id > 0) {
+          return id;
+        }
+      }
+    }
+
+    const directId = Number(payload.user_id ?? payload.id);
+
+    return directId > 0 ? directId : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveJwtUserId(payload: JwtAuthResponse): number {
+  return Number(payload.user_id) || extractUserIdFromJwtToken(payload.token || "") || 0;
+}
+
+function buildSessionFromJwt(payload: JwtAuthResponse, username: string, userId: number): CustomerSession | null {
   if (!userId) {
     return null;
   }
@@ -276,6 +311,7 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
   }
 
   const payload = (await response.json()) as JwtAuthResponse;
+  const userId = resolveJwtUserId(payload);
 
   if (payload.user_email) {
     const customerByEmail = await findCustomerByEmail(payload.user_email).catch(() => null);
@@ -285,8 +321,6 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
     }
   }
 
-  const userId = Number(payload.user_id);
-
   if (userId) {
     const customerById = await findCustomerById(userId);
 
@@ -294,7 +328,7 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
       return customerById;
     }
 
-    const sessionFromJwt = buildSessionFromJwt(payload, input.username);
+    const sessionFromJwt = buildSessionFromJwt(payload, input.username, userId);
 
     if (sessionFromJwt) {
       return sessionFromJwt;
