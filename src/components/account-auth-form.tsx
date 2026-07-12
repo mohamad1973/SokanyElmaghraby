@@ -19,6 +19,7 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginView, setLoginView] = useState<LoginView>("login");
   const [otpPhone, setOtpPhone] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,7 +76,14 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
     }
 
     if (loginView === "forgot-phone") {
-      const phone = String(formData.get("phone") || "");
+      const phone = phoneInput;
+
+      if (!/^01\d{9}$/.test(phone)) {
+        setIsSubmitting(false);
+        setMessage("أدخل رقم موبايل صحيح مكوناً من 11 رقماً يبدأ بـ 01.");
+        return;
+      }
+
       const response = await fetch("/api/account/otp/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,6 +133,7 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
   function resetLoginView() {
     setLoginView("login");
     setOtpPhone("");
+    setPhoneInput("");
     setMessage("");
     setInfoMessage("");
   }
@@ -175,11 +184,27 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
       ) : loginView === "forgot-phone" ? (
         <>
           <p className="text-sm leading-7 text-zinc-600">
-            أدخل رقم الموبايل المسجّل في حسابك. سنرسل كوداً من 6 أرقام على واتساب.
+            أدخل رقم الموبايل المسجّل في حسابك (11 رقماً). سنرسل كوداً من 6 أرقام على واتساب.
           </p>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
             رقم الموبايل
-            <input name="phone" required inputMode="tel" className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
+            <input
+              name="phone"
+              required
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              dir="ltr"
+              placeholder="01XXXXXXXXX"
+              maxLength={11}
+              pattern="01[0-9]{9}"
+              value={phoneInput}
+              onChange={(event) => setPhoneInput(event.target.value.replace(/\D/g, "").slice(0, 11))}
+              className="rounded-2xl border border-black/10 px-4 py-4 text-center text-xl font-bold tracking-[0.25em] tabular-nums outline-none focus:border-brand-gold"
+            />
+            <span className={`text-xs font-normal ${phoneInput.length === 11 ? "text-emerald-600" : "text-zinc-400"}`} dir="rtl">
+              {phoneInput.length}/11 رقم
+            </span>
           </label>
           <button type="button" onClick={resetLoginView} className="justify-self-start text-sm font-bold text-zinc-700 underline">
             العودة لتسجيل الدخول
@@ -225,7 +250,7 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
 
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || (mode === "login" && loginView === "forgot-phone" && phoneInput.length !== 11)}
         className="rounded-full bg-brand-gold px-6 py-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:opacity-60"
       >
         {isSubmitting

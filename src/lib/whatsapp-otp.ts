@@ -44,8 +44,10 @@ type OtpChangePasswordResponse = {
   message?: string;
 };
 
-function getOtpBaseUrl() {
-  return new URL("/wp-json/sokany-otp/v1", siteUrl);
+function getOtpEndpoint(path: string) {
+  const base = siteUrl.replace(/\/+$/, "");
+
+  return `${base}/wp-json/sokany-otp/v1/${path}`;
 }
 
 function normalizeOtpPhone(phone: string) {
@@ -73,7 +75,7 @@ export async function requestOtp(phone: string, purpose: OtpPurpose) {
     throw new Error("رقم الموبايل غير صحيح.");
   }
 
-  const response = await fetch(new URL("/request", getOtpBaseUrl()), {
+  const response = await fetch(getOtpEndpoint("request"), {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -112,7 +114,7 @@ export async function verifyOtp(phone: string, otp: string, purpose: OtpPurpose)
     throw new Error("رقم الموبايل غير صحيح.");
   }
 
-  const response = await fetch(new URL("/verify", getOtpBaseUrl()), {
+  const response = await fetch(getOtpEndpoint("verify"), {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -145,7 +147,7 @@ export async function completeOtpLogin(phone: string, token: string) {
     throw new Error("رقم الموبايل غير صحيح.");
   }
 
-  const response = await fetch(new URL("/login", getOtpBaseUrl()), {
+  const response = await fetch(getOtpEndpoint("login"), {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -178,7 +180,7 @@ export async function resetPasswordWithOtp(phone: string, token: string, passwor
     throw new Error("رقم الموبايل غير صحيح.");
   }
 
-  const response = await fetch(new URL("/reset-password", getOtpBaseUrl()), {
+  const response = await fetch(getOtpEndpoint("reset-password"), {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -195,7 +197,7 @@ export async function resetPasswordWithOtp(phone: string, token: string, passwor
 }
 
 export async function changePasswordWithCurrent(email: string, currentPassword: string, newPassword: string) {
-  const response = await fetch(new URL("/change-password", getOtpBaseUrl()), {
+  const response = await fetch(getOtpEndpoint("change-password"), {
     method: "POST",
     cache: "no-store",
     headers: {
