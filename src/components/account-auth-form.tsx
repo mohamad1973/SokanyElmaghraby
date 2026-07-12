@@ -12,6 +12,14 @@ type AccountAuthFormProps = {
 
 type LoginView = "login" | "forgot-phone" | "forgot-otp";
 
+function formatPhoneDisplay(phone: string) {
+  if (phone.length !== 11) {
+    return phone;
+  }
+
+  return `${phone.slice(0, 4)} ${phone.slice(4, 7)} ${phone.slice(7)}`;
+}
+
 export function AccountAuthForm({ mode }: AccountAuthFormProps) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -20,6 +28,7 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
   const [loginView, setLoginView] = useState<LoginView>("login");
   const [otpPhone, setOtpPhone] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
+  const [otpInput, setOtpInput] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,11 +110,12 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
       }
 
       setOtpPhone(phone);
+      setOtpInput("");
       setLoginView("forgot-otp");
       setInfoMessage(
         result?.testMode
-          ? "تم إنشاء كود التحقق. في وضع الاختبار يظهر الكود في ووردبريس: Settings > SOKANY WhatsApp OTP"
-          : "تم إرسال كود التحقق على واتساب.",
+          ? "تم إرسال الكود. في وضع الاختبار: Settings > SOKANY WhatsApp OTP"
+          : "تم إرسال الكود على واتساب.",
       );
       return;
     }
@@ -115,7 +125,7 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         phone: otpPhone,
-        otp: String(formData.get("otp") || ""),
+        otp: otpInput,
       }),
     });
     const result = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -134,6 +144,15 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
     setLoginView("login");
     setOtpPhone("");
     setPhoneInput("");
+    setOtpInput("");
+    setMessage("");
+    setInfoMessage("");
+  }
+
+  function goToResendCode() {
+    setPhoneInput(otpPhone);
+    setOtpInput("");
+    setLoginView("forgot-phone");
     setMessage("");
     setInfoMessage("");
   }
@@ -183,9 +202,7 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
         </>
       ) : loginView === "forgot-phone" ? (
         <>
-          <p className="text-sm leading-7 text-zinc-600">
-            أدخل رقم الموبايل المسجّل في حسابك (11 رقماً). سنرسل كوداً من 6 أرقام على واتساب.
-          </p>
+          <h2 className="text-xl font-bold text-zinc-950">أدخل رقم الموبايل</h2>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
             رقم الموبايل
             <input
@@ -212,26 +229,35 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
         </>
       ) : (
         <>
-          <p className="text-sm leading-7 text-zinc-600">
-            أدخل كود التحقق المرسل إلى واتساب على الرقم {otpPhone}.
+          <h2 className="text-xl font-bold text-zinc-950">أدخل كود التحقق</h2>
+          <p className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-600" dir="rtl">
+            تم الإرسال إلى:{" "}
+            <span className="font-bold text-zinc-950 tabular-nums" dir="ltr">
+              {formatPhoneDisplay(otpPhone)}
+            </span>
           </p>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            كود التحقق
+            كود التحقق (6 أرقام)
             <input
               name="otp"
               required
+              type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
+              autoFocus
+              dir="ltr"
+              placeholder="000000"
               maxLength={6}
-              className="rounded-2xl border border-black/10 px-4 py-3 tracking-[0.4em] outline-none focus:border-brand-gold"
+              value={otpInput}
+              onChange={(event) => setOtpInput(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="rounded-2xl border-2 border-brand-gold/30 bg-zinc-50 px-4 py-4 text-center text-2xl font-bold tracking-[0.5em] tabular-nums outline-none focus:border-brand-gold"
             />
+            <span className={`text-xs font-normal ${otpInput.length === 6 ? "text-emerald-600" : "text-zinc-400"}`} dir="rtl">
+              {otpInput.length}/6 أرقام
+            </span>
           </label>
-          <button
-            type="button"
-            onClick={() => setLoginView("forgot-phone")}
-            className="justify-self-start text-sm font-bold text-zinc-700 underline"
-          >
-            تغيير رقم الموبايل
+          <button type="button" onClick={goToResendCode} className="justify-self-start text-sm font-bold text-zinc-700 underline">
+            إعادة إرسال الكود
           </button>
         </>
       )}
@@ -250,7 +276,11 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
 
       <button
         type="submit"
-        disabled={isSubmitting || (mode === "login" && loginView === "forgot-phone" && phoneInput.length !== 11)}
+        disabled={
+          isSubmitting ||
+          (mode === "login" && loginView === "forgot-phone" && phoneInput.length !== 11) ||
+          (mode === "login" && loginView === "forgot-otp" && otpInput.length !== 6)
+        }
         className="rounded-full bg-brand-gold px-6 py-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:opacity-60"
       >
         {isSubmitting
