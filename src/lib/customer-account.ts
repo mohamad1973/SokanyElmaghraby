@@ -43,6 +43,63 @@ function hasWooCredentials() {
   return Boolean(siteUrl && consumerKey && consumerSecret);
 }
 
+type JwtAuthResponse = {
+  token?: string;
+  user_email?: string;
+  user_id?: number;
+  user_display_name?: string;
+  user_nicename?: string;
+};
+
+function mapWooCustomerToSession(customer: WooCustomer): CustomerSession {
+  return {
+    customerId: customer.id,
+    email: customer.email,
+    name:
+      `${customer.first_name || customer.billing?.first_name || ""} ${customer.last_name || customer.billing?.last_name || ""}`.trim() ||
+      customer.username ||
+      customer.email,
+    phone: customer.billing?.phone || "",
+  };
+}
+
+function buildSessionFromJwt(payload: JwtAuthResponse, username: string): CustomerSession | null {
+  const userId = Number(payload.user_id);
+
+  if (!userId) {
+    return null;
+  }
+
+  return {
+    customerId: userId,
+    email: payload.user_email || "",
+    name: payload.user_display_name || payload.user_nicename || username,
+    phone: "",
+  };
+}
+
+async function wooFetchOptional<T>(path: string): Promise<T | null> {
+  if (!hasWooCredentials()) {
+    return null;
+  }
+
+  const url = new URL(`/wp-json/wc/v3/${path}`, siteUrl);
+  const authToken = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Authorization: `Basic ${authToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return (await response.json()) as T;
+}
+
 async function wooFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   if (!hasWooCredentials()) {
     return null;
@@ -176,6 +233,10 @@ export async function createCustomerAccount(input: {
 }
 
 export async function findCustomerByEmail(email: string) {
+  if (!email.includes("@")) {
+    return null;
+  }
+
   const customers = await wooFetch<WooCustomer[]>(`customers?email=${encodeURIComponent(email)}`);
   const customer = customers?.[0];
 
@@ -183,12 +244,17 @@ export async function findCustomerByEmail(email: string) {
     return null;
   }
 
-  return {
-    customerId: customer.id,
-    email: customer.email,
-    name: `${customer.first_name || customer.billing?.first_name || ""} ${customer.last_name || customer.billing?.last_name || ""}`.trim() || customer.username || customer.email,
-    phone: customer.billing?.phone || "",
-  } satisfies CustomerSession;
+  return mapWooCustomerToSession(customer);
+}
+
+export async function findCustomerById(userId: number) {
+  const customer = await wooFetchOptional<WooCustomer>(`customers/${userId}`);
+
+  if (!customer) {
+    return null;
+  }
+
+  return mapWooCustomerToSession(customer);
 }
 
 export async function loginCustomerWithWordPress(input: { username: string; password: string }) {
@@ -209,14 +275,33 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
     throw new Error("تعذر تسجيل الدخول. تأكد من بيانات الحساب أو تفعيل JWT في ووردبريس.");
   }
 
-  const payload = (await response.json()) as { user_email?: string };
-  const customer = await findCustomerByEmail(payload.user_email || input.username);
+  const payload = (await response.json()) as JwtAuthResponse;
 
-  if (!customer) {
-    throw new Error("تم تسجيل الدخول في ووردبريس لكن لم يتم العثور على عميل ووكومرس مطابق.");
+  if (payload.user_email) {
+    const customerByEmail = await findCustomerByEmail(payload.user_email).catch(() => null);
+
+    if (customerByEmail) {
+      return customerByEmail;
+    }
   }
 
-  return customer;
+  const userId = Number(payload.user_id);
+
+  if (userId) {
+    const customerById = await findCustomerById(userId);
+
+    if (customerById) {
+      return customerById;
+    }
+
+    const sessionFromJwt = buildSessionFromJwt(payload, input.username);
+
+    if (sessionFromJwt) {
+      return sessionFromJwt;
+    }
+  }
+
+  throw new Error("تم تسجيل الدخول في ووردبريس لكن لم يتم العثور على عميل ووكومرس مطابق.");
 }
 
 export async function getCustomerOrders(customerId: number) {
