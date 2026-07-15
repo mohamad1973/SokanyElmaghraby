@@ -1,7 +1,19 @@
 import { NextResponse } from "next/server";
 
-import { getReorderProducts, updateProductReorderThreshold } from "@/lib/reorder-report";
+import {
+  getReorderProducts,
+  updateProductReorderThreshold,
+  type StockStatusFilter,
+} from "@/lib/reorder-report";
 import { requireAdminSession } from "@/lib/session-guards";
+
+function parseStockStatus(value: string | null): StockStatusFilter | undefined {
+  if (value === "instock" || value === "outofstock") {
+    return value;
+  }
+
+  return undefined;
+}
 
 export async function GET(request: Request) {
   if (!(await requireAdminSession())) {
@@ -11,9 +23,20 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const lowOnly = searchParams.get("lowOnly") === "1" || searchParams.get("lowOnly") === "true";
   const search = searchParams.get("search") || undefined;
+  const categoryRaw = searchParams.get("categoryId");
+  const categoryId = categoryRaw ? Number(categoryRaw) : undefined;
+  const stockStatus = parseStockStatus(searchParams.get("stockStatus"));
 
   try {
-    const result = await getReorderProducts({ lowOnly, search });
+    const result = await getReorderProducts({
+      lowOnly,
+      search,
+      categoryId:
+        categoryId !== undefined && Number.isFinite(categoryId) && categoryId > 0
+          ? categoryId
+          : undefined,
+      stockStatus,
+    });
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر جلب تقرير حد الطلب.";

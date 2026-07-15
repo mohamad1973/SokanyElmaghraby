@@ -14,6 +14,23 @@ export type ReorderProduct = {
   manageStock: boolean;
   isAtOrBelowThreshold: boolean;
   suggestedTransferQty: number;
+  categoryIds: number[];
+  categoryNames: string;
+};
+
+export type ReorderCategory = {
+  id: number;
+  name: string;
+  parent: number;
+  count: number;
+};
+
+export type StockStatusFilter = "instock" | "outofstock";
+
+type WooCategoryRef = {
+  id: number;
+  name: string;
+  slug?: string;
 };
 
 type WooStockProduct = {
@@ -26,6 +43,14 @@ type WooStockProduct = {
   stock_quantity?: number | null;
   low_stock_amount?: number | null;
   stock_status?: string;
+  categories?: WooCategoryRef[];
+};
+
+type WooCategoryRow = {
+  id: number;
+  name: string;
+  parent?: number;
+  count?: number;
 };
 
 function hasWooCredentials() {
@@ -60,6 +85,55 @@ async function wooGetPage(page: number): Promise<WooStockProduct[]> {
   return (await response.json()) as WooStockProduct[];
 }
 
+async function wooGetCategories(): Promise<ReorderCategory[]> {
+  if (!hasWooCredentials()) {
+    return [];
+  }
+
+  const all: ReorderCategory[] = [];
+  let page = 1;
+
+  while (page <= 20) {
+    const url = new URL("/wp-json/wc/v3/products/categories", siteUrl);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("hide_empty", "false");
+    url.searchParams.set("orderby", "name");
+    url.searchParams.set("order", "asc");
+
+    const response = await fetch(url, {
+      headers: { Authorization: authHeader() },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`WooCommerce ${response.status}: تعذر جلب التصنيفات.`);
+    }
+
+    const batch = (await response.json()) as WooCategoryRow[];
+    if (!batch.length) {
+      break;
+    }
+
+    for (const category of batch) {
+      all.push({
+        id: category.id,
+        name: category.name,
+        parent: category.parent || 0,
+        count: category.count || 0,
+      });
+    }
+
+    if (batch.length < 100) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return all.sort((a, b) => a.name.localeCompare(b.name, "ar"));
+}
+
 function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
   if (!product.manage_stock) {
     return null;
@@ -76,6 +150,7 @@ function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
   const thresholdSafe = Number.isFinite(threshold) ? threshold : 0;
   const isAtOrBelowThreshold = thresholdSafe > 0 && qty <= thresholdSafe;
   const suggestedTransferQty = isAtOrBelowThreshold ? Math.max(0, thresholdSafe - qty) : 0;
+  const categories = product.categories || [];
 
   return {
     id: product.id,
@@ -87,44 +162,73 @@ function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
     manageStock: true,
     isAtOrBelowThreshold,
     suggestedTransferQty,
+    categoryIds: categories.map((category) => category.id),
+    categoryNames: categories.map((category) => category.name).join("، "),
   };
+}
+
+function matchesStockStatus(stockStatus: string, filter: StockStatusFilter) {
+  if (filter === "instock") {
+    return stockStatus === "instock";
+  }
+
+  return stockStatus === "outofstock" || stockStatus === "onbackorder";
 }
 
 export async function getReorderProducts(options?: {
   lowOnly?: boolean;
   search?: string;
-}): Promise<{ products: ReorderProduct[]; fetchedAt: string }> {
+  categoryId?: number;
+  stockStatus?: StockStatusFilter;
+}): Promise<{ products: ReorderProduct[]; categories: ReorderCategory[]; fetchedAt: string }> {
   if (!hasWooCredentials()) {
     throw new Error(
       "مفاتيح WooCommerce غير موجودة. أضف WOOCOMMERCE_STORE_URL و Consumer Key/Secret ثم أعد النشر.",
     );
   }
 
-  const all: ReorderProduct[] = [];
-  let page = 1;
+  const [categories, allProducts] = await Promise.all([
+    wooGetCategories(),
+    (async () => {
+      const all: ReorderProduct[] = [];
+      let page = 1;
 
-  while (page <= 50) {
-    const batch = await wooGetPage(page);
-    if (!batch.length) {
-      break;
-    }
+      while (page <= 50) {
+        const batch = await wooGetPage(page);
+        if (!batch.length) {
+          break;
+        }
 
-    for (const product of batch) {
-      const mapped = mapReorderProduct(product);
-      if (mapped) {
-        all.push(mapped);
+        for (const product of batch) {
+          const mapped = mapReorderProduct(product);
+          if (mapped) {
+            all.push(mapped);
+          }
+        }
+
+        if (batch.length < 100) {
+          break;
+        }
+
+        page += 1;
       }
-    }
 
-    if (batch.length < 100) {
-      break;
-    }
+      return all;
+    })(),
+  ]);
 
-    page += 1;
+  let products = allProducts;
+  const search = options?.search?.trim().toLowerCase();
+  const categoryId = options?.categoryId;
+  const stockStatus = options?.stockStatus;
+
+  if (categoryId && Number.isFinite(categoryId) && categoryId > 0) {
+    products = products.filter((item) => item.categoryIds.includes(categoryId));
   }
 
-  let products = all;
-  const search = options?.search?.trim().toLowerCase();
+  if (stockStatus) {
+    products = products.filter((item) => matchesStockStatus(item.stockStatus, stockStatus));
+  }
 
   if (search) {
     products = products.filter(
@@ -145,7 +249,7 @@ export async function getReorderProducts(options?: {
     return a.name.localeCompare(b.name, "ar");
   });
 
-  return { products, fetchedAt: new Date().toISOString() };
+  return { products, categories, fetchedAt: new Date().toISOString() };
 }
 
 export async function updateProductReorderThreshold(
