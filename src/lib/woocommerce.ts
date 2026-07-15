@@ -1,7 +1,7 @@
 import "server-only";
 
 import { categories as fallbackCategories, products as fallbackProducts } from "./demo-data";
-import type { Category, Product } from "./types";
+import type { Category, Product, ProductReview } from "./types";
 
 const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
 const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY;
@@ -37,8 +37,18 @@ type WooProduct = {
   short_description?: string;
   description?: string;
   stock_status?: Product["stockStatus"];
+  manage_stock?: boolean;
+  stock_quantity?: number | null;
   average_rating?: string;
   attributes?: WooAttribute[];
+};
+
+type WooReview = {
+  id: number;
+  reviewer?: string;
+  rating?: number;
+  review?: string;
+  date_created?: string;
 };
 
 type StoreApiImage = {
@@ -134,6 +144,15 @@ async function storeFetch<T>(path: string): Promise<T | null> {
   }
 }
 
+function mapStockQuantity(product: Pick<WooProduct, "manage_stock" | "stock_quantity">): number | undefined {
+  if (!product.manage_stock) {
+    return undefined;
+  }
+
+  const qty = Number(product.stock_quantity);
+  return Number.isFinite(qty) ? Math.max(0, qty) : undefined;
+}
+
 function mapProduct(product: WooProduct): Product {
   const images = product.images?.map((image) => image.src).filter((src): src is string => Boolean(src)) || [];
 
@@ -156,6 +175,7 @@ function mapProduct(product: WooProduct): Product {
       stripHtml(product.description) || "تفاصيل المنتج يتم تحديثها من لوحة WooCommerce.",
     descriptionHtml: product.description || "",
     stockStatus: product.stock_status || "instock",
+    stockQuantity: mapStockQuantity(product),
     rating: product.average_rating || "0",
     attributes:
       product.attributes?.reduce<Record<string, string>>((acc, attribute) => {
@@ -415,6 +435,28 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   }
 
   return fallbackProducts.find((product) => product.slug === slug) || null;
+}
+
+export async function getProductReviews(productId: number, limit = 20): Promise<ProductReview[]> {
+  if (!Number.isFinite(productId) || productId < 1) {
+    return [];
+  }
+
+  const data = await wooFetch<WooReview[]>(
+    `products/reviews?product=${productId}&per_page=${limit}&status=approved`,
+  );
+
+  if (!data?.length) {
+    return [];
+  }
+
+  return data.map((review) => ({
+    id: review.id,
+    reviewer: review.reviewer || "عميل",
+    rating: Number(review.rating) || 0,
+    review: stripHtml(review.review || ""),
+    dateCreated: review.date_created || "",
+  }));
 }
 
 export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {

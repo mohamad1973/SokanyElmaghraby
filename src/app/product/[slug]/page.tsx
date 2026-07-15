@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProductImageGallery } from "@/components/product-image-gallery";
 import { ProductCard } from "@/components/product-card";
+import { ProductDetailTabs } from "@/components/product-detail-tabs";
 import { ProductPageActions } from "@/components/product-page-actions";
+import { ProductQuantityAddToCart } from "@/components/product-quantity-cart";
 import { ProductRichDescription } from "@/components/product-rich-description";
-import { ProductSpecRow } from "@/components/product-spec-row";
+import { ProductShareButtons } from "@/components/product-share-buttons";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { getProductCodeLabel, getProductDisplayCode } from "@/lib/product-display-code";
 import { productToListEntry } from "@/lib/product-lists";
 import { getThemeSettings } from "@/lib/theme-settings";
-import { getProductBySlug, getRelatedProducts } from "@/lib/woocommerce";
+import { getProductBySlug, getProductReviews, getRelatedProducts } from "@/lib/woocommerce";
 
 type ProductPageProps = {
   params: Promise<{ slug: string }>;
@@ -46,9 +47,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
-  const [relatedProducts, settings] = await Promise.all([
+  const [relatedProducts, settings, reviews] = await Promise.all([
     getRelatedProducts(product),
     getThemeSettings(),
+    getProductReviews(product.id),
   ]);
 
   const codeMode = settings.productCard.codeMode;
@@ -70,7 +72,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     aggregateRating: {
       "@type": "AggregateRating",
       ratingValue: product.rating,
-      reviewCount: "24",
+      reviewCount: String(Math.max(reviews.length, Number(product.rating) > 0 ? 1 : 0)),
     },
     offers: {
       "@type": "Offer",
@@ -115,40 +117,24 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <span className="rounded-full border border-brand-gold/40 bg-brand-gold/20 px-4 py-2 text-sm font-bold text-zinc-950">
                 {product.stockStatus === "instock" ? (
                   <VisualEditableText textKey="product.stock.instock">متوفر</VisualEditableText>
+                ) : product.stockStatus === "outofstock" ? (
+                  <span>غير متوفر</span>
                 ) : (
                   <VisualEditableText textKey="product.stock.backorder">متاح بالحجز</VisualEditableText>
                 )}
               </span>
             </div>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <Link
-                href="/checkout"
-                className="rounded-full bg-brand-gold px-8 py-4 text-center text-sm font-bold text-black transition hover:bg-brand-gold-dark"
-              >
-                <VisualEditableText textKey="product.buyNow">شراء الآن</VisualEditableText>
-              </Link>
-              <Link
-                href="/cart"
-                className="rounded-full border border-black/10 bg-white px-8 py-4 text-center text-sm font-bold text-zinc-950 transition hover:border-brand-gold hover:text-brand-gold"
-              >
-                <VisualEditableText textKey="product.addToCart">أضف للسلة</VisualEditableText>
-              </Link>
-            </div>
+            <ProductQuantityAddToCart product={product} />
+            <ProductShareButtons productName={product.name} productSlug={product.slug} />
 
-            <div className="mt-8 grid gap-3 rounded-[2rem] bg-white p-5 shadow-sm">
-              <p className="text-sm font-bold text-zinc-950">
-                <VisualEditableText textKey="product.specifications">المواصفات</VisualEditableText>
-              </p>
-              {Object.entries(product.attributes).map(([key, value], index) => (
-                <ProductSpecRow key={key} label={key} value={value} striped={index % 2 === 1} />
-              ))}
-              <ProductSpecRow
-                label={<VisualEditableText textKey="product.skuLabel">{codeLabel}</VisualEditableText>}
-                value={displayCode}
-                striped={Object.keys(product.attributes).length % 2 === 1}
-              />
-            </div>
+            <ProductDetailTabs
+              attributes={product.attributes}
+              codeLabel={codeLabel}
+              displayCode={displayCode}
+              rating={product.rating}
+              reviews={reviews}
+            />
           </div>
         </div>
 
@@ -168,4 +154,3 @@ export default async function ProductPage({ params }: ProductPageProps) {
     </div>
   );
 }
-

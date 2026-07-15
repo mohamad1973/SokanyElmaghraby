@@ -15,9 +15,19 @@ export type Product = {
   description: string;
   descriptionHtml?: string;
   stockStatus: "instock" | "outofstock" | "onbackorder";
+  /** Available units when Woo manage_stock is on; omitted when not managed numerically. */
+  stockQuantity?: number;
   rating: string;
   attributes: Record<string, string>;
   featured?: boolean;
+};
+
+export type ProductReview = {
+  id: number;
+  reviewer: string;
+  rating: number;
+  review: string;
+  dateCreated: string;
 };
 
 export type Category = {

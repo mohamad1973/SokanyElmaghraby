@@ -296,6 +296,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| عداد كمية + سلة محلية + مشاركة + تابات المنتج | `stockQuantity` من Woo، `CartProvider`/`sokany-cart`، عداد على PDP والكارت، مشاركة واتساب/فيسبوك/نسخ/Web Share، تابات مواصفات/مراجعات/شحن | `cart-provider.tsx`, `product-quantity-cart.tsx`, `product-share-buttons.tsx`, `product-detail-tabs.tsx`, `product/[slug]/page.tsx` |
 | كاروسيل تصنيفات مستمر | أُضيف ثم **أُلغي** | `b6f361d` → `045b2a4` |
 | تحكم كاروسيل التصنيفات من الداشبورد | عدد (ديسكتوب/تابلت/موبايل) + سرعة | `/admin/banners` — `045b2a4` |
 | موضع الأزرار العائمة | واتساب / صعود / سوشيال | `/admin/social-media` — `045b2a4` |
@@ -364,7 +365,8 @@
 | داشبورد مظهر وبانرات | جاهز |
 | طلبات أدمن + Bosta + توزيع | جاهز (يتطلب DATABASE_URL) |
 | تطبيق سائق PWA | جاهز |
-| سلة + checkout + Fawry | واجهة / placeholder |
+| سلة محلية (كمية محدودة بالمخزون) + مشاركة + تابات PDP | جاهز (checkout Woo لاحقاً) |
+| سلة + checkout + Fawry | سلة محلية جاهزة؛ checkout Woo / Fawry لاحقاً |
 
 ---
 
