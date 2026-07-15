@@ -52,7 +52,7 @@ export async function importProductsFromWordPress() {
 
   await ensureImportTables(prisma);
 
-  const products = await getProducts(100);
+  const products = await getProducts(100, undefined, { includeUnavailable: true });
 
   await Promise.all(products.map((product: Product) => prisma.$executeRaw`
     INSERT INTO ImportedProduct (productId, slug, name, payload)

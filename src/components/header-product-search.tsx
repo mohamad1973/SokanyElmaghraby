@@ -17,6 +17,8 @@ type SearchProduct = {
   displayCode: string;
   price: string;
   image: string;
+  stockStatus: "instock" | "outofstock" | "onbackorder";
+  stockQuantity?: number;
 };
 
 export function HeaderProductSearch({ className = "relative hidden min-w-72 max-w-md flex-1 lg:block" }: { className?: string }) {
@@ -108,6 +110,7 @@ export function HeaderProductSearch({ className = "relative hidden min-w-72 max-
               </Link>
               <ProductActionButtons
                 entry={productToListEntry(product)}
+                product={product}
                 size="sm"
                 className="shrink-0"
               />

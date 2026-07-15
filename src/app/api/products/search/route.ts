@@ -21,6 +21,8 @@ export async function GET(request: Request) {
       displayCode: getProductDisplayCode(product, codeMode),
       price: product.price,
       image: product.image,
+      stockStatus: product.stockStatus,
+      stockQuantity: product.stockQuantity,
     })),
   });
 }

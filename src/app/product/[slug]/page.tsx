@@ -104,7 +104,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <h1 className="text-3xl font-bold leading-tight text-zinc-950 sm:text-5xl">
               {product.name}
             </h1>
-            <ProductPageActions entry={listEntry} />
+            <ProductPageActions entry={listEntry} product={product} />
             <p className="mt-5 text-lg leading-9 text-zinc-600">{product.shortDescription}</p>
 
             <div className="mt-7 flex flex-wrap items-center gap-4">

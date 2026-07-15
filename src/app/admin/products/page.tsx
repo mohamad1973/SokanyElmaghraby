@@ -8,7 +8,7 @@ import { ImportButton } from "../import-button";
 export const dynamic = "force-dynamic";
 
 export default async function AdminProductsPage() {
-  const products = await getProducts(100);
+  const products = await getProducts(100, undefined, { includeUnavailable: true });
 
   return (
     <div className="space-y-6">

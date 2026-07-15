@@ -248,6 +248,28 @@ function hasRealProductImage(product: Product) {
   return Boolean(product.images?.length && product.image && !product.image.includes("product-placeholder"));
 }
 
+/** Hide out-of-stock / zero-qty products from the customer storefront. */
+export function isPurchasableOnStorefront(product: Product): boolean {
+  if (product.stockStatus === "outofstock") {
+    return false;
+  }
+
+  if (typeof product.stockQuantity === "number" && product.stockQuantity <= 0) {
+    return false;
+  }
+
+  return true;
+}
+
+export type ProductQueryOptions = {
+  /** When true, include out-of-stock items (admin / imports). Default false. */
+  includeUnavailable?: boolean;
+};
+
+function visibleForStorefront(product: Product, options?: ProductQueryOptions) {
+  return hasRealProductImage(product) && (options?.includeUnavailable || isPurchasableOnStorefront(product));
+}
+
 async function getCategoryIdBySlug(slug?: string) {
   if (!slug) {
     return null;
@@ -309,7 +331,11 @@ function uniqueProducts(products: Product[], limit: number) {
   return Array.from(productsById.values()).slice(0, limit);
 }
 
-export async function getProducts(limit = 12, categorySlug?: string): Promise<Product[]> {
+export async function getProducts(
+  limit = 12,
+  categorySlug?: string,
+  options?: ProductQueryOptions,
+): Promise<Product[]> {
   const categoryIds = await getCategoryIdsBySlug(categorySlug);
   const categoryId = categoryIds[0];
   const categoryQuery = categoryId ? `&category=${categoryId}` : "";
@@ -322,7 +348,7 @@ export async function getProducts(limit = 12, categorySlug?: string): Promise<Pr
     : await wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish${categoryQuery}`);
 
   if (data?.length) {
-    return uniqueProducts(data.map(mapProduct).filter(hasRealProductImage), limit);
+    return uniqueProducts(data.map(mapProduct).filter((product) => visibleForStorefront(product, options)), limit);
   }
 
   const storeData = categoryIds.length > 1
@@ -336,17 +362,20 @@ export async function getProducts(limit = 12, categorySlug?: string): Promise<Pr
       );
 
   if (storeData?.length) {
-    return uniqueProducts(storeData.map(mapStoreProduct).filter(hasRealProductImage), limit);
+    return uniqueProducts(
+      storeData.map(mapStoreProduct).filter((product) => visibleForStorefront(product, options)),
+      limit,
+    );
   }
 
-  return fallbackProducts.filter(hasRealProductImage).slice(0, limit);
+  return fallbackProducts.filter((product) => visibleForStorefront(product, options)).slice(0, limit);
 }
 
 export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<Product[]> {
   const data = await wooFetch<WooProduct[]>(`products?featured=true&per_page=${limit}&status=publish`);
 
   if (data?.length) {
-    const featuredProducts = data.map(mapProduct).filter(hasRealProductImage);
+    const featuredProducts = data.map(mapProduct).filter((product) => visibleForStorefront(product));
 
     if (featuredProducts.length >= minimumCount) {
       return featuredProducts.slice(0, limit);
@@ -359,7 +388,7 @@ export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<
     return uniqueProducts(
       [
         ...featuredProducts,
-        ...(supplementalData?.map(mapProduct).filter(hasRealProductImage) || []),
+        ...(supplementalData?.map(mapProduct).filter((product) => visibleForStorefront(product)) || []),
       ],
       limit,
     );
@@ -368,10 +397,12 @@ export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<
   const storeData = await storeFetch<StoreApiProduct[]>(`products?per_page=${limit}&orderby=popularity`);
 
   if (storeData?.length) {
-    return storeData.map(mapStoreProduct).filter(hasRealProductImage).slice(0, limit);
+    return storeData.map(mapStoreProduct).filter((product) => visibleForStorefront(product)).slice(0, limit);
   }
 
-  const featuredFallbackProducts = fallbackProducts.filter((product) => product.featured && hasRealProductImage(product));
+  const featuredFallbackProducts = fallbackProducts.filter(
+    (product) => product.featured && visibleForStorefront(product),
+  );
 
   if (featuredFallbackProducts.length >= minimumCount) {
     return featuredFallbackProducts.slice(0, limit);
@@ -380,7 +411,7 @@ export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<
   return uniqueProducts(
     [
       ...featuredFallbackProducts,
-      ...fallbackProducts.filter(hasRealProductImage),
+      ...fallbackProducts.filter((product) => visibleForStorefront(product)),
     ],
     limit,
   );
@@ -398,7 +429,7 @@ export async function searchProducts(query: string, limit = 8): Promise<Product[
   );
 
   if (data?.length) {
-    return data.map(mapProduct).filter(hasRealProductImage);
+    return data.map(mapProduct).filter((product) => visibleForStorefront(product));
   }
 
   const storeData = await storeFetch<StoreApiProduct[]>(
@@ -406,14 +437,14 @@ export async function searchProducts(query: string, limit = 8): Promise<Product[
   );
 
   if (storeData?.length) {
-    return storeData.map(mapStoreProduct).filter(hasRealProductImage);
+    return storeData.map(mapStoreProduct).filter((product) => visibleForStorefront(product));
   }
 
   const normalizedQuery = trimmedQuery.toLowerCase();
 
   return fallbackProducts
     .filter((product) =>
-      hasRealProductImage(product) &&
+      visibleForStorefront(product) &&
       [product.name, product.sku, product.category, product.shortDescription].some((value) =>
         value.toLowerCase().includes(normalizedQuery),
       ),
@@ -425,16 +456,19 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   const data = await wooFetch<WooProduct[]>(`products?slug=${slug}&status=publish`);
 
   if (data?.length) {
-    return mapProduct(data[0]);
+    const product = mapProduct(data[0]);
+    return isPurchasableOnStorefront(product) ? product : null;
   }
 
   const storeData = await storeFetch<StoreApiProduct[]>(`products?slug=${slug}`);
 
   if (storeData?.length) {
-    return mapStoreProduct(storeData[0]);
+    const product = mapStoreProduct(storeData[0]);
+    return isPurchasableOnStorefront(product) ? product : null;
   }
 
-  return fallbackProducts.find((product) => product.slug === slug) || null;
+  const fallback = fallbackProducts.find((product) => product.slug === slug) || null;
+  return fallback && isPurchasableOnStorefront(fallback) ? fallback : null;
 }
 
 export async function getProductReviews(productId: number, limit = 20): Promise<ProductReview[]> {
@@ -493,7 +527,7 @@ export async function getProductsByIds(ids: number[]): Promise<Product[]> {
 
     return uniqueIds
       .map((id) => productsById.get(id))
-      .filter((product): product is Product => Boolean(product));
+      .filter((product): product is Product => Boolean(product && isPurchasableOnStorefront(product)));
   }
 
   const storeData = await storeFetch<StoreApiProduct[]>(
@@ -505,14 +539,14 @@ export async function getProductsByIds(ids: number[]): Promise<Product[]> {
 
     return uniqueIds
       .map((id) => productsById.get(id))
-      .filter((product): product is Product => Boolean(product));
+      .filter((product): product is Product => Boolean(product && isPurchasableOnStorefront(product)));
   }
 
   const fallbackById = new Map(fallbackProducts.map((product) => [product.id, product]));
 
   return uniqueIds
     .map((id) => fallbackById.get(id))
-    .filter((product): product is Product => Boolean(product));
+    .filter((product): product is Product => Boolean(product && isPurchasableOnStorefront(product)));
 }
 
 export async function getCategories(): Promise<Category[]> {

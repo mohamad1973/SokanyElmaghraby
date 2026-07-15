@@ -69,7 +69,7 @@ export function ProductCompareTable({ products }: ProductCompareTableProps) {
               {product.name}
             </Link>
             <p className="text-base font-bold text-zinc-950">{product.price} ج.م</p>
-            <ProductActionButtons entry={productToListEntry(product)} size="sm" />
+            <ProductActionButtons entry={productToListEntry(product)} product={product} size="sm" />
             <button
               type="button"
               onClick={() => removeFromCompare(product.id)}
