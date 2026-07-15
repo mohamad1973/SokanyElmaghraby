@@ -18,6 +18,7 @@ const navItems = [
   { href: "/admin/products", label: "المنتجات" },
   { href: "/admin/categories", label: "التصنيفات" },
   { href: "/admin/orders", label: "الطلبات" },
+  { href: "/admin/reports", label: "التقارير" },
   { href: "/admin/dispatch/setup", label: "إعداد الشحن" },
   { href: "/admin/dispatch/board", label: "التوزيع" },
   { href: "/admin/dispatch/drivers", label: "المندوبين" },
