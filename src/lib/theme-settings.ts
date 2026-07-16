@@ -41,6 +41,7 @@ export type HomeSectionId = "hero" | "mainGroups" | "trustBadges" | "categories"
 export type HomeSectionOrderItem = HomeSectionId | `custom:${string}`;
 
 export type HomeSectionStyle = {
+  enabled: boolean;
   spacingTop: number;
   spacingBottom: number;
   paddingLeft: number;
@@ -539,6 +540,7 @@ function mergeHomeSectionStyle(value: unknown): HomeSectionStyle {
   const style = isObject(value) ? value : {};
 
   return {
+    enabled: typeof style.enabled === "boolean" ? style.enabled : true,
     spacingTop: typeof style.spacingTop === "number" ? Math.max(0, style.spacingTop) : 64,
     spacingBottom: typeof style.spacingBottom === "number" ? Math.max(0, style.spacingBottom) : 64,
     paddingLeft: typeof style.paddingLeft === "number" ? Math.max(0, Math.min(200, style.paddingLeft)) : 0,

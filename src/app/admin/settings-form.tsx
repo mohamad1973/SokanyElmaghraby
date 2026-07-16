@@ -61,6 +61,7 @@ function getHomeSectionLabel(sectionId: HomeSectionOrderItem, customSections: Cu
 
 function createHomeSectionStyle(): HomeSectionStyle {
   return {
+    enabled: true,
     spacingTop: 64,
     spacingBottom: 64,
     paddingLeft: 0,
@@ -773,7 +774,32 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                   <div key={sectionId} className="grid gap-4 rounded-xl bg-zinc-50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <span className="text-sm font-bold text-zinc-800">{getHomeSectionLabel(sectionId, settings.customSections)}</span>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-bold text-zinc-800">
+                          <input
+                            type="checkbox"
+                            checked={sectionStyle.enabled}
+                            onChange={(event) =>
+                              setSettings({
+                                ...settings,
+                                homeSectionStyles: {
+                                  ...settings.homeSectionStyles,
+                                  [sectionId]: { ...sectionStyle, enabled: event.target.checked },
+                                },
+                                ...(sectionId.startsWith("custom:")
+                                  ? {
+                                      customSections: settings.customSections.map((section) =>
+                                        getCustomSectionOrderId(section.id) === sectionId
+                                          ? { ...section, enabled: event.target.checked }
+                                          : section,
+                                      ),
+                                    }
+                                  : {}),
+                              })
+                            }
+                          />
+                          {sectionStyle.enabled ? "ظاهر" : "مخفي"}
+                        </label>
                         <button
                           type="button"
                           disabled={index === 0}

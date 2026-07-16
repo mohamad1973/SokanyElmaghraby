@@ -46,6 +46,10 @@ function getSectionStyle(settings: Awaited<ReturnType<typeof getThemeSettings>>,
   return settings.homeSectionStyles[sectionId];
 }
 
+function isHomeSectionEnabled(settings: Awaited<ReturnType<typeof getThemeSettings>>, sectionId: HomeSectionOrderItem) {
+  return getSectionStyle(settings, sectionId)?.enabled !== false;
+}
+
 function getSectionContainerClass(settings: Awaited<ReturnType<typeof getThemeSettings>>, sectionId: HomeSectionOrderItem) {
   return getSectionStyle(settings, sectionId)?.widthMode === "full"
     ? "w-full"
@@ -162,7 +166,7 @@ export default async function Home() {
   const heroSectionContainerClass = getSectionContainerClass(settings, "hero");
   const homeSections: HomeSectionEntry[] = [];
 
-  if (settings.hero.enabled) {
+  if (settings.hero.enabled && isHomeSectionEnabled(settings, "hero")) {
     homeSections.push({
       id: "hero",
       node: (
@@ -176,21 +180,25 @@ export default async function Home() {
     });
   }
 
-  if (settings.sections.mainGroups.enabled && settings.sections.mainGroups.items.some((item) => item.image)) {
+  if (
+    settings.sections.mainGroups.enabled &&
+    isHomeSectionEnabled(settings, "mainGroups") &&
+    settings.sections.mainGroups.items.some((item) => item.image)
+  ) {
     homeSections.push({
       id: "mainGroups",
       node: <MainGroupsSection section={settings.sections.mainGroups} />,
     });
   }
 
-  if (settings.sections.trustBadges) {
+  if (settings.sections.trustBadges && isHomeSectionEnabled(settings, "trustBadges")) {
     homeSections.push({
       id: "trustBadges",
       node: <TrustBadgesSection items={trustItems} />,
     });
   }
 
-  if (settings.sections.categories.enabled && categoriesWithImages.length) {
+  if (settings.sections.categories.enabled && isHomeSectionEnabled(settings, "categories") && categoriesWithImages.length) {
     homeSections.push({
       id: "categories",
       node: (
@@ -213,7 +221,7 @@ export default async function Home() {
     });
   }
 
-  if (settings.sections.bestSellers) {
+  if (settings.sections.bestSellers && isHomeSectionEnabled(settings, "bestSellers")) {
     homeSections.push({
       id: "bestSellers",
       node: (
@@ -237,7 +245,7 @@ export default async function Home() {
   }
 
   settings.customSections
-    .filter((section) => section.enabled)
+    .filter((section) => section.enabled && isHomeSectionEnabled(settings, getCustomSectionOrderId(section.id)))
     .forEach((section) => {
       const sectionProducts = customSectionProducts.get(section.id) || [];
       const backgroundImage = section.mobileImage || section.tabletImage || section.desktopImage;
@@ -297,13 +305,14 @@ export default async function Home() {
       });
     });
 
-  if (settings.sections.competitiveBanner) {
+  if (settings.sections.competitiveBanner && isHomeSectionEnabled(settings, "competitiveBanner")) {
     homeSections.push({
       id: "competitiveBanner",
       node: (
         <section className="py-16">
         <div className={getSectionContainerClass(settings, "competitiveBanner")}>
           {settings.sections.customBanner.enabled &&
+          isHomeSectionEnabled(settings, "customBanner") &&
           (settings.sections.customBanner.desktopImage || settings.sections.customBanner.mobileImage) ? (
             <Link
               href={settings.sections.customBanner.ctaUrl}
@@ -335,33 +344,41 @@ export default async function Home() {
           <div className="grid gap-8 rounded-[2.5rem] bg-zinc-950 p-8 text-white lg:grid-cols-[1fr_0.8fr] lg:p-12">
             <div>
               <p className="text-sm font-bold text-brand-gold">
-                <VisualEditableText textKey="competitive.eyebrow">ميزة تنافسية</VisualEditableText>
+                <VisualEditableText textKey="competitive.official.eyebrow">سوكاني الرسمية</VisualEditableText>
               </p>
               <h2 className="mt-3 text-3xl font-bold leading-tight sm:text-4xl">
-                <VisualEditableText textKey="competitive.title">
-                  موقع أسرع، صفحات منتجات أغنى، وثقة أوضح من الواجهات السريعة
+                <VisualEditableText textKey="competitive.official.title">
+                  ميزة الشراء من الموقع الرسمي لسوكاني
                 </VisualEditableText>
               </h2>
-              <p className="mt-5 max-w-2xl leading-8 text-zinc-300">
-                <VisualEditableText textKey="competitive.description">
-                  المرحلة القادمة تضيف البحث السريع، الفلاتر المتقدمة، المفضلة،
-                  المقارنة، وربط إتمام الطلب الحقيقي مع ووكومرس وفوري.
-                </VisualEditableText>
-              </p>
             </div>
             <div className="grid gap-3 text-sm font-bold text-zinc-200">
               {[
-                { key: "search", text: "تحسين ظهور المنتجات في البحث" },
-                { key: "structuredData", text: "بيانات منظمة للمنتج والسعر" },
-                { key: "checkout", text: "إتمام طلب فوري أو كاش" },
-                { key: "mobile", text: "تصميم يبدأ من الموبايل" },
-              ].map(
-                (item) => (
-                  <div key={item.key} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <VisualEditableText textKey={`competitive.feature.${item.key}`}>{item.text}</VisualEditableText>
-                  </div>
-                ),
-              )}
+                {
+                  key: "authentic",
+                  text: "مصدر موثوق للحصول على منتجات سوكاني الأصلية من مؤسسة المغربي",
+                },
+                {
+                  key: "partsWarranty",
+                  text: "قطع غيار أصلية وضمان حقيقي على كل المنتجات",
+                },
+                {
+                  key: "freeDelivery",
+                  text: "التوصيل مجاناً لحد باب البيت",
+                },
+                {
+                  key: "afterSales",
+                  text: "سرعة خدمة ما بعد البيع",
+                },
+                {
+                  key: "qualityEgypt",
+                  text: "نحن نسعى إلى التطوير المستمر لجودة منتجاتنا لتكون ملائمة للسوق المصري وهدفنا رضاء عملائنا",
+                },
+              ].map((item) => (
+                <div key={item.key} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <VisualEditableText textKey={`competitive.feature.${item.key}`}>{item.text}</VisualEditableText>
+                </div>
+              ))}
             </div>
           </div>
         </div>
