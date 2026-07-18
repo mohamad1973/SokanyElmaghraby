@@ -53,7 +53,19 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
       setIsSubmitting(false);
 
       if (!response.ok) {
-        setMessage(result?.message || "تعذر تنفيذ العملية.");
+        const rawMessage = result?.message || "تعذر تنفيذ العملية.";
+        let friendlyMessage = rawMessage;
+
+        try {
+          const parsed = JSON.parse(rawMessage) as { message?: string };
+          if (typeof parsed.message === "string" && parsed.message.trim()) {
+            friendlyMessage = parsed.message.trim();
+          }
+        } catch {
+          // already plain text
+        }
+
+        setMessage(friendlyMessage);
         return;
       }
 
@@ -167,7 +179,20 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
           </label>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
             <VisualEditableText textKey="account.form.phone">رقم الموبايل</VisualEditableText>
-            <input name="phone" required inputMode="tel" className="rounded-2xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold" />
+            <input
+              name="phone"
+              required
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              dir="ltr"
+              placeholder="01XXXXXXXXX"
+              maxLength={11}
+              pattern="01[0-9]{9}"
+              title="أدخل 11 رقماً يبدأ بـ 01"
+              className="rounded-2xl border border-black/10 px-4 py-3 text-center text-lg font-bold tracking-[0.2em] tabular-nums outline-none focus:border-brand-gold"
+            />
+            <span className="text-xs font-normal text-zinc-400">11 رقم يبدأ بـ 01 بدون مسافات</span>
           </label>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
             <VisualEditableText textKey="account.form.email">البريد الإلكتروني</VisualEditableText>

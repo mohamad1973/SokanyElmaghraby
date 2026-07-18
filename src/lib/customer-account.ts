@@ -135,6 +135,54 @@ async function wooFetchOptional<T>(path: string): Promise<T | null> {
   return (await response.json()) as T;
 }
 
+/** Extract a human-readable message from Woo/WP REST error bodies. */
+export function parseWooCommerceErrorMessage(raw: string, status?: number): string {
+  const trimmed = raw.trim();
+
+  if (trimmed) {
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        message?: unknown;
+        code?: unknown;
+        data?: { message?: unknown; status?: unknown };
+      };
+
+      if (typeof parsed.message === "string" && parsed.message.trim()) {
+        return parsed.message.trim();
+      }
+
+      if (typeof parsed.data?.message === "string" && parsed.data.message.trim()) {
+        return parsed.data.message.trim();
+      }
+    } catch {
+      // Not JSON — use plain text below.
+    }
+
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return trimmed.slice(0, 300);
+    }
+  }
+
+  return status ? `تعذر إكمال الطلب من ووكومرس (${status}).` : "تعذر إكمال الطلب من ووكومرس.";
+}
+
+/** Normalize Egyptian mobile numbers to 01XXXXXXXXX. */
+export function normalizeEgyptianPhone(phone: string): string {
+  let digits = phone.replace(/\D/g, "");
+
+  if (digits.startsWith("0020")) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith("20") && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length === 10 && digits.startsWith("1")) {
+    digits = `0${digits}`;
+  }
+
+  return digits;
+}
+
 async function wooFetch<T>(path: string, init?: RequestInit): Promise<T | null> {
   if (!hasWooCredentials()) {
     return null;
@@ -154,7 +202,7 @@ async function wooFetch<T>(path: string, init?: RequestInit): Promise<T | null> 
 
   if (!response.ok) {
     const message = await response.text().catch(() => "");
-    throw new Error(message || `WooCommerce request failed with status ${response.status}`);
+    throw new Error(parseWooCommerceErrorMessage(message, response.status));
   }
 
   return (await response.json()) as T;
@@ -238,6 +286,12 @@ export async function createCustomerAccount(input: {
   password: string;
 }) {
   const { firstName, lastName } = splitName(input.name);
+  const phone = normalizeEgyptianPhone(input.phone);
+
+  if (!/^01\d{9}$/.test(phone)) {
+    throw new Error("أدخل رقم موبايل صحيح مكوناً من 11 رقماً يبدأ بـ 01.");
+  }
+
   const customer = await wooFetch<WooCustomer>("customers", {
     method: "POST",
     body: JSON.stringify({
@@ -250,8 +304,18 @@ export async function createCustomerAccount(input: {
         first_name: firstName,
         last_name: lastName,
         email: input.email,
-        phone: input.phone,
+        phone,
       },
+      shipping: {
+        first_name: firstName,
+        last_name: lastName,
+        phone,
+      },
+      meta_data: [
+        { key: "billing_phone", value: phone },
+        { key: "phone", value: phone },
+        { key: "mobile", value: phone },
+      ],
     }),
   });
 
@@ -263,7 +327,7 @@ export async function createCustomerAccount(input: {
     customerId: customer.id,
     email: customer.email,
     name: `${customer.first_name || firstName} ${customer.last_name || lastName}`.trim(),
-    phone: customer.billing?.phone || input.phone,
+    phone: customer.billing?.phone || phone,
   } satisfies CustomerSession;
 }
 
