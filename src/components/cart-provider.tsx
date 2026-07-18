@@ -13,6 +13,7 @@ import {
 
 import {
   CART_STORAGE_KEY,
+  formatCartAddedMessage,
   getMaxOrderQuantity,
   parseCartItems,
   type CartItem,
@@ -146,11 +147,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       if (options?.notify) {
         if (result.ok) {
-          showToast(
-            result.message
-              ? `${result.message} — لديك ${nextCount} قطعة في السلة`
-              : `تمت الإضافة — لديك ${nextCount} قطعة في السلة`,
-          );
+          showToast(formatCartAddedMessage(nextCount, result.message));
         } else if (result.message) {
           showToast(result.message);
         }
@@ -201,22 +198,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [items, addItem, updateQty, removeItem, clearCart, toastMessage],
   );
 
-  return (
-    <CartContext.Provider value={value}>
-      {children}
-      {toastMessage ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 top-0 z-[80] flex justify-center px-4 pt-3 sm:pt-4"
-        >
-          <div className="pointer-events-auto max-w-lg rounded-full border border-black/10 bg-black px-5 py-3 text-center text-sm font-bold text-brand-gold shadow-lg">
-            {toastMessage}
-          </div>
-        </div>
-      ) : null}
-    </CartContext.Provider>
-  );
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart() {

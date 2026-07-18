@@ -7,6 +7,7 @@ import type { MenuNode } from "@/lib/types";
 
 import { bannerSpacingStyle } from "@/lib/banner-spacing";
 
+import { HeaderCartLink } from "./header-cart-link";
 import { HeaderCompareLink } from "./header-compare-link";
 import { HeaderProductSearch } from "./header-product-search";
 import { HeaderWishlistMenu } from "./header-wishlist-menu";
@@ -76,17 +77,8 @@ function TopBannerIcon({ icon }: { icon: TopBannerIconName }) {
   );
 }
 
-function HeaderIcon({ icon }: { icon: "account" | "cart" | "favorite" | "compare" }) {
+function HeaderIcon({ icon }: { icon: "account" | "favorite" | "compare" }) {
   const className = "h-5 w-5";
-
-  if (icon === "cart") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
-        <path d="M6 7h15l-2 8H8L6 7ZM6 7 5 4H2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M9 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM18 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
-      </svg>
-    );
-  }
 
   if (icon === "favorite") {
     return (
@@ -187,10 +179,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     icon: topBannerIconOrder[index % topBannerIconOrder.length],
     label,
   }));
-  const headerActions = [
-    { href: "/account", label: "الحساب", icon: "account" as const },
-    { href: "/cart", label: "السلة", icon: "cart" as const },
-  ];
+  const headerActions = [{ href: "/account", label: "الحساب", icon: "account" as const }];
   const logoStyle = {
     "--logo-mobile-width": `${settings.brand.logoMobileWidth}px`,
     "--logo-mobile-height": `${settings.brand.logoMobileHeight}px`,
@@ -287,6 +276,14 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </div>
 
         <HeaderProductSearch />
+        <a
+          href="tel:17355"
+          className="hidden h-10 shrink-0 items-center justify-center rounded-full border border-brand-gold bg-brand-gold px-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark lg:inline-flex"
+          dir="ltr"
+          aria-label="الاتصال بالهوت لاين 17355"
+        >
+          17355
+        </a>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {headerActions.map((action) => (
@@ -300,6 +297,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
               <HeaderIcon icon={action.icon} />
             </Link>
           ))}
+          <HeaderCartLink />
           <HeaderWishlistMenu />
           <HeaderCompareLink />
         </div>

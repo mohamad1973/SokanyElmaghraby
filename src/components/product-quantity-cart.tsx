@@ -53,7 +53,7 @@ export function ProductQuantityAddToCart({
       return;
     }
 
-    const result = addItem({ ...toCartPayload(product), qty: safeQty });
+    const result = addItem({ ...toCartPayload(product), qty: safeQty }, { notify: true });
     setFeedback(result.message || "تمت الإضافة إلى السلة");
   }
 
@@ -62,7 +62,7 @@ export function ProductQuantityAddToCart({
       return;
     }
 
-    addItem({ ...toCartPayload(product), qty: safeQty });
+    addItem({ ...toCartPayload(product), qty: safeQty }, { notify: true });
     router.push("/checkout");
   }
 

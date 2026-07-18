@@ -87,3 +87,33 @@ export function formatCartMoney(amount: number): string {
     maximumFractionDigits: 0,
   }).format(Math.round(amount));
 }
+
+/** Arabic piece count: قطعة / قطعتين / N قطع */
+export function formatCartPieceLabel(count: number): string {
+  const safe = Math.max(0, Math.floor(count));
+
+  if (safe === 1) {
+    return "قطعة";
+  }
+
+  if (safe === 2) {
+    return "قطعتين";
+  }
+
+  if (safe >= 3 && safe <= 10) {
+    return `${safe} قطع`;
+  }
+
+  return `${safe} قطعة`;
+}
+
+export function formatCartAddedMessage(count: number, prefix?: string): string {
+  const pieces = formatCartPieceLabel(count);
+  const base = `لديك ${pieces} في السلة`;
+
+  if (prefix) {
+    return `${prefix} — ${base}`;
+  }
+
+  return `تمت الإضافة — ${base}`;
+}

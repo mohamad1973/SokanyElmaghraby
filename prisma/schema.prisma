@@ -129,3 +129,12 @@ model CustomerWishlist {
   entries    Json
   updatedAt  DateTime @updatedAt
 }
+
+model SocialProofEvent {
+  id          Int      @id @default(autoincrement())
+  productName String   @db.VarChar(512)
+  productCode String   @default("") @db.VarChar(128)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

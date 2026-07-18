@@ -18,6 +18,7 @@ import { CartProvider } from "./cart-provider";
 import { ProductDisplayProvider } from "./product-display-context";
 import { ProductListsProvider } from "./product-lists-provider";
 import { PwaInstallPrompt } from "./pwa-install-prompt";
+import { OrderSocialProofToast } from "./order-social-proof-toast";
 import { SocialMediaSidebar } from "./social-media-sidebar";
 import { VisualEditorProvider } from "./visual-editor-provider";
 import { VisualEditorToolbar } from "./visual-editor-toolbar";
@@ -56,6 +57,7 @@ export function SiteChrome({
               <MobileSideDrawer menu={headerMenu} />
               <MobileBottomNav />
               <PwaInstallPrompt />
+              <OrderSocialProofToast />
             </MobileNavProvider>
           </VisualEditorProvider>
         </ProductDisplayProvider>

@@ -296,6 +296,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| هوت لاين ديسكتوب + شارة سلة + بوب أوردرات | زر 17355 في هيدر الديسكتوب؛ شارة عدد القطع وبوب إضافة بجوار السلة؛ بوب أب إثبات اجتماعي (ويب هوك + عشوائي) 5ث ديسكتوب | `header.tsx`, `header-cart-link.tsx`, `order-social-proof-toast.tsx`, `social-proof.ts` |
 | نصوص الميزة التنافسية + إظهار/إخفاء لكل سكشن | تحديث نص سكشن الشراء من الموقع الرسمي؛ خيار ظاهر/مخفي أمام كل سكشن في ترتيب الصفحة الرئيسية | `page.tsx`, `theme-settings.ts`, `settings-form.tsx` |
 | أيقونة سلة على الكارت + إخفاء مخزون صفر | إزالة عداد الكارت؛ أيقونة سلة بجانب مفضلة/مقارنة + toast بعدد القطع؛ إخفاء `outofstock`/`stockQuantity<=0` من المتجر مع `includeUnavailable` للأدمن | `product-action-buttons.tsx`, `cart-provider.tsx`, `woocommerce.ts` |
 | عداد كمية + سلة محلية + مشاركة + تابات المنتج | `stockQuantity` من Woo، `CartProvider`/`sokany-cart`، عداد على PDP، مشاركة واتساب/فيسبوك/نسخ/Web Share، تابات مواصفات/مراجعات/شحن | `cart-provider.tsx`, `product-quantity-cart.tsx`, `product-share-buttons.tsx`, `product-detail-tabs.tsx`, `product/[slug]/page.tsx` |

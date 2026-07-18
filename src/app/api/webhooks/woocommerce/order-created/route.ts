@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
 import { mapOrder, type WooOrder } from "@/lib/orders";
+import { recordSocialProofEvent } from "@/lib/social-proof";
 import { sendNewOrderWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,12 @@ export async function POST(request: Request) {
   }
 
   const order = mapOrder(payload);
+  const firstItem = order.items[0];
+
+  if (firstItem) {
+    await recordSocialProofEvent(firstItem.name, firstItem.sku || "");
+  }
+
   const whatsappResult = await sendNewOrderWhatsApp(order);
 
   return NextResponse.json({
