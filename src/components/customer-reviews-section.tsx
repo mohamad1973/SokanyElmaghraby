@@ -124,17 +124,14 @@ function ReviewCard({ item, guaranteeText }: { item: CustomerReviewItem; guarant
                 <span />
               )}
               {hasAudio ? (
-                <div className="flex flex-col items-center gap-1">
-                  <Image
-                    src="/reviews/studio-mic.png"
-                    alt=""
-                    width={56}
-                    height={56}
-                    className={`h-14 w-14 object-contain ${isGold ? "brightness-0" : ""}`}
-                    unoptimized
-                  />
-                  <span className="text-[11px] font-bold">تقييم صوتي</span>
-                </div>
+                <Image
+                  src="/reviews/studio-mic.png"
+                  alt=""
+                  width={80}
+                  height={80}
+                  className="h-20 w-20 object-contain"
+                  unoptimized
+                />
               ) : null}
             </div>
           )}
