@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SOKANY WhatsApp OTP
  * Description: WhatsApp OTP + customer order confirmation via MazBot for WooCommerce.
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: SOKANY Egypt
  */
 
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 final class Sokany_WhatsApp_OTP {
-    private const VERSION = '1.2.2';
+    private const VERSION = '1.2.3';
     private const OPTION_KEY = 'sokany_whatsapp_otp_settings';
     private const LAST_TEST_OTP_OPTION = 'sokany_whatsapp_otp_last_test';
     private const LAST_ORDER_WA_OPTION = 'sokany_mazbot_last_order_wa';
@@ -20,7 +20,7 @@ final class Sokany_WhatsApp_OTP {
     private const MAZBOT_LAST_ERROR_OPTION = 'sokany_mazbot_last_error';
     private const INSTALLED_VERSION_OPTION = 'sokany_whatsapp_otp_installed_version';
     private const ORDER_WA_META = '_sokany_order_wa_sent';
-    private const ORDER_PRODUCTS_MAX_CHARS = 250;
+    private const ORDER_PRODUCTS_MAX_CHARS = 400;
     /** Static MazBot template URL button → company WhatsApp with prefilled «تأكيد الاوردر». */
     private const ORDER_CONFIRM_WA_URL = 'https://wa.me/201156111015?text=%D8%AA%D8%A3%D9%83%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D9%88%D8%B1%D8%AF%D8%B1';
     /** Absolute MazBot login URL — never built from API Base (avoids /login/login). */
@@ -44,8 +44,12 @@ final class Sokany_WhatsApp_OTP {
         add_action('admin_post_sokany_mazbot_test_login', [__CLASS__, 'handle_mazbot_test_login']);
         add_action('admin_post_sokany_mazbot_test_order', [__CLASS__, 'handle_mazbot_test_order']);
         add_action('update_option_' . self::OPTION_KEY, [__CLASS__, 'on_settings_updated'], 10, 0);
+        // Classic checkout (items already attached).
         add_action('woocommerce_checkout_order_processed', [__CLASS__, 'on_woocommerce_order'], 20, 1);
-        add_action('woocommerce_new_order', [__CLASS__, 'on_woocommerce_order'], 20, 1);
+        // Headless / REST create — fires after line_items are saved (unlike woocommerce_new_order).
+        add_action('woocommerce_rest_insert_shop_order_object', [__CLASS__, 'on_woocommerce_rest_order'], 20, 3);
+        // Fallback when order is completed on a later save (admin / delayed line items).
+        add_action('woocommerce_update_order', [__CLASS__, 'on_woocommerce_order'], 20, 1);
     }
 
     public static function activate(): void {
@@ -272,9 +276,10 @@ final class Sokany_WhatsApp_OTP {
                 <p>
                     <code>{{1}}</code> = اسم العميل —
                     <code>{{2}}</code> = رقم الأوردر —
-                    <code>{{3}}</code> = المنتجات —
-                    <code>{{4}}</code> = قيمة الأوردر.
+                    <code>{{3}}</code> = ملخص الأصناف (اسم ×كمية | سعر الوحدة | قيمة السطر) —
+                    <code>{{4}}</code> = إجمالي الأوردر بالجنيه.
                 </p>
+                <p class="description">مثال {{3}}: <code>خلاط سوكاني ×2 | 500 ج.م | 1000 ج.م</code> — يُرسل بعد اكتمال بنود الطلب (REST/checkout) وليس عند إنشاء الطلب فارغاً.</p>
                 <p><strong>زر URL في القالب</strong> بعنوان «تأكيد الأوردر» ورابط ثابت إلى واتساب الشركة <code>01156111015</code> برسالة «تأكيد الاوردر»:</p>
                 <p dir="ltr" style="text-align:left;"><code><?php echo esc_html(self::ORDER_CONFIRM_WA_URL); ?></code></p>
             </div>
@@ -516,11 +521,11 @@ final class Sokany_WhatsApp_OTP {
                     </tr>
                     <tr>
                         <th scope="row">المنتجات</th>
-                        <td><input type="text" name="order_test_products" class="regular-text" value="خلاط، مكواة" /></td>
+                        <td><input type="text" name="order_test_products" class="regular-text" value="خلاط سوكاني ×2 | 500 ج.م | 1000 ج.م" /></td>
                     </tr>
                     <tr>
                         <th scope="row">قيمة تجريبية</th>
-                        <td><input type="text" name="order_test_total" class="regular-text" value="1500 جنيه" /></td>
+                        <td><input type="text" name="order_test_total" class="regular-text" value="1500 ج.م" /></td>
                     </tr>
                 </table>
                 <?php submit_button('إرسال اختبار قالب الأوردر عبر MazBot', 'secondary'); ?>
@@ -1315,7 +1320,7 @@ final class Sokany_WhatsApp_OTP {
     }
 
     /**
-     * WooCommerce order created / checkout processed.
+     * Classic checkout / order update (by id).
      *
      * @param int|string $order_id
      */
@@ -1326,6 +1331,68 @@ final class Sokany_WhatsApp_OTP {
         }
 
         self::maybe_send_order_whatsapp($order_id);
+    }
+
+    /**
+     * REST API order insert (headless storefront). Prefer create only.
+     *
+     * @param mixed                $order    WC_Order
+     * @param WP_REST_Request|null $request
+     * @param bool                 $creating
+     */
+    public static function on_woocommerce_rest_order($order, $request = null, $creating = false): void {
+        if (!$creating) {
+            return;
+        }
+
+        $order_id = 0;
+        if (is_object($order) && method_exists($order, 'get_id')) {
+            $order_id = (int) $order->get_id();
+        }
+
+        if ($order_id < 1) {
+            return;
+        }
+
+        self::maybe_send_order_whatsapp($order_id);
+    }
+
+    /**
+     * @param mixed $order WC_Order
+     */
+    private static function order_has_billable_items($order): bool {
+        if (!is_object($order) || !method_exists($order, 'get_items')) {
+            return false;
+        }
+
+        foreach ($order->get_items() as $item) {
+            if (!is_object($item) || !method_exists($item, 'get_name')) {
+                continue;
+            }
+            $name = trim(wp_strip_all_tags((string) $item->get_name()));
+            if ($name !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Skip WhatsApp until line items exist and total is positive (avoids REST early empty order).
+     *
+     * @param mixed $order WC_Order
+     */
+    private static function order_ready_for_whatsapp($order): bool {
+        if (!self::order_has_billable_items($order)) {
+            return false;
+        }
+
+        if (!method_exists($order, 'get_total')) {
+            return false;
+        }
+
+        return (float) $order->get_total() > 0;
     }
 
     private static function maybe_send_order_whatsapp(int $order_id): void {
@@ -1344,7 +1411,9 @@ final class Sokany_WhatsApp_OTP {
             return;
         }
 
-        if (get_post_meta($order_id, self::ORDER_WA_META, true)) {
+        $sent_meta = get_post_meta($order_id, self::ORDER_WA_META, true);
+        if ($sent_meta) {
+            // Already sent or in-flight — do not resend.
             return;
         }
 
@@ -1354,6 +1423,11 @@ final class Sokany_WhatsApp_OTP {
 
         $order = wc_get_order($order_id);
         if (!$order) {
+            return;
+        }
+
+        // Wait for line items + total (REST often creates the order shell first).
+        if (!self::order_ready_for_whatsapp($order)) {
             return;
         }
 
@@ -1373,12 +1447,9 @@ final class Sokany_WhatsApp_OTP {
         $order_number = (string) $order->get_order_number();
         $customer_name = self::order_customer_name($order);
         $products = self::order_products_summary($order);
-        $total = html_entity_decode(wp_strip_all_tags($order->get_formatted_order_total()), ENT_QUOTES, 'UTF-8');
-        if ($total === '') {
-            $total = (string) $order->get_total() . ' ' . (string) $order->get_currency();
-        }
+        $total = self::order_total_label($order);
 
-        // Mark early to prevent double send from both Woo hooks.
+        // Mark early to prevent double send from concurrent hooks.
         update_post_meta($order_id, self::ORDER_WA_META, 'pending');
 
         $result = self::send_order_whatsapp_message($phone, $customer_name, $order_number, $products, $total, [
@@ -1409,11 +1480,29 @@ final class Sokany_WhatsApp_OTP {
         return $name !== '' ? $name : 'عميل';
     }
 
+    private static function format_money_egp(float $amount): string {
+        $formatted = number_format(max(0, $amount), 2, '.', ',');
+        if (substr($formatted, -3) === '.00') {
+            $formatted = substr($formatted, 0, -3);
+        }
+
+        return $formatted . ' ج.م';
+    }
+
+    /**
+     * @param mixed $order WC_Order
+     */
+    private static function order_total_label($order): string {
+        $total = method_exists($order, 'get_total') ? (float) $order->get_total() : 0.0;
+
+        return self::format_money_egp($total);
+    }
+
     /**
      * @param mixed $order WC_Order
      */
     private static function order_products_summary($order): string {
-        $names = [];
+        $lines = [];
         foreach ($order->get_items() as $item) {
             if (!is_object($item) || !method_exists($item, 'get_name')) {
                 continue;
@@ -1422,15 +1511,17 @@ final class Sokany_WhatsApp_OTP {
             if ($name === '') {
                 continue;
             }
-            $qty = method_exists($item, 'get_quantity') ? (int) $item->get_quantity() : 1;
-            $names[] = $qty > 1 ? $name . ' ×' . $qty : $name;
+            $qty = method_exists($item, 'get_quantity') ? max(1, (int) $item->get_quantity()) : 1;
+            $line_total = method_exists($item, 'get_total') ? (float) $item->get_total() : 0.0;
+            $unit = $qty > 0 ? ($line_total / $qty) : $line_total;
+            $lines[] = $name . ' ×' . $qty . ' | ' . self::format_money_egp($unit) . ' | ' . self::format_money_egp($line_total);
         }
 
-        if (!$names) {
-            return 'منتجات';
+        if (!$lines) {
+            return '';
         }
 
-        $summary = implode('، ', $names);
+        $summary = implode('، ', $lines);
         if (function_exists('mb_strlen') && function_exists('mb_substr')) {
             if (mb_strlen($summary) > self::ORDER_PRODUCTS_MAX_CHARS) {
                 return mb_substr($summary, 0, self::ORDER_PRODUCTS_MAX_CHARS - 1) . '…';

@@ -168,12 +168,13 @@
 ### SOKANY WhatsApp OTP
 
 - **المسار في المشروع:** `wordpress-plugin/sokany-whatsapp-otp/`
-- **الإصدار الحالي:** `1.2.2`
+- **الإصدار الحالي:** `1.2.3`
 - **ZIP للرفع:** `dist/sokany-whatsapp-otp.zip` (أو `wordpress-plugin/sokany-whatsapp-otp.zip`)
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1`
 - **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`
 - **Test Mode:** الكود يظهر في Settings → SOKANY WhatsApp OTP
+- **v1.2.3:** ملخص أوردر واتساب (اسم×كمية|سعر|قيمة) بعد اكتمال البنود — بدون إرسال مبكر بـ `woocommerce_new_order`
 - **v1.2.2:** إصلاح تسجيل المتجر عبر Woo REST — تمرير `billing.phone` من JSON إلى `$_POST` وإزالة `phone_error` الكاذب
 
 ### SOKANY Headless Settings
@@ -305,6 +306,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إصلاح ملخص واتساب أوردر v1.2.3 | إرسال بعد اكتمال البنود (REST) بدل `new_order` المبكر؛ ملخص اسم×كمية\|سعر\|قيمة + إجمالي ج.م | `wordpress-plugin/sokany-whatsapp-otp/` |
 | إتمام طلب حقيقي COD + فوري + Bosta | checkout مربوط بالسلة والجلسة؛ محافظات/مناطق Bosta؛ إنشاء طلب Woo؛ thank-you للكاش؛ redirect فوري + callback | `checkout-form.tsx`, `api/checkout`, `woocommerce-orders.ts`, `fawry.ts`, `bosta-client.ts` |
 | هوت لاين ديسكتوب + شارة سلة + بوب أوردرات | زر 17355 في هيدر الديسكتوب؛ شارة عدد القطع وبوب إضافة بجوار السلة؛ بوب أب إثبات اجتماعي (ويب هوك + عشوائي) 5ث ديسكتوب | `header.tsx`, `header-cart-link.tsx`, `order-social-proof-toast.tsx`, `social-proof.ts` |
 | إصلاح تسجيل REST phone_error v1.2.2 | بلجن OTP يمرّر `billing.phone` من JSON إلى `$_POST` ويزيل `phone_error` الكاذب عند إنشاء عميل من المتجر | `wordpress-plugin/sokany-whatsapp-otp/` |

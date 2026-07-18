@@ -191,7 +191,7 @@ https://wa.me/201156111015?text=%D8%AA%D8%A3%D9%83%D9%8A%D8%AF%20%D8%A7%D9%84%D8
 
 ### WordPress settings
 
-`Settings > SOKANY WhatsApp OTP` (v1.2.2+):
+`Settings > SOKANY WhatsApp OTP` (v1.2.3+):
 
 - Mode: **Live**
 - Provider: **MazBot**
@@ -199,25 +199,33 @@ https://wa.me/201156111015?text=%D8%AA%D8%A3%D9%83%D9%8A%D8%AF%20%D8%A7%D9%84%D8
 - Set **Order Template ID**
 - Use **اختبار قالب الأوردر** before placing a real order
 
-Hooks used: `woocommerce_checkout_order_processed`, `woocommerce_new_order`  
-Deduping: order meta `_sokany_order_wa_sent`
+Hooks used:
+
+- `woocommerce_checkout_order_processed` (classic checkout)
+- `woocommerce_rest_insert_shop_order_object` (headless / REST — after line items)
+- `woocommerce_update_order` (fallback when items arrive on a later save)
+
+**Not** `woocommerce_new_order` (too early on REST: empty items / 0 total).
+
+Deduping: order meta `_sokany_order_wa_sent`  
+Send only when the order has at least one line item and `total > 0`.
 
 Variables sent to MazBot:
 
 - `{{1}}` → customer name  
 - `{{2}}` → order number  
-- `{{3}}` → product names (truncated ~250 chars)  
-- `{{4}}` → formatted order total  
+- `{{3}}` → line summary: `اسم ×كمية | سعر الوحدة ج.م | قيمة السطر ج.م` (truncated ~400 chars)  
+- `{{4}}` → order total as `1,500 ج.م`  
 
 The confirm button URL is configured **inside the MazBot template** (not sent by the plugin per order).  
 
 ### E2E checklist
 
-1. Upload plugin ZIP / replace PHP → title shows **v1.2.2**
+1. Upload plugin ZIP / replace PHP → title shows **v1.2.3**
 2. Live + MazBot credentials OK (login test)
 3. Order Template ID saved and enabled
 4. Admin test order template → phone receives message (no eligibility error in MazBot chat)
-5. Place Woo order with valid billing phone → customer gets WhatsApp; «آخر إرسال أوردر» shows `ok: true`
+5. Place a storefront order → WhatsApp shows real product names, qty, unit price, line total, and order total (not «منتجات» / «0 EGP»); «آخر إرسال أوردر» shows `ok: true`
 
 ## Live Mode — Generic API (legacy)
 
