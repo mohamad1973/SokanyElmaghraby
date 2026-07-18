@@ -264,6 +264,9 @@ export type ThemeSettings = {
     showCart: boolean;
     mobileShowSearch: boolean;
     mobileShowCart: boolean;
+    hotlineNumber: string;
+    hotlineFontSize: number;
+    hotlineHeight: number;
   };
   navigation: MenuItem[];
   hero: {
@@ -315,6 +318,11 @@ export type ThemeSettings = {
   footer: {
     description: string;
     copyright: string;
+    logoUrl: string;
+    logoDesktopWidth: number;
+    logoDesktopHeight: number;
+    logoMobileWidth: number;
+    logoMobileHeight: number;
   };
   socialMedia: SocialMediaSettings;
   floatingActions: FloatingActionsSettings;
@@ -376,6 +384,9 @@ export const defaultThemeSettings: ThemeSettings = {
     showCart: true,
     mobileShowSearch: true,
     mobileShowCart: true,
+    hotlineNumber: "17355",
+    hotlineFontSize: 14,
+    hotlineHeight: 40,
   },
   navigation: [
     { href: "/", label: "الرئيسية" },
@@ -455,6 +466,11 @@ export const defaultThemeSettings: ThemeSettings = {
     description:
       "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
     copyright: "SOKANY. جميع الحقوق محفوظة.",
+    logoUrl: "",
+    logoDesktopWidth: 144,
+    logoDesktopHeight: 48,
+    logoMobileWidth: 96,
+    logoMobileHeight: 40,
   },
   socialMedia: {
     enabled: true,
@@ -636,6 +652,51 @@ function mergeCustomSections(value: unknown): CustomHomeSection[] {
       fontSizeMobile: typeof section.fontSizeMobile === "number" ? section.fontSizeMobile : 32,
     };
   });
+}
+
+function mergeHeaderSettings(value: unknown): ThemeSettings["header"] {
+  const header = isObject(value) ? value : {};
+  const fontSize = typeof header.hotlineFontSize === "number" ? header.hotlineFontSize : defaultThemeSettings.header.hotlineFontSize;
+  const height = typeof header.hotlineHeight === "number" ? header.hotlineHeight : defaultThemeSettings.header.hotlineHeight;
+
+  return {
+    ...defaultThemeSettings.header,
+    ...header,
+    hotlineNumber:
+      typeof header.hotlineNumber === "string" && header.hotlineNumber.trim()
+        ? header.hotlineNumber.trim()
+        : defaultThemeSettings.header.hotlineNumber,
+    hotlineFontSize: Math.max(10, Math.min(48, Math.floor(fontSize))),
+    hotlineHeight: Math.max(28, Math.min(80, Math.floor(height))),
+  };
+}
+
+function mergeFooterSettings(value: unknown): ThemeSettings["footer"] {
+  const footer = isObject(value) ? value : {};
+
+  return {
+    ...defaultThemeSettings.footer,
+    ...footer,
+    description: typeof footer.description === "string" ? footer.description : defaultThemeSettings.footer.description,
+    copyright: typeof footer.copyright === "string" ? footer.copyright : defaultThemeSettings.footer.copyright,
+    logoUrl: typeof footer.logoUrl === "string" ? footer.logoUrl : defaultThemeSettings.footer.logoUrl,
+    logoDesktopWidth:
+      typeof footer.logoDesktopWidth === "number"
+        ? Math.max(1, footer.logoDesktopWidth)
+        : defaultThemeSettings.footer.logoDesktopWidth,
+    logoDesktopHeight:
+      typeof footer.logoDesktopHeight === "number"
+        ? Math.max(1, footer.logoDesktopHeight)
+        : defaultThemeSettings.footer.logoDesktopHeight,
+    logoMobileWidth:
+      typeof footer.logoMobileWidth === "number"
+        ? Math.max(1, footer.logoMobileWidth)
+        : defaultThemeSettings.footer.logoMobileWidth,
+    logoMobileHeight:
+      typeof footer.logoMobileHeight === "number"
+        ? Math.max(1, footer.logoMobileHeight)
+        : defaultThemeSettings.footer.logoMobileHeight,
+  };
 }
 
 function mergeBrandSettings(value: unknown): ThemeSettings["brand"] {
@@ -1000,7 +1061,7 @@ function mergeSettings(settings: unknown): ThemeSettings {
     ...settings,
     brand: mergeBrandSettings(settings.brand),
     topBanner: mergeTopBannerSettings(settings.topBanner),
-    header: { ...defaultThemeSettings.header, ...(isObject(settings.header) ? settings.header : {}) },
+    header: mergeHeaderSettings(settings.header),
     navigation: Array.isArray(settings.navigation)
       ? settings.navigation.filter((item): item is MenuItem => isObject(item) && typeof item.label === "string" && typeof item.href === "string")
       : defaultThemeSettings.navigation,
@@ -1018,7 +1079,7 @@ function mergeSettings(settings: unknown): ThemeSettings {
         isObject(settings.sections) ? settings.sections.categories : undefined,
       ),
     },
-    footer: { ...defaultThemeSettings.footer, ...(isObject(settings.footer) ? settings.footer : {}) },
+    footer: mergeFooterSettings(settings.footer),
     socialMedia: mergeSocialMediaSettings(settings.socialMedia),
     floatingActions: mergeFloatingActionsSettings(settings.floatingActions),
     productCard: mergeProductCardSettings(settings.productCard),

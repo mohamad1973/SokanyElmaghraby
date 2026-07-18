@@ -3,12 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
-import { cartLineTotal, formatCartMoney } from "@/lib/cart";
+import { cartLineTotal, formatCartMoney, getMaxOrderQuantity } from "@/lib/cart";
 
 import { useCart } from "./cart-provider";
 import { VisualEditableText } from "./visual-editable-text";
+
+const CHECKOUT_ADDRESS_KEY = "sokany-checkout-address";
 
 type CityOption = { id: string; nameAr: string; nameEn: string };
 type DistrictOption = { id: string; nameAr: string; nameEn: string; cityId: string };
@@ -20,9 +22,41 @@ type MeCustomer = {
   email?: string;
 };
 
+type SavedCheckoutAddress = {
+  name?: string;
+  phone?: string;
+  cityId?: string;
+  governorate?: string;
+  area?: string;
+  address?: string;
+  note?: string;
+};
+
+function readSavedAddress(): SavedCheckoutAddress | null {
+  try {
+    const raw = window.localStorage.getItem(CHECKOUT_ADDRESS_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as SavedCheckoutAddress;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedAddress(payload: SavedCheckoutAddress) {
+  try {
+    window.localStorage.setItem(CHECKOUT_ADDRESS_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 export function CheckoutForm() {
   const router = useRouter();
-  const { items, clearCart } = useCart();
+  const { items, clearCart, updateQty, removeItem } = useCart();
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + cartLineTotal(item), 0), [items]);
 
   const [authChecked, setAuthChecked] = useState(false);
@@ -35,6 +69,8 @@ export function CheckoutForm() {
   const [address, setAddress] = useState("");
   const [note, setNote] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
+  const pendingAreaRef = useRef<string | null>(null);
+  const [addressHydrated, setAddressHydrated] = useState(false);
 
   const [cities, setCities] = useState<CityOption[]>([]);
   const [districts, setDistricts] = useState<DistrictOption[]>([]);
@@ -62,9 +98,9 @@ export function CheckoutForm() {
 
         const customer = data?.customer;
         if (customer) {
-          setName(customer.name || "");
-          setPhone(customer.phone || "");
-          setEmail(customer.email || "");
+          setName((current) => current || customer.name || "");
+          setPhone((current) => current || customer.phone || "");
+          setEmail((current) => current || customer.email || "");
         }
 
         setAuthChecked(true);
@@ -121,6 +157,43 @@ export function CheckoutForm() {
   }, []);
 
   useEffect(() => {
+    if (!authChecked || citiesLoading || addressHydrated) {
+      return;
+    }
+
+    const saved = readSavedAddress();
+    if (!saved) {
+      setAddressHydrated(true);
+      return;
+    }
+
+    setName((current) => current || saved.name || "");
+    setPhone((current) => current || saved.phone || "");
+    if (saved.address) {
+      setAddress(saved.address);
+    }
+    if (saved.note) {
+      setNote(saved.note);
+    }
+
+    if (cities.length) {
+      const match =
+        cities.find((city) => city.id === saved.cityId) ||
+        cities.find((city) => city.nameAr === saved.governorate);
+
+      if (match) {
+        pendingAreaRef.current = saved.area?.trim() || null;
+        setCityId(match.id);
+        setGovernorate(match.nameAr);
+      } else if (saved.governorate) {
+        setGovernorate(saved.governorate);
+      }
+    }
+
+    setAddressHydrated(true);
+  }, [authChecked, cities, citiesLoading, addressHydrated]);
+
+  useEffect(() => {
     if (!cityId) {
       setDistricts([]);
       setArea("");
@@ -128,8 +201,11 @@ export function CheckoutForm() {
     }
 
     let cancelled = false;
+    const restoreArea = pendingAreaRef.current;
     setDistrictsLoading(true);
-    setArea("");
+    if (!restoreArea) {
+      setArea("");
+    }
 
     fetch(`/api/shipping/bosta/districts?cityId=${encodeURIComponent(cityId)}`, { cache: "no-store" })
       .then(async (response) => {
@@ -148,8 +224,15 @@ export function CheckoutForm() {
           return;
         }
 
-        setDistricts(data?.districts || []);
+        const nextDistricts = data?.districts || [];
+        setDistricts(nextDistricts);
         setGeoError(null);
+
+        if (restoreArea) {
+          const match = nextDistricts.find((district) => district.nameAr === restoreArea);
+          setArea(match ? match.nameAr : restoreArea);
+          pendingAreaRef.current = null;
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -223,6 +306,16 @@ export function CheckoutForm() {
         return;
       }
 
+      writeSavedAddress({
+        name: name.trim(),
+        phone: phone.trim(),
+        cityId,
+        governorate: governorate.trim(),
+        area: area.trim(),
+        address: address.trim(),
+        note: note.trim(),
+      });
+
       clearCart();
 
       if (data.redirectUrl.startsWith("http")) {
@@ -249,8 +342,9 @@ export function CheckoutForm() {
   if (!items.length) {
     return (
       <div className="rounded-[2.5rem] bg-white p-8 text-center shadow-sm">
-        <p className="text-sm font-bold text-brand-gold">إتمام الطلب</p>
-        <h1 className="mt-3 text-4xl font-bold text-zinc-950">سلتك فارغة</h1>
+        <h1 className="inline-flex rounded-full bg-brand-gold px-6 py-3 text-2xl font-bold text-black sm:text-3xl">
+          سلتك فارغة
+        </h1>
         <p className="mx-auto mt-4 max-w-xl leading-8 text-zinc-600">أضف منتجات من المتجر ثم عد لإتمام الطلب.</p>
         <Link
           href="/shop"
@@ -265,15 +359,10 @@ export function CheckoutForm() {
   return (
     <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_0.7fr] lg:px-8">
       <section className="rounded-[2.5rem] bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-bold text-brand-gold">
-          <VisualEditableText textKey="checkout.eyebrow">إتمام الطلب</VisualEditableText>
-        </p>
-        <h1 className="mt-3 text-4xl font-bold text-zinc-950">
+        <h1 className="inline-flex rounded-full bg-brand-gold px-6 py-3 text-2xl font-bold text-black sm:text-3xl">
           <VisualEditableText textKey="checkout.title">إتمام الطلب</VisualEditableText>
         </h1>
-        <p className="mt-4 leading-8 text-zinc-600">
-          أكمل بيانات التوصيل واختر طريقة الدفع لإرسال طلبك.
-        </p>
+        <p className="mt-4 leading-8 text-zinc-600">أكمل بيانات التوصيل واختر طريقة الدفع لإرسال طلبك.</p>
 
         <form className="mt-8 grid gap-5" onSubmit={onSubmit}>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
@@ -308,6 +397,7 @@ export function CheckoutForm() {
               onChange={(event) => {
                 const nextId = event.target.value;
                 const selected = cities.find((city) => city.id === nextId);
+                pendingAreaRef.current = null;
                 setCityId(nextId);
                 setGovernorate(selected?.nameAr || "");
               }}
@@ -423,20 +513,52 @@ export function CheckoutForm() {
         </h2>
 
         <ul className="mt-6 space-y-4">
-          {items.map((item) => (
-            <li key={item.id} className="flex gap-3 border-b border-white/10 pb-4">
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/5">
-                <Image src={item.image} alt={item.name} fill className="object-contain p-1" sizes="56px" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold">{item.name}</p>
-                <p className="mt-1 text-xs text-zinc-400">
-                  {item.qty} × {item.price} ج.م
-                </p>
-              </div>
-              <p className="shrink-0 text-sm font-bold text-brand-gold">{formatCartMoney(cartLineTotal(item))} ج.م</p>
-            </li>
-          ))}
+          {items.map((item) => {
+            const maxQty = getMaxOrderQuantity(item);
+
+            return (
+              <li key={item.id} className="flex gap-3 border-b border-white/10 pb-4">
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/5">
+                  <Image src={item.image} alt={item.name} fill className="object-contain p-1" sizes="56px" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{item.name}</p>
+                  <p className="mt-1 text-xs text-zinc-400">{item.price} ج.م</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-2 py-1" dir="ltr">
+                      <button
+                        type="button"
+                        aria-label="تقليل الكمية"
+                        disabled={item.qty <= 1}
+                        onClick={() => updateQty(item.id, item.qty - 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-sm font-bold disabled:opacity-40"
+                      >
+                        −
+                      </button>
+                      <span className="min-w-5 text-center text-sm font-bold">{item.qty}</span>
+                      <button
+                        type="button"
+                        aria-label="زيادة الكمية"
+                        disabled={item.qty >= maxQty}
+                        onClick={() => updateQty(item.id, item.qty + 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-sm font-bold disabled:opacity-40"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.id)}
+                      className="text-xs font-bold text-red-300 hover:underline"
+                    >
+                      حذف
+                    </button>
+                  </div>
+                </div>
+                <p className="shrink-0 text-sm font-bold text-brand-gold">{formatCartMoney(cartLineTotal(item))} ج.م</p>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="mt-6 space-y-4 text-sm">
@@ -450,7 +572,7 @@ export function CheckoutForm() {
             <span className="text-zinc-300">
               <VisualEditableText textKey="checkout.summary.shipping">الشحن</VisualEditableText>
             </span>
-            <span className="font-bold">يُحدد لاحقاً</span>
+            <span className="font-bold text-brand-gold">مجاني</span>
           </div>
           <div className="flex justify-between text-lg">
             <span className="text-zinc-300">

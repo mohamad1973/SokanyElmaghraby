@@ -6,7 +6,7 @@ import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
 import { HeroSection } from "@/components/hero-section";
 import { MainGroupsSection } from "@/components/main-groups-section";
-import { ProductCard } from "@/components/product-card";
+import { ProductRowScroller } from "@/components/product-row-scroller";
 import { SectionTitle } from "@/components/section-title";
 import { TrustBadgesSection } from "@/components/trust-badges-section";
 import { VisualEditableText } from "@/components/visual-editable-text";
@@ -233,10 +233,13 @@ export default async function Home() {
             title="الأكثر مبيعاً"
             description="تعرف على اكثر المنتجات مبيعا لدى العملاء."
           />
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-            {featuredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+          <div className="mt-8">
+            <ProductRowScroller
+              products={featuredProducts}
+              desktopColumns={5}
+              tabletColumns={3}
+              mobileColumns={2}
+            />
           </div>
         </div>
         </section>

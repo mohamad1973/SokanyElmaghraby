@@ -7,11 +7,25 @@ import type { ThemeSettings } from "@/lib/theme-settings";
 import { VisualEditableText } from "./visual-editable-text";
 
 export function Footer({ settings }: { settings: ThemeSettings }) {
+  const footerLogoUrl = settings.footer.logoUrl || settings.brand.logoUrl;
+  const logoDesktopWidth = settings.footer.logoUrl
+    ? settings.footer.logoDesktopWidth
+    : settings.brand.logoDesktopWidth;
+  const logoDesktopHeight = settings.footer.logoUrl
+    ? settings.footer.logoDesktopHeight
+    : settings.brand.logoDesktopHeight;
+  const logoMobileWidth = settings.footer.logoUrl
+    ? settings.footer.logoMobileWidth
+    : settings.brand.logoMobileWidth;
+  const logoMobileHeight = settings.footer.logoUrl
+    ? settings.footer.logoMobileHeight
+    : settings.brand.logoMobileHeight;
+
   const logoStyle = {
-    "--logo-mobile-width": `${settings.brand.logoMobileWidth}px`,
-    "--logo-mobile-height": `${settings.brand.logoMobileHeight}px`,
-    "--logo-desktop-width": `${settings.brand.logoDesktopWidth}px`,
-    "--logo-desktop-height": `${settings.brand.logoDesktopHeight}px`,
+    "--logo-mobile-width": `${logoMobileWidth}px`,
+    "--logo-mobile-height": `${logoMobileHeight}px`,
+    "--logo-desktop-width": `${logoDesktopWidth}px`,
+    "--logo-desktop-height": `${logoDesktopHeight}px`,
   } as CSSProperties;
 
   return (
@@ -19,16 +33,16 @@ export function Footer({ settings }: { settings: ThemeSettings }) {
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
         <div>
           <div className="mb-4 flex items-center gap-3">
-            {settings.brand.logoUrl ? (
+            {footerLogoUrl ? (
               <span
                 className="relative block h-[var(--logo-mobile-height)] w-[var(--logo-mobile-width)] sm:h-[var(--logo-desktop-height)] sm:w-[var(--logo-desktop-width)]"
                 style={logoStyle}
               >
                 <Image
-                  src={settings.brand.logoUrl}
+                  src={footerLogoUrl}
                   alt={settings.brand.logoText}
                   fill
-                  sizes={`(min-width: 640px) ${settings.brand.logoDesktopWidth}px, ${settings.brand.logoMobileWidth}px`}
+                  sizes={`(min-width: 640px) ${logoDesktopWidth}px, ${logoMobileWidth}px`}
                   className="object-contain object-right"
                   unoptimized
                 />

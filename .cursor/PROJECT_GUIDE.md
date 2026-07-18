@@ -306,6 +306,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| Checkout UX + هوتلاين + فوتر + الأكثر مبيعاً | كمية +/- وشحن مجاني وعنوان محفوظ؛ تحكم حجم الهوتلاين؛ لوجو فوتر مستقل؛ كاروسيل صف واحد بـ 5 أعمدة | `checkout-form.tsx`, `header.tsx`, `footer.tsx`, `theme-settings.ts`, `page.tsx` |
 | إصلاح ملخص واتساب أوردر v1.2.3 | إرسال بعد اكتمال البنود (REST) بدل `new_order` المبكر؛ ملخص اسم×كمية\|سعر\|قيمة + إجمالي ج.م | `wordpress-plugin/sokany-whatsapp-otp/` |
 | إتمام طلب حقيقي COD + فوري + Bosta | checkout مربوط بالسلة والجلسة؛ محافظات/مناطق Bosta؛ إنشاء طلب Woo؛ thank-you للكاش؛ redirect فوري + callback | `checkout-form.tsx`, `api/checkout`, `woocommerce-orders.ts`, `fawry.ts`, `bosta-client.ts` |
 | هوت لاين ديسكتوب + شارة سلة + بوب أوردرات | زر 17355 في هيدر الديسكتوب؛ شارة عدد القطع وبوب إضافة بجوار السلة؛ بوب أب إثبات اجتماعي (ويب هوك + عشوائي) 5ث ديسكتوب | `header.tsx`, `header-cart-link.tsx`, `order-social-proof-toast.tsx`, `social-proof.ts` |

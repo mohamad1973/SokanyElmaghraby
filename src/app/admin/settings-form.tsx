@@ -1735,6 +1735,49 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
             />
             إظهار البحث في الموبايل
           </label>
+          <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:col-span-2 lg:grid-cols-3">
+            <Field label="رقم الهوت لاين">
+              <input
+                value={settings.header.hotlineNumber}
+                onChange={(event) =>
+                  setSettings({ ...settings, header: { ...settings.header, hotlineNumber: event.target.value } })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                dir="ltr"
+                placeholder="17355"
+              />
+            </Field>
+            <Field label="حجم خط الهوت لاين (px)">
+              <input
+                type="number"
+                min={10}
+                max={48}
+                value={settings.header.hotlineFontSize}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    header: { ...settings.header, hotlineFontSize: Number(event.target.value) || 14 },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+            <Field label="ارتفاع زر الهوت لاين (px)">
+              <input
+                type="number"
+                min={28}
+                max={80}
+                value={settings.header.hotlineHeight}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    header: { ...settings.header, hotlineHeight: Number(event.target.value) || 40 },
+                  })
+                }
+                className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+              />
+            </Field>
+          </div>
         </section>
       ) : null}
 
@@ -2738,6 +2781,53 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
 
       {focus === "footer" ? (
         <section className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+          <div>
+            <ImageUploadField
+              label="لوجو الفوتر (مستقل عن لوجو الهيدر)"
+              value={settings.footer.logoUrl}
+              purpose="logo"
+              recommendation="إن تُرك فارغاً يُستخدم لوجو الهيدر. Desktop: 240x80px أو SVG"
+              aspectRatio="3:1"
+              onUploaded={(url) =>
+                setSettings({ ...settings, footer: { ...settings.footer, logoUrl: url } })
+              }
+            />
+            {settings.footer.logoUrl ? (
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, footer: { ...settings.footer, logoUrl: "" } })}
+                className="mt-3 text-sm font-bold text-red-600 hover:underline"
+              >
+                إزالة لوجو الفوتر والرجوع للوجو الافتراضي
+              </button>
+            ) : null}
+          </div>
+          <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4 lg:grid-cols-4">
+            {[
+              ["عرض اللوجو موبايل px", "logoMobileWidth"],
+              ["ارتفاع اللوجو موبايل px", "logoMobileHeight"],
+              ["عرض اللوجو ديسكتوب px", "logoDesktopWidth"],
+              ["ارتفاع اللوجو ديسكتوب px", "logoDesktopHeight"],
+            ].map(([label, key]) => (
+              <Field key={key} label={label}>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.footer[key as "logoMobileWidth" | "logoMobileHeight" | "logoDesktopWidth" | "logoDesktopHeight"]}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      footer: {
+                        ...settings.footer,
+                        [key]: Number(event.target.value) || 1,
+                      },
+                    })
+                  }
+                  className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                />
+              </Field>
+            ))}
+          </div>
           <Field label="وصف الفوتر">
             <textarea
               value={settings.footer.description}

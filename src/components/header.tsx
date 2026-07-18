@@ -277,12 +277,16 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
 
         <HeaderProductSearch />
         <a
-          href="tel:17355"
-          className="hidden h-10 shrink-0 items-center justify-center rounded-full border border-brand-gold bg-brand-gold px-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark lg:inline-flex"
+          href={`tel:${settings.header.hotlineNumber.replace(/\D/g, "") || "17355"}`}
+          className="hidden shrink-0 items-center justify-center rounded-full border border-brand-gold bg-brand-gold px-4 font-bold text-black transition hover:bg-brand-gold-dark lg:inline-flex"
+          style={{
+            height: `${settings.header.hotlineHeight}px`,
+            fontSize: `${settings.header.hotlineFontSize}px`,
+          }}
           dir="ltr"
-          aria-label="الاتصال بالهوت لاين 17355"
+          aria-label={`الاتصال بالهوت لاين ${settings.header.hotlineNumber}`}
         >
-          17355
+          {settings.header.hotlineNumber}
         </a>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
@@ -307,12 +311,16 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         <div className="flex items-center gap-2">
           <HeaderProductSearch className="relative block min-w-0 flex-1" />
           <a
-            href="tel:17355"
-            className="inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-brand-gold bg-brand-gold px-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark"
+            href={`tel:${settings.header.hotlineNumber.replace(/\D/g, "") || "17355"}`}
+            className="inline-flex shrink-0 items-center justify-center rounded-full border border-brand-gold bg-brand-gold px-4 font-bold text-black transition hover:bg-brand-gold-dark"
+            style={{
+              height: `${settings.header.hotlineHeight}px`,
+              fontSize: `${settings.header.hotlineFontSize}px`,
+            }}
             dir="ltr"
-            aria-label="الاتصال بالهوت لاين 17355"
+            aria-label={`الاتصال بالهوت لاين ${settings.header.hotlineNumber}`}
           >
-            17355
+            {settings.header.hotlineNumber}
           </a>
         </div>
       </div>
