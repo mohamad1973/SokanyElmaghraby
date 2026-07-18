@@ -306,6 +306,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تحسين كارت الآراء (مايك + ألوان) | مايك ستوديو كبير بجانب شراء مؤكد؛ أخضر brand؛ ذهبي `#E8C547`؛ صورة منتج أكبر؛ إزالة شارة المايك من صورة المنتج | `customer-reviews-section.tsx`, `public/reviews/studio-mic.png` |
 | إصلاح آراء العملاء (أسود/ذهبي + رفع + مايك) | حفظ بـ POST بدل PUT؛ امتداد صوت من اسم الملف؛ كروت أسود/ذهبي وعكسها؛ صورة المنتج + شارة مايك للتقييم الصوتي | `reviews-settings-form.tsx`, `upload/route.ts`, `theme-settings.ts`, `customer-reviews-section.tsx` |
 | منيو أب/ترتيب/أيقونات + آراء صوتية + زوم + إلغاء طلب | تجاوز أب التصنيف في الداشبورد، أيقونات جاهزة، سكشن آراء نص/صوت، lightbox للمنتج، إلغاء طلب من الحساب | `category-menu-selection.ts`, `navigation`, `customer-reviews-section.tsx`, `product-image-gallery.tsx`, `cancel` API |
 | Checkout UX + هوتلاين + فوتر + الأكثر مبيعاً | كمية +/- وشحن مجاني وعنوان محفوظ؛ تحكم حجم الهوتلاين؛ لوجو فوتر مستقل؛ كاروسيل صف واحد بـ 5 أعمدة | `checkout-form.tsx`, `header.tsx`, `footer.tsx`, `theme-settings.ts`, `page.tsx` |
