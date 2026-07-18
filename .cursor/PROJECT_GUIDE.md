@@ -164,11 +164,13 @@
 ### SOKANY WhatsApp OTP
 
 - **المسار في المشروع:** `wordpress-plugin/sokany-whatsapp-otp/`
-- **ZIP للرفع:** `dist/sokany-whatsapp-otp.zip`
+- **الإصدار الحالي:** `1.2.2`
+- **ZIP للرفع:** `dist/sokany-whatsapp-otp.zip` (أو `wordpress-plugin/sokany-whatsapp-otp.zip`)
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1`
 - **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`
 - **Test Mode:** الكود يظهر في Settings → SOKANY WhatsApp OTP
+- **v1.2.2:** إصلاح تسجيل المتجر عبر Woo REST — تمرير `billing.phone` من JSON إلى `$_POST` وإزالة `phone_error` الكاذب
 
 ### SOKANY Headless Settings
 
@@ -297,6 +299,7 @@
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
 | هوت لاين ديسكتوب + شارة سلة + بوب أوردرات | زر 17355 في هيدر الديسكتوب؛ شارة عدد القطع وبوب إضافة بجوار السلة؛ بوب أب إثبات اجتماعي (ويب هوك + عشوائي) 5ث ديسكتوب | `header.tsx`, `header-cart-link.tsx`, `order-social-proof-toast.tsx`, `social-proof.ts` |
+| إصلاح تسجيل REST phone_error v1.2.2 | بلجن OTP يمرّر `billing.phone` من JSON إلى `$_POST` ويزيل `phone_error` الكاذب عند إنشاء عميل من المتجر | `wordpress-plugin/sokany-whatsapp-otp/` |
 | نصوص الميزة التنافسية + إظهار/إخفاء لكل سكشن | تحديث نص سكشن الشراء من الموقع الرسمي؛ خيار ظاهر/مخفي أمام كل سكشن في ترتيب الصفحة الرئيسية | `page.tsx`, `theme-settings.ts`, `settings-form.tsx` |
 | أيقونة سلة على الكارت + إخفاء مخزون صفر | إزالة عداد الكارت؛ أيقونة سلة بجانب مفضلة/مقارنة + toast بعدد القطع؛ إخفاء `outofstock`/`stockQuantity<=0` من المتجر مع `includeUnavailable` للأدمن | `product-action-buttons.tsx`, `cart-provider.tsx`, `woocommerce.ts` |
 | عداد كمية + سلة محلية + مشاركة + تابات المنتج | `stockQuantity` من Woo، `CartProvider`/`sokany-cart`، عداد على PDP، مشاركة واتساب/فيسبوك/نسخ/Web Share، تابات مواصفات/مراجعات/شحن | `cart-provider.tsx`, `product-quantity-cart.tsx`, `product-share-buttons.tsx`, `product-detail-tabs.tsx`, `product/[slug]/page.tsx` |
