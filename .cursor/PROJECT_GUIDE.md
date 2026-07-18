@@ -60,8 +60,9 @@
 | إنشاء حساب | `/account/register` |
 | حسابي | `/account` (بعد الدخول) |
 | تغيير كلمة المرور | `/account` → قسم «تغيير كلمة المرور» |
-| السلة | `/cart` (واجهة فقط) |
-| الدفع | `/checkout` (واجهة فقط) |
+| السلة | `/cart` |
+| الدفع | `/checkout` (يتطلب تسجيل دخول) |
+| شكر بعد الطلب | `/checkout/thank-you?order=...` |
 
 ### الداشبورد (أدمن)
 
@@ -113,8 +114,9 @@
 | `/product/[slug]` | منتج + SEO + مواصفات | `src/app/product/[slug]/page.tsx` | جاهز |
 | `/offers` | عروض | `src/app/offers/page.tsx` | جاهز |
 | `/compare` | مقارنة (حتى 4 منتجات) | `src/app/compare/page.tsx` | جاهز |
-| `/cart` | سلة | `src/app/cart/page.tsx` | واجهة فقط |
-| `/checkout` | دفع | `src/app/checkout/page.tsx` | واجهة فقط |
+| `/cart` | سلة | `src/app/cart/page.tsx` | جاهز |
+| `/checkout` | دفع COD / فوري + Bosta | `src/app/checkout/page.tsx` + `checkout-form.tsx` | جاهز |
+| `/checkout/thank-you` | شكر بعد الطلب | `src/app/checkout/thank-you/page.tsx` | جاهز |
 | `/account/login` | دخول + OTP واتساب | `src/app/account/login/page.tsx` | جاهز |
 | `/account/register` | تسجيل | `src/app/account/register/page.tsx` | جاهز |
 | `/account` | طلبات، ولاء، كلمة مرور | `src/app/account/page.tsx` | جاهز |
@@ -145,8 +147,10 @@
 | `GET/PUT /api/account/wishlist` | المفضلة | `src/app/api/account/wishlist/route.ts` |
 | `GET /api/products/search` | بحث | `src/app/api/products/search/route.ts` |
 | `GET /api/products/compare` | مقارنة | `src/app/api/products/compare/route.ts` |
-| `POST /api/checkout` | دفع | placeholder — `src/app/api/checkout/route.ts` |
-| `POST /api/fawry/callback` | Fawry | placeholder |
+| `POST /api/checkout` | إنشاء طلب Woo + redirect COD/فوري | `src/app/api/checkout/route.ts` |
+| `GET /api/shipping/bosta/cities` | محافظات Bosta | `src/app/api/shipping/bosta/cities/route.ts` |
+| `GET /api/shipping/bosta/districts?cityId=` | مناطق Bosta | `src/app/api/shipping/bosta/districts/route.ts` |
+| `GET/POST /api/fawry/callback` | تحديث طلب بعد دفع فوري | `src/app/api/fawry/callback/route.ts` |
 | `POST /api/webhooks/woocommerce/order-created` | ويب هوك طلب | `src/app/api/webhooks/woocommerce/order-created/route.ts` |
 | `POST /api/webhooks/bosta/[secret]` | ويب هوك Bosta | `src/app/api/webhooks/bosta/[secret]/route.ts` |
 
@@ -268,6 +272,8 @@
 | طلبات أدمن | `src/lib/orders.ts` |
 | توزيع / سائقين | `src/lib/dispatch/` |
 | Bosta | `src/lib/shipping/bosta-client.ts` |
+| إنشاء طلب من المتجر | `src/lib/woocommerce-orders.ts`, `src/app/api/checkout/route.ts` |
+| فوري | `src/lib/fawry.ts`, `src/app/api/fawry/callback/route.ts` |
 | middleware (حماية admin/driver) | `middleware.ts` |
 
 ---
@@ -288,7 +294,8 @@
 | `GOOGLE_MAPS_API_KEY` | تحسين مسار السائق |
 | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | إشعارات واتساب (متجر) |
 | `WHATSAPP_ADMIN_RECIPIENT`, `WHATSAPP_ORDER_TEMPLATE_NAME` | قوالب طلبات |
-| `FAWRY_MERCHANT_CODE`, `FAWRY_SECURITY_KEY` | Fawry (غير مفعّل بعد) |
+| `FAWRY_MERCHANT_CODE`, `FAWRY_SECURITY_KEY`, `FAWRY_BASE_URL` | فوري Express Checkout |
+| `WOO_FAWRY_PAYMENT_METHOD` | slug طريقة دفع فوري في Woo (افتراضي: `fawry`) |
 
 **ملاحظة:** لا ترفع `.env` إلى GitHub. إعدادات Vercel: Project → Settings → Environment Variables.
 
@@ -298,6 +305,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إتمام طلب حقيقي COD + فوري + Bosta | checkout مربوط بالسلة والجلسة؛ محافظات/مناطق Bosta؛ إنشاء طلب Woo؛ thank-you للكاش؛ redirect فوري + callback | `checkout-form.tsx`, `api/checkout`, `woocommerce-orders.ts`, `fawry.ts`, `bosta-client.ts` |
 | هوت لاين ديسكتوب + شارة سلة + بوب أوردرات | زر 17355 في هيدر الديسكتوب؛ شارة عدد القطع وبوب إضافة بجوار السلة؛ بوب أب إثبات اجتماعي (ويب هوك + عشوائي) 5ث ديسكتوب | `header.tsx`, `header-cart-link.tsx`, `order-social-proof-toast.tsx`, `social-proof.ts` |
 | إصلاح تسجيل REST phone_error v1.2.2 | بلجن OTP يمرّر `billing.phone` من JSON إلى `$_POST` ويزيل `phone_error` الكاذب عند إنشاء عميل من المتجر | `wordpress-plugin/sokany-whatsapp-otp/` |
 | نصوص الميزة التنافسية + إظهار/إخفاء لكل سكشن | تحديث نص سكشن الشراء من الموقع الرسمي؛ خيار ظاهر/مخفي أمام كل سكشن في ترتيب الصفحة الرئيسية | `page.tsx`, `theme-settings.ts`, `settings-form.tsx` |
@@ -371,8 +379,8 @@
 | داشبورد مظهر وبانرات | جاهز |
 | طلبات أدمن + Bosta + توزيع | جاهز (يتطلب DATABASE_URL) |
 | تطبيق سائق PWA | جاهز |
-| سلة محلية (كمية محدودة بالمخزون) + مشاركة + تابات PDP | جاهز (checkout Woo لاحقاً) |
-| سلة + checkout + Fawry | سلة محلية جاهزة؛ checkout Woo / Fawry لاحقاً |
+| سلة محلية (كمية محدودة بالمخزون) + مشاركة + تابات PDP | جاهز |
+| سلة + checkout + COD / Fawry + Bosta | جاهز (يتطلب مفاتيح Woo / Bosta؛ فوري اختياري عبر FAWRY_* أو بوابة Woo) |
 
 ---
 
