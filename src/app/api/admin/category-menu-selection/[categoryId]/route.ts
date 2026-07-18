@@ -2,7 +2,8 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { authOptions } from "@/lib/auth";
-import { updateCategoryMenuSelection } from "@/lib/category-menu-selection";
+import { swapCategorySortOrder, updateCategoryMenuSelection } from "@/lib/category-menu-selection";
+import { getWordPressCategoryTree } from "@/lib/menu";
 
 type RouteContext = {
   params: Promise<{
@@ -22,24 +23,41 @@ export async function PATCH(request: Request, context: RouteContext) {
   const payload = (await request.json()) as {
     slug?: string;
     showInMenu?: boolean;
+    sortOrder?: number;
+    parentOverride?: number | null;
+    iconUrl?: string | null;
+    clearIcon?: boolean;
+    move?: "up" | "down";
   };
 
-  if (!Number.isInteger(numericCategoryId) || !payload.slug) {
+  if (!Number.isInteger(numericCategoryId)) {
     return NextResponse.json({ message: "Invalid category payload." }, { status: 400 });
   }
 
-  if (typeof payload.showInMenu !== "boolean") {
-    return NextResponse.json({ message: "Menu selection value is required." }, { status: 400 });
-  }
-
   try {
+    if (payload.move === "up" || payload.move === "down") {
+      const wooTree = await getWordPressCategoryTree();
+      return NextResponse.json(await swapCategorySortOrder(numericCategoryId, payload.move, wooTree));
+    }
+
+    if (!payload.slug) {
+      return NextResponse.json({ message: "Invalid category payload." }, { status: 400 });
+    }
+
     return NextResponse.json(
       await updateCategoryMenuSelection(
         {
           id: numericCategoryId,
           slug: payload.slug,
         },
-        payload.showInMenu,
+        {
+          slug: payload.slug,
+          showInMenu: payload.showInMenu,
+          sortOrder: payload.sortOrder,
+          parentOverride: payload.parentOverride,
+          iconUrl: payload.iconUrl,
+          clearIcon: payload.clearIcon,
+        },
       ),
     );
   } catch (error) {

@@ -306,6 +306,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| منيو أب/ترتيب/أيقونات + آراء صوتية + زوم + إلغاء طلب | تجاوز أب التصنيف في الداشبورد، أيقونات جاهزة، سكشن آراء نص/صوت، lightbox للمنتج، إلغاء طلب من الحساب | `category-menu-selection.ts`, `navigation`, `customer-reviews-section.tsx`, `product-image-gallery.tsx`, `cancel` API |
 | Checkout UX + هوتلاين + فوتر + الأكثر مبيعاً | كمية +/- وشحن مجاني وعنوان محفوظ؛ تحكم حجم الهوتلاين؛ لوجو فوتر مستقل؛ كاروسيل صف واحد بـ 5 أعمدة | `checkout-form.tsx`, `header.tsx`, `footer.tsx`, `theme-settings.ts`, `page.tsx` |
 | إصلاح ملخص واتساب أوردر v1.2.3 | إرسال بعد اكتمال البنود (REST) بدل `new_order` المبكر؛ ملخص اسم×كمية\|سعر\|قيمة + إجمالي ج.م | `wordpress-plugin/sokany-whatsapp-otp/` |
 | إتمام طلب حقيقي COD + فوري + Bosta | checkout مربوط بالسلة والجلسة؛ محافظات/مناطق Bosta؛ إنشاء طلب Woo؛ thank-you للكاش؛ redirect فوري + callback | `checkout-form.tsx`, `api/checkout`, `woocommerce-orders.ts`, `fawry.ts`, `bosta-client.ts` |

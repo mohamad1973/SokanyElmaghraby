@@ -1,0 +1,2425 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>دليل SOKANY Storefront الشامل</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6478;
+      --accent: #b8860b;
+      --accent-dark: #8b6914;
+      --border: #e2e6ef;
+      --code-bg: #f1f3f8;
+      --sidebar-width: 280px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      color: var(--text);
+      background: var(--bg);
+      direction: rtl;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      padding: 1.25rem 1rem;
+    }
+    .sidebar h2 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+      color: var(--accent-dark);
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 0.35rem 0.5rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.88rem;
+      border-radius: 6px;
+    }
+    .sidebar nav a:hover {
+      background: var(--code-bg);
+      color: var(--accent-dark);
+    }
+    .content {
+      max-width: 960px;
+      padding: 2rem 2.5rem 4rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #fff8e6;
+      color: var(--accent-dark);
+      border: 1px solid #f0d78c;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 2rem;
+      margin: 0 0 0.5rem;
+      color: var(--accent-dark);
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 0.5rem;
+    }
+    h2 {
+      font-size: 1.45rem;
+      margin: 2.5rem 0 1rem;
+      color: var(--accent-dark);
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 1.15rem;
+      margin: 1.75rem 0 0.75rem;
+      color: #2d3344;
+    }
+    p { margin: 0.75rem 0; }
+    strong { color: #111; }
+    a { color: var(--accent-dark); }
+    a:hover { color: var(--accent); }
+    ul, ol { padding-right: 1.5rem; margin: 0.75rem 0; }
+    li { margin: 0.35rem 0; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.75rem 1rem;
+      background: #fff8e6;
+      border-right: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      color: #4a4020;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.92rem;
+      background: var(--surface);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      text-align: right;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f5fa;
+      font-weight: 700;
+      color: #2d3344;
+    }
+    tr:nth-child(even) td { background: #fafbfc; }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+    pre {
+      background: #1e2433;
+      color: #e8ecf4;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      direction: ltr;
+      text-align: left;
+      margin: 1rem 0;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+      font-size: 0.85rem;
+    }
+    .footer-note {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar {
+        position: relative;
+        height: auto;
+        border-left: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .content { padding: 1.25rem 1rem 3rem; }
+    }
+    @media print {
+      .sidebar { display: none; }
+      .layout { display: block; }
+      body { background: white; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>فهرس سريع</h2>
+      <nav>
+        <a href="#1-نظرة-عامة-وروابط-الإنتاج">1. نظرة عامة</a>
+        <a href="#2-البنية-المعمارية">2. البنية المعمارية</a>
+        <a href="#3-هيكل-المجلدات">3. هيكل المجلدات</a>
+        <a href="#4-بناء-الموقع-من-الصفر">4. بناء الموقع</a>
+        <a href="#5-فهرس-المسارات-السريع">5. فهرس المسارات</a>
+        <a href="#6-دليل-الميزات-التفصيلي">6. دليل الميزات</a>
+        <a href="#7-فهرس-التعديل-السريع">7. فهرس التعديل</a>
+        <a href="#8-متغيرات-البيئة">8. متغيرات البيئة</a>
+        <a href="#9-إعدادات-المظهر-من-الداشبورد">9. إعدادات المظهر</a>
+        <a href="#10-قاعدة-البيانات-prisma">10. قاعدة البيانات</a>
+        <a href="#11-بلجنات-ووردبريس">11. بلجنات ووردبريس</a>
+        <a href="#12-سجل-التعديلات">12. سجل التعديلات</a>
+        <a href="#13-حالة-الميزات">13. حالة الميزات</a>
+        <a href="#14-دليل-للمساعدين">14. دليل المساعدين</a>
+      </nav>
+    </aside>
+    <main class="content">
+      <div class="badge">SOKANY Storefront — دليل شامل RTL</div>
+      <h1>دليل SOKANY Storefront الشامل</h1>
+<p><strong>مشروع:</strong> sokany-storefront — متجر إلكتروني عربي RTL لـ SOKANY مصر<br><strong>آخر تحديث:</strong> يوليو 2026<br><strong>الإصدار التقني:</strong> Next.js 16 + React 19 + TypeScript + Tailwind CSS 4 + Prisma + WooCommerce</p>
+<hr>
+<h2>كيف تقرأ هذا الدليل</h2>
+<ul>
+<li><strong>النسخة الموصى بها (HTML — RTL جاهز):</strong> افتح <code>docs/SOKANY_HANDBOOK_AR.html</code> في المتصفح، أو من الديسكتوب: <code>C:\Users\mm\Desktop\SOKANY_STOREFRONT_دليل.html</code></li>
+<li><strong>نسخة Markdown:</strong> <code>docs/SOKANY_HANDBOOK_AR.md</code></li>
+<li><strong>إعادة توليد HTML بعد تعديل Markdown:</strong> <code>node scripts/handbook-to-html.mjs</code></li>
+</ul>
+<hr>
+<h2>فهرس المحتويات</h2>
+<ol>
+<li><a href="#1-%D9%86%D8%B8%D8%B1%D8%A9-%D8%B9%D8%A7%D9%85%D8%A9-%D9%88%D8%B1%D9%88%D8%A7%D8%A8%D8%B7-%D8%A7%D9%84%D8%A5%D9%86%D8%AA%D8%A7%D8%AC">نظرة عامة وروابط الإنتاج</a></li>
+<li><a href="#2-%D8%A7%D9%84%D8%A8%D9%86%D9%8A%D8%A9-%D8%A7%D9%84%D9%85%D8%B9%D9%85%D8%A7%D8%B1%D9%8A%D8%A9">البنية المعمارية</a></li>
+<li><a href="#3-%D9%87%D9%8A%D9%83%D9%84-%D8%A7%D9%84%D9%85%D8%AC%D9%84%D8%AF%D8%A7%D8%AA">هيكل المجلدات</a></li>
+<li><a href="#4-%D8%A8%D9%86%D8%A7%D8%A1-%D8%A7%D9%84%D9%85%D9%88%D9%82%D8%B9-%D9%85%D9%86-%D8%A7%D9%84%D8%B5%D9%81%D8%B1">بناء الموقع من الصفر</a></li>
+<li><a href="#5-%D9%81%D9%87%D8%B1%D8%B3-%D8%A7%D9%84%D9%85%D8%B3%D8%A7%D8%B1%D8%A7%D8%AA-%D8%A7%D9%84%D8%B3%D8%B1%D9%8A%D8%B9">فهرس المسارات السريع</a></li>
+<li><a href="#6-%D8%AF%D9%84%D9%8A%D9%84-%D8%A7%D9%84%D9%85%D9%8A%D8%B2%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D9%81%D8%B5%D9%8A%D9%84%D9%8A">دليل الميزات التفصيلي</a></li>
+<li><a href="#7-%D9%81%D9%87%D8%B1%D8%B3-%D8%A7%D9%84%D8%AA%D8%B9%D8%AF%D9%8A%D9%84-%D8%A7%D9%84%D8%B3%D8%B1%D9%8A%D8%B9">فهرس التعديل السريع — أين أجد الكود؟</a></li>
+<li><a href="#8-%D9%85%D8%AA%D8%BA%D9%8A%D8%B1%D8%A7%D8%AA-%D8%A7%D9%84%D8%A8%D9%8A%D8%A6%D8%A9">متغيرات البيئة — مرجع كامل</a></li>
+<li><a href="#9-%D8%A5%D8%B9%D8%AF%D8%A7%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D9%85%D8%B8%D9%87%D8%B1-%D9%85%D9%86-%D8%A7%D9%84%D8%AF%D8%A7%D8%B4%D8%A8%D9%88%D8%B1%D8%AF">إعدادات المظهر من الداشبورد</a></li>
+<li><a href="#10-%D9%82%D8%A7%D8%B9%D8%AF%D8%A9-%D8%A7%D9%84%D8%A8%D9%8A%D8%A7%D9%86%D8%A7%D8%AA-prisma">قاعدة البيانات Prisma</a></li>
+<li><a href="#11-%D8%A8%D9%84%D8%AC%D9%86%D8%A7%D8%AA-%D9%88%D9%88%D8%B1%D8%AF%D8%A8%D8%B1%D9%8A%D8%B3">بلجنات ووردبريس</a></li>
+<li><a href="#12-%D8%B3%D8%AC%D9%84-%D8%A7%D9%84%D8%AA%D8%B9%D8%AF%D9%8A%D9%84%D8%A7%D8%AA">سجل التعديلات</a></li>
+<li><a href="#13-%D8%AD%D8%A7%D9%84%D8%A9-%D8%A7%D9%84%D9%85%D9%8A%D8%B2%D8%A7%D8%AA">حالة الميزات</a></li>
+<li><a href="#14-%D8%AF%D9%84%D9%8A%D9%84-%D9%84%D9%84%D9%85%D8%B3%D8%A7%D8%B9%D8%AF%D9%8A%D9%86">دليل للمساعدين</a></li>
+</ol>
+<hr>
+<h2>1. نظرة عامة وروابط الإنتاج</h2>
+<table>
+<thead>
+<tr>
+<th>الخدمة</th>
+<th>الرابط / المسار</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>المتجر (إنتاج Vercel)</td>
+<td><a href="https://sokany-storefront.vercel.app">https://sokany-storefront.vercel.app</a></td>
+</tr>
+<tr>
+<td>ووردبريس / WooCommerce</td>
+<td><a href="https://sokany-eg.com">https://sokany-eg.com</a></td>
+</tr>
+<tr>
+<td>GitHub</td>
+<td><code>mohamad1973/SokanyElmaghraby</code> — فرع <code>master</code></td>
+</tr>
+<tr>
+<td>مشروع Vercel</td>
+<td><code>tooliano-store/sokany-storefront</code></td>
+</tr>
+<tr>
+<td>مجلد المشروع المحلي</td>
+<td><code>C:\Users\mm\SokanyElmaghraby\sokany-storefront</code></td>
+</tr>
+</tbody></table>
+<p><strong>ما يفعله المشروع:</strong></p>
+<ul>
+<li>واجهة متجر عربية RTL للعملاء (منتجات، بحث، مقارنة، مفضلة، حساب، OTP).</li>
+<li>لوحة تحكم أدمن لتخصيص المظهر والبانرات والتنقل والطلبات.</li>
+<li>نظام شحن وتوزيع مع Bosta وتطبيق سائق PWA.</li>
+<li>اتصال بـ WooCommerce REST API كمصدر للمنتجات والطلبات.</li>
+<li>بلجن ووردبريس لإرسال OTP عبر واتساب.</li>
+</ul>
+<hr>
+<h2>2. البنية المعمارية</h2>
+<pre><code>المتصفح (عميل / أدمن / سائق)
+    │
+    ▼
+Next.js App Router
+    ├── src/app/          ← صفحات + API Routes
+    ├── src/components/   ← مكوّنات React
+    └── src/lib/          ← منطق الأعمال
+            │
+            ├── WooCommerce REST API  (منتجات، طلبات، عملاء)
+            ├── بلجن SOKANY WhatsApp OTP  (ووردبريس REST)
+            └── Prisma / MySQL  (إعدادات المظهر، شحن، توزيع، wishlist)
+</code></pre>
+<p><strong>طبقات الحماية:</strong></p>
+<ul>
+<li><code>middleware.ts</code> — يحمي <code>/admin/*</code> و <code>/driver/*</code> و APIs الخاصة بهما عبر NextAuth JWT.</li>
+<li>جلسة العميل — cookie موقّعة في <code>src/lib/customer-account.ts</code> باستخدام <code>NEXTAUTH_SECRET</code>.</li>
+</ul>
+<hr>
+<h2>3. هيكل المجلدات</h2>
+<table>
+<thead>
+<tr>
+<th>المجلد</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>src/app/</code></td>
+<td>كل صفحات المتجر والأدمن والسائق + API Routes</td>
+</tr>
+<tr>
+<td><code>src/components/</code></td>
+<td>مكوّنات UI مشتركة (هيدر، فوتر، منتج، OTP، إلخ)</td>
+</tr>
+<tr>
+<td><code>src/lib/</code></td>
+<td>منطق الأعمال (WooCommerce، OTP، شحن، مظهر، إلخ)</td>
+</tr>
+<tr>
+<td><code>prisma/</code></td>
+<td>مخطط قاعدة البيانات + seed + migrations</td>
+</tr>
+<tr>
+<td><code>wordpress-plugin/</code></td>
+<td>بلجنات ووردبريس (OTP، headless settings)</td>
+</tr>
+<tr>
+<td><code>dist/</code></td>
+<td>ملفات ZIP جاهزة للرفع (مثل OTP plugin)</td>
+</tr>
+<tr>
+<td><code>scripts/</code></td>
+<td>سكربتات البناء (<code>prepare-db.mjs</code>)</td>
+</tr>
+<tr>
+<td><code>docs/</code></td>
+<td>هذا الدليل</td>
+</tr>
+<tr>
+<td><code>.cursor/</code></td>
+<td>دليل Cursor + قواعد الوكيل</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>4. بناء الموقع من الصفر</h2>
+<h3>4.1 المتطلبات</h3>
+<table>
+<thead>
+<tr>
+<th>المتطلب</th>
+<th>الإصدار / الملاحظة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Node.js</td>
+<td>20 أو أحدث</td>
+</tr>
+<tr>
+<td>npm</td>
+<td>يأتي مع Node</td>
+</tr>
+<tr>
+<td>Git</td>
+<td>لاستنساخ المشروع</td>
+</tr>
+<tr>
+<td>حساب Vercel</td>
+<td>للنشر</td>
+</tr>
+<tr>
+<td>MySQL</td>
+<td>اختياري محلياً؛ مطلوب للشحن/التوزيع/إعدادات المظهر المحفوظة</td>
+</tr>
+<tr>
+<td>ووردبريس</td>
+<td>sokany-eg.com مع WooCommerce + JWT + بلجن OTP</td>
+</tr>
+</tbody></table>
+<h3>4.2 استنساخ المشروع وتثبيت الحزم</h3>
+<pre><code class="language-bash">git clone https://github.com/mohamad1973/SokanyElmaghraby.git
+cd SokanyElmaghraby
+npm install
+</code></pre>
+<blockquote>
+<p><code>npm install</code> يشغّل <code>postinstall</code> → <code>prisma generate</code> تلقائياً.</p>
+</blockquote>
+<h3>4.3 إعداد متغيرات البيئة</h3>
+<p>أنشئ ملف <code>.env.local</code> في جذر المشروع (لا يُرفع إلى GitHub):</p>
+<pre><code class="language-env"># === ووردبريس / WooCommerce ===
+WOOCOMMERCE_STORE_URL=https://sokany-eg.com
+WOOCOMMERCE_CONSUMER_KEY=ck_xxxxxxxx
+WOOCOMMERCE_CONSUMER_SECRET=cs_xxxxxxxx
+WOOCOMMERCE_WEBHOOK_SECRET=سر_ويب_هوك_الطلبات
+
+# === جلسات NextAuth (أدمن + سائق + توقيع عميل) ===
+NEXTAUTH_SECRET=ضع_هنا_سراً_عشوائياً_طويلاً_32_حرفاً_على_الأقل
+NEXTAUTH_URL=http://localhost:3000
+
+# === دخول الأدمن ===
+ADMIN_EMAIL=admin@sokany-eg.com
+ADMIN_PASSWORD=كلمة_مرور_قوية
+
+# === قاعدة البيانات MySQL (اختياري محلياً) ===
+DATABASE_URL=mysql://user:password@host:3306/database
+
+# === شحن Bosta ===
+BOSTA_API_KEY=
+BOSTA_BASE_URL=https://app.bosta.co
+BOSTA_WEBHOOK_SECRET=
+
+# === واتساب إشعارات الطلبات (للأدمن) ===
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_ADMIN_RECIPIENT=201000260262
+WHATSAPP_ORDER_TEMPLATE_NAME=
+
+# === خرائط Google (تحسين مسار السائق) ===
+GOOGLE_MAPS_API_KEY=
+
+# === Fawry (غير مفعّل بعد — placeholder) ===
+FAWRY_MERCHANT_CODE=
+FAWRY_SECURITY_KEY=
+</code></pre>
+<p><strong>أين تحصل على المفاتيح:</strong></p>
+<ul>
+<li>WooCommerce keys: ووردبريس → WooCommerce → Settings → Advanced → REST API.</li>
+<li><code>NEXTAUTH_SECRET</code>: أي مولّد أسرار عشوائية (32+ حرف).</li>
+<li>Vercel: Project → Settings → Environment Variables (نفس القيم للإنتاج مع <code>NEXTAUTH_URL=https://sokany-storefront.vercel.app</code>).</li>
+</ul>
+<h3>4.4 قاعدة البيانات</h3>
+<pre><code class="language-bash"># مزامنة المخطط مع MySQL
+npm run db:push
+
+# بذر المناطق الافتراضية للتوصيل
+npm run db:seed
+</code></pre>
+<p><strong>بديل عبر المتصفح:</strong> بعد النشر، افتح <code>/admin/dispatch/setup</code> لتهيئة جداول الشحن.</p>
+<blockquote>
+<p>أثناء <code>npm run build</code> يُشغَّل <code>scripts/prepare-db.mjs</code> الذي يحاول <code>db push</code> + <code>seed</code> إذا وُجد <code>DATABASE_URL</code>؛ وإلا يتخطى بأمان.</p>
+</blockquote>
+<h3>4.5 التطوير المحلي</h3>
+<pre><code class="language-bash">npm run dev
+</code></pre>
+<p>افتح: <a href="http://localhost:3000">http://localhost:3000</a></p>
+<table>
+<thead>
+<tr>
+<th>الصفحة</th>
+<th>الرابط المحلي</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>المتجر</td>
+<td><a href="http://localhost:3000">http://localhost:3000</a></td>
+</tr>
+<tr>
+<td>دخول أدمن</td>
+<td><a href="http://localhost:3000/admin/login">http://localhost:3000/admin/login</a></td>
+</tr>
+<tr>
+<td>دخول سائق</td>
+<td><a href="http://localhost:3000/driver/login">http://localhost:3000/driver/login</a></td>
+</tr>
+</tbody></table>
+<h3>4.6 البناء للإنتاج</h3>
+<pre><code class="language-bash">npm run build
+</code></pre>
+<p>الأمر يشغّل: <code>node scripts/prepare-db.mjs</code> ثم <code>next build</code>.</p>
+<p>للتشغيل بعد البناء محلياً:</p>
+<pre><code class="language-bash">npm start
+</code></pre>
+<h3>4.7 النشر على Vercel</h3>
+<pre><code class="language-bash">git add .
+git commit -m &quot;وصف التعديل&quot;
+git push origin master
+npx vercel --prod --yes
+</code></pre>
+<p><strong>رابط الإنتاج:</strong> <a href="https://sokany-storefront.vercel.app">https://sokany-storefront.vercel.app</a></p>
+<h3>4.8 تثبيت بلجن OTP على ووردبريس</h3>
+<ol>
+<li>ارفع <code>dist/sokany-whatsapp-otp.zip</code> من لوحة ووردبريس → Plugins → Add New → Upload.</li>
+<li><strong>مهم:</strong> يجب أن يكون الملف الرئيسي داخل المجلد مباشرة:
+<code>wp-content/plugins/sokany-whatsapp-otp/sokany-whatsapp-otp.php</code></li>
+<li>إذا فشل التفعيل بـ «Plugin file does not exist»:<ul>
+<li>ارفع المجلد يدوياً عبر FTP إلى <code>wp-content/plugins/sokany-whatsapp-otp/</code></li>
+</ul>
+</li>
+<li>فعّل البلجن → Settings → <strong>SOKANY WhatsApp OTP</strong> → فعّل <strong>Test Mode</strong>.</li>
+</ol>
+<h3>4.9 اختبار OTP</h3>
+<ol>
+<li>ووردبريس: Settings → SOKANY WhatsApp OTP → Test Mode ON → اطلب كود من المتجر → اقرأ الكود من صفحة الإعدادات.</li>
+<li>المتجر: <code>/account/login</code> → «نسيت كلمة المرور؟» → أدخل موبايل 11 رقم → شاشة OTP منفصلة (6 أرقام).</li>
+<li>Postman مباشرة على ووردبريس:<pre><code>POST https://sokany-eg.com/wp-json/sokany-otp/v1/request
+Body: {&quot;phone&quot;:&quot;01000260262&quot;,&quot;purpose&quot;:&quot;login&quot;}
+</code></pre>
+بدون Authorization header.</li>
+</ol>
+<p><strong>شرط:</strong> رقم الموبايل يجب أن يكون مسجلاً في ووردبريس في أحد الحقول: <code>billing_phone</code>, <code>phone</code>, <code>mobile</code>.</p>
+<hr>
+<h2>5. فهرس المسارات السريع</h2>
+<h3>5.1 المتجر (عميل)</h3>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد</th>
+<th>افتح</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>الصفحة الرئيسية</td>
+<td><code>/</code></td>
+</tr>
+<tr>
+<td>المتجر / تصنيف</td>
+<td><code>/shop</code> أو <code>/shop?category=slug</code></td>
+</tr>
+<tr>
+<td>منتج</td>
+<td><code>/product/[slug]</code></td>
+</tr>
+<tr>
+<td>العروض</td>
+<td><code>/offers</code></td>
+</tr>
+<tr>
+<td>مقارنة منتجات</td>
+<td><code>/compare</code></td>
+</tr>
+<tr>
+<td>تسجيل الدخول</td>
+<td><code>/account/login</code></td>
+</tr>
+<tr>
+<td>نسيت كلمة المرور (OTP)</td>
+<td><code>/account/login</code> → «نسيت كلمة المرور؟»</td>
+</tr>
+<tr>
+<td>إنشاء حساب</td>
+<td><code>/account/register</code></td>
+</tr>
+<tr>
+<td>حسابي</td>
+<td><code>/account</code></td>
+</tr>
+<tr>
+<td>تغيير كلمة المرور</td>
+<td><code>/account</code> → قسم «تغيير كلمة المرور»</td>
+</tr>
+<tr>
+<td>تفاصيل طلب</td>
+<td><code>/account/orders/[id]</code></td>
+</tr>
+<tr>
+<td>السلة</td>
+<td><code>/cart</code></td>
+</tr>
+<tr>
+<td>الدفع</td>
+<td><code>/checkout</code></td>
+</tr>
+<tr>
+<td>من نحن</td>
+<td><code>/about</code></td>
+</tr>
+<tr>
+<td>اتصل بنا</td>
+<td><code>/contact</code></td>
+</tr>
+<tr>
+<td>الضمان</td>
+<td><code>/warranty</code></td>
+</tr>
+<tr>
+<td>سياسة الإرجاع</td>
+<td><code>/return-policy</code></td>
+</tr>
+</tbody></table>
+<h3>5.2 الداشبورد (أدمن)</h3>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد</th>
+<th>افتح</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>دخول الأدمن</td>
+<td><code>/admin/login</code></td>
+</tr>
+<tr>
+<td>لوحة التحكم</td>
+<td><code>/admin</code></td>
+</tr>
+<tr>
+<td>الألوان والشعار</td>
+<td><code>/admin/theme</code></td>
+</tr>
+<tr>
+<td>الهيدر</td>
+<td><code>/admin/header</code></td>
+</tr>
+<tr>
+<td>الفوتر</td>
+<td><code>/admin/footer</code></td>
+</tr>
+<tr>
+<td>بانرات الرئيسية + كاروسيل التصنيفات</td>
+<td><code>/admin/banners</code></td>
+</tr>
+<tr>
+<td>واتساب / سوشيال / موضع الأزرار</td>
+<td><code>/admin/social-media</code></td>
+</tr>
+<tr>
+<td>قائمة التصنيفات في الهيدر</td>
+<td><code>/admin/navigation</code></td>
+</tr>
+<tr>
+<td>المنتجات</td>
+<td><code>/admin/products</code></td>
+</tr>
+<tr>
+<td>التصنيفات</td>
+<td><code>/admin/categories</code></td>
+</tr>
+<tr>
+<td>الطلبات</td>
+<td><code>/admin/orders</code></td>
+</tr>
+<tr>
+<td>تفاصيل طلب</td>
+<td><code>/admin/orders/[id]</code></td>
+</tr>
+<tr>
+<td>إعداد الشحن</td>
+<td><code>/admin/dispatch/setup</code></td>
+</tr>
+<tr>
+<td>لوحة التوزيع</td>
+<td><code>/admin/dispatch/board</code></td>
+</tr>
+<tr>
+<td>السائقين</td>
+<td><code>/admin/dispatch/drivers</code></td>
+</tr>
+<tr>
+<td>المناطق</td>
+<td><code>/admin/dispatch/zones</code></td>
+</tr>
+<tr>
+<td>تقارير</td>
+<td><code>/admin/dispatch/reports</code></td>
+</tr>
+</tbody></table>
+<h3>5.3 السائق</h3>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد</th>
+<th>افتح</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>دخول السائق</td>
+<td><code>/driver/login</code></td>
+</tr>
+<tr>
+<td>ملخص اليوم</td>
+<td><code>/driver/today</code></td>
+</tr>
+<tr>
+<td>ترتيب المحطات</td>
+<td><code>/driver/route</code></td>
+</tr>
+<tr>
+<td>تأكيد تسليم + OTP</td>
+<td><code>/driver/order/[id]</code></td>
+</tr>
+</tbody></table>
+<h3>5.4 ووردبريس (خارج Next.js)</h3>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد</th>
+<th>أين</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>إعدادات OTP + Test Mode</td>
+<td>Settings → SOKANY WhatsApp OTP</td>
+</tr>
+<tr>
+<td>عملاء / أرقام موبايل</td>
+<td>Users → حقول billing_phone, phone, mobile</td>
+</tr>
+<tr>
+<td>JWT للعملاء</td>
+<td>بلجن JWT Authentication</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>6. دليل الميزات التفصيلي</h2>
+<blockquote>
+<p><strong>قالب كل ميزة:</strong> الوصول | ملفات الواجهة | API | منطق الأعمال | إعدادات أدمن | متغيرات | كيف تعدّل</p>
+</blockquote>
+<hr>
+<h3>6.1 الصفحة الرئيسية <code>/</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّنات</strong></td>
+<td><code>src/components/hero-section.tsx</code>, <code>hero-carousel.tsx</code>, <code>main-groups-section.tsx</code>, <code>category-scroller.tsx</code>, <code>trust-badges-section.tsx</code>, <code>custom-product-section.tsx</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/theme-settings.ts</code> (ترتيب الأقسام، بانرات، ألوان)</td>
+</tr>
+<tr>
+<td><strong>منتجات</strong></td>
+<td><code>src/lib/woocommerce.ts</code></td>
+</tr>
+<tr>
+<td><strong>إعدادات أدمن</strong></td>
+<td><code>/admin/banners</code>, <code>/admin/theme</code>, <code>/admin/header</code></td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>WOOCOMMERCE_*</code>, <code>DATABASE_URL</code> (لحفظ إعدادات المظهر)</td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) غيّر ترتيب الأقسام من <code>/admin/banners</code>. 2) غيّر ألوان الشعار من <code>/admin/theme</code>. 3) للتعديل البرمجي: <code>src/app/page.tsx</code> + <code>theme-settings.ts</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.2 المتجر <code>/shop</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/shop</code>, <code>/shop?category=slug</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/shop/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّنات</strong></td>
+<td><code>src/components/product-card.tsx</code>, <code>product-section-grid.tsx</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/woocommerce.ts</code> — <code>getProducts()</code>, <code>getCategories()</code></td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>WOOCOMMERCE_STORE_URL</code>, <code>WOOCOMMERCE_CONSUMER_KEY</code>, <code>WOOCOMMERCE_CONSUMER_SECRET</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) عدد المنتجات/الفلترة: عدّل استدعاء WooCommerce في <code>shop/page.tsx</code>. 2) شكل البطاقة: <code>product-card.tsx</code>. 3) مفاتيح API: <code>.env.local</code> أو Vercel env.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.3 صفحة المنتج <code>/product/[slug]</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/product/اسم-المنتج</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/product/[slug]/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّنات</strong></td>
+<td><code>product-image-gallery.tsx</code>, <code>product-page-actions.tsx</code>, <code>product-rich-description.tsx</code>, <code>product-spec-row.tsx</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>woocommerce.ts</code>, <code>product-spec-parser.ts</code>, <code>product-display-code.ts</code></td>
+</tr>
+<tr>
+<td><strong>SEO</strong></td>
+<td>metadata + JSON-LD داخل <code>page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) عرض المواصفات: <code>product-spec-parser.ts</code>. 2) أزرار wishlist/compare: <code>product-page-actions.tsx</code>. 3) كود المنتج المعروض: إعداد <code>productCard.codeMode</code> من <code>/admin/theme</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.4 العروض <code>/offers</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/offers</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/offers/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>woocommerce.ts</code> — منتجات بتخفيض</td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>عدّل فلتر العروض في <code>offers/page.tsx</code> أو استعلام WooCommerce.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.5 مقارنة المنتجات <code>/compare</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/compare</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/compare/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّنات</strong></td>
+<td><code>product-compare-table.tsx</code>, <code>compare-floating-bar.tsx</code>, <code>compare-replace-modal.tsx</code>, <code>header-compare-link.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>GET /api/products/compare</code> → <code>src/app/api/products/compare/route.ts</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/compare-utils.ts</code>, <code>src/lib/product-lists.ts</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) حد أقصى 4 منتجات: <code>product-lists.ts</code>. 2) أعمدة الجدول: <code>compare-utils.ts</code>. 3) واجهة: <code>product-compare-table.tsx</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.6 المفضلة (Wishlist)</h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td>أيقونة القلب في الهيدر</td>
+</tr>
+<tr>
+<td><strong>مكوّنات</strong></td>
+<td><code>header-wishlist-menu.tsx</code>, <code>product-lists-provider.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>GET/PUT /api/account/wishlist</code> → <code>src/app/api/account/wishlist/route.ts</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/product-lists.ts</code> — يحفظ في Prisma جدول <code>CustomerWishlist</code></td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>DATABASE_URL</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) سلوك الحفظ: <code>product-lists.ts</code>. 2) واجهة القائمة: <code>header-wishlist-menu.tsx</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.7 البحث عن منتجات</h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td>حقل البحث في الهيدر</td>
+</tr>
+<tr>
+<td><strong>مكوّن</strong></td>
+<td><code>src/components/header-product-search.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>GET /api/products/search</code> → <code>src/app/api/products/search/route.ts</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>woocommerce.ts</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>عدّل منطق البحث في <code>search/route.ts</code> أو <code>header-product-search.tsx</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.8 السلة <code>/cart</code> و الدفع <code>/checkout</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/cart</code>, <code>/checkout</code></td>
+</tr>
+<tr>
+<td><strong>ملفات الواجهة</strong></td>
+<td><code>src/app/cart/page.tsx</code>, <code>src/app/checkout/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>POST /api/checkout</code> → placeholder</td>
+</tr>
+<tr>
+<td><strong>Fawry</strong></td>
+<td><code>POST /api/fawry/callback</code> → placeholder</td>
+</tr>
+<tr>
+<td><strong>الحالة</strong></td>
+<td><strong>واجهة فقط</strong> — لا إنشاء طلب حقيقي بعد</td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>عند التفعيل: اربط <code>checkout/route.ts</code> بـ WooCommerce orders + Fawry env vars.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.9 تسجيل الدخول <code>/account/login</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/account/login</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/account/login/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّن</strong></td>
+<td><code>src/components/account-auth-form.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>POST /api/account/login</code>, <code>POST /api/account/otp/request</code>, <code>POST /api/account/otp/login</code>, <code>POST /api/account/otp/reset-password</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/customer-account.ts</code>, <code>src/lib/whatsapp-otp.ts</code></td>
+</tr>
+<tr>
+<td><strong>بلجن ووردبريس</strong></td>
+<td><code>wordpress-plugin/sokany-whatsapp-otp/</code></td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>WOOCOMMERCE_STORE_URL</code>, <code>WOOCOMMERCE_CONSUMER_KEY/SECRET</code>, <code>NEXTAUTH_SECRET</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) نصوص الواجهة: <code>login/page.tsx</code>. 2) تدفق OTP: <code>account-auth-form.tsx</code>. 3) منطق الجلسة: <code>customer-account.ts</code>. 4) عنوان OTP API: <code>whatsapp-otp.ts</code> → دالة <code>getOtpEndpoint()</code>.</td>
+</tr>
+</tbody></table>
+<p><strong>تدفق OTP نسيت كلمة المرور:</strong></p>
+<ol>
+<li>المستخدم يدخل 11 رقم موبايل.</li>
+<li><code>POST /api/account/otp/request</code> → ووردبريس <code>/wp-json/sokany-otp/v1/request</code>.</li>
+<li>شاشة OTP منفصلة (6 أرقام).</li>
+<li>تحقق + إعادة تعيين كلمة المرور.</li>
+</ol>
+<hr>
+<h3>6.10 التسجيل <code>/account/register</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/account/register</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/account/register/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّن</strong></td>
+<td><code>account-auth-form.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>POST /api/account/register</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>customer-account.ts</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>حقول التسجيل في <code>account-auth-form.tsx</code> + <code>register/route.ts</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.11 حسابي <code>/account</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/account</code> (يتطلب دخول)</td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/account/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>مكوّنات</strong></td>
+<td><code>account-change-password-form.tsx</code>, <code>account-logout-button.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>GET /api/account/me</code>, <code>POST /api/account/change-password</code>, <code>POST /api/account/logout</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>customer-account.ts</code> — طلبات، ولاء، جلسة</td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) أقسام الصفحة: <code>account/page.tsx</code>. 2) تغيير كلمة المرور: <code>account-change-password-form.tsx</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.12 تفاصيل طلب العميل <code>/account/orders/[id]</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/account/orders/123</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/account/orders/[id]/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>customer-account.ts</code> — يجلب الطلب من WooCommerce</td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>عرض الحقول في <code>orders/[id]/page.tsx</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.13 صفحات المحتوى الثابت</h3>
+<table>
+<thead>
+<tr>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/about</code></td>
+<td><code>src/app/about/page.tsx</code></td>
+</tr>
+<tr>
+<td><code>/contact</code></td>
+<td><code>src/app/contact/page.tsx</code></td>
+</tr>
+<tr>
+<td><code>/warranty</code></td>
+<td><code>src/app/warranty/page.tsx</code></td>
+</tr>
+<tr>
+<td><code>/return-policy</code></td>
+<td><code>src/app/return-policy/page.tsx</code></td>
+</tr>
+</tbody></table>
+<p><strong>كيف تعدّل:</strong> عدّل النص مباشرة في ملف <code>page.tsx</code> لكل صفحة.</p>
+<hr>
+<h3>6.14 الهيدر والفوتر والأزرار العائمة</h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>مكوّن رئيسي</strong></td>
+<td><code>src/components/site-chrome.tsx</code></td>
+</tr>
+<tr>
+<td><strong>هيدر</strong></td>
+<td><code>src/components/header.tsx</code></td>
+</tr>
+<tr>
+<td><strong>فوتر</strong></td>
+<td><code>src/components/footer.tsx</code></td>
+</tr>
+<tr>
+<td><strong>تنقل سفلي موبايل</strong></td>
+<td><code>src/components/mobile-bottom-nav.tsx</code></td>
+</tr>
+<tr>
+<td><strong>درج جانبي</strong></td>
+<td><code>src/components/mobile-side-drawer.tsx</code></td>
+</tr>
+<tr>
+<td><strong>أزرار عائمة</strong></td>
+<td><code>src/components/floating-action-buttons.tsx</code></td>
+</tr>
+<tr>
+<td><strong>سوشيال</strong></td>
+<td><code>src/components/social-media-sidebar.tsx</code>, <code>mobile-social-launcher.tsx</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>theme-settings.ts</code>, <code>widget-placement.ts</code>, <code>widget-button-style.ts</code>, <code>menu.ts</code></td>
+</tr>
+<tr>
+<td><strong>إعدادات أدمن</strong></td>
+<td><code>/admin/header</code>, <code>/admin/footer</code>, <code>/admin/social-media</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) نصوص وشعار: <code>/admin/theme</code> + <code>/admin/header</code>. 2) موضع واتساب/صعود: <code>/admin/social-media</code>. 3) برمجياً: <code>widget-placement.ts</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.15 لوحة الأدمن <code>/admin</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/admin/login</code> ثم <code>/admin</code></td>
+</tr>
+<tr>
+<td><strong>حماية</strong></td>
+<td><code>middleware.ts</code> + <code>src/lib/auth.ts</code> (NextAuth)</td>
+</tr>
+<tr>
+<td><strong>قشرة UI</strong></td>
+<td><code>src/app/admin/admin-shell.tsx</code>, <code>src/app/admin/layout.tsx</code></td>
+</tr>
+<tr>
+<td><strong>نموذج إعدادات مشترك</strong></td>
+<td><code>src/app/admin/settings-form.tsx</code></td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>ADMIN_EMAIL</code>, <code>ADMIN_PASSWORD</code>, <code>NEXTAUTH_SECRET</code>, <code>NEXTAUTH_URL</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) بيانات دخول: env vars. 2) قائمة جانبية: <code>admin-shell.tsx</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.16 إعدادات المظهر <code>/admin/theme</code></h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>الوصول</strong></td>
+<td><code>/admin/theme</code></td>
+</tr>
+<tr>
+<td><strong>ملف الواجهة</strong></td>
+<td><code>src/app/admin/theme/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>GET/POST /api/admin/theme-settings</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/theme-settings.ts</code> — يحفظ JSON في جدول <code>ThemeSettings</code> (id=<code>site</code>)</td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>DATABASE_URL</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) من المتصفح: <code>/admin/theme</code>. 2) ألوان CSS: <code>getThemeCssVariables()</code> في <code>theme-settings.ts</code>. 3) defaults: <code>defaultThemeSettings</code> في نفس الملف.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.17 الهيدر والفوتر من الأدمن</h3>
+<table>
+<thead>
+<tr>
+<th>الصفحة</th>
+<th>الملف</th>
+<th>مفتاح JSON</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/admin/header</code></td>
+<td><code>src/app/admin/header/page.tsx</code></td>
+<td><code>settings.header</code>, <code>settings.topBanner</code></td>
+</tr>
+<tr>
+<td><code>/admin/footer</code></td>
+<td><code>src/app/admin/footer/page.tsx</code></td>
+<td><code>settings.footer</code></td>
+</tr>
+<tr>
+<td><code>/admin/banners</code></td>
+<td><code>src/app/admin/banners/page.tsx</code></td>
+<td><code>settings.hero</code>, <code>settings.sections</code></td>
+</tr>
+<tr>
+<td><code>/admin/social-media</code></td>
+<td><code>src/app/admin/social-media/page.tsx</code></td>
+<td><code>settings.socialMedia</code>, <code>settings.floatingActions</code></td>
+</tr>
+<tr>
+<td><code>/admin/navigation</code></td>
+<td><code>src/app/admin/navigation/page.tsx</code></td>
+<td><code>CategoryMenuSelection</code> + <code>menu.ts</code></td>
+</tr>
+</tbody></table>
+<p><strong>رفع صور:</strong> <code>src/app/admin/image-upload-field.tsx</code> → <code>POST /api/admin/upload</code> → <code>src/lib/admin-media.ts</code></p>
+<hr>
+<h3>6.18 المنتجات والتصنيفات (أدمن)</h3>
+<table>
+<thead>
+<tr>
+<th>الصفحة</th>
+<th>الملف</th>
+<th>API</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/admin/products</code></td>
+<td><code>src/app/admin/products/page.tsx</code></td>
+<td><code>POST /api/admin/import/products</code></td>
+</tr>
+<tr>
+<td><code>/admin/categories</code></td>
+<td><code>src/app/admin/categories/page.tsx</code></td>
+<td><code>POST /api/admin/import/categories</code></td>
+</tr>
+</tbody></table>
+<p><strong>منطق الاستيراد:</strong> <code>src/lib/admin-imports.ts</code>, <code>src/lib/woocommerce-update.ts</code></p>
+<p><strong>كيف تعدّل:</strong> بيانات المنتجات الأساسية من WooCommerce؛ الاستيراد يحدّث حقول إضافية في ووردبريس.</p>
+<hr>
+<h3>6.19 الطلبات (أدمن)</h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>القائمة</strong></td>
+<td><code>/admin/orders</code> → <code>src/app/admin/orders/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>التفاصيل</strong></td>
+<td><code>/admin/orders/[id]</code> → <code>src/app/admin/orders/[id]/page.tsx</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>GET /api/admin/orders</code>, <code>GET /api/admin/orders/[id]</code></td>
+</tr>
+<tr>
+<td><strong>منطق الأعمال</strong></td>
+<td><code>src/lib/orders.ts</code></td>
+</tr>
+<tr>
+<td><strong>شحن Bosta</strong></td>
+<td><code>order-shipping-actions.tsx</code> → <code>POST /api/admin/shipping/bosta/create</code></td>
+</tr>
+<tr>
+<td><strong>إشعار واتساب</strong></td>
+<td><code>src/lib/whatsapp.ts</code></td>
+</tr>
+<tr>
+<td><strong>متغيرات</strong></td>
+<td><code>WOOCOMMERCE_*</code>, <code>BOSTA_*</code>, <code>WHATSAPP_*</code></td>
+</tr>
+<tr>
+<td><strong>كيف تعدّل</strong></td>
+<td>1) أعمدة القائمة: <code>orders/page.tsx</code>. 2) إنشاء شحنة: <code>bosta-client.ts</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>6.20 نظام التوزيع والشحن</h3>
+<table>
+<thead>
+<tr>
+<th>الصفحة</th>
+<th>الملف</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/admin/dispatch/setup</code></td>
+<td><code>dispatch/setup/page.tsx</code></td>
+<td>تهيئة DB + Bosta</td>
+</tr>
+<tr>
+<td><code>/admin/dispatch/board</code></td>
+<td><code>dispatch/board/page.tsx</code></td>
+<td>توزيع طلبات اليوم</td>
+</tr>
+<tr>
+<td><code>/admin/dispatch/drivers</code></td>
+<td><code>dispatch/drivers/page.tsx</code></td>
+<td>إدارة السائقين</td>
+</tr>
+<tr>
+<td><code>/admin/dispatch/zones</code></td>
+<td><code>dispatch/zones/page.tsx</code></td>
+<td>مناطق القاهرة/الجيزة</td>
+</tr>
+<tr>
+<td><code>/admin/dispatch/reports</code></td>
+<td><code>dispatch/reports/page.tsx</code></td>
+<td>تقارير أداء</td>
+</tr>
+</tbody></table>
+<p><strong>مكتبات:</strong> <code>src/lib/dispatch/</code> (assign-orders, drivers, zones, route-optimizer, zone-names)<br><strong>شحن:</strong> <code>src/lib/shipping/</code> (bosta-client, bosta-zones, bootstrap, shipments)<br><strong>APIs:</strong> <code>/api/admin/dispatch/*</code>, <code>/api/admin/setup/shipping</code>, <code>/api/admin/shipping/bosta/*</code><br><strong>متغيرات:</strong> <code>DATABASE_URL</code>, <code>BOSTA_API_KEY</code>, <code>BOSTA_BASE_URL</code>, <code>BOSTA_WEBHOOK_SECRET</code>, <code>GOOGLE_MAPS_API_KEY</code></p>
+<p><strong>كيف تعدّل:</strong></p>
+<ol>
+<li>أضف سائق من <code>/admin/dispatch/drivers</code>.</li>
+<li>عيّن مناطق من <code>/admin/dispatch/zones</code>.</li>
+<li>وزّع من <code>/admin/dispatch/board</code>.</li>
+<li>مفاتيح Bosta في Vercel env.</li>
+</ol>
+<hr>
+<h3>6.21 تطبيق السائق</h3>
+<table>
+<thead>
+<tr>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/driver/login</code></td>
+<td><code>src/app/driver/login/page.tsx</code></td>
+</tr>
+<tr>
+<td><code>/driver/today</code></td>
+<td><code>src/app/driver/today/page.tsx</code></td>
+</tr>
+<tr>
+<td><code>/driver/route</code></td>
+<td><code>src/app/driver/route/page.tsx</code></td>
+</tr>
+<tr>
+<td><code>/driver/order/[id]</code></td>
+<td><code>src/app/driver/order/[id]/page.tsx</code></td>
+</tr>
+</tbody></table>
+<p><strong>قشرة:</strong> <code>src/app/driver/driver-shell.tsx</code>, <code>driver/layout.tsx</code><br><strong>APIs:</strong> <code>GET /api/driver/today</code>, <code>GET/POST /api/driver/assignments/[id]</code><br><strong>OTP تسليم:</strong> <code>src/lib/security.ts</code><br><strong>حماية:</strong> <code>middleware.ts</code> — role=<code>driver</code></p>
+<hr>
+<h3>6.22 Webhooks</h3>
+<table>
+<thead>
+<tr>
+<th>المسار</th>
+<th>الملف</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>POST /api/webhooks/woocommerce/order-created</code></td>
+<td><code>src/app/api/webhooks/woocommerce/order-created/route.ts</code></td>
+<td>طلب جديد من WooCommerce</td>
+</tr>
+<tr>
+<td><code>POST /api/webhooks/bosta/[secret]</code></td>
+<td><code>src/app/api/webhooks/bosta/[secret]/route.ts</code></td>
+<td>تحديث حالة شحنة Bosta</td>
+</tr>
+</tbody></table>
+<p><strong>متغيرات:</strong> <code>WOOCOMMERCE_WEBHOOK_SECRET</code>, <code>BOSTA_WEBHOOK_SECRET</code></p>
+<hr>
+<h3>6.23 SEO و PWA</h3>
+<table>
+<thead>
+<tr>
+<th>الملف</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>src/app/layout.tsx</code></td>
+<td>metadata عام، خط Almarai، RTL</td>
+</tr>
+<tr>
+<td><code>src/app/sitemap.ts</code></td>
+<td>خريطة الموقع</td>
+</tr>
+<tr>
+<td><code>src/app/robots.ts</code></td>
+<td>robots.txt</td>
+</tr>
+<tr>
+<td><code>public/manifest.webmanifest</code></td>
+<td>PWA manifest</td>
+</tr>
+<tr>
+<td><code>src/components/pwa-install-prompt.tsx</code></td>
+<td>مطالبة تثبيت التطبيق</td>
+</tr>
+</tbody></table>
+<p><strong>كيف تعدّل:</strong> عنوان ووصف الموقع في <code>layout.tsx</code> → <code>metadata</code>.</p>
+<hr>
+<h2>7. فهرس التعديل السريع</h2>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد تغييره</th>
+<th>الملف / المكان</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>عنوان ووصف الموقع (SEO)</td>
+<td><code>src/app/layout.tsx</code></td>
+</tr>
+<tr>
+<td>ألوان العلامة التجارية</td>
+<td><code>/admin/theme</code> أو <code>theme-settings.ts</code> → <code>brand</code></td>
+</tr>
+<tr>
+<td>شعار الموقع</td>
+<td><code>/admin/theme</code> → <code>brand.logoUrl</code></td>
+</tr>
+<tr>
+<td>بانرات الهيرو</td>
+<td><code>/admin/banners</code> أو <code>hero-slide-utils.ts</code></td>
+</tr>
+<tr>
+<td>ترتيب أقسام الرئيسية</td>
+<td><code>/admin/banners</code> → <code>homeSectionsOrder</code></td>
+</tr>
+<tr>
+<td>كاروسيل التصنيفات (عدد/سرعة)</td>
+<td><code>/admin/banners</code> → <code>sections.categories</code></td>
+</tr>
+<tr>
+<td>نص البانر العلوي المتحرك</td>
+<td><code>/admin/header</code> → <code>topBanner</code></td>
+</tr>
+<tr>
+<td>قائمة التنقل</td>
+<td><code>/admin/navigation</code> + <code>src/lib/menu.ts</code></td>
+</tr>
+<tr>
+<td>هيدر (بحث، سلة، CTA)</td>
+<td><code>/admin/header</code> + <code>src/components/header.tsx</code></td>
+</tr>
+<tr>
+<td>فوتر</td>
+<td><code>/admin/footer</code> + <code>src/components/footer.tsx</code></td>
+</tr>
+<tr>
+<td>زر واتساب العائم</td>
+<td><code>/admin/social-media</code> → <code>floatingActions</code></td>
+</tr>
+<tr>
+<td>موضع الأزرار العائمة</td>
+<td><code>src/lib/widget-placement.ts</code></td>
+</tr>
+<tr>
+<td>شكل الأزرار العائمة</td>
+<td><code>src/lib/widget-button-style.ts</code></td>
+</tr>
+<tr>
+<td>روابط فيسبوك/إنستغرام/تيك توك</td>
+<td><code>/admin/social-media</code></td>
+</tr>
+<tr>
+<td>بطاقة المنتج (حدود، كود)</td>
+<td><code>/admin/theme</code> → <code>productCard</code></td>
+</tr>
+<tr>
+<td>جلب المنتجات من WooCommerce</td>
+<td><code>src/lib/woocommerce.ts</code></td>
+</tr>
+<tr>
+<td>تحديث منتج في WooCommerce</td>
+<td><code>src/lib/woocommerce-update.ts</code></td>
+</tr>
+<tr>
+<td>دخول عميل / JWT</td>
+<td><code>src/lib/customer-account.ts</code></td>
+</tr>
+<tr>
+<td>OTP واتساب (عميل Next.js)</td>
+<td><code>src/lib/whatsapp-otp.ts</code></td>
+</tr>
+<tr>
+<td>OTP واتساب (ووردبريس)</td>
+<td><code>wordpress-plugin/sokany-whatsapp-otp/sokany-whatsapp-otp.php</code></td>
+</tr>
+<tr>
+<td>واجهة دخول / OTP</td>
+<td><code>src/components/account-auth-form.tsx</code></td>
+</tr>
+<tr>
+<td>صفحة عنوان الدخول</td>
+<td><code>src/app/account/login/page.tsx</code></td>
+</tr>
+<tr>
+<td>تغيير كلمة مرور</td>
+<td><code>src/components/account-change-password-form.tsx</code></td>
+</tr>
+<tr>
+<td>مقارنة منتجات</td>
+<td><code>src/lib/compare-utils.ts</code></td>
+</tr>
+<tr>
+<td>wishlist</td>
+<td><code>src/lib/product-lists.ts</code></td>
+</tr>
+<tr>
+<td>طلبات أدمن</td>
+<td><code>src/lib/orders.ts</code></td>
+</tr>
+<tr>
+<td>شحن Bosta</td>
+<td><code>src/lib/shipping/bosta-client.ts</code></td>
+</tr>
+<tr>
+<td>توزيع / سائقين</td>
+<td><code>src/lib/dispatch/</code></td>
+</tr>
+<tr>
+<td>حماية admin/driver</td>
+<td><code>middleware.ts</code></td>
+</tr>
+<tr>
+<td>دخول أدمن</td>
+<td><code>src/lib/auth.ts</code> + env <code>ADMIN_EMAIL/PASSWORD</code></td>
+</tr>
+<tr>
+<td>إشعار واتساب للأدمن عند طلب</td>
+<td><code>src/lib/whatsapp.ts</code></td>
+</tr>
+<tr>
+<td>بيانات تجريبية عند غياب API</td>
+<td><code>src/lib/demo-data.ts</code></td>
+</tr>
+<tr>
+<td>حماية middleware</td>
+<td><code>middleware.ts</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>8. متغيرات البيئة</h2>
+<table>
+<thead>
+<tr>
+<th>المتغير</th>
+<th>الوظيفة</th>
+<th>الملفات</th>
+<th>كيف تعدّله</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>WOOCOMMERCE_STORE_URL</code></td>
+<td>عنوان ووردبريس</td>
+<td><code>woocommerce.ts:6</code>, <code>customer-account.ts:9</code>, <code>orders.ts:6</code>, <code>menu.ts:6</code>, <code>whatsapp-otp.ts:5</code>, <code>woocommerce-update.ts:3</code></td>
+<td><code>.env.local</code> أو Vercel → Environment Variables</td>
+</tr>
+<tr>
+<td><code>WOOCOMMERCE_CONSUMER_KEY</code></td>
+<td>مفتاح REST API</td>
+<td>نفس الملفات أعلاه</td>
+<td>WooCommerce → Settings → Advanced → REST API</td>
+</tr>
+<tr>
+<td><code>WOOCOMMERCE_CONSUMER_SECRET</code></td>
+<td>سر REST API</td>
+<td>نفس الملفات</td>
+<td>نفس المصدر</td>
+</tr>
+<tr>
+<td><code>WOOCOMMERCE_WEBHOOK_SECRET</code></td>
+<td>تحقق ويب هوك الطلبات</td>
+<td><code>webhooks/woocommerce/order-created/route.ts:10</code></td>
+<td>عيّنه في WooCommerce webhook + Vercel</td>
+</tr>
+<tr>
+<td><code>NEXTAUTH_SECRET</code></td>
+<td>توقيع JWT وجلسات</td>
+<td><code>auth.ts:13</code>, <code>middleware.ts:5</code>, <code>customer-account.ts:12</code></td>
+<td>سر عشوائي 32+ حرف؛ نفس القيمة محلياً وفي Vercel</td>
+</tr>
+<tr>
+<td><code>NEXTAUTH_URL</code></td>
+<td>URL التطبيق</td>
+<td><code>bosta-client.ts:118</code></td>
+<td><code>http://localhost:3000</code> محلياً؛ <code>https://sokany-storefront.vercel.app</code> إنتاج</td>
+</tr>
+<tr>
+<td><code>ADMIN_EMAIL</code></td>
+<td>بريد دخول الأدمن</td>
+<td><code>auth.ts:6</code>, <code>theme-settings/route.ts:9</code></td>
+<td><code>.env.local</code> / Vercel</td>
+</tr>
+<tr>
+<td><code>ADMIN_PASSWORD</code></td>
+<td>كلمة مرور الأدمن</td>
+<td><code>auth.ts:7</code></td>
+<td><code>.env.local</code> / Vercel — <strong>غيّرها في الإنتاج</strong></td>
+</tr>
+<tr>
+<td><code>DATABASE_URL</code></td>
+<td>اتصال MySQL</td>
+<td><code>prisma/schema.prisma:7</code>, <code>db.ts:10</code>, <code>prepare-db.mjs:7</code></td>
+<td>PlanetScale / Railway / MySQL hosting</td>
+</tr>
+<tr>
+<td><code>BOSTA_API_KEY</code></td>
+<td>مفتاح Bosta</td>
+<td><code>bosta-client.ts:7</code>, <code>bootstrap.ts:169</code></td>
+<td>لوحة Bosta</td>
+</tr>
+<tr>
+<td><code>BOSTA_BASE_URL</code></td>
+<td>عنوان API Bosta</td>
+<td><code>bosta-client.ts:10</code></td>
+<td>افتراضي: <code>https://app.bosta.co</code></td>
+</tr>
+<tr>
+<td><code>BOSTA_WEBHOOK_SECRET</code></td>
+<td>تحقق ويب هوك Bosta</td>
+<td><code>bosta-client.ts:114</code></td>
+<td>عيّنه في Bosta + Vercel</td>
+</tr>
+<tr>
+<td><code>WHATSAPP_ACCESS_TOKEN</code></td>
+<td>توكن Meta WhatsApp</td>
+<td><code>whatsapp.ts:10</code></td>
+<td>Meta Business Suite</td>
+</tr>
+<tr>
+<td><code>WHATSAPP_PHONE_NUMBER_ID</code></td>
+<td>معرّف رقم واتساب</td>
+<td><code>whatsapp.ts:11</code></td>
+<td>Meta Business</td>
+</tr>
+<tr>
+<td><code>WHATSAPP_ADMIN_RECIPIENT</code></td>
+<td>رقم مستلم إشعارات الطلبات</td>
+<td><code>whatsapp.ts:12</code></td>
+<td>افتراضي: <code>201000260262</code></td>
+</tr>
+<tr>
+<td><code>WHATSAPP_ORDER_TEMPLATE_NAME</code></td>
+<td>اسم قالب واتساب</td>
+<td><code>whatsapp.ts:13</code></td>
+<td>Meta Business templates</td>
+</tr>
+<tr>
+<td><code>GOOGLE_MAPS_API_KEY</code></td>
+<td>تحسين مسار السائق</td>
+<td><code>route-optimizer.ts:5</code></td>
+<td>Google Cloud Console</td>
+</tr>
+<tr>
+<td><code>FAWRY_MERCHANT_CODE</code></td>
+<td>دفع Fawry</td>
+<td>غير مستخدم بعد</td>
+<td>placeholder في README</td>
+</tr>
+<tr>
+<td><code>FAWRY_SECURITY_KEY</code></td>
+<td>دفع Fawry</td>
+<td>غير مستخدم بعد</td>
+<td>placeholder</td>
+</tr>
+<tr>
+<td><code>NODE_ENV</code></td>
+<td>بيئة التشغيل</td>
+<td><code>customer-account.ts:209</code></td>
+<td>يُضبط تلقائياً</td>
+</tr>
+</tbody></table>
+<p><strong>تحذير:</strong> لا ترفع <code>.env</code> أو <code>.env.local</code> إلى GitHub أبداً.</p>
+<hr>
+<h2>9. إعدادات المظهر من الداشبورد</h2>
+<p>إعدادات المظهر تُحفظ كـ JSON في جدول MySQL <code>ThemeSettings</code> (مفتاح <code>id=&#39;site&#39;</code>).<br>النوع الكامل: <code>ThemeSettings</code> في <code>src/lib/theme-settings.ts</code>.</p>
+<table>
+<thead>
+<tr>
+<th>إعداد</th>
+<th>صفحة الأدمن</th>
+<th>مفتاح JSON</th>
+<th>ملف العرض</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>شعار وألوان وخط</td>
+<td><code>/admin/theme</code></td>
+<td><code>brand</code></td>
+<td><code>layout.tsx</code> (CSS variables)</td>
+</tr>
+<tr>
+<td>بانر علوي متحرك</td>
+<td><code>/admin/header</code></td>
+<td><code>topBanner</code></td>
+<td><code>top-banner-marquee.tsx</code></td>
+</tr>
+<tr>
+<td>هيدر (CTA، سلة)</td>
+<td><code>/admin/header</code></td>
+<td><code>header</code></td>
+<td><code>header.tsx</code></td>
+</tr>
+<tr>
+<td>هيرو + slides</td>
+<td><code>/admin/banners</code></td>
+<td><code>hero</code></td>
+<td><code>hero-section.tsx</code>, <code>hero-carousel.tsx</code></td>
+</tr>
+<tr>
+<td>مجموعات رئيسية</td>
+<td><code>/admin/banners</code></td>
+<td><code>sections.mainGroups</code></td>
+<td><code>main-groups-section.tsx</code></td>
+</tr>
+<tr>
+<td>كاروسيل تصنيفات</td>
+<td><code>/admin/banners</code></td>
+<td><code>sections.categories</code></td>
+<td><code>category-scroller.tsx</code></td>
+</tr>
+<tr>
+<td>بانر مخصص</td>
+<td><code>/admin/banners</code></td>
+<td><code>sections.customBanner</code></td>
+<td><code>page.tsx</code></td>
+</tr>
+<tr>
+<td>ترتيب أقسام الرئيسية</td>
+<td><code>/admin/banners</code></td>
+<td><code>homeSectionsOrder</code></td>
+<td><code>page.tsx</code></td>
+</tr>
+<tr>
+<td>فوتر</td>
+<td><code>/admin/footer</code></td>
+<td><code>footer</code></td>
+<td><code>footer.tsx</code></td>
+</tr>
+<tr>
+<td>سوشيال ميديا</td>
+<td><code>/admin/social-media</code></td>
+<td><code>socialMedia</code></td>
+<td><code>social-media-sidebar.tsx</code></td>
+</tr>
+<tr>
+<td>واتساب + زر صعود</td>
+<td><code>/admin/social-media</code></td>
+<td><code>floatingActions</code></td>
+<td><code>floating-action-buttons.tsx</code></td>
+</tr>
+<tr>
+<td>بطاقة منتج</td>
+<td><code>/admin/theme</code></td>
+<td><code>productCard</code></td>
+<td><code>product-card.tsx</code></td>
+</tr>
+<tr>
+<td>قائمة تصنيفات الهيدر</td>
+<td><code>/admin/navigation</code></td>
+<td>جدول <code>CategoryMenuSelection</code></td>
+<td><code>menu.ts</code></td>
+</tr>
+</tbody></table>
+<p><strong>API الحفظ:</strong> <code>POST /api/admin/theme-settings</code> → <code>updateThemeSettings()</code> في <code>theme-settings.ts</code>.</p>
+<p><strong>إذا لم يعمل الحفظ:</strong> تأكد من <code>DATABASE_URL</code> في Vercel.</p>
+<hr>
+<h2>10. قاعدة البيانات Prisma</h2>
+<p><strong>المزود:</strong> MySQL<br><strong>المخطط:</strong> <code>prisma/schema.prisma</code><br><strong>البذر:</strong> <code>prisma/seed.ts</code><br><strong>توثيق الشحن:</strong> <code>prisma/migrations/README-shipping-dispatch.md</code></p>
+<h3>الجداول</h3>
+<table>
+<thead>
+<tr>
+<th>الجدول / الكيان</th>
+<th>الوظيفة</th>
+<th>متى تحتاجه</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ThemeSettings</code> (SQL خام)</td>
+<td>إعدادات مظهر JSON</td>
+<td>أي تخصيص من <code>/admin</code></td>
+</tr>
+<tr>
+<td><code>CategoryMenuSelection</code></td>
+<td>إظهار تصنيف في قائمة الهيدر</td>
+<td><code>/admin/navigation</code></td>
+</tr>
+<tr>
+<td><code>CustomerWishlist</code></td>
+<td>مفضلة العملاء</td>
+<td>wishlist</td>
+</tr>
+<tr>
+<td><code>Shipment</code></td>
+<td>شحنات مرتبطة بطلبات WooCommerce</td>
+<td>Bosta + توزيع</td>
+</tr>
+<tr>
+<td><code>Driver</code></td>
+<td>بيانات السائقين</td>
+<td><code>/admin/dispatch/drivers</code></td>
+</tr>
+<tr>
+<td><code>DeliveryZone</code></td>
+<td>مناطق التوصيل</td>
+<td><code>/admin/dispatch/zones</code></td>
+</tr>
+<tr>
+<td><code>DriverZone</code></td>
+<td>ربط سائق بمنطقة</td>
+<td>توزيع</td>
+</tr>
+<tr>
+<td><code>DeliveryRun</code></td>
+<td>جولة يومية لسائق</td>
+<td><code>/admin/dispatch/board</code></td>
+</tr>
+<tr>
+<td><code>DeliveryAssignment</code></td>
+<td>ربط شحنة بجولة + OTP تسليم</td>
+<td>تطبيق السائق</td>
+</tr>
+</tbody></table>
+<h3>أوامر مفيدة</h3>
+<pre><code class="language-bash">npm run db:push    # مزامنة المخطط
+npm run db:seed    # بذر المناطق
+npx prisma studio  # واجهة بصرية للبيانات
+</code></pre>
+<hr>
+<h2>11. بلجنات ووردبريس</h2>
+<h3>11.1 SOKANY WhatsApp OTP</h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>مجلد المشروع</strong></td>
+<td><code>wordpress-plugin/sokany-whatsapp-otp/</code></td>
+</tr>
+<tr>
+<td><strong>الملف الرئيسي</strong></td>
+<td><code>sokany-whatsapp-otp.php</code></td>
+</tr>
+<tr>
+<td><strong>ZIP للرفع</strong></td>
+<td><code>dist/sokany-whatsapp-otp.zip</code></td>
+</tr>
+<tr>
+<td><strong>REST Base</strong></td>
+<td><code>https://sokany-eg.com/wp-json/sokany-otp/v1</code></td>
+</tr>
+<tr>
+<td><strong>Endpoints</strong></td>
+<td><code>/request</code>, <code>/verify</code>, <code>/login</code>, <code>/reset-password</code>, <code>/register</code>, <code>/change-password</code></td>
+</tr>
+<tr>
+<td><strong>إعدادات</strong></td>
+<td>Settings → SOKANY WhatsApp OTP</td>
+</tr>
+<tr>
+<td><strong>Test Mode</strong></td>
+<td>يعرض آخر OTP في صفحة الإعدادات</td>
+</tr>
+<tr>
+<td><strong>توثيق</strong></td>
+<td><code>wordpress-plugin/sokany-whatsapp-otp/README.md</code></td>
+</tr>
+</tbody></table>
+<p><strong>أخطاء شائعة:</strong></p>
+<ul>
+<li>«Plugin file does not exist» → بنية مجلد خاطئة في ZIP؛ ارفع يدوياً.</li>
+<li>OTP لا يصل من المتجر لكن Postman يعمل → تحقق من <code>whatsapp-otp.ts</code> → <code>getOtpEndpoint()</code>.</li>
+<li>«لم يُعثر على مستخدم» → أضف رقم الموبايل في user meta بالووردبريس.</li>
+</ul>
+<h3>11.2 SOKANY Headless Settings</h3>
+<table>
+<thead>
+<tr>
+<th>البند</th>
+<th>التفاصيل</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>مجلد</strong></td>
+<td><code>wordpress-plugin/sokany-headless-settings/</code></td>
+</tr>
+<tr>
+<td><strong>ZIP</strong></td>
+<td><code>wordpress-plugin/sokany-headless-settings.zip</code></td>
+</tr>
+<tr>
+<td><strong>REST</strong></td>
+<td><code>/wp-json/sokany/v1/theme-settings</code>, <code>/wp-json/sokany/v1/menu</code></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>حالياً إعدادات المظهر الرئيسية تُدار من Prisma عبر Next.js وليس من هذا البلجن.</p>
+</blockquote>
+<hr>
+<h2>12. سجل التعديلات</h2>
+<table>
+<thead>
+<tr>
+<th>الموضوع</th>
+<th>ماذا فُعل</th>
+<th>Commit / ملفات</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>كاروسيل تصنيفات مستمر</td>
+<td>أُضيف ثم أُلغي</td>
+<td><code>b6f361d</code> → <code>045b2a4</code></td>
+</tr>
+<tr>
+<td>تحكم كاروسيل التصنيفات</td>
+<td>عدد (ديسكتوب/تابلت/موبايل) + سرعة</td>
+<td><code>/admin/banners</code> — <code>045b2a4</code></td>
+</tr>
+<tr>
+<td>موضع الأزرار العائمة</td>
+<td>واتساب / صعود / سوشيال</td>
+<td><code>/admin/social-media</code> — <code>045b2a4</code></td>
+</tr>
+<tr>
+<td>إصلاح دخول JWT</td>
+<td>بحث بريد + user_id من JWT</td>
+<td><code>76e5219</code>, <code>8f6531a</code></td>
+</tr>
+<tr>
+<td>OTP دخول + تغيير كلمة مرور</td>
+<td>بلجن WP + API + UI</td>
+<td><code>46cb115</code></td>
+</tr>
+<tr>
+<td>إصلاح OTP من المتجر</td>
+<td>URL صحيح <code>/wp-json/sokany-otp/v1/...</code></td>
+<td><code>9b7c892</code> — <code>whatsapp-otp.ts</code></td>
+</tr>
+<tr>
+<td>واجهة OTP</td>
+<td>11 رقم موبايل + شاشة كود منفصلة</td>
+<td><code>0f8f082</code></td>
+</tr>
+<tr>
+<td>تبسيط صفحة الدخول</td>
+<td>«تسجيل الدخول» + حذف نص JWT</td>
+<td><code>0f8f082</code></td>
+</tr>
+</tbody></table>
+<p><strong>ميزات سابقة:</strong> wishlist + compare (<code>86726c4</code>), مواصفات مقارنة (<code>b090249</code>), منتجات ذات صلة (<code>790d655</code>), تنقل سفلي (<code>7746434</code>), أزرار عائمة (<code>439c88f</code>), هيرو split (<code>68e32a0</code>), main groups (<code>87d0aa9</code>).</p>
+<p>للتاريخ الكامل: <code>git log --oneline</code></p>
+<hr>
+<h2>13. حالة الميزات</h2>
+<table>
+<thead>
+<tr>
+<th>الميزة</th>
+<th>الحالة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>كتالوج منتجات وتصنيفات</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>صفحة منتج + SEO + JSON-LD</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>بحث / compare / wishlist</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>حساب عميل + OTP + كلمة مرور</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>داشبورد مظهر وبانرات</td>
+<td>جاهز (يتطلب DATABASE_URL)</td>
+</tr>
+<tr>
+<td>طلبات أدمن + Bosta + توزيع</td>
+<td>جاهز (يتطلب DATABASE_URL + BOSTA)</td>
+</tr>
+<tr>
+<td>تطبيق سائق PWA</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>سلة + checkout + Fawry</td>
+<td>واجهة / placeholder فقط</td>
+</tr>
+<tr>
+<td>إشعارات واتساب طلبات للأدمن</td>
+<td>يتطلب WHATSAPP_* env</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>14. دليل للمساعدين</h2>
+<h3>14.1 البدء السريع</h3>
+<ol>
+<li>استنسخ المشروع وثبّت الحزم (<code>npm install</code>).</li>
+<li>أنشئ <code>.env.local</code> من القالب في <a href="#43-%D8%A5%D8%B9%D8%AF%D8%A7%D8%AF-%D9%85%D8%AA%D8%BA%D9%8A%D8%B1%D8%A7%D8%AA-%D8%A7%D9%84%D8%A8%D9%8A%D8%A6%D8%A9">القسم 4.3</a>.</li>
+<li>شغّل <code>npm run dev</code>.</li>
+<li>اقرأ هذا الدليل — استخدم <strong>فهرس المسارات</strong> (قسم 5) و<strong>فهرس التعديل</strong> (قسم 7).</li>
+</ol>
+<h3>14.2 كيف تبحث في الدليل</h3>
+<ul>
+<li><strong>تريد معرفة URL صفحة؟</strong> → قسم 5.</li>
+<li><strong>تريد معرفة أي ملف تعدّل؟</strong> → قسم 7.</li>
+<li><strong>تريد فهم ميزة بالتفصيل؟</strong> → قسم 6.</li>
+<li><strong>مشكلة في OTP؟</strong> → أقسام 6.9 و 4.9 و 11.1.</li>
+<li><strong>مشكلة في النشر؟</strong> → قسم 4.6 و 4.7.</li>
+</ul>
+<h3>14.3 قواعد الأمان</h3>
+<ul>
+<li>لا ترفع <code>.env</code> أو مفاتيح API إلى GitHub.</li>
+<li>لا <code>git push --force</code> على فرع <code>master</code>.</li>
+<li>غيّر <code>ADMIN_PASSWORD</code> و <code>NEXTAUTH_SECRET</code> في الإنتاج.</li>
+<li>اختبر OTP في Test Mode قبل Live Mode.</li>
+</ul>
+<h3>14.4 اختبار OTP (خطوة بخطوة)</h3>
+<ol>
+<li>ووردبريس: فعّل بلجن OTP + Test Mode.</li>
+<li>تأكد أن رقم الموبايل موجود في Users → user meta.</li>
+<li>المتجر: <code>/account/login</code> → نسيت كلمة المرور → 11 رقم → 6 أرقام OTP.</li>
+<li>اقرأ الكود من Settings → SOKANY WhatsApp OTP.</li>
+<li>إذا فشل: افحص Network tab → <code>/api/account/otp/request</code> → رسالة الخطأ.</li>
+</ol>
+<h3>14.5 الملفات المرجعية داخل المشروع</h3>
+<table>
+<thead>
+<tr>
+<th>الملف</th>
+<th>الغرض</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>docs/SOKANY_HANDBOOK_AR.md</code></td>
+<td>هذا الدليل (نسخة المشروع)</td>
+</tr>
+<tr>
+<td><code>.cursor/PROJECT_GUIDE.md</code></td>
+<td>ملخص سريع لـ Cursor</td>
+</tr>
+<tr>
+<td><code>README.md</code></td>
+<td>README إنجليزي (قديم جزئياً)</td>
+</tr>
+<tr>
+<td><code>.cursor/rules/auto-deploy-after-changes.mdc</code></td>
+<td>قواعد النشر التلقائي</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>ملحق: قائمة APIs كاملة</h2>
+<h3>APIs العميل</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/account/login</code></td>
+<td><code>api/account/login/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/account/logout</code></td>
+<td><code>api/account/logout/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/account/register</code></td>
+<td><code>api/account/register/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/account/me</code></td>
+<td><code>api/account/me/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/account/change-password</code></td>
+<td><code>api/account/change-password/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/account/otp/request</code></td>
+<td><code>api/account/otp/request/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/account/otp/login</code></td>
+<td><code>api/account/otp/login/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/account/otp/reset-password</code></td>
+<td><code>api/account/otp/reset-password/route.ts</code></td>
+</tr>
+<tr>
+<td>GET/PUT</td>
+<td><code>/api/account/wishlist</code></td>
+<td><code>api/account/wishlist/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/products/search</code></td>
+<td><code>api/products/search/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/products/compare</code></td>
+<td><code>api/products/compare/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/checkout</code></td>
+<td><code>api/checkout/route.ts</code> (placeholder)</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/fawry/callback</code></td>
+<td><code>api/fawry/callback/route.ts</code> (placeholder)</td>
+</tr>
+</tbody></table>
+<h3>APIs الأدمن</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET/POST</td>
+<td><code>/api/admin/theme-settings</code></td>
+<td><code>api/admin/theme-settings/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/upload</code></td>
+<td><code>api/admin/upload/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/orders</code></td>
+<td><code>api/admin/orders/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/orders/[id]</code></td>
+<td><code>api/admin/orders/[id]/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/import/products</code></td>
+<td><code>api/admin/import/products/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/import/categories</code></td>
+<td><code>api/admin/import/categories/route.ts</code></td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/admin/category-menu-selection/[categoryId]</code></td>
+<td><code>api/admin/category-menu-selection/[categoryId]/route.ts</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/admin/dispatch</code></td>
+<td><code>api/admin/dispatch/route.ts</code></td>
+</tr>
+<tr>
+<td>GET/POST/PATCH/DELETE</td>
+<td><code>/api/admin/dispatch/zones</code></td>
+<td><code>api/admin/dispatch/zones/route.ts</code></td>
+</tr>
+<tr>
+<td>GET/POST/PATCH</td>
+<td><code>/api/admin/dispatch/drivers</code></td>
+<td><code>api/admin/dispatch/drivers/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/dispatch/reports</code></td>
+<td><code>api/admin/dispatch/reports/route.ts</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/admin/setup/shipping</code></td>
+<td><code>api/admin/setup/shipping/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/shipping/bosta/create</code></td>
+<td><code>api/admin/shipping/bosta/create/route.ts</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/shipping/bosta/track/[trackingNumber]</code></td>
+<td><code>api/admin/shipping/bosta/track/[trackingNumber]/route.ts</code></td>
+</tr>
+</tbody></table>
+<h3>APIs السائق</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/driver/today</code></td>
+<td><code>api/driver/today/route.ts</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/driver/assignments/[id]</code></td>
+<td><code>api/driver/assignments/[id]/route.ts</code></td>
+</tr>
+</tbody></table>
+<h3>Webhooks</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/webhooks/woocommerce/order-created</code></td>
+<td><code>api/webhooks/woocommerce/order-created/route.ts</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/webhooks/bosta/[secret]</code></td>
+<td><code>api/webhooks/bosta/[secret]/route.ts</code></td>
+</tr>
+</tbody></table>
+<h3>Auth</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>المسار</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>*</td>
+<td><code>/api/auth/[...nextauth]</code></td>
+<td><code>api/auth/[...nextauth]/route.ts</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>ملحق: قائمة مكوّنات UI</h2>
+<table>
+<thead>
+<tr>
+<th>المكوّن</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>site-chrome.tsx</code></td>
+<td>غلاف الموقع (هيدر + فوتر + أزرار)</td>
+</tr>
+<tr>
+<td><code>header.tsx</code></td>
+<td>الهيدر الرئيسي</td>
+</tr>
+<tr>
+<td><code>footer.tsx</code></td>
+<td>الفوتر</td>
+</tr>
+<tr>
+<td><code>hero-section.tsx</code></td>
+<td>قسم الهيرو</td>
+</tr>
+<tr>
+<td><code>hero-carousel.tsx</code></td>
+<td>كاروسيل الهيرو</td>
+</tr>
+<tr>
+<td><code>category-scroller.tsx</code></td>
+<td>كاروسيل التصنيفات</td>
+</tr>
+<tr>
+<td><code>product-card.tsx</code></td>
+<td>بطاقة منتج</td>
+</tr>
+<tr>
+<td><code>account-auth-form.tsx</code></td>
+<td>دخول / تسجيل / OTP</td>
+</tr>
+<tr>
+<td><code>account-change-password-form.tsx</code></td>
+<td>تغيير كلمة المرور</td>
+</tr>
+<tr>
+<td><code>floating-action-buttons.tsx</code></td>
+<td>واتساب + صعود للأعلى</td>
+</tr>
+<tr>
+<td><code>mobile-bottom-nav.tsx</code></td>
+<td>تنقل سفلي</td>
+</tr>
+<tr>
+<td><code>compare-floating-bar.tsx</code></td>
+<td>شريط المقارنة</td>
+</tr>
+<tr>
+<td><code>pwa-install-prompt.tsx</code></td>
+<td>تثبيت PWA</td>
+</tr>
+</tbody></table>
+<hr>
+<p><em>نهاية الدليل — SOKANY Storefront Handbook</em></p>
+
+
+      <p class="footer-note">آخر تحديث: يوليو 2026 — sokany-storefront</p>
+    </main>
+  </div>
+</body>
+</html>

@@ -37,8 +37,30 @@ export type VisualTextStyle = {
   align?: VisualTextAlign;
 };
 
-export type HomeSectionId = "hero" | "mainGroups" | "trustBadges" | "categories" | "bestSellers" | "customBanner" | "competitiveBanner";
+export type HomeSectionId = "hero" | "mainGroups" | "trustBadges" | "categories" | "bestSellers" | "customerReviews" | "customBanner" | "competitiveBanner";
 export type HomeSectionOrderItem = HomeSectionId | `custom:${string}`;
+
+export type CustomerReviewItem = {
+  id: string;
+  name: string;
+  rating: number;
+  text: string;
+  audioUrl: string;
+  productName: string;
+  productUrl: string;
+  productImage: string;
+  verified: boolean;
+  cardTone: "navy" | "orange";
+};
+
+export type CustomerReviewsSectionSettings = {
+  enabled: boolean;
+  title: string;
+  ratingValue: string;
+  trustText: string;
+  guaranteeText: string;
+  items: CustomerReviewItem[];
+};
 
 export type HomeSectionStyle = {
   enabled: boolean;
@@ -303,6 +325,7 @@ export type ThemeSettings = {
     mainGroups: MainGroupsSectionSettings;
     categories: CategoriesSectionSettings;
     bestSellers: boolean;
+    customerReviews: CustomerReviewsSectionSettings;
     competitiveBanner: boolean;
     customBanner: {
       enabled: boolean;
@@ -348,9 +371,44 @@ export const defaultHomeSectionsOrder: HomeSectionOrderItem[] = [
   "trustBadges",
   "categories",
   "bestSellers",
+  "customerReviews",
   "customBanner",
   "competitiveBanner",
 ];
+
+export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
+  enabled: true,
+  title: "آراء عملاء سوكاني",
+  ratingValue: "4.9",
+  trustText: "أكثر من آلاف العملاء وثقوا فينا",
+  guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
+  items: [
+    {
+      id: "sample-1",
+      name: "محمد",
+      rating: 5,
+      text: "منتجات أصلية وتوصيل سريع، تجربة ممتازة.",
+      audioUrl: "",
+      productName: "خلاط سوكاني",
+      productUrl: "/shop",
+      productImage: "",
+      verified: true,
+      cardTone: "navy",
+    },
+    {
+      id: "sample-2",
+      name: "سارة",
+      rating: 5,
+      text: "الجودة عالية والسعر مناسب جداً.",
+      audioUrl: "",
+      productName: "قلاية هوائية",
+      productUrl: "/shop",
+      productImage: "",
+      verified: true,
+      cardTone: "orange",
+    },
+  ],
+};
 
 export const defaultThemeSettings: ThemeSettings = {
   brand: {
@@ -450,6 +508,7 @@ export const defaultThemeSettings: ThemeSettings = {
       carouselIntervalSeconds: 3,
     },
     bestSellers: true,
+    customerReviews: defaultCustomerReviewsSettings,
     competitiveBanner: true,
     customBanner: {
       enabled: false,
@@ -912,6 +971,40 @@ function mergeWidgetButtonStyle(value: unknown, defaultStyle: WidgetButtonStyle)
   };
 }
 
+function mergeCustomerReviewsSettings(value: unknown): CustomerReviewsSectionSettings {
+  const reviews = isObject(value) ? value : {};
+  const items = Array.isArray(reviews.items)
+    ? reviews.items.filter(isObject).map((item, index) => {
+        const rating = typeof item.rating === "number" ? item.rating : 5;
+        return {
+          id: typeof item.id === "string" && item.id ? item.id : `review-${index + 1}`,
+          name: typeof item.name === "string" ? item.name : "عميل",
+          rating: Math.max(1, Math.min(5, Math.round(rating))),
+          text: typeof item.text === "string" ? item.text : "",
+          audioUrl: typeof item.audioUrl === "string" ? item.audioUrl : "",
+          productName: typeof item.productName === "string" ? item.productName : "",
+          productUrl: typeof item.productUrl === "string" ? item.productUrl : "/shop",
+          productImage: typeof item.productImage === "string" ? item.productImage : "",
+          verified: item.verified !== false,
+          cardTone: item.cardTone === "orange" ? "orange" : "navy",
+        } satisfies CustomerReviewItem;
+      })
+    : defaultCustomerReviewsSettings.items;
+
+  return {
+    ...defaultCustomerReviewsSettings,
+    ...reviews,
+    enabled: reviews.enabled !== false,
+    title: typeof reviews.title === "string" ? reviews.title : defaultCustomerReviewsSettings.title,
+    ratingValue:
+      typeof reviews.ratingValue === "string" ? reviews.ratingValue : defaultCustomerReviewsSettings.ratingValue,
+    trustText: typeof reviews.trustText === "string" ? reviews.trustText : defaultCustomerReviewsSettings.trustText,
+    guaranteeText:
+      typeof reviews.guaranteeText === "string" ? reviews.guaranteeText : defaultCustomerReviewsSettings.guaranteeText,
+    items,
+  };
+}
+
 function mergeCategoriesSettings(value: unknown): CategoriesSectionSettings {
   if (typeof value === "boolean") {
     return {
@@ -1077,6 +1170,9 @@ function mergeSettings(settings: unknown): ThemeSettings {
       ),
       categories: mergeCategoriesSettings(
         isObject(settings.sections) ? settings.sections.categories : undefined,
+      ),
+      customerReviews: mergeCustomerReviewsSettings(
+        isObject(settings.sections) ? settings.sections.customerReviews : undefined,
       ),
     },
     footer: mergeFooterSettings(settings.footer),

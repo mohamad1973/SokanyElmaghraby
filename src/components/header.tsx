@@ -103,6 +103,18 @@ function HeaderIcon({ icon }: { icon: "account" | "favorite" | "compare" }) {
   );
 }
 
+function MenuItemLabel({ item }: { item: MenuNode }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      {item.iconUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.iconUrl} alt="" className="h-5 w-5 shrink-0 object-contain" />
+      ) : null}
+      <span>{item.title}</span>
+    </span>
+  );
+}
+
 function DesktopMenu({ menu }: { menu: MenuNode[] }) {
   return (
     <nav className="hidden border-t border-black/10 bg-brand-gold lg:block">
@@ -113,7 +125,7 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
               href={item.href}
               className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-black transition hover:bg-black hover:text-white"
             >
-              {item.title}
+              <MenuItemLabel item={item} />
               {item.children.length ? <span className="text-xs">‹</span> : null}
             </Link>
 
@@ -125,7 +137,7 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
                       href={child.href}
                       className="flex items-center justify-between rounded-lg px-4 py-3 text-sm font-bold transition hover:bg-brand-gold hover:text-black"
                     >
-                      <span>{child.title}</span>
+                      <MenuItemLabel item={child} />
                       {child.children.length ? <span>‹</span> : null}
                     </Link>
 
@@ -137,7 +149,7 @@ function DesktopMenu({ menu }: { menu: MenuNode[] }) {
                             href={grandChild.href}
                             className="block rounded-lg px-4 py-3 text-sm transition hover:bg-brand-gold hover:text-black"
                           >
-                            {grandChild.title}
+                            <MenuItemLabel item={grandChild} />
                           </Link>
                         ))}
                       </div>

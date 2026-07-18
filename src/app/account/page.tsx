@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AccountChangePasswordForm } from "@/components/account-change-password-form";
 import { AccountLogoutButton } from "@/components/account-logout-button";
+import { CancelOrderButton } from "@/components/cancel-order-button";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import {
   calculateLoyaltySummary,
@@ -83,9 +84,12 @@ export default async function AccountPage() {
                   {formatDate(activeOrder.dateCreated)}
                 </p>
               </div>
-              <Link href={`/account/orders/${activeOrder.id}`} className="rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-black">
-                <VisualEditableText textKey="account.dashboard.orderDetails">تفاصيل الطلب</VisualEditableText>
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                <CancelOrderButton orderId={activeOrder.id} status={activeOrder.status} />
+                <Link href={`/account/orders/${activeOrder.id}`} className="rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-black">
+                  <VisualEditableText textKey="account.dashboard.orderDetails">تفاصيل الطلب</VisualEditableText>
+                </Link>
+              </div>
             </div>
             <div className="mt-8 grid gap-4 md:grid-cols-5">
               {timeline.map((step) => (

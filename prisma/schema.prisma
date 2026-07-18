@@ -8,15 +8,19 @@ datasource db {
 }
 
 model CategoryMenuSelection {
-  id         Int      @id @default(autoincrement())
-  categoryId Int      @unique
-  slug       String
-  showInMenu Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  categoryId     Int      @unique
+  slug           String
+  showInMenu     Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  parentOverride Int?
+  iconUrl        String?  @db.VarChar(500)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([slug])
   @@index([showInMenu])
+  @@index([sortOrder])
 }
 
 model Shipment {

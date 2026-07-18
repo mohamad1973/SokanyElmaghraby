@@ -27,7 +27,13 @@ export function MobileMenuTree({
               depth ? "bg-zinc-50 text-sm text-zinc-700" : "bg-white text-sm text-zinc-950",
             ].join(" ")}
           >
-            <span>{item.title}</span>
+            <span className="inline-flex items-center gap-2">
+              {item.iconUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.iconUrl} alt="" className="h-5 w-5 shrink-0 object-contain" />
+              ) : null}
+              <span>{item.title}</span>
+            </span>
             {item.children.length && !depth ? <span className="text-xs text-zinc-400">‹</span> : null}
           </Link>
           <MobileMenuTree items={item.children} depth={depth + 1} onNavigate={onNavigate} />

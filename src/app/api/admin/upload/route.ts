@@ -18,8 +18,19 @@ const videoMimeTypes = new Map([
   ["video/mp4", "mp4"],
   ["video/webm", "webm"],
 ]);
+const audioMimeTypes = new Map([
+  ["audio/mpeg", "mp3"],
+  ["audio/mp3", "mp3"],
+  ["audio/wav", "wav"],
+  ["audio/x-wav", "wav"],
+  ["audio/webm", "webm"],
+  ["audio/ogg", "ogg"],
+  ["audio/mp4", "m4a"],
+  ["audio/aac", "aac"],
+]);
 const maxImageFileSize = 4 * 1024 * 1024;
 const maxVideoFileSize = 25 * 1024 * 1024;
+const maxAudioFileSize = 15 * 1024 * 1024;
 
 function slugify(value: string) {
   return value
@@ -46,26 +57,33 @@ export async function POST(request: Request) {
 
   const imageExtension = imageMimeTypes.get(file.type);
   const videoExtension = videoMimeTypes.get(file.type);
-  const extension = imageExtension || videoExtension;
+  const audioExtension = audioMimeTypes.get(file.type);
+  const extension = imageExtension || videoExtension || audioExtension;
 
   if (!extension) {
     return NextResponse.json(
       {
         message:
-          "صيغة الملف غير مدعومة. الصيغ المتاحة: jpg, png, webp, svg, gif, avif, mp4, webm.",
+          "صيغة الملف غير مدعومة. الصيغ المتاحة: صور، فيديو mp4/webm، صوت mp3/wav/ogg/webm/m4a.",
       },
       { status: 400 },
     );
   }
 
-  const maxFileSize = videoExtension ? maxVideoFileSize : maxImageFileSize;
+  const maxFileSize = videoExtension
+    ? maxVideoFileSize
+    : audioExtension
+      ? maxAudioFileSize
+      : maxImageFileSize;
 
   if (file.size > maxFileSize) {
     return NextResponse.json(
       {
         message: videoExtension
           ? "حجم الفيديو كبير جداً. الحد الأقصى الحالي 25MB."
-          : "حجم الصورة كبير جداً. الحد الأقصى الحالي 4MB.",
+          : audioExtension
+            ? "حجم الملف الصوتي كبير جداً. الحد الأقصى الحالي 15MB."
+            : "حجم الصورة كبير جداً. الحد الأقصى الحالي 4MB.",
       },
       { status: 400 },
     );

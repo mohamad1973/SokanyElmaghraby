@@ -32,6 +32,7 @@ const sectionLabels: Record<HomeSectionId, string> = {
   trustBadges: "مربعات المزايا",
   categories: "تسوق حسب التصنيف",
   bestSellers: "الأكثر مبيعاً",
+  customerReviews: "آراء العملاء",
   customBanner: "بنر العروض العام",
   competitiveBanner: "سكشن الميزة التنافسية",
 };

@@ -52,20 +52,25 @@ export type MenuNode = {
   parent?: number;
   count?: number;
   image?: string;
+  iconUrl?: string;
   permalink?: string;
   children: MenuNode[];
 };
 
-export type WooCategoryNode = Omit<MenuNode, "children" | "parent" | "count" | "image" | "permalink"> & {
+export type WooCategoryNode = Omit<MenuNode, "children" | "parent" | "count" | "image" | "permalink" | "iconUrl"> & {
   parent: number;
   count: number;
   image?: string;
+  iconUrl?: string;
   permalink: string;
   children: WooCategoryNode[];
 };
 
 export type CategoryMenuSelectionNode = Omit<WooCategoryNode, "children"> & {
   showInMenu: boolean;
+  sortOrder: number;
+  /** null = use Woo parent; 0 = root; otherwise custom parent id */
+  parentOverride: number | null;
   children: CategoryMenuSelectionNode[];
 };
 

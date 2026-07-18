@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
+import { CustomerReviewsSection } from "@/components/customer-reviews-section";
 import { HeroSection } from "@/components/hero-section";
 import { MainGroupsSection } from "@/components/main-groups-section";
 import { ProductRowScroller } from "@/components/product-row-scroller";
@@ -244,6 +245,13 @@ export default async function Home() {
         </div>
         </section>
       ),
+    });
+  }
+
+  if (settings.sections.customerReviews?.enabled && isHomeSectionEnabled(settings, "customerReviews")) {
+    homeSections.push({
+      id: "customerReviews",
+      node: <CustomerReviewsSection settings={settings.sections.customerReviews} />,
     });
   }
 

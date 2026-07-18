@@ -14,6 +14,7 @@ const navItems = [
   { href: "/admin/footer", label: "الفوتر" },
   { href: "/admin/social-media", label: "السوشيال ميديا" },
   { href: "/admin/banners", label: "البنرات" },
+  { href: "/admin/reviews", label: "آراء العملاء" },
   { href: "/admin/navigation", label: "المنيو" },
   { href: "/admin/products", label: "المنتجات" },
   { href: "/admin/categories", label: "التصنيفات" },

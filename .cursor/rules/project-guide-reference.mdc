@@ -1,0 +1,20 @@
+---
+description: Reference the project guide before large changes to storefront, admin, or WordPress integration
+alwaysApply: true
+---
+
+# Project guide reference
+
+Before implementing or refactoring major features in `sokany-storefront`, read:
+
+`.cursor/PROJECT_GUIDE.md`
+
+Use it to find:
+
+- Customer, admin, and driver routes
+- API endpoints and core `src/lib/` files
+- WordPress plugin locations (OTP, headless settings)
+- Changelog of prior session work
+- Environment variables and deployment defaults
+
+When adding a significant feature, append a short entry to the changelog section in `PROJECT_GUIDE.md`.

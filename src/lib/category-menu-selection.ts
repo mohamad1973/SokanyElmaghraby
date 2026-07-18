@@ -3,10 +3,22 @@ import "server-only";
 import { getPrismaClient, isDatabaseConfigured } from "./db";
 import type { Category, CategoryMenuSelectionNode, WooCategoryNode } from "./types";
 
-type MenuSelectionSetting = {
+export type MenuSelectionSetting = {
   categoryId: number;
   slug: string;
   showInMenu: boolean;
+  sortOrder: number;
+  parentOverride: number | null;
+  iconUrl: string | null;
+};
+
+export type CategoryMenuUpdateInput = {
+  slug: string;
+  showInMenu?: boolean;
+  sortOrder?: number;
+  parentOverride?: number | null;
+  iconUrl?: string | null;
+  clearIcon?: boolean;
 };
 
 export type MenuSelectionStatus = {
@@ -17,6 +29,7 @@ export type MenuSelectionStatus = {
 
 export type CategoryMenuSelectionResult = {
   categories: CategoryMenuSelectionNode[];
+  flatCategories: CategoryMenuSelectionNode[];
   status: MenuSelectionStatus;
 };
 
@@ -27,29 +40,180 @@ async function ensureMenuSelectionTable(prisma: NonNullable<ReturnType<typeof ge
       \`categoryId\` INT NOT NULL,
       \`slug\` VARCHAR(191) NOT NULL,
       \`showInMenu\` BOOLEAN NOT NULL DEFAULT false,
+      \`sortOrder\` INT NOT NULL DEFAULT 0,
+      \`parentOverride\` INT NULL,
+      \`iconUrl\` VARCHAR(500) NULL,
       \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
       UNIQUE INDEX \`CategoryMenuSelection_categoryId_key\`(\`categoryId\`),
       INDEX \`CategoryMenuSelection_slug_idx\`(\`slug\`),
       INDEX \`CategoryMenuSelection_showInMenu_idx\`(\`showInMenu\`),
+      INDEX \`CategoryMenuSelection_sortOrder_idx\`(\`sortOrder\`),
       PRIMARY KEY (\`id\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
+
+  const alterStatements = [
+    "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `sortOrder` INT NOT NULL DEFAULT 0",
+    "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `parentOverride` INT NULL",
+    "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `iconUrl` VARCHAR(500) NULL",
+  ];
+
+  for (const statement of alterStatements) {
+    try {
+      await prisma.$executeRawUnsafe(statement);
+    } catch {
+      // Column already exists
+    }
+  }
 }
 
-function applySettingsToTree(
-  categories: WooCategoryNode[],
-  settingsByCategoryId: Map<number, MenuSelectionSetting>,
+function flattenWooTree(categories: WooCategoryNode[]): WooCategoryNode[] {
+  const result: WooCategoryNode[] = [];
+
+  function walk(nodes: WooCategoryNode[]) {
+    for (const node of nodes) {
+      result.push({
+        ...node,
+        children: [],
+      });
+      if (node.children.length) {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(categories);
+  return result;
+}
+
+function resolveEffectiveParent(wooParent: number, parentOverride: number | null): number {
+  if (parentOverride === null) {
+    return wooParent;
+  }
+
+  return parentOverride;
+}
+
+function wouldCreateCycle(
+  categoryId: number,
+  nextParentId: number,
+  parentById: Map<number, number>,
+): boolean {
+  if (nextParentId === 0) {
+    return false;
+  }
+
+  if (nextParentId === categoryId) {
+    return true;
+  }
+
+  let current = nextParentId;
+  const visited = new Set<number>();
+
+  while (current > 0) {
+    if (current === categoryId) {
+      return true;
+    }
+
+    if (visited.has(current)) {
+      break;
+    }
+
+    visited.add(current);
+    current = parentById.get(current) ?? 0;
+  }
+
+  return false;
+}
+
+function rebuildMenuTree(
+  flat: Array<
+    WooCategoryNode & {
+      showInMenu: boolean;
+      sortOrder: number;
+      parentOverride: number | null;
+      effectiveParent: number;
+    }
+  >,
+  parentId = 0,
 ): CategoryMenuSelectionNode[] {
-  return categories.map((category) => {
+  return flat
+    .filter((category) => category.effectiveParent === parentId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "ar"))
+    .map((category) => ({
+      id: category.id,
+      title: category.title,
+      url: category.url,
+      href: category.href,
+      type: category.type,
+      object: category.object,
+      objectId: category.objectId,
+      slug: category.slug,
+      parent: category.effectiveParent,
+      count: category.count,
+      image: category.image,
+      iconUrl: category.iconUrl,
+      permalink: category.permalink,
+      showInMenu: category.showInMenu,
+      sortOrder: category.sortOrder,
+      parentOverride: category.parentOverride,
+      children: rebuildMenuTree(flat, category.id),
+    }));
+}
+
+function applyOverridesToCategories(
+  wooTree: WooCategoryNode[],
+  settingsByCategoryId: Map<number, MenuSelectionSetting>,
+): { tree: CategoryMenuSelectionNode[]; flat: CategoryMenuSelectionNode[] } {
+  const flatWoo = flattenWooTree(wooTree);
+
+  const withSettings = flatWoo.map((category, index) => {
     const setting = settingsByCategoryId.get(category.id);
+    const parentOverride = setting?.parentOverride ?? null;
+    const sortOrder = setting?.sortOrder ?? index * 10;
 
     return {
       ...category,
+      iconUrl: setting?.iconUrl || undefined,
       showInMenu: setting?.showInMenu ?? false,
-      children: applySettingsToTree(category.children, settingsByCategoryId),
+      sortOrder,
+      parentOverride,
+      effectiveParent: resolveEffectiveParent(category.parent, parentOverride),
     };
   });
+
+  // Guard against cycles from bad overrides: fall back to woo parent
+  const parentById = new Map(withSettings.map((item) => [item.id, item.effectiveParent]));
+
+  for (const item of withSettings) {
+    if (wouldCreateCycle(item.id, item.effectiveParent, parentById)) {
+      item.effectiveParent = item.parent;
+      item.parentOverride = null;
+      parentById.set(item.id, item.parent);
+    }
+  }
+
+  const tree = rebuildMenuTree(withSettings);
+  const flat = flattenSelectionTree(tree);
+
+  return { tree, flat };
+}
+
+function flattenSelectionTree(nodes: CategoryMenuSelectionNode[]): CategoryMenuSelectionNode[] {
+  const result: CategoryMenuSelectionNode[] = [];
+
+  function walk(list: CategoryMenuSelectionNode[]) {
+    for (const node of list) {
+      result.push({ ...node, children: [] });
+      if (node.children.length) {
+        walk(node.children);
+      }
+    }
+  }
+
+  walk(nodes);
+  return result;
 }
 
 function hasSelectedDescendant(category: CategoryMenuSelectionNode): boolean {
@@ -63,6 +227,13 @@ function filterMenuTree(categories: CategoryMenuSelectionNode[]): CategoryMenuSe
       ...category,
       children: filterMenuTree(category.children),
     }));
+}
+
+function toMenuNodes(categories: CategoryMenuSelectionNode[]): CategoryMenuSelectionNode[] {
+  return categories.map((category) => ({
+    ...category,
+    children: toMenuNodes(category.children),
+  }));
 }
 
 async function getSelectionSettingsMap(): Promise<{
@@ -99,7 +270,19 @@ async function getSelectionSettingsMap(): Promise<{
     const settings = await prisma.categoryMenuSelection.findMany();
 
     return {
-      settings: new Map(settings.map((setting) => [setting.categoryId, setting])),
+      settings: new Map(
+        settings.map((setting) => [
+          setting.categoryId,
+          {
+            categoryId: setting.categoryId,
+            slug: setting.slug,
+            showInMenu: setting.showInMenu,
+            sortOrder: setting.sortOrder ?? 0,
+            parentOverride: setting.parentOverride ?? null,
+            iconUrl: setting.iconUrl ?? null,
+          },
+        ]),
+      ),
       status: {
         databaseConfigured: true,
         settingsAvailable: true,
@@ -117,13 +300,35 @@ async function getSelectionSettingsMap(): Promise<{
   }
 }
 
+function wooTreeAsSelection(categories: WooCategoryNode[]): CategoryMenuSelectionNode[] {
+  return categories.map((category, index) => ({
+    ...category,
+    showInMenu: false,
+    sortOrder: index * 10,
+    parentOverride: null,
+    children: wooTreeAsSelection(category.children),
+  }));
+}
+
 export async function getCategoriesWithMenuSelection(
   categories: WooCategoryNode[],
 ): Promise<CategoryMenuSelectionResult> {
   const { settings, status } = await getSelectionSettingsMap();
 
+  if (!status.settingsAvailable) {
+    const tree = wooTreeAsSelection(categories);
+    return {
+      categories: tree,
+      flatCategories: flattenSelectionTree(tree),
+      status,
+    };
+  }
+
+  const { tree, flat } = applyOverridesToCategories(categories, settings);
+
   return {
-    categories: applySettingsToTree(categories, settings),
+    categories: tree,
+    flatCategories: flat,
     status,
   };
 }
@@ -135,7 +340,7 @@ export async function getSelectedMenuCategories(categories: WooCategoryNode[]) {
     return categories;
   }
 
-  return filterMenuTree(result.categories);
+  return toMenuNodes(filterMenuTree(result.categories));
 }
 
 export async function filterSelectedCategoryList(categories: Category[]): Promise<Category[]> {
@@ -150,7 +355,7 @@ export async function filterSelectedCategoryList(categories: Category[]): Promis
 
 export async function updateCategoryMenuSelection(
   category: Pick<WooCategoryNode, "id" | "slug">,
-  showInMenu: boolean,
+  input: CategoryMenuUpdateInput,
 ) {
   const prisma = getPrismaClient();
 
@@ -160,16 +365,105 @@ export async function updateCategoryMenuSelection(
 
   await ensureMenuSelectionTable(prisma);
 
+  const existing = await prisma.categoryMenuSelection.findUnique({
+    where: { categoryId: category.id },
+  });
+
+  const showInMenu = typeof input.showInMenu === "boolean" ? input.showInMenu : (existing?.showInMenu ?? false);
+  const sortOrder =
+    typeof input.sortOrder === "number" && Number.isFinite(input.sortOrder)
+      ? Math.floor(input.sortOrder)
+      : (existing?.sortOrder ?? 0);
+
+  let parentOverride: number | null =
+    input.parentOverride === undefined ? (existing?.parentOverride ?? null) : input.parentOverride;
+
+  if (parentOverride !== null && parentOverride === category.id) {
+    parentOverride = null;
+  }
+
+  let iconUrl: string | null = existing?.iconUrl ?? null;
+  if (input.clearIcon) {
+    iconUrl = null;
+  } else if (typeof input.iconUrl === "string") {
+    iconUrl = input.iconUrl.trim() || null;
+  }
+
   return prisma.categoryMenuSelection.upsert({
     where: { categoryId: category.id },
     create: {
       categoryId: category.id,
-      slug: category.slug,
+      slug: category.slug || input.slug,
       showInMenu,
+      sortOrder,
+      parentOverride,
+      iconUrl,
     },
     update: {
-      slug: category.slug,
+      slug: category.slug || input.slug,
       showInMenu,
+      sortOrder,
+      parentOverride,
+      iconUrl,
     },
   });
+}
+
+export async function swapCategorySortOrder(categoryId: number, direction: "up" | "down", wooTree: WooCategoryNode[]) {
+  const result = await getCategoriesWithMenuSelection(wooTree);
+  const current = result.flatCategories.find((item) => item.id === categoryId);
+
+  if (!current) {
+    throw new Error("Category not found.");
+  }
+
+  const siblings =
+    current.parent === 0
+      ? result.categories
+      : findInTree(result.categories, current.parent)?.children || [];
+
+  const index = siblings.findIndex((item) => item.id === categoryId);
+  const swapWith = direction === "up" ? siblings[index - 1] : siblings[index + 1];
+
+  if (!swapWith || index < 0) {
+    return { ok: true, swapped: false };
+  }
+
+  await updateCategoryMenuSelection(
+    { id: current.id, slug: current.slug },
+    {
+      slug: current.slug,
+      sortOrder: swapWith.sortOrder,
+      showInMenu: current.showInMenu,
+      parentOverride: current.parentOverride,
+      iconUrl: current.iconUrl || null,
+    },
+  );
+  await updateCategoryMenuSelection(
+    { id: swapWith.id, slug: swapWith.slug },
+    {
+      slug: swapWith.slug,
+      sortOrder: current.sortOrder,
+      showInMenu: swapWith.showInMenu,
+      parentOverride: swapWith.parentOverride,
+      iconUrl: swapWith.iconUrl || null,
+    },
+  );
+
+  return { ok: true, swapped: true };
+}
+
+function findInTree(tree: CategoryMenuSelectionNode[], id: number): CategoryMenuSelectionNode | null {
+  for (const node of tree) {
+    if (node.id === id) {
+      return node;
+    }
+
+    const child = findInTree(node.children, id);
+    if (child) {
+      return child;
+    }
+  }
+
+  return null;
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { CancelOrderButton } from "@/components/cancel-order-button";
 import { VisualEditableText } from "@/components/visual-editable-text";
 import { getCustomerOrders, getCustomerSession, getOrderTimeline } from "@/lib/customer-account";
 
@@ -42,9 +43,12 @@ export default async function OrderDetailsPage({ params }: OrderDetailsPageProps
               {order.status}
             </p>
           </div>
-          <Link href="/account" className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold">
-            <VisualEditableText textKey="account.orderDetails.backToAccount">العودة لحسابي</VisualEditableText>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <CancelOrderButton orderId={order.id} status={order.status} />
+            <Link href="/account" className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold">
+              <VisualEditableText textKey="account.orderDetails.backToAccount">العودة لحسابي</VisualEditableText>
+            </Link>
+          </div>
         </div>
 
         <section className="rounded-[2rem] bg-white p-6 shadow-sm">
