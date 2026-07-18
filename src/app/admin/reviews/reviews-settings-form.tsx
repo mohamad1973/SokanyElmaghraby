@@ -28,13 +28,21 @@ function createEmptyReview(): CustomerReviewItem {
     productUrl: "/shop",
     productImage: "",
     verified: true,
-    cardTone: "navy",
+    cardTone: "black",
   };
+}
+
+function normalizeCardTone(value: string): CustomerReviewItem["cardTone"] {
+  if (value === "gold" || value === "orange") {
+    return "gold";
+  }
+  return "black";
 }
 
 export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProps) {
   const [settings, setSettings] = useState(initialSettings);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState("");
 
   const reviews = settings.sections.customerReviews || fallbackReviews;
@@ -57,15 +65,21 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
   }
 
   async function uploadFile(file: File, purpose: string): Promise<string | null> {
+    setIsUploading(true);
+    setMessage("جارٍ رفع الملف…");
     const formData = new FormData();
     formData.set("file", file);
     formData.set("purpose", purpose);
     const response = await fetch("/api/admin/upload", { method: "POST", body: formData });
     const payload = (await response.json().catch(() => null)) as { url?: string; message?: string } | null;
+    setIsUploading(false);
+
     if (!response.ok || !payload?.url) {
       setMessage(payload?.message || "تعذر رفع الملف.");
       return null;
     }
+
+    setMessage(`تم الرفع بنجاح. اضغط «حفظ التغييرات» لتثبيت الرابط: ${payload.url}`);
     return payload.url;
   }
 
@@ -73,7 +87,7 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
     setIsSaving(true);
     setMessage("");
     const response = await fetch("/api/admin/theme-settings", {
-      method: "PUT",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
     });
@@ -90,7 +104,9 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
     <div className="space-y-6" dir="rtl">
       <div>
         <h1 className="text-3xl font-bold text-zinc-950">آراء العملاء</h1>
-        <p className="mt-2 text-sm text-zinc-600">تحكم في سكشن الآراء على الرئيسية — نص أو تسجيل صوتي لكل رأي.</p>
+        <p className="mt-2 text-sm text-zinc-600">
+          تحكم في سكشن الآراء على الرئيسية — نص أو تسجيل صوتي لكل رأي. بعد رفع صورة/صوت اضغط حفظ التغييرات.
+        </p>
       </div>
 
       <section className="grid gap-4 rounded-xl border border-black/10 bg-white p-6 shadow-sm lg:grid-cols-2">
@@ -169,7 +185,7 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
             />
           </label>
           <label className="grid gap-1 text-sm font-bold lg:col-span-2">
-            نص الرأي (يُخفى إن وُجد صوت)
+            نص الرأي (يظهر إن لم يوجد صوت)
             <textarea
               value={item.text}
               onChange={(event) => updateItem(index, { text: event.target.value })}
@@ -186,14 +202,16 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
                 placeholder="رابط الصوت أو ارفع ملفاً"
                 dir="ltr"
               />
-              <label className="cursor-pointer rounded-full bg-zinc-100 px-3 py-2 text-xs font-bold">
-                رفع صوت
+              <label className="cursor-pointer rounded-full bg-zinc-100 px-3 py-2 text-xs font-bold disabled:opacity-50">
+                {isUploading ? "جار الرفع…" : "رفع صوت"}
                 <input
                   type="file"
-                  accept="audio/mpeg,audio/mp3,audio/wav,audio/webm,audio/ogg,audio/mp4"
+                  accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.webm"
                   className="hidden"
+                  disabled={isUploading}
                   onChange={async (event) => {
                     const file = event.target.files?.[0];
+                    event.target.value = "";
                     if (!file) return;
                     const url = await uploadFile(file, "review-audio");
                     if (url) updateItem(index, { audioUrl: url });
@@ -229,13 +247,15 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
                 dir="ltr"
               />
               <label className="cursor-pointer rounded-full bg-zinc-100 px-3 py-2 text-xs font-bold">
-                رفع صورة
+                {isUploading ? "جار الرفع…" : "رفع صورة"}
                 <input
                   type="file"
                   accept="image/*"
                   className="hidden"
+                  disabled={isUploading}
                   onChange={async (event) => {
                     const file = event.target.files?.[0];
+                    event.target.value = "";
                     if (!file) return;
                     const url = await uploadFile(file, "review-product");
                     if (url) updateItem(index, { productImage: url });
@@ -243,6 +263,10 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
                 />
               </label>
             </div>
+            {item.productImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.productImage} alt="" className="mt-2 h-16 w-16 rounded-xl object-contain ring-1 ring-black/10" />
+            ) : null}
           </label>
           <label className="flex items-center gap-2 text-sm font-bold">
             <input
@@ -255,14 +279,12 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
           <label className="grid gap-1 text-sm font-bold">
             لون الكارت
             <select
-              value={item.cardTone}
-              onChange={(event) =>
-                updateItem(index, { cardTone: event.target.value === "orange" ? "orange" : "navy" })
-              }
+              value={normalizeCardTone(item.cardTone)}
+              onChange={(event) => updateItem(index, { cardTone: normalizeCardTone(event.target.value) })}
               className="rounded-xl border border-black/10 px-3 py-2"
             >
-              <option value="navy">كحلي</option>
-              <option value="orange">برتقالي</option>
+              <option value="black">أسود بذهبي</option>
+              <option value="gold">ذهبي بأسود</option>
             </select>
           </label>
           <button
@@ -278,7 +300,7 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          disabled={isSaving}
+          disabled={isSaving || isUploading}
           onClick={save}
           className="rounded-full bg-black px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
         >

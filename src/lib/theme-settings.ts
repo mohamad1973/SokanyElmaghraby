@@ -50,7 +50,7 @@ export type CustomerReviewItem = {
   productUrl: string;
   productImage: string;
   verified: boolean;
-  cardTone: "navy" | "orange";
+  cardTone: "black" | "gold";
 };
 
 export type CustomerReviewsSectionSettings = {
@@ -393,7 +393,7 @@ export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
       productUrl: "/shop",
       productImage: "",
       verified: true,
-      cardTone: "navy",
+      cardTone: "black",
     },
     {
       id: "sample-2",
@@ -405,7 +405,7 @@ export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
       productUrl: "/shop",
       productImage: "",
       verified: true,
-      cardTone: "orange",
+      cardTone: "gold",
     },
   ],
 };
@@ -986,7 +986,10 @@ function mergeCustomerReviewsSettings(value: unknown): CustomerReviewsSectionSet
           productUrl: typeof item.productUrl === "string" ? item.productUrl : "/shop",
           productImage: typeof item.productImage === "string" ? item.productImage : "",
           verified: item.verified !== false,
-          cardTone: item.cardTone === "orange" ? "orange" : "navy",
+          cardTone:
+            item.cardTone === "gold" || item.cardTone === "orange"
+              ? "gold"
+              : "black",
         } satisfies CustomerReviewItem;
       })
     : defaultCustomerReviewsSettings.items;
