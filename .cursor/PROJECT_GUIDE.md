@@ -224,7 +224,8 @@
 | `GET/PATCH /api/admin/reports/reorder` | تقرير حد الطلب + حفظ الحد |
 | `POST /api/admin/import/products` | استيراد منتجات |
 | `POST /api/admin/import/categories` | استيراد تصنيفات |
-| `PATCH /api/admin/category-menu-selection/[categoryId]` | إظهار/إخفاء تصنيف في القائمة |
+| `PATCH /api/admin/category-menu-selection/[categoryId]` | إظهار/إخفاء/ترتيب/أب/أيقونة لتصنيف في القائمة |
+| `POST /api/admin/category-menu-selection/bulk` | إضافة عدة تصنيفات للقائمة دفعة واحدة |
 | `GET/POST /api/admin/dispatch` | لوحة التوزيع |
 | `GET/POST/PATCH/DELETE /api/admin/dispatch/zones` | مناطق |
 | `GET/POST/PATCH /api/admin/dispatch/drivers` | سائقين |
