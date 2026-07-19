@@ -97,7 +97,7 @@ function ReviewCard({ item, guaranteeText }: { item: CustomerReviewItem; guarant
 
   return (
     <article
-      className={`flex min-w-[280px] max-w-[320px] shrink-0 flex-col rounded-[1.75rem] p-5 shadow-lg sm:min-w-[300px] ${
+      className={`flex h-full w-full flex-col rounded-[1.75rem] p-5 shadow-lg ${
         isGold ? "bg-[#E8C547] text-black" : "bg-[#0a0a0a] text-[#E8C547]"
       }`}
     >
@@ -195,8 +195,75 @@ function ReviewCard({ item, guaranteeText }: { item: CustomerReviewItem; guarant
   );
 }
 
+const REVIEW_CAROUSEL_INTERVAL_MS = 10_000;
+const REVIEW_GAP_REM = 1;
+
+function useReviewVisibleCount() {
+  const [visibleCount, setVisibleCount] = useState(4);
+
+  useEffect(() => {
+    function update() {
+      if (window.matchMedia("(min-width: 1024px)").matches) {
+        setVisibleCount(4);
+        return;
+      }
+      if (window.matchMedia("(min-width: 640px)").matches) {
+        setVisibleCount(2);
+        return;
+      }
+      setVisibleCount(1);
+    }
+
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return visibleCount;
+}
+
 export function CustomerReviewsSection({ settings }: { settings: CustomerReviewsSectionSettings }) {
-  if (!settings.enabled || !settings.items.length) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const activeIndexRef = useRef(0);
+  const [paused, setPaused] = useState(false);
+  const visibleCount = useReviewVisibleCount();
+  const items = settings.items;
+  const shouldAutoScroll = items.length > 4;
+  const columns = Math.min(visibleCount, Math.max(1, items.length));
+  const itemBasis = `calc((100% - (${columns} - 1) * ${REVIEW_GAP_REM}rem) / ${columns})`;
+
+  useEffect(() => {
+    activeIndexRef.current = 0;
+    scrollerRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [columns, items.length]);
+
+  useEffect(() => {
+    if (!shouldAutoScroll || paused) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      const scroller = scrollerRef.current;
+      if (!scroller) {
+        return;
+      }
+
+      const maxIndex = Math.max(0, items.length - columns);
+      activeIndexRef.current = activeIndexRef.current >= maxIndex ? 0 : activeIndexRef.current + 1;
+      const target = scroller.children[activeIndexRef.current] as HTMLElement | undefined;
+
+      if (target) {
+        scroller.scrollTo({
+          left: target.offsetLeft,
+          behavior: "smooth",
+        });
+      }
+    }, REVIEW_CAROUSEL_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [shouldAutoScroll, paused, items.length, columns]);
+
+  if (!settings.enabled || !items.length) {
     return null;
   }
 
@@ -214,9 +281,22 @@ export function CustomerReviewsSection({ settings }: { settings: CustomerReviews
           </div>
         </div>
 
-        <div className="flex gap-4 overflow-x-auto pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {settings.items.map((item) => (
-            <ReviewCard key={item.id} item={item} guaranteeText={settings.guaranteeText} />
+        <div
+          ref={scrollerRef}
+          dir="rtl"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          className="flex snap-x gap-4 overflow-x-auto scroll-smooth pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {items.map((item) => (
+            <div
+              key={item.id}
+              dir="rtl"
+              className="shrink-0 snap-start"
+              style={{ flexBasis: itemBasis, maxWidth: itemBasis }}
+            >
+              <ReviewCard item={item} guaranteeText={settings.guaranteeText} />
+            </div>
           ))}
         </div>
       </div>
