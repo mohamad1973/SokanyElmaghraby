@@ -353,6 +353,19 @@ export async function filterSelectedCategoryList(categories: Category[]): Promis
   return categories.filter((category) => settings.get(category.id)?.showInMenu === true);
 }
 
+export async function bulkUpdateCategoryMenuSelection(
+  items: Array<Pick<WooCategoryNode, "id" | "slug"> & CategoryMenuUpdateInput>,
+) {
+  const results = [];
+
+  for (const item of items) {
+    const { id, slug, ...input } = item;
+    results.push(await updateCategoryMenuSelection({ id, slug }, { slug, ...input }));
+  }
+
+  return { ok: true as const, count: results.length, results };
+}
+
 export async function updateCategoryMenuSelection(
   category: Pick<WooCategoryNode, "id" | "slug">,
   input: CategoryMenuUpdateInput,

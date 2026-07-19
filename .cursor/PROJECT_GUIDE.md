@@ -306,6 +306,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| منيو تصنيفات بواجهة ووردبريس الكلاسيكية | عمودان: إضافة تصنيفات (checkbox) + هيكل القائمة؛ bulk API؛ أعلى/أسفل/أب/أيقونة/إزالة | `wordpress-menu-builder.tsx`, `category-menu-selection/bulk`, `navigation/page.tsx` |
 | أيقونة مايك جديدة فوق تقييم صوتي | استبدال المايك بأيقونة خطية شفافة؛ أبيض على أسود / أسود على ذهبي؛ المايك فوق النص | `studio-mic.png`, `customer-reviews-section.tsx` |
 | تحسين كارت الآراء (مايك + ألوان) | مايك ستوديو كبير بجانب شراء مؤكد؛ أخضر brand؛ ذهبي `#E8C547`؛ صورة منتج أكبر؛ إزالة شارة المايك من صورة المنتج | `customer-reviews-section.tsx`, `public/reviews/studio-mic.png` |
 | إصلاح آراء العملاء (أسود/ذهبي + رفع + مايك) | حفظ بـ POST بدل PUT؛ امتداد صوت من اسم الملف؛ كروت أسود/ذهبي وعكسها؛ صورة المنتج + شارة مايك للتقييم الصوتي | `reviews-settings-form.tsx`, `upload/route.ts`, `theme-settings.ts`, `customer-reviews-section.tsx` |
