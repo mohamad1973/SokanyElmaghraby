@@ -27,6 +27,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     parentOverride?: number | null;
     iconUrl?: string | null;
     clearIcon?: boolean;
+    menuTitle?: string | null;
+    clearMenuTitle?: boolean;
     move?: "up" | "down";
   };
 
@@ -57,6 +59,8 @@ export async function PATCH(request: Request, context: RouteContext) {
           parentOverride: payload.parentOverride,
           iconUrl: payload.iconUrl,
           clearIcon: payload.clearIcon,
+          menuTitle: payload.menuTitle,
+          clearMenuTitle: payload.clearMenuTitle,
         },
       ),
     );

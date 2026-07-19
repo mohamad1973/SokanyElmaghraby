@@ -1,13 +1,33 @@
 "use client";
 
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCenter,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CategoryMenuSelectionNode } from "@/lib/types";
 
 import { PRESET_CATEGORY_ICONS } from "./category-menu-editor";
+
+const INDENT = 24;
 
 type WordpressMenuBuilderProps = {
   flatCategories: CategoryMenuSelectionNode[];
@@ -15,43 +35,312 @@ type WordpressMenuBuilderProps = {
   statusError?: string;
 };
 
-type MenuTreeNode = CategoryMenuSelectionNode & { depth: number };
+type FlatMenuItem = {
+  id: number;
+  slug: string;
+  title: string;
+  href: string;
+  count: number;
+  iconUrl?: string;
+  menuTitle: string | null;
+  parentId: number;
+  depth: number;
+  sortOrder: number;
+};
 
-function buildInMenuTree(flat: CategoryMenuSelectionNode[]): MenuTreeNode[] {
-  const inMenu = flat.filter((item) => item.showInMenu);
+function buildFlatFromCategories(flatCategories: CategoryMenuSelectionNode[]): FlatMenuItem[] {
+  const inMenu = flatCategories.filter((item) => item.showInMenu);
   const ids = new Set(inMenu.map((item) => item.id));
 
-  function childrenOf(parentId: number, depth: number): MenuTreeNode[] {
+  function childrenOf(parentId: number, depth: number): FlatMenuItem[] {
     return inMenu
       .filter((item) => {
         const effectiveParent = ids.has(item.parent) ? item.parent : 0;
         return effectiveParent === parentId;
       })
       .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "ar"))
-      .map((item) => ({
-        ...item,
-        depth,
-        children: childrenOf(item.id, depth + 1),
-      }));
+      .flatMap((item) => {
+        const node: FlatMenuItem = {
+          id: item.id,
+          slug: item.slug,
+          title: item.title,
+          href: item.href,
+          count: item.count,
+          iconUrl: item.iconUrl,
+          menuTitle: item.menuTitle ?? null,
+          parentId,
+          depth,
+          sortOrder: item.sortOrder,
+        };
+        return [node, ...childrenOf(item.id, depth + 1)];
+      });
   }
 
   return childrenOf(0, 0);
 }
 
-function flattenMenuTree(nodes: MenuTreeNode[]): MenuTreeNode[] {
-  const result: MenuTreeNode[] = [];
+function getDragDepth(offset: number, indentationWidth: number) {
+  return Math.round(offset / indentationWidth);
+}
 
-  function walk(list: MenuTreeNode[]) {
-    for (const node of list) {
-      result.push(node);
-      if (node.children.length) {
-        walk(node.children as MenuTreeNode[]);
-      }
-    }
+function getMaxDepth({ previousItem }: { previousItem: FlatMenuItem | undefined }) {
+  return previousItem ? previousItem.depth + 1 : 0;
+}
+
+function getMinDepth({ nextItem }: { nextItem: FlatMenuItem | undefined }) {
+  return nextItem ? nextItem.depth : 0;
+}
+
+function getProjection(
+  items: FlatMenuItem[],
+  activeId: number,
+  overId: number,
+  dragOffset: number,
+  indentationWidth: number,
+) {
+  const overItemIndex = items.findIndex((item) => item.id === overId);
+  const activeItemIndex = items.findIndex((item) => item.id === activeId);
+  if (overItemIndex < 0 || activeItemIndex < 0) {
+    return null;
   }
 
-  walk(nodes);
-  return result;
+  const activeItem = items[activeItemIndex];
+  const newItems = arrayMove(items, activeItemIndex, overItemIndex);
+  const previousItem = newItems[overItemIndex - 1];
+  const nextItem = newItems[overItemIndex + 1];
+  const dragDepth = getDragDepth(dragOffset, indentationWidth);
+  const projectedDepth = activeItem.depth + dragDepth;
+  const maxDepth = getMaxDepth({ previousItem });
+  const minDepth = getMinDepth({ nextItem });
+  let depth = projectedDepth;
+  if (depth >= maxDepth) {
+    depth = maxDepth;
+  }
+  if (depth < minDepth) {
+    depth = minDepth;
+  }
+
+  function getParentId() {
+    if (depth === 0 || !previousItem) {
+      return 0;
+    }
+    if (depth === previousItem.depth) {
+      return previousItem.parentId;
+    }
+    if (depth > previousItem.depth) {
+      return previousItem.id;
+    }
+
+    const newParent = newItems
+      .slice(0, overItemIndex)
+      .reverse()
+      .find((item) => item.depth === depth)?.parentId;
+
+    return newParent ?? 0;
+  }
+
+  return { depth, maxDepth, minDepth, parentId: getParentId() };
+}
+
+function getSubtreeIndexes(items: FlatMenuItem[], index: number): number[] {
+  const depth = items[index]?.depth ?? 0;
+  const indexes = [index];
+  for (let i = index + 1; i < items.length; i++) {
+    if (items[i].depth <= depth) {
+      break;
+    }
+    indexes.push(i);
+  }
+  return indexes;
+}
+
+function assignSortOrders(items: FlatMenuItem[]): FlatMenuItem[] {
+  const counters = new Map<number, number>();
+  return items.map((item) => {
+    const next = (counters.get(item.parentId) ?? 0) + 10;
+    counters.set(item.parentId, next);
+    return { ...item, sortOrder: next };
+  });
+}
+
+function SortableMenuRow({
+  item,
+  projectedDepth,
+  expanded,
+  disabled,
+  isSaving,
+  titleDraft,
+  onToggleExpand,
+  onTitleDraftChange,
+  onSaveTitle,
+  onSetIcon,
+  onUploadIcon,
+  onRemove,
+}: {
+  item: FlatMenuItem;
+  projectedDepth?: number;
+  expanded: boolean;
+  disabled: boolean;
+  isSaving: boolean;
+  titleDraft: string;
+  onToggleExpand: () => void;
+  onTitleDraftChange: (value: string) => void;
+  onSaveTitle: () => void;
+  onSetIcon: (url: string | null, clear?: boolean) => void;
+  onUploadIcon: (file: File | null) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+  const depth = projectedDepth ?? item.depth;
+  const displayName = item.menuTitle?.trim() || item.title;
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        marginInlineStart: depth * INDENT,
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      className="rounded border border-[#c3c4c7] bg-[#f6f7f7]"
+    >
+      <div className="flex items-center justify-between gap-2 px-2 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <button
+            type="button"
+            className="cursor-grab touch-none rounded border border-[#c3c4c7] bg-white px-2 py-1 text-xs text-[#646970] active:cursor-grabbing"
+            aria-label="اسحب لإعادة الترتيب"
+            {...attributes}
+            {...listeners}
+          >
+            ⋮⋮
+          </button>
+          {item.iconUrl ? (
+            <span className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white ring-1 ring-[#c3c4c7]">
+              <Image src={item.iconUrl} alt="" width={20} height={20} unoptimized />
+            </span>
+          ) : null}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-[#1d2327]">{displayName}</p>
+            {depth > 0 ? <p className="text-[11px] text-[#646970]">عنصر فرعي</p> : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded bg-white px-2 py-0.5 text-[11px] font-bold text-[#646970] ring-1 ring-[#c3c4c7]">
+            تصنيف
+          </span>
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="rounded border border-[#c3c4c7] bg-white px-2 py-1 text-xs text-[#1d2327]"
+            aria-expanded={expanded}
+          >
+            {expanded ? "▴" : "▾"}
+          </button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="space-y-3 border-t border-[#c3c4c7] bg-white px-3 py-3">
+          <p className="text-xs text-[#646970]">
+            اسم ووردبريس: <span className="font-bold text-[#1d2327]">{item.title}</span>
+          </p>
+
+          <label className="grid gap-1 text-xs font-bold text-[#1d2327]">
+            اسم العرض في الموقع
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="text"
+                value={titleDraft}
+                disabled={disabled || isSaving}
+                onChange={(event) => onTitleDraftChange(event.target.value)}
+                placeholder={item.title}
+                className="min-w-[200px] flex-1 rounded border border-[#8c8f94] px-2 py-1.5 text-sm"
+              />
+              <button
+                type="button"
+                disabled={disabled || isSaving}
+                onClick={onSaveTitle}
+                className="rounded bg-[#2271b1] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+              >
+                حفظ الاسم
+              </button>
+            </div>
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={item.href}
+              className="rounded border border-[#c3c4c7] bg-[#f6f7f7] px-2.5 py-1 text-xs font-bold text-[#2271b1]"
+            >
+              عرض في المتجر
+            </Link>
+          </div>
+
+          <div className="grid gap-2">
+            <p className="text-xs font-bold text-[#1d2327]">أيقونة المنيو</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {item.iconUrl ? (
+                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded bg-[#f6f7f7] ring-1 ring-[#c3c4c7]">
+                  <Image src={item.iconUrl} alt="" width={24} height={24} unoptimized />
+                </span>
+              ) : (
+                <span className="text-xs text-[#646970]">لا توجد أيقونة</span>
+              )}
+              <label className="cursor-pointer rounded border border-[#c3c4c7] bg-[#f6f7f7] px-2.5 py-1 text-xs font-bold">
+                رفع أيقونة
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden"
+                  disabled={disabled || isSaving}
+                  onChange={(event) => onUploadIcon(event.target.files?.[0] || null)}
+                />
+              </label>
+              {item.iconUrl ? (
+                <button
+                  type="button"
+                  disabled={disabled || isSaving}
+                  onClick={() => onSetIcon(null, true)}
+                  className="text-xs font-bold text-[#b32d2e]"
+                >
+                  مسح الأيقونة
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESET_CATEGORY_ICONS.map((icon) => (
+                <button
+                  key={icon.key}
+                  type="button"
+                  title={icon.label}
+                  disabled={disabled || isSaving}
+                  onClick={() => onSetIcon(icon.url)}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded bg-[#f6f7f7] ring-1 transition disabled:opacity-50 ${
+                    item.iconUrl === icon.url ? "ring-[#2271b1]" : "ring-[#c3c4c7]"
+                  }`}
+                >
+                  <Image src={icon.url} alt={icon.label} width={20} height={20} unoptimized />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={disabled || isSaving}
+            onClick={onRemove}
+            className="text-xs font-bold text-[#b32d2e] hover:underline disabled:opacity-50"
+          >
+            إزالة من القائمة
+          </button>
+        </div>
+      ) : null}
+    </li>
+  );
 }
 
 export function WordpressMenuBuilder({
@@ -67,14 +356,25 @@ export function WordpressMenuBuilder({
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const [parentDrafts, setParentDrafts] = useState<Record<number, string>>({});
+  const [titleDrafts, setTitleDrafts] = useState<Record<number, string>>({});
+  const [items, setItems] = useState<FlatMenuItem[]>(() => buildFlatFromCategories(flatCategories));
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
+  const [offsetLeft, setOffsetLeft] = useState(0);
+  const offsetLeftRef = useRef(0);
 
-  const menuTree = useMemo(() => buildInMenuTree(flatCategories), [flatCategories]);
-  const menuFlat = useMemo(() => flattenMenuTree(menuTree), [menuTree]);
-  const inMenuIds = useMemo(() => new Set(menuFlat.map((item) => item.id)), [menuFlat]);
+  useEffect(() => {
+    setItems(buildFlatFromCategories(flatCategories));
+  }, [flatCategories]);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const projected =
+    activeId && overId ? getProjection(items, activeId, overId, offsetLeft, INDENT) : null;
 
   const availableCategories = useMemo(() => {
-    const notInMenu = flatCategories.filter((item) => !item.showInMenu);
+    const inMenu = new Set(items.map((item) => item.id));
+    const notInMenu = flatCategories.filter((item) => !inMenu.has(item.id));
     if (leftTab === "search") {
       const q = search.trim().toLowerCase();
       if (!q) {
@@ -88,7 +388,9 @@ export function WordpressMenuBuilder({
       return [...notInMenu].sort((a, b) => b.count - a.count).slice(0, 20);
     }
     return [...notInMenu].sort((a, b) => a.title.localeCompare(b.title, "ar"));
-  }, [flatCategories, leftTab, search]);
+  }, [flatCategories, items, leftTab, search]);
+
+  const activeItem = activeId ? items.find((item) => item.id === activeId) : null;
 
   function toggleExpand(id: number) {
     setExpandedIds((prev) => {
@@ -114,22 +416,41 @@ export function WordpressMenuBuilder({
     });
   }
 
-  function selectAllVisible() {
-    setSelectedIds(new Set(availableCategories.map((item) => item.id)));
-  }
+  async function persistStructure(nextItems: FlatMenuItem[]) {
+    const ordered = assignSortOrders(nextItems);
+    setItems(ordered);
+    setIsSaving(true);
+    setError("");
+    setMessage("");
 
-  function clearSelection() {
-    setSelectedIds(new Set());
-  }
+    const response = await fetch("/api/admin/category-menu-selection/structure", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: ordered.map((item) => ({
+          id: item.id,
+          slug: item.slug,
+          parentOverride: item.parentId,
+          sortOrder: item.sortOrder,
+          showInMenu: true,
+          menuTitle: item.menuTitle,
+          iconUrl: item.iconUrl || null,
+        })),
+      }),
+    });
 
-  async function refreshAfter(ok: boolean, successMessage?: string) {
-    if (!ok) {
-      return;
+    setIsSaving(false);
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      setError(payload?.message || "تعذر حفظ ترتيب القائمة.");
+      setItems(buildFlatFromCategories(flatCategories));
+      return false;
     }
-    if (successMessage) {
-      setMessage(successMessage);
-    }
+
+    setMessage("تم حفظ ترتيب القائمة.");
     router.refresh();
+    return true;
   }
 
   async function patchCategory(categoryId: number, body: Record<string, unknown>) {
@@ -151,6 +472,7 @@ export function WordpressMenuBuilder({
       return false;
     }
 
+    router.refresh();
     return true;
   }
 
@@ -160,11 +482,11 @@ export function WordpressMenuBuilder({
       return;
     }
 
-    const rootSorts = menuFlat.filter((item) => item.depth === 0).map((item) => item.sortOrder);
+    const rootSorts = items.filter((item) => item.depth === 0).map((item) => item.sortOrder);
     let nextSort = (rootSorts.length ? Math.max(...rootSorts) : 0) + 10;
-    const inMenuParents = new Set(menuFlat.map((item) => item.id));
+    const inMenuParents = new Set(items.map((item) => item.id));
 
-    const items = flatCategories
+    const payloadItems = flatCategories
       .filter((item) => selectedIds.has(item.id))
       .map((item) => {
         const sortOrder = nextSort;
@@ -175,7 +497,7 @@ export function WordpressMenuBuilder({
           slug: item.slug,
           showInMenu: true,
           sortOrder,
-          parentOverride: wooParentInMenu ? item.parent : null,
+          parentOverride: wooParentInMenu ? item.parent : 0,
         };
       });
 
@@ -186,7 +508,7 @@ export function WordpressMenuBuilder({
     const response = await fetch("/api/admin/category-menu-selection/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items: payloadItems }),
     });
 
     setIsSaving(false);
@@ -197,78 +519,116 @@ export function WordpressMenuBuilder({
       return;
     }
 
-    clearSelection();
-    await refreshAfter(true, `تمت إضافة ${items.length} عنصر إلى القائمة.`);
+    setSelectedIds(new Set());
+    setMessage(`تمت إضافة ${payloadItems.length} عنصر إلى القائمة.`);
+    router.refresh();
   }
 
-  async function removeFromMenu(category: CategoryMenuSelectionNode) {
-    const ok = await patchCategory(category.id, {
-      slug: category.slug,
-      showInMenu: false,
-      parentOverride: category.parentOverride,
-      sortOrder: category.sortOrder,
-      iconUrl: category.iconUrl || null,
-    });
-    await refreshAfter(ok, "تمت إزالة العنصر من القائمة.");
+  function handleDragStart({ active }: DragStartEvent) {
+    setActiveId(Number(active.id));
+    setOverId(Number(active.id));
+    offsetLeftRef.current = 0;
+    setOffsetLeft(0);
   }
 
-  async function move(category: CategoryMenuSelectionNode, direction: "up" | "down") {
-    const ok = await patchCategory(category.id, { move: direction });
-    await refreshAfter(ok);
+  function handleDragMove({ delta }: DragMoveEvent) {
+    // RTL: dragging toward visual left (into nesting) increases depth when delta.x is negative
+    offsetLeftRef.current = -delta.x;
+    setOffsetLeft(-delta.x);
   }
 
-  async function saveParent(category: CategoryMenuSelectionNode) {
-    const draft = parentDrafts[category.id] ?? (category.parentOverride === null ? "woo" : String(category.parentOverride));
-    const nextParent = draft === "woo" ? null : draft === "0" ? 0 : Number(draft);
-
-    const ok = await patchCategory(category.id, {
-      slug: category.slug,
-      showInMenu: true,
-      parentOverride: nextParent,
-      sortOrder: category.sortOrder,
-      iconUrl: category.iconUrl || null,
-    });
-    await refreshAfter(ok, "تم حفظ الأب.");
+  function handleDragOver({ over }: { over: { id: string | number } | null }) {
+    setOverId(over ? Number(over.id) : null);
   }
 
-  async function setIcon(category: CategoryMenuSelectionNode, url: string | null, clear = false) {
-    const ok = await patchCategory(category.id, {
-      slug: category.slug,
-      showInMenu: true,
-      parentOverride: category.parentOverride,
-      sortOrder: category.sortOrder,
-      iconUrl: url,
-      clearIcon: clear,
-    });
-    await refreshAfter(ok);
-  }
+  async function handleDragEnd({ active, over }: DragEndEvent) {
+    const dragOffset = offsetLeftRef.current;
+    setActiveId(null);
+    setOverId(null);
+    offsetLeftRef.current = 0;
+    setOffsetLeft(0);
 
-  async function uploadIcon(category: CategoryMenuSelectionNode, file: File | null) {
-    if (!file) {
+    if (!over) {
       return;
     }
 
-    const formData = new FormData();
-    formData.set("file", file);
-    formData.set("purpose", "category-icon");
-
-    setIsSaving(true);
-    setError("");
-
-    const response = await fetch("/api/admin/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    const payload = (await response.json().catch(() => null)) as { url?: string; message?: string } | null;
-    setIsSaving(false);
-
-    if (!response.ok || !payload?.url) {
-      setError(payload?.message || "تعذر رفع الأيقونة.");
+    const activeItemId = Number(active.id);
+    const overItemId = Number(over.id);
+    const projection = getProjection(items, activeItemId, overItemId, dragOffset, INDENT);
+    if (!projection) {
       return;
     }
 
-    await setIcon(category, payload.url);
+    const activeIndex = items.findIndex((item) => item.id === activeItemId);
+    const overIndex = items.findIndex((item) => item.id === overItemId);
+    if (activeIndex < 0 || overIndex < 0) {
+      return;
+    }
+
+    const subtreeIndexes = getSubtreeIndexes(items, activeIndex);
+    const subtree = subtreeIndexes.map((index) => items[index]);
+    const remaining = items.filter((_, index) => !subtreeIndexes.includes(index));
+    const overIndexInRemaining = remaining.findIndex((item) => item.id === overItemId);
+    const insertAt =
+      overIndexInRemaining < 0
+        ? remaining.length
+        : activeIndex < overIndex
+          ? overIndexInRemaining + 1
+          : overIndexInRemaining;
+
+    const depthDelta = projection.depth - subtree[0].depth;
+    const movedSubtree = subtree.map((item, index) =>
+      index === 0
+        ? { ...item, depth: projection.depth, parentId: projection.parentId }
+        : { ...item, depth: item.depth + depthDelta },
+    );
+
+    // Fix parentIds for descendants relative to moved root
+    const idSet = new Set(movedSubtree.map((item) => item.id));
+    const withParents = movedSubtree.map((item, index) => {
+      if (index === 0) {
+        return item;
+      }
+      // keep parent if still in subtree, else clamp
+      if (idSet.has(item.parentId)) {
+        return item;
+      }
+      return { ...item, parentId: projection.parentId };
+    });
+
+    const next = [...remaining.slice(0, insertAt), ...withParents, ...remaining.slice(insertAt)];
+
+    const byId = new Map(next.map((item) => [item.id, item]));
+    function depthOf(id: number, seen = new Set<number>()): number {
+      const node = byId.get(id);
+      if (!node) {
+        return 0;
+      }
+      if (node.parentId === 0 || !byId.has(node.parentId)) {
+        return 0;
+      }
+      if (seen.has(id)) {
+        return 0;
+      }
+      seen.add(id);
+      return depthOf(node.parentId, seen) + 1;
+    }
+
+    const withDepth = next.map((item) => {
+      if (item.parentId !== 0 && !byId.has(item.parentId)) {
+        return { ...item, parentId: 0, depth: 0 };
+      }
+      return { ...item, depth: depthOf(item.id) };
+    });
+
+    await persistStructure(withDepth);
+  }
+
+  function handleDragCancel() {
+    setActiveId(null);
+    setOverId(null);
+    offsetLeftRef.current = 0;
+    setOffsetLeft(0);
   }
 
   return (
@@ -286,7 +646,6 @@ export function WordpressMenuBuilder({
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-        {/* Left: Add menu items */}
         <aside className="rounded border border-[#c3c4c7] bg-white">
           <div className="border-b border-[#c3c4c7] bg-[#f0f0f1] px-4 py-3">
             <h2 className="text-sm font-bold text-[#1d2327]">إضافة عناصر للقائمة</h2>
@@ -369,7 +728,11 @@ export function WordpressMenuBuilder({
                       availableCategories.every((item) => selectedIds.has(item.id))
                     }
                     disabled={disabled || isSaving || !availableCategories.length}
-                    onChange={(event) => (event.target.checked ? selectAllVisible() : clearSelection())}
+                    onChange={(event) =>
+                      setSelectedIds(
+                        event.target.checked ? new Set(availableCategories.map((item) => item.id)) : new Set(),
+                      )
+                    }
                   />
                   تحديد الكل
                 </label>
@@ -384,18 +747,15 @@ export function WordpressMenuBuilder({
               </div>
             </div>
           </details>
-
-          <div className="px-4 py-3 text-xs leading-6 text-[#646970]">
-            اختر التصنيفات من اليسار ثم أضفها إلى هيكل القائمة على اليمين — بنفس أسلوب ووردبريس.
-          </div>
         </aside>
 
-        {/* Right: Menu structure */}
         <section className="rounded border border-[#c3c4c7] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#c3c4c7] bg-[#f0f0f1] px-4 py-3">
             <div>
               <h2 className="text-sm font-bold text-[#1d2327]">هيكل القائمة</h2>
-              <p className="mt-1 text-xs text-[#646970]">{menuFlat.length} عنصر في قائمة المتجر</p>
+              <p className="mt-1 text-xs text-[#646970]">
+                اسحب العناصر لإعادة الترتيب أو التداخل. أول عنصر رئيسي يظهر يمين شريط المنيو.
+              </p>
             </div>
             <button
               type="button"
@@ -411,191 +771,119 @@ export function WordpressMenuBuilder({
           </div>
 
           <div className="p-4">
-            {!menuFlat.length ? (
+            {!items.length ? (
               <div className="rounded border border-dashed border-[#c3c4c7] bg-[#f6f7f7] px-4 py-10 text-center text-sm text-[#646970]">
                 أضف تصنيفات من العمود الأيسر لبناء القائمة.
               </div>
             ) : (
-              <ul className="space-y-2">
-                {menuFlat.map((category) => {
-                  const expanded = expandedIds.has(category.id);
-                  const parentValue =
-                    parentDrafts[category.id] ??
-                    (category.parentOverride === null ? "woo" : String(category.parentOverride));
-                  const parentOptions = flatCategories.filter(
-                    (item) => item.id !== category.id && (inMenuIds.has(item.id) || item.showInMenu),
-                  );
-
-                  return (
-                    <li
-                      key={category.id}
-                      style={{ marginInlineStart: category.depth * 24 }}
-                      className="rounded border border-[#c3c4c7] bg-[#f6f7f7]"
-                    >
-                      <div className="flex items-center justify-between gap-2 px-3 py-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          {category.iconUrl ? (
-                            <span className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white ring-1 ring-[#c3c4c7]">
-                              <Image src={category.iconUrl} alt="" width={20} height={20} unoptimized />
-                            </span>
-                          ) : null}
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-bold text-[#1d2327]">{category.title}</p>
-                            {category.depth > 0 ? (
-                              <p className="text-[11px] text-[#646970]">عنصر فرعي</p>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span className="rounded bg-white px-2 py-0.5 text-[11px] font-bold text-[#646970] ring-1 ring-[#c3c4c7]">
-                            تصنيف
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(category.id)}
-                            className="rounded border border-[#c3c4c7] bg-white px-2 py-1 text-xs text-[#1d2327]"
-                            aria-expanded={expanded}
-                          >
-                            {expanded ? "▴" : "▾"}
-                          </button>
-                        </div>
-                      </div>
-
-                      {expanded ? (
-                        <div className="space-y-3 border-t border-[#c3c4c7] bg-white px-3 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              disabled={disabled || isSaving}
-                              onClick={() => move(category, "up")}
-                              className="rounded border border-[#c3c4c7] bg-[#f6f7f7] px-2.5 py-1 text-xs font-bold text-[#1d2327] disabled:opacity-50"
-                            >
-                              أعلى ↑
-                            </button>
-                            <button
-                              type="button"
-                              disabled={disabled || isSaving}
-                              onClick={() => move(category, "down")}
-                              className="rounded border border-[#c3c4c7] bg-[#f6f7f7] px-2.5 py-1 text-xs font-bold text-[#1d2327] disabled:opacity-50"
-                            >
-                              أسفل ↓
-                            </button>
-                            <Link
-                              href={category.href}
-                              className="rounded border border-[#c3c4c7] bg-[#f6f7f7] px-2.5 py-1 text-xs font-bold text-[#2271b1]"
-                            >
-                              عرض في المتجر
-                            </Link>
-                          </div>
-
-                          <label className="grid gap-1 text-xs font-bold text-[#1d2327]">
-                            التصنيف الأب
-                            <div className="flex flex-wrap gap-2">
-                              <select
-                                value={parentValue}
-                                disabled={disabled || isSaving}
-                                onChange={(event) =>
-                                  setParentDrafts((prev) => ({ ...prev, [category.id]: event.target.value }))
-                                }
-                                className="min-w-[200px] rounded border border-[#8c8f94] px-2 py-1.5 text-sm"
-                              >
-                                <option value="woo">حسب ووكومرس (افتراضي)</option>
-                                <option value="0">بدون أب (رئيسي)</option>
-                                {parentOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.title}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                disabled={disabled || isSaving}
-                                onClick={() => saveParent(category)}
-                                className="rounded bg-[#2271b1] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-                              >
-                                حفظ الأب
-                              </button>
-                            </div>
-                          </label>
-
-                          <div className="grid gap-2">
-                            <p className="text-xs font-bold text-[#1d2327]">أيقونة المنيو</p>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {category.iconUrl ? (
-                                <span className="relative inline-flex h-9 w-9 items-center justify-center rounded bg-[#f6f7f7] ring-1 ring-[#c3c4c7]">
-                                  <Image src={category.iconUrl} alt="" width={24} height={24} unoptimized />
-                                </span>
-                              ) : (
-                                <span className="text-xs text-[#646970]">لا توجد أيقونة</span>
-                              )}
-                              <label className="cursor-pointer rounded border border-[#c3c4c7] bg-[#f6f7f7] px-2.5 py-1 text-xs font-bold">
-                                رفع أيقونة
-                                <input
-                                  type="file"
-                                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                                  className="hidden"
-                                  disabled={disabled || isSaving}
-                                  onChange={(event) => uploadIcon(category, event.target.files?.[0] || null)}
-                                />
-                              </label>
-                              {category.iconUrl ? (
-                                <button
-                                  type="button"
-                                  disabled={disabled || isSaving}
-                                  onClick={() => setIcon(category, null, true)}
-                                  className="text-xs font-bold text-[#b32d2e]"
-                                >
-                                  مسح الأيقونة
-                                </button>
-                              ) : null}
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {PRESET_CATEGORY_ICONS.map((icon) => (
-                                <button
-                                  key={icon.key}
-                                  type="button"
-                                  title={icon.label}
-                                  disabled={disabled || isSaving}
-                                  onClick={() => setIcon(category, icon.url)}
-                                  className={`inline-flex h-9 w-9 items-center justify-center rounded bg-[#f6f7f7] ring-1 transition disabled:opacity-50 ${
-                                    category.iconUrl === icon.url ? "ring-[#2271b1]" : "ring-[#c3c4c7]"
-                                  }`}
-                                >
-                                  <Image src={icon.url} alt={icon.label} width={20} height={20} unoptimized />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={disabled || isSaving}
-                            onClick={() => removeFromMenu(category)}
-                            className="text-xs font-bold text-[#b32d2e] hover:underline disabled:opacity-50"
-                          >
-                            إزالة
-                          </button>
-                        </div>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragMove={handleDragMove}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                  <ul className="space-y-2">
+                    {items.map((item) => (
+                      <SortableMenuRow
+                        key={item.id}
+                        item={item}
+                        projectedDepth={
+                          item.id === activeId && projected ? projected.depth : undefined
+                        }
+                        expanded={expandedIds.has(item.id)}
+                        disabled={disabled}
+                        isSaving={isSaving}
+                        titleDraft={titleDrafts[item.id] ?? item.menuTitle ?? ""}
+                        onToggleExpand={() => toggleExpand(item.id)}
+                        onTitleDraftChange={(value) =>
+                          setTitleDrafts((prev) => ({ ...prev, [item.id]: value }))
+                        }
+                        onSaveTitle={async () => {
+                          const draft = (titleDrafts[item.id] ?? item.menuTitle ?? "").trim();
+                          const ok = await patchCategory(item.id, {
+                            slug: item.slug,
+                            showInMenu: true,
+                            parentOverride: item.parentId,
+                            sortOrder: item.sortOrder,
+                            iconUrl: item.iconUrl || null,
+                            menuTitle: draft || null,
+                            clearMenuTitle: !draft,
+                          });
+                          if (ok) {
+                            setMessage("تم حفظ اسم العرض.");
+                          }
+                        }}
+                        onSetIcon={async (url, clear) => {
+                          await patchCategory(item.id, {
+                            slug: item.slug,
+                            showInMenu: true,
+                            parentOverride: item.parentId,
+                            sortOrder: item.sortOrder,
+                            menuTitle: item.menuTitle,
+                            iconUrl: url,
+                            clearIcon: clear,
+                          });
+                        }}
+                        onUploadIcon={async (file) => {
+                          if (!file) {
+                            return;
+                          }
+                          const formData = new FormData();
+                          formData.set("file", file);
+                          formData.set("purpose", "category-icon");
+                          setIsSaving(true);
+                          const response = await fetch("/api/admin/upload", {
+                            method: "POST",
+                            body: formData,
+                          });
+                          const payload = (await response.json().catch(() => null)) as {
+                            url?: string;
+                            message?: string;
+                          } | null;
+                          setIsSaving(false);
+                          if (!response.ok || !payload?.url) {
+                            setError(payload?.message || "تعذر رفع الأيقونة.");
+                            return;
+                          }
+                          await patchCategory(item.id, {
+                            slug: item.slug,
+                            showInMenu: true,
+                            parentOverride: item.parentId,
+                            sortOrder: item.sortOrder,
+                            menuTitle: item.menuTitle,
+                            iconUrl: payload.url,
+                          });
+                        }}
+                        onRemove={async () => {
+                          const ok = await patchCategory(item.id, {
+                            slug: item.slug,
+                            showInMenu: false,
+                            parentOverride: item.parentId,
+                            sortOrder: item.sortOrder,
+                            menuTitle: item.menuTitle,
+                            iconUrl: item.iconUrl || null,
+                          });
+                          if (ok) {
+                            setMessage("تمت إزالة العنصر من القائمة.");
+                          }
+                        }}
+                      />
+                    ))}
+                  </ul>
+                </SortableContext>
+                <DragOverlay>
+                  {activeItem ? (
+                    <div className="rounded border border-[#2271b1] bg-white px-3 py-2 text-sm font-bold shadow-lg">
+                      {activeItem.menuTitle?.trim() || activeItem.title}
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
             )}
-          </div>
-
-          <div className="flex justify-end border-t border-[#c3c4c7] bg-[#f0f0f1] px-4 py-3">
-            <button
-              type="button"
-              disabled={disabled || isSaving}
-              onClick={() => {
-                setMessage("كل تغيير يُحفظ مباشرة. القائمة محدّثة.");
-                router.refresh();
-              }}
-              className="rounded bg-[#2271b1] px-4 py-2 text-xs font-bold text-white hover:bg-[#135e96] disabled:opacity-50"
-            >
-              حفظ القائمة
-            </button>
           </div>
         </section>
       </div>

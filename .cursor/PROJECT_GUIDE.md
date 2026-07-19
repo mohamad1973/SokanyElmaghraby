@@ -224,8 +224,9 @@
 | `GET/PATCH /api/admin/reports/reorder` | تقرير حد الطلب + حفظ الحد |
 | `POST /api/admin/import/products` | استيراد منتجات |
 | `POST /api/admin/import/categories` | استيراد تصنيفات |
-| `PATCH /api/admin/category-menu-selection/[categoryId]` | إظهار/إخفاء/ترتيب/أب/أيقونة لتصنيف في القائمة |
+| `PATCH /api/admin/category-menu-selection/[categoryId]` | إظهار/إخفاء/ترتيب/أب/أيقونة/اسم عرض لتصنيف في القائمة |
 | `POST /api/admin/category-menu-selection/bulk` | إضافة عدة تصنيفات للقائمة دفعة واحدة |
+| `PUT /api/admin/category-menu-selection/structure` | حفظ هيكل السحب (أب + ترتيب) دفعة واحدة |
 | `GET/POST /api/admin/dispatch` | لوحة التوزيع |
 | `GET/POST/PATCH/DELETE /api/admin/dispatch/zones` | مناطق |
 | `GET/POST/PATCH /api/admin/dispatch/drivers` | سائقين |
@@ -307,6 +308,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| سحب منيو + اسم عرض مخصص | dnd-kit شجري بدل أعلى/أسفل؛ `menuTitle` للفرونت؛ PUT structure؛ أول جذر يظهر يمين الهيدر | `wordpress-menu-builder.tsx`, `category-menu-selection.ts`, `structure` API |
 | منيو تصنيفات بواجهة ووردبريس الكلاسيكية | عمودان: إضافة تصنيفات (checkbox) + هيكل القائمة؛ bulk API؛ أعلى/أسفل/أب/أيقونة/إزالة | `wordpress-menu-builder.tsx`, `category-menu-selection/bulk`, `navigation/page.tsx` |
 | أيقونة مايك جديدة فوق تقييم صوتي | استبدال المايك بأيقونة خطية شفافة؛ أبيض على أسود / أسود على ذهبي؛ المايك فوق النص | `studio-mic.png`, `customer-reviews-section.tsx` |
 | تحسين كارت الآراء (مايك + ألوان) | مايك ستوديو كبير بجانب شراء مؤكد؛ أخضر brand؛ ذهبي `#E8C547`؛ صورة منتج أكبر؛ إزالة شارة المايك من صورة المنتج | `customer-reviews-section.tsx`, `public/reviews/studio-mic.png` |

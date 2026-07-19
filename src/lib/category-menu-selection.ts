@@ -10,6 +10,7 @@ export type MenuSelectionSetting = {
   sortOrder: number;
   parentOverride: number | null;
   iconUrl: string | null;
+  menuTitle: string | null;
 };
 
 export type CategoryMenuUpdateInput = {
@@ -19,6 +20,8 @@ export type CategoryMenuUpdateInput = {
   parentOverride?: number | null;
   iconUrl?: string | null;
   clearIcon?: boolean;
+  menuTitle?: string | null;
+  clearMenuTitle?: boolean;
 };
 
 export type MenuSelectionStatus = {
@@ -43,6 +46,7 @@ async function ensureMenuSelectionTable(prisma: NonNullable<ReturnType<typeof ge
       \`sortOrder\` INT NOT NULL DEFAULT 0,
       \`parentOverride\` INT NULL,
       \`iconUrl\` VARCHAR(500) NULL,
+      \`menuTitle\` VARCHAR(191) NULL,
       \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
       UNIQUE INDEX \`CategoryMenuSelection_categoryId_key\`(\`categoryId\`),
@@ -57,6 +61,7 @@ async function ensureMenuSelectionTable(prisma: NonNullable<ReturnType<typeof ge
     "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `sortOrder` INT NOT NULL DEFAULT 0",
     "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `parentOverride` INT NULL",
     "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `iconUrl` VARCHAR(500) NULL",
+    "ALTER TABLE `CategoryMenuSelection` ADD COLUMN `menuTitle` VARCHAR(191) NULL",
   ];
 
   for (const statement of alterStatements) {
@@ -133,6 +138,7 @@ function rebuildMenuTree(
       showInMenu: boolean;
       sortOrder: number;
       parentOverride: number | null;
+      menuTitle: string | null;
       effectiveParent: number;
     }
   >,
@@ -158,6 +164,7 @@ function rebuildMenuTree(
       showInMenu: category.showInMenu,
       sortOrder: category.sortOrder,
       parentOverride: category.parentOverride,
+      menuTitle: category.menuTitle,
       children: rebuildMenuTree(flat, category.id),
     }));
 }
@@ -179,6 +186,7 @@ function applyOverridesToCategories(
       showInMenu: setting?.showInMenu ?? false,
       sortOrder,
       parentOverride,
+      menuTitle: setting?.menuTitle ?? null,
       effectiveParent: resolveEffectiveParent(category.parent, parentOverride),
     };
   });
@@ -232,6 +240,7 @@ function filterMenuTree(categories: CategoryMenuSelectionNode[]): CategoryMenuSe
 function toMenuNodes(categories: CategoryMenuSelectionNode[]): CategoryMenuSelectionNode[] {
   return categories.map((category) => ({
     ...category,
+    title: category.menuTitle?.trim() || category.title,
     children: toMenuNodes(category.children),
   }));
 }
@@ -280,6 +289,7 @@ async function getSelectionSettingsMap(): Promise<{
             sortOrder: setting.sortOrder ?? 0,
             parentOverride: setting.parentOverride ?? null,
             iconUrl: setting.iconUrl ?? null,
+            menuTitle: setting.menuTitle ?? null,
           },
         ]),
       ),
@@ -306,6 +316,7 @@ function wooTreeAsSelection(categories: WooCategoryNode[]): CategoryMenuSelectio
     showInMenu: false,
     sortOrder: index * 10,
     parentOverride: null,
+    menuTitle: null,
     children: wooTreeAsSelection(category.children),
   }));
 }
@@ -402,6 +413,15 @@ export async function updateCategoryMenuSelection(
     iconUrl = input.iconUrl.trim() || null;
   }
 
+  let menuTitle: string | null = existing?.menuTitle ?? null;
+  if (input.clearMenuTitle) {
+    menuTitle = null;
+  } else if (typeof input.menuTitle === "string") {
+    menuTitle = input.menuTitle.trim() || null;
+  } else if (input.menuTitle === null) {
+    menuTitle = null;
+  }
+
   return prisma.categoryMenuSelection.upsert({
     where: { categoryId: category.id },
     create: {
@@ -411,6 +431,7 @@ export async function updateCategoryMenuSelection(
       sortOrder,
       parentOverride,
       iconUrl,
+      menuTitle,
     },
     update: {
       slug: category.slug || input.slug,
@@ -418,8 +439,45 @@ export async function updateCategoryMenuSelection(
       sortOrder,
       parentOverride,
       iconUrl,
+      menuTitle,
     },
   });
+}
+
+export type MenuStructureItem = {
+  id: number;
+  slug: string;
+  parentOverride: number;
+  sortOrder: number;
+  showInMenu?: boolean;
+  menuTitle?: string | null;
+  iconUrl?: string | null;
+};
+
+export async function saveMenuStructure(items: MenuStructureItem[]) {
+  const parentById = new Map(items.map((item) => [item.id, item.parentOverride]));
+
+  for (const item of items) {
+    let parentOverride = item.parentOverride;
+    if (parentOverride === item.id || wouldCreateCycle(item.id, parentOverride, parentById)) {
+      parentOverride = 0;
+      parentById.set(item.id, 0);
+    }
+
+    await updateCategoryMenuSelection(
+      { id: item.id, slug: item.slug },
+      {
+        slug: item.slug,
+        showInMenu: item.showInMenu !== false,
+        sortOrder: item.sortOrder,
+        parentOverride,
+        menuTitle: item.menuTitle,
+        iconUrl: item.iconUrl,
+      },
+    );
+  }
+
+  return { ok: true as const, count: items.length };
 }
 
 export async function swapCategorySortOrder(categoryId: number, direction: "up" | "down", wooTree: WooCategoryNode[]) {

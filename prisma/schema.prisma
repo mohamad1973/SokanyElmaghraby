@@ -15,6 +15,7 @@ model CategoryMenuSelection {
   sortOrder      Int      @default(0)
   parentOverride Int?
   iconUrl        String?  @db.VarChar(500)
+  menuTitle      String?  @db.VarChar(191)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

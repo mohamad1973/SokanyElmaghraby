@@ -71,6 +71,8 @@ export type CategoryMenuSelectionNode = Omit<WooCategoryNode, "children"> & {
   sortOrder: number;
   /** null = use Woo parent; 0 = root; otherwise custom parent id */
   parentOverride: number | null;
+  /** Custom storefront label; null = use Woo title */
+  menuTitle: string | null;
   children: CategoryMenuSelectionNode[];
 };
 
