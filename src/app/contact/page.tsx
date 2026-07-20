@@ -20,8 +20,8 @@ export default function ContactPage() {
           </h1>
           <p className="mt-5 leading-8 text-zinc-300">
             <VisualEditableText textKey="contact.description">
-              صفحة تواصل واضحة تزيد الثقة وتساعد العميل يسأل عن المنتج أو الضمان أو
-              حالة الشحن قبل الشراء.
+              مؤسسة المغربي مؤسسة عريقة تسعى لخدمة العملاء وإرضائهم، ونرحب بتواصلكم معنا لأي
+              استفسار عن المنتجات أو الضمان أو الشحن.
             </VisualEditableText>
           </p>
           <div className="mt-8 space-y-4 text-sm text-zinc-300">
