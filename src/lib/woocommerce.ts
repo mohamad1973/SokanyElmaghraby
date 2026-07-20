@@ -406,13 +406,15 @@ async function collectVisibleProducts(
 ) {
   const pageSize = getProductFetchPageSize(limit);
   const categoryQuery = categoryQueryParam(categoryIds);
+  /** Woo REST returns newest first; without this, a page of OOS items can starve the section. */
+  const stockQuery = options?.includeUnavailable ? "" : "&stock_status=instock";
   const collected: Product[] = [];
 
   for (let page = 1; page <= 5 && collected.length < limit; page += 1) {
     const raw =
       source === "woo"
         ? await wooFetch<WooProduct[]>(
-            `products?per_page=${pageSize}&page=${page}&status=publish${categoryQuery}`,
+            `products?per_page=${pageSize}&page=${page}&status=publish${stockQuery}${categoryQuery}`,
           )
         : await storeFetch<StoreApiProduct[]>(
             `products?per_page=${pageSize}&page=${page}${categoryQuery}`,
@@ -450,14 +452,15 @@ export async function getProducts(
 
   const wooProducts = await collectVisibleProducts(limit, categoryIds, options, "woo");
 
-  if (wooProducts.length) {
+  if (wooProducts.length >= limit) {
     return wooProducts;
   }
 
   const storeProducts = await collectVisibleProducts(limit, categoryIds, options, "store");
+  const merged = uniqueProducts([...wooProducts, ...storeProducts], limit);
 
-  if (storeProducts.length) {
-    return storeProducts;
+  if (merged.length) {
+    return merged;
   }
 
   if (categorySlug) {
@@ -468,7 +471,9 @@ export async function getProducts(
 }
 
 export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<Product[]> {
-  const data = await wooFetch<WooProduct[]>(`products?featured=true&per_page=${limit}&status=publish`);
+  const data = await wooFetch<WooProduct[]>(
+    `products?featured=true&per_page=${limit}&status=publish&stock_status=instock`,
+  );
 
   if (data?.length) {
     const featuredProducts = data.map(mapProduct).filter((product) => visibleForStorefront(product));
@@ -478,7 +483,7 @@ export async function getFeaturedProducts(limit = 8, minimumCount = 4): Promise<
     }
 
     const supplementalData = await wooFetch<WooProduct[]>(
-      `products?per_page=${limit}&status=publish&orderby=popularity`,
+      `products?per_page=${limit}&status=publish&stock_status=instock&orderby=popularity`,
     );
 
     return uniqueProducts(

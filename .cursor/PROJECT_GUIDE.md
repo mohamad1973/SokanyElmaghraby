@@ -312,7 +312,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
-| إصلاح عدد منتجات السكشن المخصص | جلب تصنيفات الأبناء كاملة + over-fetch/paginate حتى اكتمال `productLimit` بعد فلتر الصورة/المخزون؛ الشبكة تحترم `productLimit` | `woocommerce.ts`, `product-section-grid.tsx`, `custom-product-section.tsx` |
+| إصلاح عدد منتجات السكشن المخصص | السبب: Woo REST يعيد نافداً أولاً فيظهر كرتان فقط؛ الحل: `stock_status=instock` + إكمال العدد من Store API + أبناء التصنيف/over-fetch | `woocommerce.ts`, `product-section-grid.tsx`, `custom-product-section.tsx` |
 | تفعيل فورم تواصل معنا | إرسال الاسم/الهاتف/الرسالة إلى `info@sokanyelmaghraby.com` عبر SMTP | `contact-form.tsx`, `api/contact`, `contact-mail.ts` |
 | سحب منيو + اسم عرض مخصص | dnd-kit شجري بدل أعلى/أسفل؛ `menuTitle` للفرونت؛ PUT structure؛ أول جذر يظهر يمين الهيدر | `wordpress-menu-builder.tsx`, `category-menu-selection.ts`, `structure` API |
 | منيو تصنيفات بواجهة ووردبريس الكلاسيكية | عمودان: إضافة تصنيفات (checkbox) + هيكل القائمة؛ bulk API؛ أعلى/أسفل/أب/أيقونة/إزالة | `wordpress-menu-builder.tsx`, `category-menu-selection/bulk`, `navigation/page.tsx` |
