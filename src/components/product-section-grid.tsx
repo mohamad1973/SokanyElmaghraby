@@ -11,6 +11,8 @@ type ProductSectionGridProps = {
   tabletColumns: number;
   mobileColumns: number;
   rowCount: number;
+  /** Prefer showing at least this many cards when products are available. */
+  productLimit?: number;
 };
 
 function getSafeColumnCount(value: number | undefined, fallback: number) {
@@ -64,12 +66,15 @@ export function ProductSectionGrid({
   tabletColumns,
   mobileColumns,
   rowCount,
+  productLimit,
 }: ProductSectionGridProps) {
   const columns = useResponsiveColumns({ desktopColumns, tabletColumns, mobileColumns });
   const safeRowCount = getSafeColumnCount(rowCount, 1);
+  const gridCapacity = columns * safeRowCount;
+  const displayLimit = Math.max(gridCapacity, getSafeColumnCount(productLimit, gridCapacity));
   const productsWithImages = products
     .filter((product) => product.images?.length && !product.image.includes("product-placeholder"))
-    .slice(0, columns * safeRowCount);
+    .slice(0, displayLimit);
 
   if (!productsWithImages.length) {
     return null;

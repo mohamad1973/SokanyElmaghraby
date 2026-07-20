@@ -290,21 +290,54 @@ async function getCategoryIdBySlug(slug?: string) {
   return wooData?.[0]?.id || null;
 }
 
-async function getCategoryIdsBySlug(slug?: string) {
-  if (!slug) {
-    return [];
+type CategoryTreeNode = {
+  id: number;
+  slug: string;
+  parent?: number;
+};
+
+async function getAllCategoryNodes(): Promise<CategoryTreeNode[]> {
+  const nodes: CategoryTreeNode[] = [];
+
+  for (let page = 1; page <= 10; page += 1) {
+    const batch = await wooFetch<WooCategory[]>(
+      `products/categories?per_page=100&page=${page}&hide_empty=false`,
+    );
+
+    if (!batch?.length) {
+      break;
+    }
+
+    nodes.push(
+      ...batch.map((category) => ({
+        id: category.id,
+        slug: category.slug,
+        parent: category.parent || 0,
+      })),
+    );
+
+    if (batch.length < 100) {
+      break;
+    }
   }
 
-  const categories = await storeFetch<StoreApiCategory[]>("products/categories?per_page=100");
-  const selectedCategory = categories?.find((category) => category.slug === slug);
-
-  if (!categories?.length || !selectedCategory) {
-    const categoryId = await getCategoryIdBySlug(slug);
-
-    return categoryId ? [categoryId] : [];
+  if (nodes.length) {
+    return nodes;
   }
 
-  const descendantIds = new Set<number>([selectedCategory.id]);
+  const storeCategories = await storeFetch<StoreApiCategory[]>("products/categories?per_page=100");
+
+  return (
+    storeCategories?.map((category) => ({
+      id: category.id,
+      slug: category.slug,
+      parent: category.parent || 0,
+    })) || []
+  );
+}
+
+function expandCategoryDescendants(categories: CategoryTreeNode[], rootId: number) {
+  const descendantIds = new Set<number>([rootId]);
   let foundChild = true;
 
   while (foundChild) {
@@ -321,14 +354,87 @@ async function getCategoryIdsBySlug(slug?: string) {
   return Array.from(descendantIds);
 }
 
-function uniqueProducts(products: Product[], limit: number) {
+async function getCategoryIdsBySlug(slug?: string) {
+  if (!slug) {
+    return [];
+  }
+
+  const categories = await getAllCategoryNodes();
+  const selectedCategory = categories.find((category) => category.slug === slug);
+
+  if (selectedCategory) {
+    return expandCategoryDescendants(categories, selectedCategory.id);
+  }
+
+  const categoryId = await getCategoryIdBySlug(slug);
+
+  return categoryId ? [categoryId] : [];
+}
+
+function dedupeProducts(products: Product[]) {
   const productsById = new Map<number, Product>();
 
   products.forEach((product) => {
     productsById.set(product.id, product);
   });
 
-  return Array.from(productsById.values()).slice(0, limit);
+  return Array.from(productsById.values());
+}
+
+function uniqueProducts(products: Product[], limit: number) {
+  return dedupeProducts(products).slice(0, limit);
+}
+
+function categoryQueryParam(categoryIds: number[]) {
+  if (!categoryIds.length) {
+    return "";
+  }
+
+  return `&category=${categoryIds.join(",")}`;
+}
+
+/** Request more than `limit` so image/stock filters can still fill the section. */
+function getProductFetchPageSize(limit: number) {
+  return Math.min(100, Math.max(limit * 4, limit + 20));
+}
+
+async function collectVisibleProducts(
+  limit: number,
+  categoryIds: number[],
+  options: ProductQueryOptions | undefined,
+  source: "woo" | "store",
+) {
+  const pageSize = getProductFetchPageSize(limit);
+  const categoryQuery = categoryQueryParam(categoryIds);
+  const collected: Product[] = [];
+
+  for (let page = 1; page <= 5 && collected.length < limit; page += 1) {
+    const raw =
+      source === "woo"
+        ? await wooFetch<WooProduct[]>(
+            `products?per_page=${pageSize}&page=${page}&status=publish${categoryQuery}`,
+          )
+        : await storeFetch<StoreApiProduct[]>(
+            `products?per_page=${pageSize}&page=${page}${categoryQuery}`,
+          );
+
+    if (!raw?.length) {
+      break;
+    }
+
+    const mapped =
+      source === "woo"
+        ? (raw as WooProduct[]).map(mapProduct)
+        : (raw as StoreApiProduct[]).map(mapStoreProduct);
+
+    collected.push(...mapped.filter((product) => visibleForStorefront(product, options)));
+
+    if (raw.length < pageSize) {
+      break;
+    }
+  }
+
+  return uniqueProducts(collected, limit);
 }
 
 export async function getProducts(
@@ -337,35 +443,25 @@ export async function getProducts(
   options?: ProductQueryOptions,
 ): Promise<Product[]> {
   const categoryIds = await getCategoryIdsBySlug(categorySlug);
-  const categoryId = categoryIds[0];
-  const categoryQuery = categoryId ? `&category=${categoryId}` : "";
-  const data = categoryIds.length > 1
-    ? (
-        await Promise.all(
-          categoryIds.map((id) => wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish&category=${id}`)),
-        )
-      ).flatMap((categoryProducts) => categoryProducts || [])
-    : await wooFetch<WooProduct[]>(`products?per_page=${limit}&status=publish${categoryQuery}`);
 
-  if (data?.length) {
-    return uniqueProducts(data.map(mapProduct).filter((product) => visibleForStorefront(product, options)), limit);
+  if (categorySlug && !categoryIds.length) {
+    return [];
   }
 
-  const storeData = categoryIds.length > 1
-    ? (
-        await Promise.all(
-          categoryIds.map((id) => storeFetch<StoreApiProduct[]>(`products?per_page=${limit}&category=${id}`)),
-        )
-      ).flatMap((categoryProducts) => categoryProducts || [])
-    : await storeFetch<StoreApiProduct[]>(
-        `products?per_page=${limit}${categoryId ? `&category=${categoryId}` : ""}`,
-      );
+  const wooProducts = await collectVisibleProducts(limit, categoryIds, options, "woo");
 
-  if (storeData?.length) {
-    return uniqueProducts(
-      storeData.map(mapStoreProduct).filter((product) => visibleForStorefront(product, options)),
-      limit,
-    );
+  if (wooProducts.length) {
+    return wooProducts;
+  }
+
+  const storeProducts = await collectVisibleProducts(limit, categoryIds, options, "store");
+
+  if (storeProducts.length) {
+    return storeProducts;
+  }
+
+  if (categorySlug) {
+    return [];
   }
 
   return fallbackProducts.filter((product) => visibleForStorefront(product, options)).slice(0, limit);

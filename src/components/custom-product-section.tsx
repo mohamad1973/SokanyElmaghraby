@@ -117,6 +117,7 @@ export function CustomProductSection({ section, products }: CustomProductSection
               tabletColumns={section.tabletColumns}
               mobileColumns={section.mobileColumns}
               rowCount={section.rowCount}
+              productLimit={section.productLimit}
             />
           )}
         </div>
