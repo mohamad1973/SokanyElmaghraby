@@ -14,6 +14,7 @@ const fallbackReviews: CustomerReviewsSectionSettings = {
   ratingValue: "4.9",
   trustText: "أكثر من آلاف العملاء وثقوا فينا",
   guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
+  verifiedBadgeLabel: "عميل مميز",
   items: [],
 };
 
@@ -150,6 +151,15 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
             className="rounded-xl border border-black/10 px-3 py-2"
           />
         </label>
+        <label className="grid gap-1 text-sm font-bold lg:col-span-2">
+          نص شارة العميل
+          <input
+            value={reviews.verifiedBadgeLabel}
+            onChange={(event) => updateReviews({ verifiedBadgeLabel: event.target.value })}
+            className="rounded-xl border border-black/10 px-3 py-2"
+            placeholder="عميل مميز"
+          />
+        </label>
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -274,7 +284,7 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
               checked={item.verified}
               onChange={(event) => updateItem(index, { verified: event.target.checked })}
             />
-            شراء مؤكد
+            إظهار شارة: {reviews.verifiedBadgeLabel || "عميل مميز"}
           </label>
           <label className="grid gap-1 text-sm font-bold">
             لون الكارت

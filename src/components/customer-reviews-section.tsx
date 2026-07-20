@@ -89,7 +89,15 @@ function AudioReviewPlayer({
   );
 }
 
-function ReviewCard({ item, guaranteeText }: { item: CustomerReviewItem; guaranteeText: string }) {
+function ReviewCard({
+  item,
+  guaranteeText,
+  verifiedBadgeLabel,
+}: {
+  item: CustomerReviewItem;
+  guaranteeText: string;
+  verifiedBadgeLabel: string;
+}) {
   const isGold = item.cardTone === "gold";
   const initial = item.name.trim().slice(0, 1) || "ع";
   const hasAudio = Boolean(item.audioUrl);
@@ -118,7 +126,7 @@ function ReviewCard({ item, guaranteeText }: { item: CustomerReviewItem; guarant
             <div className="mt-2 flex items-center justify-between gap-2">
               {item.verified ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand-gold px-2.5 py-1 text-[11px] font-bold text-black">
-                  ✓ شراء مؤكد
+                  ✓ {verifiedBadgeLabel}
                 </span>
               ) : (
                 <span />
@@ -182,7 +190,7 @@ function ReviewCard({ item, guaranteeText }: { item: CustomerReviewItem; guarant
                 isGold ? "text-[#DAFF00]" : "text-sky-700"
               }`}
             >
-              أطلبه الآن ←
+              احصل عليه ←
             </Link>
           </div>
         </div>
@@ -211,7 +219,7 @@ function useReviewVisibleCount() {
         setVisibleCount(2);
         return;
       }
-      setVisibleCount(1);
+      setVisibleCount(2);
     }
 
     update();
@@ -295,7 +303,11 @@ export function CustomerReviewsSection({ settings }: { settings: CustomerReviews
               className="shrink-0 snap-start"
               style={{ flexBasis: itemBasis, maxWidth: itemBasis }}
             >
-              <ReviewCard item={item} guaranteeText={settings.guaranteeText} />
+              <ReviewCard
+                item={item}
+                guaranteeText={settings.guaranteeText}
+                verifiedBadgeLabel={settings.verifiedBadgeLabel || "عميل مميز"}
+              />
             </div>
           ))}
         </div>

@@ -59,6 +59,7 @@ export type CustomerReviewsSectionSettings = {
   ratingValue: string;
   trustText: string;
   guaranteeText: string;
+  verifiedBadgeLabel: string;
   items: CustomerReviewItem[];
 };
 
@@ -382,6 +383,7 @@ export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
   ratingValue: "4.9",
   trustText: "أكثر من آلاف العملاء وثقوا فينا",
   guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
+  verifiedBadgeLabel: "عميل مميز",
   items: [
     {
       id: "sample-1",
@@ -1004,6 +1006,10 @@ function mergeCustomerReviewsSettings(value: unknown): CustomerReviewsSectionSet
     trustText: typeof reviews.trustText === "string" ? reviews.trustText : defaultCustomerReviewsSettings.trustText,
     guaranteeText:
       typeof reviews.guaranteeText === "string" ? reviews.guaranteeText : defaultCustomerReviewsSettings.guaranteeText,
+    verifiedBadgeLabel:
+      typeof reviews.verifiedBadgeLabel === "string" && reviews.verifiedBadgeLabel.trim()
+        ? reviews.verifiedBadgeLabel.trim()
+        : defaultCustomerReviewsSettings.verifiedBadgeLabel,
     items,
   };
 }
