@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { ContactForm } from "@/components/contact-form";
 import { VisualEditableText } from "@/components/visual-editable-text";
 
 export const metadata: Metadata = {
@@ -24,9 +25,15 @@ export default function ContactPage() {
             </VisualEditableText>
           </p>
           <div className="mt-8 space-y-4 text-sm text-zinc-300">
-            <p><VisualEditableText textKey="contact.whatsapp">واتساب: يتم إضافة الرقم الرسمي</VisualEditableText></p>
-            <p><VisualEditableText textKey="contact.phone">الهاتف: يتم إضافة رقم خدمة العملاء</VisualEditableText></p>
-            <p><VisualEditableText textKey="contact.address">العنوان: يتم إضافة بيانات مؤسسة المغربي</VisualEditableText></p>
+            <p>
+              <VisualEditableText textKey="contact.whatsapp">واتساب: يتم إضافة الرقم الرسمي</VisualEditableText>
+            </p>
+            <p>
+              <VisualEditableText textKey="contact.phone">الهاتف: يتم إضافة رقم خدمة العملاء</VisualEditableText>
+            </p>
+            <p>
+              <VisualEditableText textKey="contact.address">العنوان: يتم إضافة بيانات مؤسسة المغربي</VisualEditableText>
+            </p>
           </div>
         </aside>
 
@@ -34,28 +41,9 @@ export default function ContactPage() {
           <h2 className="text-2xl font-bold text-zinc-950">
             <VisualEditableText textKey="contact.formTitle">أرسل رسالة</VisualEditableText>
           </h2>
-          <form className="mt-6 grid gap-5">
-            {["الاسم", "رقم الهاتف", "موضوع الرسالة"].map((field) => (
-              <input
-                key={field}
-                className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-                placeholder={field}
-              />
-            ))}
-            <textarea
-              className="min-h-36 rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-              placeholder="اكتب رسالتك"
-            />
-            <button
-              type="button"
-              className="rounded-full bg-brand-gold px-8 py-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark"
-            >
-              <VisualEditableText textKey="contact.submit">إرسال الرسالة</VisualEditableText>
-            </button>
-          </form>
+          <ContactForm />
         </section>
       </div>
     </div>
   );
 }
-

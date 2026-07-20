@@ -148,6 +148,7 @@
 | `GET /api/products/search` | بحث | `src/app/api/products/search/route.ts` |
 | `GET /api/products/compare` | مقارنة | `src/app/api/products/compare/route.ts` |
 | `POST /api/checkout` | إنشاء طلب Woo + redirect COD/فوري | `src/app/api/checkout/route.ts` |
+| `POST /api/contact` | فورم تواصل معنا → إيميل SMTP | `src/app/api/contact/route.ts` |
 | `GET /api/shipping/bosta/cities` | محافظات Bosta | `src/app/api/shipping/bosta/cities/route.ts` |
 | `GET /api/shipping/bosta/districts?cityId=` | مناطق Bosta | `src/app/api/shipping/bosta/districts/route.ts` |
 | `GET/POST /api/fawry/callback` | تحديث طلب بعد دفع فوري | `src/app/api/fawry/callback/route.ts` |
@@ -292,6 +293,9 @@
 | `NEXTAUTH_SECRET` | جلسات أدمن/سائق + توقيع جلسة العميل |
 | `NEXTAUTH_URL` | URL التطبيق (Vercel) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | دخول الأدمن |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | إرسال فورم تواصل معنا (مثلاً Hostinger) |
+| `CONTACT_FROM_EMAIL` | عنوان المرسل في الفورم |
+| `CONTACT_TO_EMAIL` | صندوق الاستقبال (افتراضي: `info@sokanyelmaghraby.com`) |
 | `DATABASE_URL` | Prisma (شحن، توصيل، theme، wishlist) |
 | `BOSTA_API_KEY`, `BOSTA_BASE_URL`, `BOSTA_WEBHOOK_SECRET` | شحن Bosta |
 | `GOOGLE_MAPS_API_KEY` | تحسين مسار السائق |
@@ -308,6 +312,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تفعيل فورم تواصل معنا | إرسال الاسم/الهاتف/الرسالة إلى `info@sokanyelmaghraby.com` عبر SMTP | `contact-form.tsx`, `api/contact`, `contact-mail.ts` |
 | سحب منيو + اسم عرض مخصص | dnd-kit شجري بدل أعلى/أسفل؛ `menuTitle` للفرونت؛ PUT structure؛ أول جذر يظهر يمين الهيدر | `wordpress-menu-builder.tsx`, `category-menu-selection.ts`, `structure` API |
 | منيو تصنيفات بواجهة ووردبريس الكلاسيكية | عمودان: إضافة تصنيفات (checkbox) + هيكل القائمة؛ bulk API؛ أعلى/أسفل/أب/أيقونة/إزالة | `wordpress-menu-builder.tsx`, `category-menu-selection/bulk`, `navigation/page.tsx` |
 | أيقونة مايك جديدة فوق تقييم صوتي | استبدال المايك بأيقونة خطية شفافة؛ أبيض على أسود / أسود على ذهبي؛ المايك فوق النص | `studio-mic.png`, `customer-reviews-section.tsx` |
