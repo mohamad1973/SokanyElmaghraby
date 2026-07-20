@@ -206,26 +206,32 @@ function ReviewCard({
 const REVIEW_CAROUSEL_INTERVAL_MS = 10_000;
 const REVIEW_GAP_REM = 1;
 
-function useReviewVisibleCount() {
-  const [visibleCount, setVisibleCount] = useState(4);
+function useReviewVisibleCount(settings: {
+  desktopVisibleCount: number;
+  tabletVisibleCount: number;
+  mobileVisibleCount: number;
+}) {
+  const [visibleCount, setVisibleCount] = useState(() =>
+    Math.max(1, settings.mobileVisibleCount || 1),
+  );
 
   useEffect(() => {
     function update() {
       if (window.matchMedia("(min-width: 1024px)").matches) {
-        setVisibleCount(4);
+        setVisibleCount(Math.max(1, settings.desktopVisibleCount || 4));
         return;
       }
       if (window.matchMedia("(min-width: 640px)").matches) {
-        setVisibleCount(2);
+        setVisibleCount(Math.max(1, settings.tabletVisibleCount || 2));
         return;
       }
-      setVisibleCount(2);
+      setVisibleCount(Math.max(1, settings.mobileVisibleCount || 1));
     }
 
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, []);
+  }, [settings.desktopVisibleCount, settings.tabletVisibleCount, settings.mobileVisibleCount]);
 
   return visibleCount;
 }
@@ -234,9 +240,9 @@ export function CustomerReviewsSection({ settings }: { settings: CustomerReviews
   const scrollerRef = useRef<HTMLDivElement>(null);
   const activeIndexRef = useRef(0);
   const [paused, setPaused] = useState(false);
-  const visibleCount = useReviewVisibleCount();
+  const visibleCount = useReviewVisibleCount(settings);
   const items = settings.items;
-  const shouldAutoScroll = items.length > 4;
+  const shouldAutoScroll = items.length > visibleCount;
   const columns = Math.min(visibleCount, Math.max(1, items.length));
   const itemBasis = `calc((100% - (${columns} - 1) * ${REVIEW_GAP_REM}rem) / ${columns})`;
 

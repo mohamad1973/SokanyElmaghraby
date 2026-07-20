@@ -60,6 +60,9 @@ export type CustomerReviewsSectionSettings = {
   trustText: string;
   guaranteeText: string;
   verifiedBadgeLabel: string;
+  desktopVisibleCount: number;
+  tabletVisibleCount: number;
+  mobileVisibleCount: number;
   items: CustomerReviewItem[];
 };
 
@@ -384,6 +387,9 @@ export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
   trustText: "أكثر من آلاف العملاء وثقوا فينا",
   guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
   verifiedBadgeLabel: "عميل مميز",
+  desktopVisibleCount: 4,
+  tabletVisibleCount: 2,
+  mobileVisibleCount: 1,
   items: [
     {
       id: "sample-1",
@@ -1010,6 +1016,18 @@ function mergeCustomerReviewsSettings(value: unknown): CustomerReviewsSectionSet
       typeof reviews.verifiedBadgeLabel === "string" && reviews.verifiedBadgeLabel.trim()
         ? reviews.verifiedBadgeLabel.trim()
         : defaultCustomerReviewsSettings.verifiedBadgeLabel,
+    desktopVisibleCount:
+      typeof reviews.desktopVisibleCount === "number"
+        ? Math.min(8, Math.max(1, Math.round(reviews.desktopVisibleCount)))
+        : defaultCustomerReviewsSettings.desktopVisibleCount,
+    tabletVisibleCount:
+      typeof reviews.tabletVisibleCount === "number"
+        ? Math.min(6, Math.max(1, Math.round(reviews.tabletVisibleCount)))
+        : defaultCustomerReviewsSettings.tabletVisibleCount,
+    mobileVisibleCount:
+      typeof reviews.mobileVisibleCount === "number"
+        ? Math.min(4, Math.max(1, Math.round(reviews.mobileVisibleCount)))
+        : defaultCustomerReviewsSettings.mobileVisibleCount,
     items,
   };
 }

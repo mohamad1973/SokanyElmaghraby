@@ -15,6 +15,9 @@ const fallbackReviews: CustomerReviewsSectionSettings = {
   trustText: "أكثر من آلاف العملاء وثقوا فينا",
   guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
   verifiedBadgeLabel: "عميل مميز",
+  desktopVisibleCount: 4,
+  tabletVisibleCount: 2,
+  mobileVisibleCount: 1,
   items: [],
 };
 
@@ -158,6 +161,45 @@ export function ReviewsSettingsForm({ initialSettings }: ReviewsSettingsFormProp
             onChange={(event) => updateReviews({ verifiedBadgeLabel: event.target.value })}
             className="rounded-xl border border-black/10 px-3 py-2"
             placeholder="عميل مميز"
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-bold">
+          عدد الكروت — ديسكتوب
+          <input
+            type="number"
+            min={1}
+            max={8}
+            value={reviews.desktopVisibleCount}
+            onChange={(event) =>
+              updateReviews({ desktopVisibleCount: Math.min(8, Math.max(1, Number(event.target.value) || 4)) })
+            }
+            className="rounded-xl border border-black/10 px-3 py-2"
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-bold">
+          عدد الكروت — تابلت
+          <input
+            type="number"
+            min={1}
+            max={6}
+            value={reviews.tabletVisibleCount}
+            onChange={(event) =>
+              updateReviews({ tabletVisibleCount: Math.min(6, Math.max(1, Number(event.target.value) || 2)) })
+            }
+            className="rounded-xl border border-black/10 px-3 py-2"
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-bold">
+          عدد الكروت — موبايل
+          <input
+            type="number"
+            min={1}
+            max={4}
+            value={reviews.mobileVisibleCount}
+            onChange={(event) =>
+              updateReviews({ mobileVisibleCount: Math.min(4, Math.max(1, Number(event.target.value) || 1)) })
+            }
+            className="rounded-xl border border-black/10 px-3 py-2"
           />
         </label>
       </section>
