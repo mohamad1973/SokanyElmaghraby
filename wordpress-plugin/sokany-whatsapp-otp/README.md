@@ -1,17 +1,22 @@
 # SOKANY WhatsApp OTP
 
-WordPress plugin for WhatsApp OTP customer flows.
+WordPress plugin for WhatsApp OTP customer flows **and** WooCommerce order confirmation via MazBot.
+
+**Current version: 1.3.0**
 
 ## What It Does
 
-- Sends OTP for password reset, login, and registration.
-- Sends customer **order confirmation** WhatsApp via MazBot on WooCommerce order create.
+- Sends OTP for password reset, login, and registration (REST API for the headless storefront).
+- Optional **My Account OTP** UI on the native WooCommerce account page (login + register with WhatsApp code + WordPress cookie session).
+- Sends customer **order confirmation** WhatsApp via MazBot when a WooCommerce order is placed from:
+  - Classic shortcode checkout
+  - Checkout Blocks / Store API
+  - Headless / REST (Next.js storefront)
+- Queues sends through WooCommerce Action Scheduler (unique per order) with HPOS-safe state and retries.
 - Searches customers by `billing_phone`, `phone`, or `mobile` user meta.
-- Fixes headless storefront registration: maps REST JSON `billing.phone` into `$_POST` and clears false `phone_error` from themes/plugins that only check form POST.
+- Fixes headless storefront registration: maps REST JSON `billing.phone` into `$_POST` and clears false `phone_error`.
 - Stores OTP records in the same WordPress MySQL database.
-- Uses Test Mode before the real WhatsApp API is available.
-- Provides admin settings at:
-  `Settings > SOKANY WhatsApp OTP`
+- Admin settings at: `Settings > SOKANY WhatsApp OTP`
 
 ## REST Endpoints
 
@@ -35,214 +40,91 @@ Content-Type: application/json
 }
 ```
 
-Allowed purposes:
-
-- `reset_password`
-- `register`
-- `login`
+Allowed purposes: `reset_password`, `register`, `login`
 
 ### Verify OTP
 
 ```http
 POST /verify
-Content-Type: application/json
 ```
 
 ```json
 {
   "phone": "01000260262",
-  "purpose": "reset_password",
+  "purpose": "login",
   "otp": "123456"
 }
 ```
 
-Returns a temporary `token` if valid.
-
-### Reset Password
+### Account session (My Account UI only)
 
 ```http
-POST /reset-password
-Content-Type: application/json
+POST /account-session
 ```
 
-```json
-{
-  "phone": "01000260262",
-  "token": "TOKEN_FROM_VERIFY",
-  "password": "new-secure-password"
-}
-```
+Creates a WordPress logged-in cookie after OTP verify. Requires `nonce` from the localized My Account script.
 
-### Register Customer
+Also: `/reset-password`, `/register`, `/login`, `/change-password` (unchanged for the headless storefront).
 
-```http
-POST /register
-Content-Type: application/json
-```
+## Customer order WhatsApp (MazBot) — v1.3.0
 
-```json
-{
-  "name": "Customer Name",
-  "email": "customer@example.com",
-  "phone": "01000260262",
-  "password": "secure-password",
-  "token": "TOKEN_FROM_VERIFY"
-}
-```
+### Hooks
 
-### Complete Login (after OTP verify with purpose `login`)
+- `woocommerce_checkout_order_processed` — classic checkout
+- `woocommerce_store_api_checkout_order_processed` — Checkout Blocks
+- `woocommerce_rest_insert_shop_order_object` — headless / REST
+- `woocommerce_new_order` — delayed safety-net enqueue only
+- `woocommerce_update_order` — fallback when items arrive later
+- Worker: Action Scheduler hook `sokany_whatsapp_otp_process_order`
 
-```http
-POST /login
-Content-Type: application/json
-```
+### Behaviour
 
-```json
-{
-  "phone": "01000260262",
-  "token": "TOKEN_FROM_VERIFY"
-}
-```
+- Unified `queue_order_whatsapp()` → Action Scheduler → validate → MazBot template
+- One message per order (states: `queued` / `sending` / `sent` / `failed`)
+- HPOS-safe order meta via `$order->get_meta()` / `update_meta_data()` / `save_meta_data()`
+- Phone resolution: billing → shipping → customer user meta
+- Test Mode previews only (does **not** mark as sent)
+- Retries transient MazBot/network errors with backoff
+- WC logger source: `sokany-whatsapp-otp`
+- Admin: last history + **resend by Order ID**
 
-### Change Password (with current password)
+### Template variables
 
-```http
-POST /change-password
-Content-Type: application/json
-```
+- `{{1}}` customer name
+- `{{2}}` order number
+- `{{3}}` line summary
+- `{{4}}` total (`1,500 ج.م`)
 
-```json
-{
-  "email": "customer@example.com",
-  "currentPassword": "old-password",
-  "newPassword": "new-secure-password"
-}
-```
+Confirm button URL stays configured inside the MazBot template.
 
-## Test Mode
+## My Account OTP (native Woo)
 
-Keep `Mode = Test` while developing. The OTP code appears on:
+1. Enable **OTP في صفحة حساب ووكومرس** in plugin settings.
+2. Visit WooCommerce My Account while logged out.
+3. Use WhatsApp login/register panels above the classic forms.
 
-`Settings > SOKANY WhatsApp OTP`
+## Install / upgrade
 
-## Live Mode — MazBot (recommended)
+1. Upload the ZIP (or replace the plugin folder) so version shows **v1.3.0**.
+2. Keep Live + MazBot credentials.
+3. Enable order notifications + Order Template ID.
+4. Optionally enable My Account OTP.
+5. Place a test order from the **native Woo checkout** and confirm WhatsApp delivery.
+6. Check WooCommerce → Status → Logs → `sokany-whatsapp-otp` if needed.
 
-1. Connect WhatsApp in MazBot dashboard.
-2. Create and get Meta approval for an **Authentication / OTP** template.
-3. Note the real **template_id** from MazBot (not a placeholder like `1` unless that is the real ID).
-4. Use owner or staff credentials as MazBot support confirmed for your account.
-5. In WordPress: `Settings > SOKANY WhatsApp OTP`:
-   - Mode: **Live**
-   - Provider: **MazBot**
-   - MazBot API Base: `https://mazbot.net/api`
-   - API Key from MazBot → API page
-   - MazBot account email + password
-   - Template ID
-6. Use **Send test OTP via MazBot** on the settings page before testing the store.
+## Changelog
 
-The plugin:
+### 1.3.0
 
-1. Logs in via `POST /api/login` (and falls back to `/ar/api/login` / `/en/api/login` on 404)
-2. Caches JWT ~50 min and remembers the working API base
-3. Sends via `POST .../whatsapp/send-template`
-4. Surfaces the **real MazBot error** in admin settings and to the storefront API consumer
+- Checkout Blocks support (`woocommerce_store_api_checkout_order_processed`)
+- Unified Action Scheduler queue with retries and HPOS-safe state
+- My Account OTP login/register UI + `/account-session`
+- Admin order history + manual resend
 
-```json
-{
-  "template_id": 42,
-  "mobile": "201000260262",
-  "body_matchs": { "1": "input_value" },
-  "body_values": { "1": "123456" },
-  "button_matchs": { "1": "input_value" },
-  "button_values": { "1": "123456" }
-}
-```
+### 1.2.3
 
-`button_*` fields are optional (disable if your template has no copy-code button).
+- Order summary after line items ready; removed early `woocommerce_new_order` send
 
-Docs: https://api.mazbot.net/
+### 1.2.2
 
-## Customer order WhatsApp (MazBot)
-
-When a WooCommerce order is created, the plugin can send an approved **order confirmation** template to `billing_phone`.
-
-### Prerequisites
-
-1. Fix Meta/MazBot **Business eligibility payment issue** (messages otherwise appear in MazBot chat but not on the phone).
-2. Create a separate Meta template (not the OTP template), example name `sokany_order_confirm`, Arabic, category UTILITY:
-
-```text
-مرحباً {{1}} في سوكاني
-تم عمل أوردر رقم {{2}} بالمنتجات التالية {{3}} بقيمة {{4}}
-للتأكيد اضغط [زر: تأكيد الأوردر]
-أو انتظار مكالمة من أحد ممثلي خدمة العملاء خلال 24 ساعة عمل
-شكراً لثقتكم
-```
-
-3. Add a **URL button** labeled «تأكيد الأوردر» pointing to company WhatsApp with prefilled text:
-
-```text
-https://wa.me/201156111015?text=%D8%AA%D8%A3%D9%83%D9%8A%D8%AF%20%D8%A7%D9%84%D8%A7%D9%88%D8%B1%D8%AF%D8%B1
-```
-
-(Opens chat with `01156111015` and message «تأكيد الاوردر».)
-
-4. After **APPROVED**, copy the numeric **Template ID** into WordPress.
-
-### WordPress settings
-
-`Settings > SOKANY WhatsApp OTP` (v1.2.3+):
-
-- Mode: **Live**
-- Provider: **MazBot**
-- Enable **إشعار الأوردر**
-- Set **Order Template ID**
-- Use **اختبار قالب الأوردر** before placing a real order
-
-Hooks used:
-
-- `woocommerce_checkout_order_processed` (classic checkout)
-- `woocommerce_rest_insert_shop_order_object` (headless / REST — after line items)
-- `woocommerce_update_order` (fallback when items arrive on a later save)
-
-**Not** `woocommerce_new_order` (too early on REST: empty items / 0 total).
-
-Deduping: order meta `_sokany_order_wa_sent`  
-Send only when the order has at least one line item and `total > 0`.
-
-Variables sent to MazBot:
-
-- `{{1}}` → customer name  
-- `{{2}}` → order number  
-- `{{3}}` → line summary: `اسم ×كمية | سعر الوحدة ج.م | قيمة السطر ج.م` (truncated ~400 chars)  
-- `{{4}}` → order total as `1,500 ج.م`  
-
-The confirm button URL is configured **inside the MazBot template** (not sent by the plugin per order).  
-
-### E2E checklist
-
-1. Upload plugin ZIP / replace PHP → title shows **v1.2.3**
-2. Live + MazBot credentials OK (login test)
-3. Order Template ID saved and enabled
-4. Admin test order template → phone receives message (no eligibility error in MazBot chat)
-5. Place a storefront order → WhatsApp shows real product names, qty, unit price, line total, and order total (not «منتجات» / «0 EGP»); «آخر إرسال أوردر» shows `ok: true`
-
-## Live Mode — Generic API (legacy)
-
-For other providers, set Provider to **Generic API** and configure:
-
-- API Base URL
-- API Token
-- Token Header / Prefix
-- Sender ID
-- Template Name / Language
-
-```json
-{
-  "to": "201000260262",
-  "sender": "SENDER_ID",
-  "template": "otp_code",
-  "language": "ar",
-  "variables": ["123456", "5"]
-}
-```
+- REST customer phone mapping / `phone_error` fix

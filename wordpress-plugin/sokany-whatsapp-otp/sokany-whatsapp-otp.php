@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: SOKANY WhatsApp OTP
- * Description: WhatsApp OTP + customer order confirmation via MazBot for WooCommerce.
- * Version: 1.2.3
+ * Description: WhatsApp OTP + customer order confirmation via MazBot for WooCommerce (Classic, Blocks, REST) and My Account OTP.
+ * Version: 1.3.0
  * Author: SOKANY Egypt
  */
 
@@ -10,8 +10,14 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/includes/trait-order-whatsapp.php';
+require_once __DIR__ . '/includes/trait-account-otp.php';
+
 final class Sokany_WhatsApp_OTP {
-    private const VERSION = '1.2.3';
+    use Sokany_WhatsApp_OTP_Order_Trait;
+    use Sokany_WhatsApp_OTP_Account_Trait;
+
+    private const VERSION = '1.3.0';
     private const OPTION_KEY = 'sokany_whatsapp_otp_settings';
     private const LAST_TEST_OTP_OPTION = 'sokany_whatsapp_otp_last_test';
     private const LAST_ORDER_WA_OPTION = 'sokany_mazbot_last_order_wa';
@@ -44,12 +50,8 @@ final class Sokany_WhatsApp_OTP {
         add_action('admin_post_sokany_mazbot_test_login', [__CLASS__, 'handle_mazbot_test_login']);
         add_action('admin_post_sokany_mazbot_test_order', [__CLASS__, 'handle_mazbot_test_order']);
         add_action('update_option_' . self::OPTION_KEY, [__CLASS__, 'on_settings_updated'], 10, 0);
-        // Classic checkout (items already attached).
-        add_action('woocommerce_checkout_order_processed', [__CLASS__, 'on_woocommerce_order'], 20, 1);
-        // Headless / REST create — fires after line_items are saved (unlike woocommerce_new_order).
-        add_action('woocommerce_rest_insert_shop_order_object', [__CLASS__, 'on_woocommerce_rest_order'], 20, 3);
-        // Fallback when order is completed on a later save (admin / delayed line items).
-        add_action('woocommerce_update_order', [__CLASS__, 'on_woocommerce_order'], 20, 1);
+        self::register_order_hooks();
+        self::register_account_hooks();
     }
 
     public static function activate(): void {
@@ -151,6 +153,7 @@ final class Sokany_WhatsApp_OTP {
             'mazbot_include_button' => true,
             'order_wa_enabled' => false,
             'mazbot_order_template_id' => 0,
+            'woo_account_otp_enabled' => false,
             'api_base_url' => '',
             'api_token' => '',
             'api_token_header' => 'Authorization',
@@ -224,6 +227,7 @@ final class Sokany_WhatsApp_OTP {
             'mazbot_include_button' => !empty($settings['mazbot_include_button']),
             'order_wa_enabled' => !empty($settings['order_wa_enabled']),
             'mazbot_order_template_id' => max(0, (int) ($settings['mazbot_order_template_id'] ?? 0)),
+            'woo_account_otp_enabled' => !empty($settings['woo_account_otp_enabled']),
             'api_base_url' => esc_url_raw((string) ($settings['api_base_url'] ?? '')),
             'api_token' => self::clean_secret((string) ($settings['api_token'] ?? '')),
             'api_token_header' => sanitize_key((string) ($settings['api_token_header'] ?? 'Authorization')),
@@ -253,11 +257,16 @@ final class Sokany_WhatsApp_OTP {
         $test_notice = isset($_GET['mazbot_test']) ? sanitize_key((string) $_GET['mazbot_test']) : '';
         $login_notice = isset($_GET['mazbot_login']) ? sanitize_key((string) $_GET['mazbot_login']) : '';
         $order_notice = isset($_GET['mazbot_order']) ? sanitize_key((string) $_GET['mazbot_order']) : '';
+        $resend_notice = isset($_GET['mazbot_resend']) ? sanitize_key((string) $_GET['mazbot_resend']) : '';
         $api_key_len = strlen((string) ($settings['mazbot_api_key'] ?? ''));
         $password_len = strlen((string) ($settings['mazbot_password'] ?? ''));
         $api_key_tail = $api_key_len >= 4 ? substr((string) $settings['mazbot_api_key'], -4) : '';
         $plugin_file_mtime = @filemtime(__FILE__);
         $plugin_file_stamp = $plugin_file_mtime ? gmdate('Y-m-d H:i:s', $plugin_file_mtime) . ' UTC' : 'unknown';
+        $order_history = get_option(self::ORDER_WA_HISTORY_OPTION, []);
+        if (!is_array($order_history)) {
+            $order_history = [];
+        }
         ?>
         <div class="wrap" dir="rtl">
             <h1>SOKANY WhatsApp OTP <span style="font-size:13px;font-weight:normal;color:#666;">v<?php echo esc_html(self::VERSION); ?></span></h1>
@@ -305,6 +314,12 @@ final class Sokany_WhatsApp_OTP {
                 <div class="notice notice-error is-dismissible"><p>فشل اختبار قالب الأوردر. راجع «آخر خطأ API» أو «آخر إرسال أوردر» أدناه.</p></div>
             <?php elseif ($order_notice === 'test_mode') : ?>
                 <div class="notice notice-info is-dismissible"><p>الوضع Test Mode: لم يُرسل واتساب. راجع «آخر إرسال أوردر» للمعاينة.</p></div>
+            <?php endif; ?>
+
+            <?php if ($resend_notice === 'queued') : ?>
+                <div class="notice notice-success is-dismissible"><p>تمت جدولة إعادة إرسال رسالة الأوردر.</p></div>
+            <?php elseif ($resend_notice === 'invalid' || $resend_notice === 'missing') : ?>
+                <div class="notice notice-error is-dismissible"><p>تعذر إعادة الإرسال — تحقق من رقم الطلب.</p></div>
             <?php endif; ?>
 
             <?php if (!empty($last_test['code'])) : ?>
@@ -426,7 +441,7 @@ final class Sokany_WhatsApp_OTP {
                 </table>
 
                 <h2>إشعار واتساب للعميل عند الأوردر</h2>
-                <p class="description">عند إنشاء طلب WooCommerce يُرسل قالب MazBot إلى <code>billing_phone</code>. يعمل مع Live Mode + MazBot. يتطلب قالب أوردر معتمد منفصل عن OTP وإصلاح أهلية الدفع في Meta.</p>
+                <p class="description">عند إنشاء طلب WooCommerce يُرسل قالب MazBot إلى هاتف العميل. يدعم Classic Checkout و Checkout Blocks و REST (الموقع الجديد). يتطلب قالب أوردر معتمد منفصل عن OTP.</p>
                 <table class="form-table" role="presentation">
                     <tr>
                         <th scope="row">تفعيل إشعار الأوردر</th>
@@ -435,6 +450,10 @@ final class Sokany_WhatsApp_OTP {
                                 <input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[order_wa_enabled]" value="1" <?php checked(!empty($settings['order_wa_enabled'])); ?> />
                                 أرسل واتساب للعميل عند إنشاء الطلب
                             </label>
+                            <p class="description">
+                                Action Scheduler: <?php echo function_exists('as_schedule_single_action') ? '<strong style="color:green;">متاح</strong>' : '<strong style="color:#b32d2e;">غير متاح (fallback wp-cron)</strong>'; ?>
+                                — هوك Blocks: <code>woocommerce_store_api_checkout_order_processed</code>
+                            </p>
                         </td>
                     </tr>
                     <tr>
@@ -442,6 +461,20 @@ final class Sokany_WhatsApp_OTP {
                         <td>
                             <input type="number" min="1" name="<?php echo esc_attr(self::OPTION_KEY); ?>[mazbot_order_template_id]" value="<?php echo esc_attr((string) ((int) $settings['mazbot_order_template_id'])); ?>" />
                             <p class="description">Template ID من MazBot لقالب تأكيد الأوردر فقط — ليس قالب OTP (<code><?php echo esc_html((string) ((int) $settings['mazbot_template_id'])); ?></code>).</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h2>OTP في صفحة حساب ووكومرس</h2>
+                <p class="description">يظهر نموذج دخول/تسجيل برمز واتساب في My Account بجانب النموذج التقليدي. لا يؤثر على OTP في الموقع الجديد.</p>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row">تفعيل OTP في My Account</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[woo_account_otp_enabled]" value="1" <?php checked(!empty($settings['woo_account_otp_enabled'])); ?> />
+                                أظهر دخول وتسجيل برمز واتساب على ووردبريس
+                            </label>
                         </td>
                     </tr>
                 </table>
@@ -531,6 +564,27 @@ final class Sokany_WhatsApp_OTP {
                 <?php submit_button('إرسال اختبار قالب الأوردر عبر MazBot', 'secondary'); ?>
             </form>
 
+            <h2>إعادة إرسال رسالة أوردر</h2>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <?php wp_nonce_field('sokany_resend_order_wa'); ?>
+                <input type="hidden" name="action" value="sokany_resend_order_wa" />
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row">Order ID</th>
+                        <td>
+                            <input type="number" min="1" name="order_id" class="regular-text" placeholder="12345" required />
+                            <p class="description">رقم الطلب الداخلي في WooCommerce (ليس رقم العرض فقط إن اختلفا).</p>
+                        </td>
+                    </tr>
+                </table>
+                <?php submit_button('إعادة جدولة إرسال واتساب لهذا الطلب', 'secondary'); ?>
+            </form>
+
+            <?php if (!empty($order_history)) : ?>
+                <h2>آخر محاولات إرسال الأوردر</h2>
+                <pre style="white-space:pre-wrap;direction:ltr;text-align:left;max-height:320px;overflow:auto;background:#fff;border:1px solid #ccd0d4;padding:10px;"><?php echo esc_html(wp_json_encode($order_history, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)); ?></pre>
+            <?php endif; ?>
+
             <h2>Endpoints الجاهزة</h2>
             <ul>
                 <li><code>POST /wp-json/sokany-otp/v1/request</code></li>
@@ -539,6 +593,7 @@ final class Sokany_WhatsApp_OTP {
                 <li><code>POST /wp-json/sokany-otp/v1/register</code></li>
                 <li><code>POST /wp-json/sokany-otp/v1/login</code></li>
                 <li><code>POST /wp-json/sokany-otp/v1/change-password</code></li>
+                <li><code>POST /wp-json/sokany-otp/v1/account-session</code> (My Account OTP cookie session)</li>
             </ul>
         </div>
         <?php
@@ -580,6 +635,8 @@ final class Sokany_WhatsApp_OTP {
             'callback' => [__CLASS__, 'change_password'],
             'permission_callback' => '__return_true',
         ]);
+
+        self::register_account_routes();
     }
 
     public static function request_otp(WP_REST_Request $request) {
@@ -1320,42 +1377,8 @@ final class Sokany_WhatsApp_OTP {
     }
 
     /**
-     * Classic checkout / order update (by id).
-     *
-     * @param int|string $order_id
+     * Classic checkout / order update (by id) — handled by Sokany_WhatsApp_OTP_Order_Trait.
      */
-    public static function on_woocommerce_order($order_id): void {
-        $order_id = (int) $order_id;
-        if ($order_id < 1) {
-            return;
-        }
-
-        self::maybe_send_order_whatsapp($order_id);
-    }
-
-    /**
-     * REST API order insert (headless storefront). Prefer create only.
-     *
-     * @param mixed                $order    WC_Order
-     * @param WP_REST_Request|null $request
-     * @param bool                 $creating
-     */
-    public static function on_woocommerce_rest_order($order, $request = null, $creating = false): void {
-        if (!$creating) {
-            return;
-        }
-
-        $order_id = 0;
-        if (is_object($order) && method_exists($order, 'get_id')) {
-            $order_id = (int) $order->get_id();
-        }
-
-        if ($order_id < 1) {
-            return;
-        }
-
-        self::maybe_send_order_whatsapp($order_id);
-    }
 
     /**
      * @param mixed $order WC_Order
@@ -1378,96 +1401,6 @@ final class Sokany_WhatsApp_OTP {
         return false;
     }
 
-    /**
-     * Skip WhatsApp until line items exist and total is positive (avoids REST early empty order).
-     *
-     * @param mixed $order WC_Order
-     */
-    private static function order_ready_for_whatsapp($order): bool {
-        if (!self::order_has_billable_items($order)) {
-            return false;
-        }
-
-        if (!method_exists($order, 'get_total')) {
-            return false;
-        }
-
-        return (float) $order->get_total() > 0;
-    }
-
-    private static function maybe_send_order_whatsapp(int $order_id): void {
-        $settings = self::settings();
-
-        if (empty($settings['order_wa_enabled'])) {
-            return;
-        }
-
-        if (($settings['provider'] ?? 'mazbot') !== 'mazbot') {
-            return;
-        }
-
-        if ((int) ($settings['mazbot_order_template_id'] ?? 0) < 1) {
-            self::store_mazbot_error('إشعار الأوردر مفعّل لكن Order Template ID غير مضبوط.');
-            return;
-        }
-
-        $sent_meta = get_post_meta($order_id, self::ORDER_WA_META, true);
-        if ($sent_meta) {
-            // Already sent or in-flight — do not resend.
-            return;
-        }
-
-        if (!function_exists('wc_get_order')) {
-            return;
-        }
-
-        $order = wc_get_order($order_id);
-        if (!$order) {
-            return;
-        }
-
-        // Wait for line items + total (REST often creates the order shell first).
-        if (!self::order_ready_for_whatsapp($order)) {
-            return;
-        }
-
-        $phone_raw = (string) $order->get_billing_phone();
-        $phone = self::normalize_phone($phone_raw);
-        if ($phone === '') {
-            self::store_last_order_wa([
-                'ok' => false,
-                'orderId' => $order_id,
-                'error' => 'billing_phone_invalid',
-                'phoneRaw' => $phone_raw,
-                'at' => current_time('mysql'),
-            ]);
-            return;
-        }
-
-        $order_number = (string) $order->get_order_number();
-        $customer_name = self::order_customer_name($order);
-        $products = self::order_products_summary($order);
-        $total = self::order_total_label($order);
-
-        // Mark early to prevent double send from concurrent hooks.
-        update_post_meta($order_id, self::ORDER_WA_META, 'pending');
-
-        $result = self::send_order_whatsapp_message($phone, $customer_name, $order_number, $products, $total, [
-            'source' => 'woocommerce',
-            'orderId' => $order_id,
-        ]);
-
-        if (is_wp_error($result)) {
-            delete_post_meta($order_id, self::ORDER_WA_META);
-            return;
-        }
-
-        update_post_meta($order_id, self::ORDER_WA_META, current_time('mysql'));
-    }
-
-    /**
-     * @param mixed $order WC_Order
-     */
     private static function order_customer_name($order): string {
         $first = trim((string) $order->get_billing_first_name());
         $last = trim((string) $order->get_billing_last_name());

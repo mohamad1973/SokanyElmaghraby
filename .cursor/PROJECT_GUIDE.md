@@ -169,13 +169,14 @@
 ### SOKANY WhatsApp OTP
 
 - **المسار في المشروع:** `wordpress-plugin/sokany-whatsapp-otp/`
-- **الإصدار الحالي:** `1.2.3`
+- **الإصدار الحالي:** `1.3.0`
 - **ZIP للرفع:** `dist/sokany-whatsapp-otp.zip` (أو `wordpress-plugin/sokany-whatsapp-otp.zip`)
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1`
-- **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`
+- **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`, `/account-session`
 - **Test Mode:** الكود يظهر في Settings → SOKANY WhatsApp OTP
-- **v1.2.3:** ملخص أوردر واتساب (اسم×كمية|سعر|قيمة) بعد اكتمال البنود — بدون إرسال مبكر بـ `woocommerce_new_order`
+- **v1.3.0:** هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account + إعادة إرسال من الأدمن
+- **v1.2.3:** ملخص أوردر واتساب بعد اكتمال البنود — بدون إرسال مبكر بـ `woocommerce_new_order`
 - **v1.2.2:** إصلاح تسجيل المتجر عبر Woo REST — تمرير `billing.phone` من JSON إلى `$_POST` وإزالة `phone_error` الكاذب
 
 ### SOKANY Headless Settings
@@ -312,6 +313,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |
 | ثنائية اللغة AR/EN | next-intl؛ افتراضي عربي بدون بادئة؛ `/en/...` للإنجليزي؛ مبدّل لغة؛ ترجمة واجهة المتجر + شِل الأدمن؛ منتجات Woo والثيم كما هي | `messages/`, `src/i18n/`, `middleware.ts`, `[locale]/` |
 | إصلاح عدد منتجات السكشن المخصص | السبب: Woo REST يعيد نافداً أولاً فيظهر كرتان فقط؛ الحل: `stock_status=instock` + إكمال العدد من Store API + أبناء التصنيف/over-fetch | `woocommerce.ts`, `product-section-grid.tsx`, `custom-product-section.tsx` |
 | تفعيل فورم تواصل معنا | إرسال الاسم/الهاتف/الرسالة إلى `info@sokanyelmaghraby.com` عبر SMTP | `contact-form.tsx`, `api/contact`, `contact-mail.ts` |
