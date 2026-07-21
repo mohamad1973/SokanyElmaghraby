@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+
+import { Link, usePathname } from "@/i18n/navigation";
 
 import { useMobileNav } from "./mobile-nav-context";
 
@@ -104,14 +105,15 @@ function NavButton({
 
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
   const { isDrawerOpen, toggleDrawer, closeDrawer } = useMobileNav();
 
   const items: NavItem[] = [
-    { id: "home", label: "الرئيسية", href: "/", icon: <HomeIcon active={pathname === "/"} /> },
-    { id: "offers", label: "العروض", href: "/offers", icon: <OffersIcon /> },
-    { id: "warranty", label: "الصيانة", href: "/warranty", icon: <WarrantyIcon /> },
-    { id: "about", label: "عن سوكاني", href: "/about", icon: <AboutIcon /> },
-    { id: "more", label: "المزيد", icon: <MoreIcon /> },
+    { id: "home", label: t("home"), href: "/", icon: <HomeIcon active={pathname === "/"} /> },
+    { id: "offers", label: t("offers"), href: "/offers", icon: <OffersIcon /> },
+    { id: "warranty", label: t("warranty"), href: "/warranty", icon: <WarrantyIcon /> },
+    { id: "about", label: t("about"), href: "/about", icon: <AboutIcon /> },
+    { id: "more", label: t("more"), icon: <MoreIcon /> },
   ];
 
   function isActive(item: NavItem) {
@@ -133,8 +135,7 @@ export function MobileBottomNav() {
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 backdrop-blur lg:hidden"
-      dir="rtl"
-      aria-label="التنقل السفلي"
+      aria-label={t("home")}
     >
       <div className="mx-auto flex max-w-lg items-stretch justify-between px-1">
         {items.map((item) => (

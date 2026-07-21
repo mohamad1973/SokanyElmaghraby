@@ -1,0 +1,208 @@
+{
+  "meta": {
+    "titleDefault": "SOKANY Egypt | مؤسسة المغربي الوكيل الحصري",
+    "titleTemplate": "%s | SOKANY Egypt",
+    "description": "تسوق منتجات سوكاني الأصلية في مصر من مؤسسة المغربي الوكيل الحصري مع ضمان عام، دفع فوري أو كاش عند الاستلام، وشحن داخل الجمهورية."
+  },
+  "common": {
+    "loading": "جاري التحميل...",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "search": "بحث",
+    "close": "إغلاق",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق",
+    "viewAll": "عرض الكل",
+    "currency": "جنيه",
+    "addToCart": "أضف للسلة",
+    "buyNow": "احصل عليه",
+    "outOfStock": "غير متوفر",
+    "inStock": "متوفر",
+    "quantity": "الكمية",
+    "price": "السعر",
+    "total": "الإجمالي",
+    "home": "الرئيسية",
+    "errorGeneric": "حدث خطأ. حاول مرة أخرى."
+  },
+  "language": {
+    "label": "اللغة",
+    "ar": "العربية",
+    "en": "English",
+    "switchTo": "التبديل إلى {language}"
+  },
+  "nav": {
+    "shop": "المتجر",
+    "offers": "العروض",
+    "cart": "السلة",
+    "account": "حسابي",
+    "compare": "المقارنة",
+    "wishlist": "المفضلة",
+    "contact": "تواصل معنا",
+    "about": "من نحن",
+    "warranty": "الضمان",
+    "returnPolicy": "سياسة الاسترجاع",
+    "more": "المزيد",
+    "home": "الرئيسية"
+  },
+  "header": {
+    "searchPlaceholder": "ابحث عن منتج...",
+    "account": "حسابي",
+    "wishlist": "المفضلة",
+    "compare": "المقارنة",
+    "cart": "السلة"
+  },
+  "footer": {
+    "shopTitle": "المتجر",
+    "shopAll": "كل المنتجات",
+    "offers": "العروض",
+    "cart": "سلة المشتريات",
+    "helpTitle": "المساعدة",
+    "contact": "تواصل معنا",
+    "warranty": "الضمان",
+    "returnPolicy": "سياسة الاسترجاع",
+    "aboutTitle": "عن سوكاني",
+    "about": "من نحن",
+    "account": "حسابي"
+  },
+  "home": {
+    "bestSellers": "الأكثر مبيعاً",
+    "bestSellersDesc": "منتجات مختارة من سوكاني بأعلى تقييمات العملاء.",
+    "categories": "تسوق حسب التصنيف"
+  },
+  "shop": {
+    "title": "المتجر",
+    "allProducts": "كل المنتجات",
+    "filterCategory": "التصنيف",
+    "noProducts": "لا توجد منتجات في هذا التصنيف حالياً.",
+    "showing": "عرض المنتجات"
+  },
+  "cart": {
+    "title": "سلة المشتريات",
+    "empty": "سلتك فارغة حالياً. تصفّح المنتجات وأضف ما يناسبك.",
+    "continueShopping": "متابعة التسوق",
+    "checkout": "إتمام الطلب",
+    "remove": "حذف",
+    "subtotal": "المجموع الفرعي",
+    "shipping": "الشحن",
+    "shippingFree": "مجاني",
+    "shippingNote": "الشحن والضرائب يُحسبان عند إتمام الطلب.",
+    "updateQuantity": "تحديث الكمية",
+    "itemCount": "قطعة في السلة"
+  },
+  "checkout": {
+    "title": "إتمام الطلب",
+    "subtitle": "أكمل بيانات التوصيل واختر طريقة الدفع لإرسال طلبك.",
+    "name": "الاسم بالكامل",
+    "phone": "رقم الموبايل",
+    "governorate": "المحافظة",
+    "area": "المنطقة",
+    "address": "العنوان بالتفصيل",
+    "addressPlaceholder": "الشارع، رقم المبنى، علامة مميزة",
+    "note": "ملاحظات (اختياري)",
+    "paymentMethod": "طريقة الدفع",
+    "cod": "كاش عند الاستلام",
+    "codDescription": "الدفع عند وصول الطلب للعميل.",
+    "fawry": "الدفع عبر فوري",
+    "fawryDescription": "دفع إلكتروني آمن بعد تأكيد الطلب.",
+    "placeOrder": "تأكيد الطلب",
+    "placingOrder": "جاري تأكيد الطلب…",
+    "orderSummary": "ملخص الطلب",
+    "selectGovernorate": "اختر المحافظة",
+    "selectGovernorateFirst": "اختر المحافظة أولاً",
+    "selectArea": "اختر المنطقة",
+    "loadingAreas": "جاري تحميل المناطق…",
+    "thankYouTitle": "تم استلام طلبك",
+    "thankYouBody": "شكراً لك. سنتواصل معك قريباً لتأكيد الطلب.",
+    "backHome": "العودة للرئيسية",
+    "browseProducts": "تصفّح المنتجات"
+  },
+  "account": {
+    "login": "تسجيل الدخول",
+    "register": "إنشاء حساب",
+    "logout": "تسجيل الخروج",
+    "myOrders": "طلباتي",
+    "wishlist": "المفضلة",
+    "changePassword": "تغيير كلمة المرور",
+    "phone": "رقم الموبايل",
+    "password": "كلمة المرور",
+    "name": "الاسم",
+    "otp": "رمز التحقق",
+    "sendOtp": "إرسال رمز واتساب",
+    "verifyOtp": "تحقق",
+    "loginWithOtp": "دخول برمز واتساب",
+    "loginWithPassword": "دخول بكلمة المرور",
+    "noAccount": "ليس لديك حساب؟",
+    "hasAccount": "لديك حساب بالفعل؟",
+    "ordersEmpty": "لا توجد طلبات بعد.",
+    "orderNumber": "طلب رقم",
+    "orderStatus": "الحالة",
+    "cancelOrder": "إلغاء الطلب"
+  },
+  "product": {
+    "related": "منتجات مشابهة",
+    "specs": "المواصفات",
+    "reviews": "المراجعات",
+    "shipping": "الشحن والتوصيل",
+    "share": "مشاركة",
+    "addToWishlist": "أضف للمفضلة",
+    "addToCompare": "أضف للمقارنة",
+    "sku": "الكود"
+  },
+  "compare": {
+    "title": "مقارنة المنتجات",
+    "empty": "لم تضف منتجات للمقارنة بعد.",
+    "clear": "مسح الكل",
+    "remove": "إزالة"
+  },
+  "contact": {
+    "title": "تواصل معنا",
+    "name": "الاسم",
+    "phone": "رقم الهاتف",
+    "subject": "موضوع الرسالة",
+    "message": "اكتب رسالتك",
+    "send": "إرسال الرسالة",
+    "success": "تم إرسال رسالتك بنجاح.",
+    "error": "تعذر إرسال الرسالة. حاول مرة أخرى.",
+    "requiredFields": "الاسم ورقم الهاتف والرسالة مطلوبة.",
+    "invalidPhone": "أدخل رقم هاتف صحيح."
+  },
+  "about": {
+    "title": "من نحن"
+  },
+  "warranty": {
+    "title": "الضمان"
+  },
+  "returnPolicy": {
+    "title": "سياسة الاسترجاع"
+  },
+  "offers": {
+    "title": "العروض"
+  },
+  "admin": {
+    "brand": "إدارة سوكاني",
+    "brandSub": "لوحة تحكم الواجهة",
+    "headerTitle": "تحكم واجهة سوكاني",
+    "headerSub": "لوحة تحكم للمتجر والواجهة الأمامية",
+    "logout": "تسجيل الخروج",
+    "nav": {
+      "dashboard": "لوحة التحكم",
+      "theme": "المظهر",
+      "header": "الهيدر",
+      "footer": "الفوتر",
+      "socialMedia": "السوشيال ميديا",
+      "banners": "البنرات",
+      "reviews": "آراء العملاء",
+      "navigation": "المنيو",
+      "products": "المنتجات",
+      "categories": "التصنيفات",
+      "orders": "الطلبات",
+      "reports": "التقارير",
+      "dispatchSetup": "إعداد الشحن",
+      "dispatchBoard": "التوزيع",
+      "drivers": "المندوبين",
+      "zones": "الأحياء",
+      "dispatchReports": "تقارير التوصيل"
+    }
+  }
+}

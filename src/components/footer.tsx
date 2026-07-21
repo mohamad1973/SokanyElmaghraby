@@ -1,12 +1,16 @@
+"use client";
+
 import Image from "next/image";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
+import { Link } from "@/i18n/navigation";
 import type { ThemeSettings } from "@/lib/theme-settings";
 
 import { VisualEditableText } from "./visual-editable-text";
 
 export function Footer({ settings }: { settings: ThemeSettings }) {
+  const t = useTranslations("footer");
   const footerLogoUrl = settings.footer.logoUrl || settings.brand.logoUrl;
   const logoDesktopWidth = settings.footer.logoUrl
     ? settings.footer.logoDesktopWidth
@@ -68,46 +72,49 @@ export function Footer({ settings }: { settings: ThemeSettings }) {
 
         <div>
           <h3 className="mb-4 text-sm font-bold text-brand-gold">
-            <VisualEditableText textKey="footer.shopTitle">المتجر</VisualEditableText>
+            <VisualEditableText textKey="footer.shopTitle">{t("shopTitle")}</VisualEditableText>
           </h3>
           <div className="space-y-3 text-sm text-zinc-300">
             <Link href="/shop" className="block hover:text-white">
-              <VisualEditableText textKey="footer.shopAll">كل المنتجات</VisualEditableText>
+              <VisualEditableText textKey="footer.shopAll">{t("shopAll")}</VisualEditableText>
             </Link>
             <Link href="/offers" className="block hover:text-white">
-              <VisualEditableText textKey="footer.offers">العروض</VisualEditableText>
+              <VisualEditableText textKey="footer.offers">{t("offers")}</VisualEditableText>
             </Link>
             <Link href="/cart" className="block hover:text-white">
-              <VisualEditableText textKey="footer.cart">سلة المشتريات</VisualEditableText>
+              <VisualEditableText textKey="footer.cart">{t("cart")}</VisualEditableText>
             </Link>
           </div>
         </div>
 
         <div>
           <h3 className="mb-4 text-sm font-bold text-brand-gold">
-            <VisualEditableText textKey="footer.customerServiceTitle">خدمة العملاء</VisualEditableText>
+            <VisualEditableText textKey="footer.customerServiceTitle">{t("helpTitle")}</VisualEditableText>
           </h3>
           <div className="space-y-3 text-sm text-zinc-300">
             <Link href="/warranty" className="block hover:text-white">
-              <VisualEditableText textKey="footer.warranty">الضمان والصيانة</VisualEditableText>
+              <VisualEditableText textKey="footer.warranty">{t("warranty")}</VisualEditableText>
             </Link>
             <Link href="/contact" className="block hover:text-white">
-              <VisualEditableText textKey="footer.contact">تواصل معنا</VisualEditableText>
+              <VisualEditableText textKey="footer.contact">{t("contact")}</VisualEditableText>
             </Link>
             <Link href="/return-policy" className="block hover:text-white">
-              <VisualEditableText textKey="footer.returnPolicy">سياسة الاسترجاع</VisualEditableText>
+              <VisualEditableText textKey="footer.returnPolicy">{t("returnPolicy")}</VisualEditableText>
             </Link>
           </div>
         </div>
 
         <div>
           <h3 className="mb-4 text-sm font-bold text-brand-gold">
-            <VisualEditableText textKey="footer.paymentTitle">طرق الدفع</VisualEditableText>
+            <VisualEditableText textKey="footer.aboutTitle">{t("aboutTitle")}</VisualEditableText>
           </h3>
           <div className="space-y-3 text-sm text-zinc-300">
-            <p><VisualEditableText textKey="footer.paymentFawry">فوري للدفع الإلكتروني</VisualEditableText></p>
-            <p><VisualEditableText textKey="footer.paymentCod">كاش عند الاستلام</VisualEditableText></p>
-            <p><VisualEditableText textKey="footer.paymentConfirm">تأكيد الطلب قبل الشحن</VisualEditableText></p>
+            <Link href="/about" className="block hover:text-white">
+              <VisualEditableText textKey="footer.about">{t("about")}</VisualEditableText>
+            </Link>
+            <Link href="/account" className="block hover:text-white">
+              <VisualEditableText textKey="footer.account">{t("account")}</VisualEditableText>
+            </Link>
           </div>
         </div>
       </div>

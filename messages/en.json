@@ -1,0 +1,208 @@
+{
+  "meta": {
+    "titleDefault": "SOKANY Egypt | Exclusive Agent El Maghraby",
+    "titleTemplate": "%s | SOKANY Egypt",
+    "description": "Shop original SOKANY products in Egypt from El Maghraby, the exclusive agent — one-year warranty, Fawry or cash on delivery, and nationwide shipping."
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "viewAll": "View all",
+    "currency": "EGP",
+    "addToCart": "Add to cart",
+    "buyNow": "Get it",
+    "outOfStock": "Out of stock",
+    "inStock": "In stock",
+    "quantity": "Quantity",
+    "price": "Price",
+    "total": "Total",
+    "home": "Home",
+    "errorGeneric": "Something went wrong. Please try again."
+  },
+  "language": {
+    "label": "Language",
+    "ar": "العربية",
+    "en": "English",
+    "switchTo": "Switch to {language}"
+  },
+  "nav": {
+    "shop": "Shop",
+    "offers": "Offers",
+    "cart": "Cart",
+    "account": "Account",
+    "compare": "Compare",
+    "wishlist": "Wishlist",
+    "contact": "Contact",
+    "about": "About",
+    "warranty": "Warranty",
+    "returnPolicy": "Return policy",
+    "more": "More",
+    "home": "Home"
+  },
+  "header": {
+    "searchPlaceholder": "Search for a product...",
+    "account": "Account",
+    "wishlist": "Wishlist",
+    "compare": "Compare",
+    "cart": "Cart"
+  },
+  "footer": {
+    "shopTitle": "Shop",
+    "shopAll": "All products",
+    "offers": "Offers",
+    "cart": "Cart",
+    "helpTitle": "Help",
+    "contact": "Contact us",
+    "warranty": "Warranty",
+    "returnPolicy": "Return policy",
+    "aboutTitle": "About SOKANY",
+    "about": "About us",
+    "account": "My account"
+  },
+  "home": {
+    "bestSellers": "Best sellers",
+    "bestSellersDesc": "Top-rated SOKANY products chosen by customers.",
+    "categories": "Shop by category"
+  },
+  "shop": {
+    "title": "Shop",
+    "allProducts": "All products",
+    "filterCategory": "Category",
+    "noProducts": "No products in this category right now.",
+    "showing": "Products"
+  },
+  "cart": {
+    "title": "Shopping cart",
+    "empty": "Your cart is empty. Browse products and add what you need.",
+    "continueShopping": "Continue shopping",
+    "checkout": "Checkout",
+    "remove": "Remove",
+    "subtotal": "Subtotal",
+    "shipping": "Shipping",
+    "shippingFree": "Free",
+    "shippingNote": "Shipping and taxes are calculated at checkout.",
+    "updateQuantity": "Update quantity",
+    "itemCount": "items in cart"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "subtitle": "Complete your delivery details and choose a payment method.",
+    "name": "Full name",
+    "phone": "Mobile number",
+    "governorate": "Governorate",
+    "area": "Area",
+    "address": "Detailed address",
+    "addressPlaceholder": "Street, building number, landmark",
+    "note": "Notes (optional)",
+    "paymentMethod": "Payment method",
+    "cod": "Cash on delivery",
+    "codDescription": "Pay when the order arrives.",
+    "fawry": "Pay with Fawry",
+    "fawryDescription": "Secure online payment after order confirmation.",
+    "placeOrder": "Place order",
+    "placingOrder": "Placing order…",
+    "orderSummary": "Order summary",
+    "selectGovernorate": "Select governorate",
+    "selectGovernorateFirst": "Select governorate first",
+    "selectArea": "Select area",
+    "loadingAreas": "Loading areas…",
+    "thankYouTitle": "Order received",
+    "thankYouBody": "Thank you. We will contact you shortly to confirm your order.",
+    "backHome": "Back to home",
+    "browseProducts": "Browse products"
+  },
+  "account": {
+    "login": "Sign in",
+    "register": "Create account",
+    "logout": "Sign out",
+    "myOrders": "My orders",
+    "wishlist": "Wishlist",
+    "changePassword": "Change password",
+    "phone": "Mobile number",
+    "password": "Password",
+    "name": "Name",
+    "otp": "Verification code",
+    "sendOtp": "Send WhatsApp code",
+    "verifyOtp": "Verify",
+    "loginWithOtp": "Sign in with WhatsApp code",
+    "loginWithPassword": "Sign in with password",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "ordersEmpty": "No orders yet.",
+    "orderNumber": "Order",
+    "orderStatus": "Status",
+    "cancelOrder": "Cancel order"
+  },
+  "product": {
+    "related": "Related products",
+    "specs": "Specifications",
+    "reviews": "Reviews",
+    "shipping": "Shipping & delivery",
+    "share": "Share",
+    "addToWishlist": "Add to wishlist",
+    "addToCompare": "Add to compare",
+    "sku": "SKU"
+  },
+  "compare": {
+    "title": "Compare products",
+    "empty": "No products added to compare yet.",
+    "clear": "Clear all",
+    "remove": "Remove"
+  },
+  "contact": {
+    "title": "Contact us",
+    "name": "Name",
+    "phone": "Phone number",
+    "subject": "Subject",
+    "message": "Write your message",
+    "send": "Send message",
+    "success": "Your message was sent successfully.",
+    "error": "Could not send the message. Please try again.",
+    "requiredFields": "Name, phone, and message are required.",
+    "invalidPhone": "Enter a valid phone number."
+  },
+  "about": {
+    "title": "About us"
+  },
+  "warranty": {
+    "title": "Warranty"
+  },
+  "returnPolicy": {
+    "title": "Return policy"
+  },
+  "offers": {
+    "title": "Offers"
+  },
+  "admin": {
+    "brand": "SOKANY Admin",
+    "brandSub": "Storefront control panel",
+    "headerTitle": "SOKANY storefront control",
+    "headerSub": "Manage the store and front-end experience",
+    "logout": "Log out",
+    "nav": {
+      "dashboard": "Dashboard",
+      "theme": "Theme",
+      "header": "Header",
+      "footer": "Footer",
+      "socialMedia": "Social media",
+      "banners": "Banners",
+      "reviews": "Customer reviews",
+      "navigation": "Navigation",
+      "products": "Products",
+      "categories": "Categories",
+      "orders": "Orders",
+      "reports": "Reports",
+      "dispatchSetup": "Shipping setup",
+      "dispatchBoard": "Dispatch board",
+      "drivers": "Drivers",
+      "zones": "Zones",
+      "dispatchReports": "Delivery reports"
+    }
+  }
+}

@@ -312,6 +312,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| ثنائية اللغة AR/EN | next-intl؛ افتراضي عربي بدون بادئة؛ `/en/...` للإنجليزي؛ مبدّل لغة؛ ترجمة واجهة المتجر + شِل الأدمن؛ منتجات Woo والثيم كما هي | `messages/`, `src/i18n/`, `middleware.ts`, `[locale]/` |
 | إصلاح عدد منتجات السكشن المخصص | السبب: Woo REST يعيد نافداً أولاً فيظهر كرتان فقط؛ الحل: `stock_status=instock` + إكمال العدد من Store API + أبناء التصنيف/over-fetch | `woocommerce.ts`, `product-section-grid.tsx`, `custom-product-section.tsx` |
 | تفعيل فورم تواصل معنا | إرسال الاسم/الهاتف/الرسالة إلى `info@sokanyelmaghraby.com` عبر SMTP | `contact-form.tsx`, `api/contact`, `contact-mail.ts` |
 | سحب منيو + اسم عرض مخصص | dnd-kit شجري بدل أعلى/أسفل؛ `menuTitle` للفرونت؛ PUT structure؛ أول جذر يظهر يمين الهيدر | `wordpress-menu-builder.tsx`, `category-menu-selection.ts`, `structure` API |

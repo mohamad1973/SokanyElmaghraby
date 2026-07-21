@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { Link, useRouter } from "@/i18n/navigation";
 import { cartLineTotal, formatCartMoney, getMaxOrderQuantity } from "@/lib/cart";
 
 import { useCart } from "./cart-provider";
@@ -56,8 +56,14 @@ function writeSavedAddress(payload: SavedCheckoutAddress) {
 
 export function CheckoutForm() {
   const router = useRouter();
+  const locale = useLocale();
+  const t = useTranslations("checkout");
+  const tCommon = useTranslations("common");
   const { items, clearCart, updateQty, removeItem } = useCart();
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + cartLineTotal(item), 0), [items]);
+  const cityLabel = (city: CityOption) => (locale === "en" ? city.nameEn || city.nameAr : city.nameAr);
+  const districtLabel = (district: DistrictOption) =>
+    locale === "en" ? district.nameEn || district.nameAr : district.nameAr;
 
   const [authChecked, setAuthChecked] = useState(false);
   const [name, setName] = useState("");
@@ -350,7 +356,7 @@ export function CheckoutForm() {
           href="/shop"
           className="mt-8 inline-flex rounded-full bg-black px-7 py-3 text-sm font-bold text-white transition hover:bg-brand-gold hover:text-black"
         >
-          تصفّح المنتجات
+          {t("browseProducts")}
         </Link>
       </div>
     );
@@ -360,24 +366,24 @@ export function CheckoutForm() {
     <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_0.7fr] lg:px-8">
       <section className="rounded-[2.5rem] bg-white p-6 shadow-sm sm:p-8">
         <h1 className="inline-flex rounded-full bg-brand-gold px-6 py-3 text-2xl font-bold text-black sm:text-3xl">
-          <VisualEditableText textKey="checkout.title">إتمام الطلب</VisualEditableText>
+          <VisualEditableText textKey="checkout.title">{t("title")}</VisualEditableText>
         </h1>
-        <p className="mt-4 leading-8 text-zinc-600">أكمل بيانات التوصيل واختر طريقة الدفع لإرسال طلبك.</p>
+        <p className="mt-4 leading-8 text-zinc-600">{t("subtitle")}</p>
 
         <form className="mt-8 grid gap-5" onSubmit={onSubmit}>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            <VisualEditableText textKey="checkout.field.name">الاسم بالكامل</VisualEditableText>
+            <VisualEditableText textKey="checkout.field.name">{t("name")}</VisualEditableText>
             <input
               required
               value={name}
               onChange={(event) => setName(event.target.value)}
               className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-              placeholder="الاسم بالكامل"
+              placeholder={t("name")}
             />
           </label>
 
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            <VisualEditableText textKey="checkout.field.phone">رقم الهاتف</VisualEditableText>
+            <VisualEditableText textKey="checkout.field.phone">{t("phone")}</VisualEditableText>
             <input
               required
               value={phone}
@@ -389,7 +395,7 @@ export function CheckoutForm() {
           </label>
 
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            <VisualEditableText textKey="checkout.field.governorate">المحافظة</VisualEditableText>
+            <VisualEditableText textKey="checkout.field.governorate">{t("governorate")}</VisualEditableText>
             <select
               required
               value={cityId}
@@ -399,21 +405,21 @@ export function CheckoutForm() {
                 const selected = cities.find((city) => city.id === nextId);
                 pendingAreaRef.current = null;
                 setCityId(nextId);
-                setGovernorate(selected?.nameAr || "");
+                setGovernorate(selected ? cityLabel(selected) : "");
               }}
               className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white disabled:opacity-60"
             >
-              <option value="">{citiesLoading ? "جاري التحميل…" : "اختر المحافظة"}</option>
+              <option value="">{citiesLoading ? tCommon("loading") : t("selectGovernorate")}</option>
               {cities.map((city) => (
                 <option key={city.id} value={city.id}>
-                  {city.nameAr}
+                  {cityLabel(city)}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            <VisualEditableText textKey="checkout.field.area">المنطقة</VisualEditableText>
+            <VisualEditableText textKey="checkout.field.area">{t("area")}</VisualEditableText>
             <select
               required
               value={area}
@@ -422,35 +428,35 @@ export function CheckoutForm() {
               className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white disabled:opacity-60"
             >
               <option value="">
-                {!cityId ? "اختر المحافظة أولاً" : districtsLoading ? "جاري تحميل المناطق…" : "اختر المنطقة"}
+                {!cityId ? t("selectGovernorateFirst") : districtsLoading ? t("loadingAreas") : t("selectArea")}
               </option>
               {districts.map((district) => (
                 <option key={district.id} value={district.nameAr}>
-                  {district.nameAr}
+                  {districtLabel(district)}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            <VisualEditableText textKey="checkout.field.address">العنوان بالتفصيل</VisualEditableText>
+            <VisualEditableText textKey="checkout.field.address">{t("address")}</VisualEditableText>
             <input
               required
               value={address}
               onChange={(event) => setAddress(event.target.value)}
               className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-              placeholder="الشارع، رقم المبنى، علامة مميزة"
+              placeholder={t("addressPlaceholder")}
             />
           </label>
 
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
-            <VisualEditableText textKey="checkout.field.note">ملاحظات</VisualEditableText>
+            <VisualEditableText textKey="checkout.field.note">{t("note")}</VisualEditableText>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
               rows={3}
               className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-              placeholder="ملاحظات للتوصيل (اختياري)"
+              placeholder={t("note")}
             />
           </label>
 
@@ -468,10 +474,10 @@ export function CheckoutForm() {
                 onChange={() => setPaymentMethod("fawry")}
               />
               <span className="font-bold">
-                <VisualEditableText textKey="checkout.payment.fawry">الدفع عبر فوري</VisualEditableText>
+                <VisualEditableText textKey="checkout.payment.fawry">{t("fawry")}</VisualEditableText>
               </span>
               <p className="mt-2 text-sm leading-6 text-zinc-600">
-                <VisualEditableText textKey="checkout.payment.fawryDescription">دفع إلكتروني آمن بعد تأكيد الطلب.</VisualEditableText>
+                <VisualEditableText textKey="checkout.payment.fawryDescription">{t("fawryDescription")}</VisualEditableText>
               </p>
             </label>
             <label
@@ -485,10 +491,10 @@ export function CheckoutForm() {
                 onChange={() => setPaymentMethod("cod")}
               />
               <span className="font-bold">
-                <VisualEditableText textKey="checkout.payment.cod">كاش عند الاستلام</VisualEditableText>
+                <VisualEditableText textKey="checkout.payment.cod">{t("cod")}</VisualEditableText>
               </span>
               <p className="mt-2 text-sm leading-6 text-zinc-600">
-                <VisualEditableText textKey="checkout.payment.codDescription">الدفع عند وصول الطلب للعميل.</VisualEditableText>
+                <VisualEditableText textKey="checkout.payment.codDescription">{t("codDescription")}</VisualEditableText>
               </p>
             </label>
           </div>
@@ -500,8 +506,8 @@ export function CheckoutForm() {
             disabled={submitting}
             className="rounded-full bg-brand-gold px-8 py-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:opacity-60"
           >
-            {submitting ? "جاري تأكيد الطلب…" : (
-              <VisualEditableText textKey="checkout.confirm">تأكيد الطلب</VisualEditableText>
+            {submitting ? t("placingOrder") : (
+              <VisualEditableText textKey="checkout.confirm">{t("placeOrder")}</VisualEditableText>
             )}
           </button>
         </form>
@@ -509,7 +515,7 @@ export function CheckoutForm() {
 
       <aside className="h-fit rounded-[2.5rem] bg-zinc-950 p-6 text-white shadow-sm sm:p-8">
         <h2 className="text-2xl font-bold">
-          <VisualEditableText textKey="checkout.summary.title">ملخص الطلب</VisualEditableText>
+          <VisualEditableText textKey="checkout.summary.title">{t("orderSummary")}</VisualEditableText>
         </h2>
 
         <ul className="mt-6 space-y-4">

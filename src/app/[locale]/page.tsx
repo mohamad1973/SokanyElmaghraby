@@ -1,6 +1,6 @@
 import Image from "next/image";
-import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import { setRequestLocale } from "next-intl/server";
 
 import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
@@ -11,6 +11,7 @@ import { ProductRowScroller } from "@/components/product-row-scroller";
 import { SectionTitle } from "@/components/section-title";
 import { TrustBadgesSection } from "@/components/trust-badges-section";
 import { VisualEditableText } from "@/components/visual-editable-text";
+import { Link } from "@/i18n/navigation";
 import { bannerHorizontalPaddingStyle, bannerSpacingStyle } from "@/lib/banner-spacing";
 import { heroSlideHasMedia } from "@/lib/hero-slide-utils";
 import { getThemeSettings, type CustomHomeSection, type HomeSectionOrderItem } from "@/lib/theme-settings";
@@ -147,7 +148,9 @@ function renderHomeSections(homeSections: HomeSectionEntry[], settings: Awaited<
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  setRequestLocale(locale);
   const [featuredProducts, categories, settings] = await Promise.all([
     getFeaturedProducts(),
     getCategories(),
@@ -230,9 +233,13 @@ export default async function Home() {
         <div className={getSectionContainerClass(settings, "bestSellers")}>
           <SectionTitle
             textKeyPrefix="home.bestSellers"
-            eyebrow="الأكثر طلباً"
-            title="الأكثر مبيعاً"
-            description="تعرف على اكثر المنتجات مبيعا لدى العملاء."
+            eyebrow={locale === "en" ? "Most ordered" : "الأكثر طلباً"}
+            title={locale === "en" ? "Best sellers" : "الأكثر مبيعاً"}
+            description={
+              locale === "en"
+                ? "Discover the products customers buy most."
+                : "تعرف على اكثر المنتجات مبيعا لدى العملاء."
+            }
           />
           <div className="mt-8">
             <ProductRowScroller

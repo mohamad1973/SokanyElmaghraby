@@ -1,7 +1,10 @@
+"use client";
+
 import Image from "next/image";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
+import { Link } from "@/i18n/navigation";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
@@ -11,6 +14,7 @@ import { HeaderCartLink } from "./header-cart-link";
 import { HeaderCompareLink } from "./header-compare-link";
 import { HeaderProductSearch } from "./header-product-search";
 import { HeaderWishlistMenu } from "./header-wishlist-menu";
+import { LanguageSwitcher } from "./language-switcher";
 import { TopBannerMarquee, type TopBannerIconName } from "./top-banner-marquee";
 import { VisualEditableText } from "./visual-editable-text";
 
@@ -182,6 +186,8 @@ export function buildHeaderMenu(settings: ThemeSettings, menu: MenuNode[]): Menu
 }
 
 export function Header({ settings, menu }: { settings: ThemeSettings; menu: MenuNode[] }) {
+  const t = useTranslations("header");
+  const tNav = useTranslations("nav");
   const headerMenu = buildHeaderMenu(settings, menu);
   const topBannerPhrases = settings.topBanner.text
     .split(/•|\n/)
@@ -191,7 +197,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
     icon: topBannerIconOrder[index % topBannerIconOrder.length],
     label,
   }));
-  const headerActions = [{ href: "/account", label: "الحساب", icon: "account" as const }];
+  const headerActions = [{ href: "/account", label: t("account"), icon: "account" as const }];
   const logoStyle = {
     "--logo-mobile-width": `${settings.brand.logoMobileWidth}px`,
     "--logo-mobile-height": `${settings.brand.logoMobileHeight}px`,
@@ -256,7 +262,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
 
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-6 lg:px-8 lg:py-4">
         <div className="flex items-center gap-2">
-          <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-3" aria-label="الرئيسية">
+          <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-3" aria-label={tNav("home")}>
           {settings.brand.logoUrl ? (
             <span
               className="relative block h-[var(--logo-mobile-height)] w-[var(--logo-mobile-width)] sm:h-[var(--logo-desktop-height)] sm:w-[var(--logo-desktop-width)]"
@@ -302,6 +308,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </a>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <LanguageSwitcher className="hidden sm:inline-flex" />
           {headerActions.map((action) => (
             <Link
               key={action.label}
@@ -316,6 +323,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
           <HeaderCartLink />
           <HeaderWishlistMenu />
           <HeaderCompareLink />
+          <LanguageSwitcher className="sm:hidden" />
         </div>
       </div>
 

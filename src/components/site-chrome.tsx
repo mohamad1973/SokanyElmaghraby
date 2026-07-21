@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { stripLocalePrefix } from "@/i18n/path";
 import type { ThemeSettings } from "@/lib/theme-settings";
 import type { MenuNode } from "@/lib/types";
 
@@ -33,8 +34,9 @@ export function SiteChrome({
   menu: MenuNode[];
 }) {
   const pathname = usePathname();
+  const path = stripLocalePrefix(pathname);
 
-  if (pathname.startsWith("/admin")) {
+  if (path.startsWith("/admin") || path.startsWith("/driver")) {
     return children;
   }
 

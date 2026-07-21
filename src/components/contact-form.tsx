@@ -1,10 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 
 import { VisualEditableText } from "@/components/visual-editable-text";
 
 export function ContactForm() {
+  const t = useTranslations("contact");
+  const tCommon = useTranslations("common");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [subject, setSubject] = useState("");
@@ -24,13 +27,13 @@ export function ContactForm() {
     const trimmedMessage = message.trim();
 
     if (!trimmedName || !trimmedPhone || !trimmedMessage) {
-      setError("الاسم ورقم الهاتف والرسالة مطلوبة.");
+      setError(t("requiredFields"));
       return;
     }
 
     const digits = trimmedPhone.replace(/\D/g, "");
     if (digits.length < 10 || digits.length > 15) {
-      setError("أدخل رقم هاتف صحيح.");
+      setError(t("invalidPhone"));
       return;
     }
 
@@ -52,18 +55,18 @@ export function ContactForm() {
       const payload = (await response.json().catch(() => null)) as { message?: string; ok?: boolean } | null;
 
       if (!response.ok) {
-        setError(payload?.message || "تعذر إرسال الرسالة.");
+        setError(payload?.message || t("error"));
         return;
       }
 
-      setSuccess(payload?.message || "تم إرسال رسالتك بنجاح.");
+      setSuccess(t("success"));
       setName("");
       setPhone("");
       setSubject("");
       setMessage("");
       setWebsite("");
     } catch {
-      setError("تعذر الاتصال بالخادم. حاول مرة أخرى.");
+      setError(tCommon("errorGeneric"));
     } finally {
       setIsSubmitting(false);
     }
@@ -78,7 +81,7 @@ export function ContactForm() {
         autoComplete="name"
         required
         className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-        placeholder="الاسم"
+        placeholder={t("name")}
       />
       <input
         name="phone"
@@ -89,14 +92,14 @@ export function ContactForm() {
         autoComplete="tel"
         required
         className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-        placeholder="رقم الهاتف"
+        placeholder={t("phone")}
       />
       <input
         name="subject"
         value={subject}
         onChange={(event) => setSubject(event.target.value)}
         className="rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-        placeholder="موضوع الرسالة"
+        placeholder={t("subject")}
       />
       <textarea
         name="message"
@@ -104,9 +107,8 @@ export function ContactForm() {
         onChange={(event) => setMessage(event.target.value)}
         required
         className="min-h-36 rounded-2xl border border-black/10 bg-brand-cream px-4 py-3 outline-none transition focus:border-brand-gold focus:bg-white"
-        placeholder="اكتب رسالتك"
+        placeholder={t("message")}
       />
-      {/* Honeypot — hidden from users */}
       <input
         name="website"
         value={website}
@@ -127,7 +129,7 @@ export function ContactForm() {
         disabled={isSubmitting}
         className="rounded-full bg-brand-gold px-8 py-4 text-sm font-bold text-black transition hover:bg-brand-gold-dark disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "جارٍ الإرسال..." : <VisualEditableText textKey="contact.submit">إرسال الرسالة</VisualEditableText>}
+        {isSubmitting ? tCommon("loading") : <VisualEditableText textKey="contact.submit">{t("send")}</VisualEditableText>}
       </button>
     </form>
   );
