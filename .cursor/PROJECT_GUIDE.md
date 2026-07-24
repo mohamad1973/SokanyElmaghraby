@@ -184,6 +184,24 @@
 - **المسار:** `wordpress-plugin/sokany-headless-settings/`
 - **REST:** `/wp-json/sokany/v1/theme-settings`, `/wp-json/sokany/v1/menu`
 
+### Meta for WooCommerce (كتالوج + Pixel)
+
+- **الموقع المصدر:** `https://sokany-eg.com` (ووردبريس) — روابط الإعلان حالياً لصفحات Woo وليس Vercel.
+- **الحالة:** البلجن Connected/Active تحت Marketing → Facebook.
+- **Pixel ID على الموقع:** `1249252143469785` (موجود في HTML مع `fbq` + تلميحات `facebook-for-woocommerce`).
+- **أحداث ظاهرة في صفحات المنتج:** `PageView`, `ViewContent`, `AddToCart` (اختبار `Purchase` يتم من طلب حقيقي/تجريبي في Events Manager).
+- **سكربتات التدقيق في الريبو:**
+  - `node scripts/audit-meta-catalog.mjs` — جودة الكتالوج (صور/أسعار/تصنيفات)
+  - `node scripts/audit-air-fryer-set.mjs` — مجموعة «قلايه هوائيه»
+  - `node scripts/check-meta-pixel.mjs` — التحقق من Pixel في HTML
+  - `node scripts/enable-air-fryer-meta-sync.mjs` — فرض Sync على القلايات الجاهزة
+- **نتائج تدقيق 2026-07-24:** ~1392 منتج منشور؛ ~123 بدون صورة؛ ~136 بدون سعر؛ تصنيف «قلايه هوائيه» فيه 5 قلايات in-stock جاهزة للإعلان بعد إزالة منتج خاطئ (حلة بخار SK-07018).
+- **إنشاء إعلان الفئة (يدوي في Ads Manager):**
+  1. Commerce Manager → Catalog → Products / Product sets → تأكد من set «قلايه هوائيه» (أو أنشئ فلتر category).
+  2. Marketing → Facebook في WP → View all synced products + مزامنة يدوية إن لزم.
+  3. Ads Manager → حملة **Sales** → Catalog → Product set = قلايات → قالب Carousel/Collection/Advantage+.
+  4. Business Settings → Domains → وثّق `sokany-eg.com`؛ فعّل Conversions API من إعدادات البلجن إن ظهر الخيار.
+
 ---
 
 ## الداشبورد — صفحات الأدمن (فرونت)
@@ -313,6 +331,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| Meta Catalog / Pixel على Woo | تدقيق كتالوج Woo؛ Pixel `1249252143469785`؛ فرض sync على قلايات in-stock؛ إصلاح تصنيف حلة بخار داخل قلايات؛ دليل Ads Manager في PROJECT_GUIDE | `scripts/audit-meta-*.mjs`, `scripts/check-meta-pixel.mjs`, `PROJECT_GUIDE.md` |
 | محول لغة واحد + وضع اللغة | إصلاح تكرار المحول في هيدر الموبايل؛ إعداد `localeMode` (لغتين / عربي فقط) في الثيم مع فرض العربية عبر middleware | `header.tsx`, `theme-settings.ts`, `settings-form.tsx`, `api/public/locale-mode`, `middleware.ts` |
 | ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |
 | ثنائية اللغة AR/EN | next-intl؛ افتراضي عربي بدون بادئة؛ `/en/...` للإنجليزي؛ مبدّل لغة؛ ترجمة واجهة المتجر + شِل الأدمن؛ منتجات Woo والثيم كما هي | `messages/`, `src/i18n/`, `middleware.ts`, `[locale]/` |

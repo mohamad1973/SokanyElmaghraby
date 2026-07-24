@@ -36,6 +36,14 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local Meta/Woo audit outputs
+scripts/meta-*-report.json
+scripts/meta-*-result.json
+scripts/meta-air-fryer-product-set.json
+scripts/meta-air-fryer-sync-enable-result.json
+scripts/meta-fix-miscategorized-steam-cooker.json
+scripts/meta-catalog-audit.log
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
