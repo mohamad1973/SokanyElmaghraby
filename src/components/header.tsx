@@ -308,7 +308,6 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
         </a>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <LanguageSwitcher className="hidden sm:inline-flex" />
           {headerActions.map((action) => (
             <Link
               key={action.label}
@@ -323,7 +322,7 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
           <HeaderCartLink />
           <HeaderWishlistMenu />
           <HeaderCompareLink />
-          <LanguageSwitcher className="sm:hidden" />
+          {settings.localeMode !== "ar-only" ? <LanguageSwitcher /> : null}
         </div>
       </div>
 

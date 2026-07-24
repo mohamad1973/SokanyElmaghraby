@@ -313,6 +313,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| محول لغة واحد + وضع اللغة | إصلاح تكرار المحول في هيدر الموبايل؛ إعداد `localeMode` (لغتين / عربي فقط) في الثيم مع فرض العربية عبر middleware | `header.tsx`, `theme-settings.ts`, `settings-form.tsx`, `api/public/locale-mode`, `middleware.ts` |
 | ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |
 | ثنائية اللغة AR/EN | next-intl؛ افتراضي عربي بدون بادئة؛ `/en/...` للإنجليزي؛ مبدّل لغة؛ ترجمة واجهة المتجر + شِل الأدمن؛ منتجات Woo والثيم كما هي | `messages/`, `src/i18n/`, `middleware.ts`, `[locale]/` |
 | إصلاح عدد منتجات السكشن المخصص | السبب: Woo REST يعيد نافداً أولاً فيظهر كرتان فقط؛ الحل: `stock_status=instock` + إكمال العدد من Store API + أبناء التصنيف/over-fetch | `woocommerce.ts`, `product-section-grid.tsx`, `custom-product-section.tsx` |

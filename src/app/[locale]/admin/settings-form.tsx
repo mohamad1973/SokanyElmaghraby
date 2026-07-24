@@ -741,6 +741,40 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
           <p className="-mt-2 text-xs font-semibold text-zinc-500 lg:col-span-2">
             يظهر الرمز في كارت المنتج وصفحة المنتج والبحث. إن لم يُعثر على قيمة في العنوان يُستخدم SKU من WooCommerce.
           </p>
+          <div className="rounded-xl border border-black/10 bg-zinc-50 p-4 lg:col-span-2">
+            <h2 className="text-base font-bold text-zinc-950">لغة الموقع</h2>
+            <p className="mt-1 text-sm leading-6 text-zinc-500">
+              اختر تشغيل المتجر بلغتين أو بالعربية فقط. لوحة التحكم تبقى قابلة للترجمة بغض النظر عن هذا الخيار.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-black/10 bg-white p-4 text-sm font-bold">
+                <input
+                  type="radio"
+                  name="localeMode"
+                  checked={settings.localeMode !== "ar-only"}
+                  onChange={() => setSettings({ ...settings, localeMode: "bilingual" })}
+                  className="mt-1"
+                />
+                <span>
+                  تشغيل الموقع بلغتين
+                  <span className="mt-1 block text-xs font-semibold text-zinc-500">عربي / إنجليزي مع محول اللغة في الهيدر</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-black/10 bg-white p-4 text-sm font-bold">
+                <input
+                  type="radio"
+                  name="localeMode"
+                  checked={settings.localeMode === "ar-only"}
+                  onChange={() => setSettings({ ...settings, localeMode: "ar-only" })}
+                  className="mt-1"
+                />
+                <span>
+                  لغة واحدة (العربية فقط)
+                  <span className="mt-1 block text-xs font-semibold text-zinc-500">إخفاء المحول ومنع مسارات الإنجليزية في المتجر</span>
+                </span>
+              </label>
+            </div>
+          </div>
           <div className="rounded-xl bg-zinc-50 p-4 lg:col-span-2">
             <label className="flex items-center gap-3 text-sm font-bold">
               <input

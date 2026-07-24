@@ -10,6 +10,8 @@ const intlMiddleware = createMiddleware(routing);
 const LOCALE_COOKIE = "NEXT_LOCALE";
 const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+type SiteLocaleMode = "bilingual" | "ar-only";
+
 function isDriverPath(pathname: string) {
   return pathname.startsWith("/driver") || pathname.startsWith("/api/driver");
 }
@@ -32,6 +34,26 @@ function nextWithLocale(req: NextRequest, locale: AppLocale) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-locale", locale);
   return applyLocaleCookie(NextResponse.next({ request: { headers: requestHeaders } }), locale);
+}
+
+async function getSiteLocaleMode(req: NextRequest): Promise<SiteLocaleMode> {
+  try {
+    const url = new URL("/api/public/locale-mode", req.nextUrl.origin);
+    const response = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(800),
+      next: { revalidate: 30 },
+    });
+
+    if (!response.ok) {
+      return "bilingual";
+    }
+
+    const data = (await response.json()) as { mode?: string };
+    return data.mode === "ar-only" ? "ar-only" : "bilingual";
+  } catch {
+    return "bilingual";
+  }
 }
 
 export async function middleware(req: NextRequest) {
@@ -82,13 +104,34 @@ export async function middleware(req: NextRequest) {
     cookieLocale && (routing.locales as readonly string[]).includes(cookieLocale)
       ? cookieLocale
       : routing.defaultLocale;
+  const isStorefrontPath = !pathWithoutLocale.startsWith("/admin");
 
-  // Remember EN preference without using Accept-Language (keeps Arabic as site default).
-  if (
+  // Storefront Arabic-only mode: strip /en and ignore EN cookie preference.
+  if (isStorefrontPath && (urlLocale === "en" || preferredLocale === "en")) {
+    const localeMode = await getSiteLocaleMode(req);
+
+    if (localeMode === "ar-only") {
+      if (urlLocale === "en") {
+        const url = req.nextUrl.clone();
+        url.pathname = withLocalePrefix(pathWithoutLocale, "ar");
+        return applyLocaleCookie(NextResponse.redirect(url), "ar");
+      }
+      // Prefer EN cookie on an Arabic URL: stay Arabic and clear EN below.
+    } else if (
+      preferredLocale === "en" &&
+      urlLocale === routing.defaultLocale &&
+      !pathWithoutLocale.startsWith("/api")
+    ) {
+      const url = req.nextUrl.clone();
+      url.pathname = withLocalePrefix(pathWithoutLocale, "en");
+      return applyLocaleCookie(NextResponse.redirect(url), "en");
+    }
+  } else if (
     preferredLocale === "en" &&
     urlLocale === routing.defaultLocale &&
     !pathWithoutLocale.startsWith("/api")
   ) {
+    // Admin (and any non-storefront) keeps bilingual cookie preference.
     const url = req.nextUrl.clone();
     url.pathname = withLocalePrefix(pathWithoutLocale, "en");
     return applyLocaleCookie(NextResponse.redirect(url), "en");
@@ -119,7 +162,11 @@ export async function middleware(req: NextRequest) {
     method: req.method,
   });
 
-  return applyLocaleCookie(intlMiddleware(localizedRequest), urlLocale);
+  // When storefront is ar-only and cookie was en but path is already ar, force ar cookie.
+  const responseLocale =
+    isStorefrontPath && preferredLocale === "en" && urlLocale === "ar" ? "ar" : urlLocale;
+
+  return applyLocaleCookie(intlMiddleware(localizedRequest), responseLocale);
 }
 
 export const config = {

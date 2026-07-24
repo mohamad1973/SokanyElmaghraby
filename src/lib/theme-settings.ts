@@ -365,6 +365,8 @@ export type ThemeSettings = {
   visualEditor: {
     enabled: boolean;
   };
+  /** Storefront language mode: bilingual keeps AR/EN switcher; ar-only forces Arabic. */
+  localeMode: "bilingual" | "ar-only";
   visualTextStyles: Record<string, VisualTextStyle>;
   visualTextContent: Record<string, string>;
 };
@@ -582,6 +584,7 @@ export const defaultThemeSettings: ThemeSettings = {
   visualEditor: {
     enabled: false,
   },
+  localeMode: "bilingual",
   visualTextStyles: {},
   visualTextContent: {},
 };
@@ -1214,6 +1217,7 @@ function mergeSettings(settings: unknown): ThemeSettings {
       ...defaultThemeSettings.visualEditor,
       ...(isObject(settings.visualEditor) ? settings.visualEditor : {}),
     },
+    localeMode: settings.localeMode === "ar-only" ? "ar-only" : "bilingual",
     visualTextStyles: isObject(settings.visualTextStyles)
       ? Object.fromEntries(
           Object.entries(settings.visualTextStyles).filter(([, value]) => isObject(value)),
