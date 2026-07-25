@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SOKANY WhatsApp OTP
  * Description: WhatsApp OTP + customer order confirmation via MazBot for WooCommerce (Classic, Blocks, REST) and My Account OTP.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: SOKANY Egypt
  */
 
@@ -17,7 +17,7 @@ final class Sokany_WhatsApp_OTP {
     use Sokany_WhatsApp_OTP_Order_Trait;
     use Sokany_WhatsApp_OTP_Account_Trait;
 
-    private const VERSION = '1.3.0';
+    private const VERSION = '1.3.1';
     private const OPTION_KEY = 'sokany_whatsapp_otp_settings';
     private const LAST_TEST_OTP_OPTION = 'sokany_whatsapp_otp_last_test';
     private const LAST_ORDER_WA_OPTION = 'sokany_mazbot_last_order_wa';
@@ -594,6 +594,7 @@ final class Sokany_WhatsApp_OTP {
                 <li><code>POST /wp-json/sokany-otp/v1/login</code></li>
                 <li><code>POST /wp-json/sokany-otp/v1/change-password</code></li>
                 <li><code>POST /wp-json/sokany-otp/v1/account-session</code> (My Account OTP cookie session)</li>
+                <li><code>POST /wp-json/sokany-otp/v1/lost-password-session</code> (lost-password Code Snippet cookie login)</li>
             </ul>
         </div>
         <?php

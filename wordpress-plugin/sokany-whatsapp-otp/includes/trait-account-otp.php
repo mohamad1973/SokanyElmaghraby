@@ -20,6 +20,13 @@ trait Sokany_WhatsApp_OTP_Account_Trait {
             'callback' => [__CLASS__, 'complete_account_session'],
             'permission_callback' => '__return_true',
         ]);
+
+        // Lost-password Code Snippet / native WP UI — login cookie without requiring My Account OTP toggle.
+        register_rest_route('sokany-otp/v1', '/lost-password-session', [
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => [__CLASS__, 'complete_lost_password_session'],
+            'permission_callback' => '__return_true',
+        ]);
     }
 
     public static function enqueue_account_otp_assets(): void {
@@ -234,6 +241,51 @@ trait Sokany_WhatsApp_OTP_Account_Trait {
             'status' => $purpose === 'register' ? 'registered_and_logged_in' : 'logged_in',
             'userId' => (int) $user->ID,
             'redirect' => wc_get_page_permalink('myaccount'),
+        ]);
+    }
+
+    /**
+     * Cookie login after OTP on Woo lost-password page (Code Snippet UI).
+     * Does not require woo_account_otp_enabled.
+     */
+    public static function complete_lost_password_session(WP_REST_Request $request) {
+        $nonce = (string) $request->get_param('nonce');
+        if (!wp_verify_nonce($nonce, 'sokany_lost_password_session')) {
+            return new WP_Error('sokany_invalid_nonce', 'انتهت صلاحية الجلسة. حدّث الصفحة وحاول مرة أخرى.', ['status' => 403]);
+        }
+
+        $phone = self::normalize_phone((string) $request->get_param('phone'));
+        $token = (string) $request->get_param('token');
+
+        if (!$phone || !$token) {
+            return new WP_Error('sokany_invalid_session_payload', 'بيانات الجلسة غير مكتملة.', ['status' => 400]);
+        }
+
+        $token_data = self::verify_action_token($token, $phone, 'login');
+        if (is_wp_error($token_data)) {
+            return $token_data;
+        }
+
+        $token_fingerprint = hash('sha256', $token);
+        $used_key = 'sokany_otp_token_used_' . $token_fingerprint;
+        if (get_transient($used_key)) {
+            return new WP_Error('sokany_token_reused', 'تم استخدام رمز التحقق مسبقاً.', ['status' => 409]);
+        }
+        set_transient($used_key, 1, self::TOKEN_TTL);
+
+        $user = self::find_user_by_phone($phone);
+        if (!$user) {
+            return new WP_Error('sokany_user_not_found', 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.', ['status' => 404]);
+        }
+
+        wp_set_current_user((int) $user->ID);
+        wp_set_auth_cookie((int) $user->ID, true);
+
+        return rest_ensure_response([
+            'ok' => true,
+            'status' => 'logged_in',
+            'userId' => (int) $user->ID,
+            'redirect' => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : home_url('/'),
         ]);
     }
 }

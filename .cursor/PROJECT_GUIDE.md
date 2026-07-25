@@ -169,12 +169,14 @@
 ### SOKANY WhatsApp OTP
 
 - **المسار في المشروع:** `wordpress-plugin/sokany-whatsapp-otp/`
-- **الإصدار الحالي:** `1.3.0`
+- **الإصدار الحالي:** `1.3.1`
 - **ZIP للرفع:** `dist/sokany-whatsapp-otp.zip` (أو `wordpress-plugin/sokany-whatsapp-otp.zip`)
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1`
-- **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`, `/account-session`
+- **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`, `/account-session`, `/lost-password-session`
+- **Code Snippet (نسيت كلمة المرور بموبايل):** `wordpress-plugin/snippets/sokany-lost-password-otp.php` — الصق في Code Snippets بعد تحديث البلجن إلى 1.3.1
 - **Test Mode:** الكود يظهر في Settings → SOKANY WhatsApp OTP
+- **v1.3.1:** endpoint `/lost-password-session` + سنابت استبدال نموذج lost-password بموبايل/OTP
 - **v1.3.0:** هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account + إعادة إرسال من الأدمن
 - **v1.2.3:** ملخص أوردر واتساب بعد اكتمال البنود — بدون إرسال مبكر بـ `woocommerce_new_order`
 - **v1.2.2:** إصلاح تسجيل المتجر عبر Woo REST — تمرير `billing.phone` من JSON إلى `$_POST` وإزالة `phone_error` الكاذب
@@ -331,6 +333,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| نسيت كلمة المرور بموبايل OTP على Woo | سنابت Code Snippets يستبدل نموذج الإيميل بموبايل+OTP؛ endpoint `/lost-password-session` في بلجن 1.3.1 | `wordpress-plugin/snippets/`, `trait-account-otp.php` |
 | Meta Catalog / Pixel على Woo | تدقيق كتالوج Woo؛ Pixel `1249252143469785`؛ فرض sync على قلايات in-stock؛ إصلاح تصنيف حلة بخار داخل قلايات؛ دليل Ads Manager في PROJECT_GUIDE | `scripts/audit-meta-*.mjs`, `scripts/check-meta-pixel.mjs`, `PROJECT_GUIDE.md` |
 | محول لغة واحد + وضع اللغة | إصلاح تكرار المحول في هيدر الموبايل؛ إعداد `localeMode` (لغتين / عربي فقط) في الثيم مع فرض العربية عبر middleware | `header.tsx`, `theme-settings.ts`, `settings-form.tsx`, `api/public/locale-mode`, `middleware.ts` |
 | ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |
