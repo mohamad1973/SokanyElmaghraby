@@ -174,8 +174,8 @@
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1`
 - **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`, `/account-session`, `/lost-password-session`
-- **Code Snippet (نسيت كلمة المرور بموبايل):** `wordpress-plugin/snippets/sokany-lost-password-otp.php` — الصق في Code Snippets بعد تحديث البلجن إلى 1.3.2
-- **Test Mode:** الكود يظهر في Settings → SOKANY WhatsApp OTP
+- **Code Snippet (نسيت كلمة المرور بموبايل):** `wordpress-plugin/snippets/sokany-lost-password-otp.php` — **مستقل** (REST خاص `sokany-lost-otp/v1`)؛ لا يعتمد على كلاس البلجن ولا يلمس تأكيد الأوردر؛ يعيد استخدام بيانات MazBot من نفس الـ option
+- **Test Mode (بلجن):** الكود يظهر في Settings → SOKANY WhatsApp OTP
 - **v1.3.2:** تحسين `find_user_by_phone` (صيغ مصر + أرقام بفواصل) + سنابت لا يعتبر كل 404 «رقم غير مسجّل»
 - **v1.3.1:** endpoint `/lost-password-session` + سنابت استبدال نموذج lost-password بموبايل/OTP
 - **v1.3.0:** هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account + إعادة إرسال من الأدمن
@@ -334,7 +334,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
-| نسيت كلمة المرور بموبايل OTP على Woo | سنابت + `/lost-password-session`؛ v1.3.2 يحسّن مطابقة رقم الموبايل ويصلح تصنيف أخطاء 404 في السنابت | `wordpress-plugin/snippets/`, `sokany-whatsapp-otp.php` |
+| نسيت كلمة المرور بموبايل OTP على Woo | سنابت مستقل `sokany-lost-otp/v1` (بدون اعتماد على كلاس البلجن)؛ تأكيد الأوردر يبقى كما هو في البلجن | `wordpress-plugin/snippets/sokany-lost-password-otp.php` |
 | Meta Catalog / Pixel على Woo | تدقيق كتالوج Woo؛ Pixel `1249252143469785`؛ فرض sync على قلايات in-stock؛ إصلاح تصنيف حلة بخار داخل قلايات؛ دليل Ads Manager في PROJECT_GUIDE | `scripts/audit-meta-*.mjs`, `scripts/check-meta-pixel.mjs`, `PROJECT_GUIDE.md` |
 | محول لغة واحد + وضع اللغة | إصلاح تكرار المحول في هيدر الموبايل؛ إعداد `localeMode` (لغتين / عربي فقط) في الثيم مع فرض العربية عبر middleware | `header.tsx`, `theme-settings.ts`, `settings-form.tsx`, `api/public/locale-mode`, `middleware.ts` |
 | ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |
