@@ -17,7 +17,7 @@
 
 1. ارفع/حدّث بلجن OTP إلى **1.3.1** على ووردبريس وفعّله.
 2. افتح **Snippets → Add New** (بلجن Code Snippets).
-3. الصق **كامل** محتوى `sokany-lost-password-otp.php`.
+3. الصق محتوى `sokany-lost-password-otp.php` **بدون** سطر `<?php` في البداية — Code Snippets يضيفه تلقائياً، ولصقه يسبب خطأ syntax.
 4. العنوان مثلاً: `SOKANY Lost Password OTP`
 5. Run snippet: **Everywhere**
 6. Activate.

@@ -1,15 +1,11 @@
-<?php
 /**
  * Snippet Name: SOKANY Lost Password OTP (phone)
- * Description: Replaces WooCommerce lost-password email field with mobile + WhatsApp OTP (same behaviour as the headless storefront forgot flow). Requires SOKANY WhatsApp OTP plugin v1.3.1+.
- * How to install: Code Snippets → Add New → paste this entire file → Run snippet everywhere → Activate.
+ * Description: Replaces WooCommerce lost-password email field with mobile + WhatsApp OTP.
+ * Requires SOKANY WhatsApp OTP plugin v1.3.1+.
  *
- * Source in repo: wordpress-plugin/snippets/sokany-lost-password-otp.php
+ * Code Snippets: Do NOT paste a <?php opening tag — the plugin adds it automatically.
+ * Paste from this comment block downward → Run everywhere → Activate.
  */
-
-if (!defined('ABSPATH')) {
-    exit;
-}
 
 /**
  * True on WooCommerce lost-password endpoint.
