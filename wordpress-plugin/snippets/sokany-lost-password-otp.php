@@ -3,7 +3,12 @@
  * Description: نسيت كلمة المرور برقم الموبايل + واتساب OTP — مستقل عن بلجن OTP.
  * لا يغيّر تأكيد الأوردر. يعيد استخدام بيانات MazBot من إعدادات البلجن إن وُجدت.
  *
- * Code Snippets: لا تلصق <?php — الصق من هذا التعليق للأسفل → Run everywhere → Activate.
+ * Code Snippets:
+ * - لا تلصق <?php
+ * - Run snippet: Everywhere (مهم — ليس Front-end only)
+ * - Activate
+ *
+ * الواجهة تستخدم admin-ajax.php (أوثق من REST مع Code Snippets).
  */
 
 if (!defined('ABSPATH')) {
@@ -440,46 +445,179 @@ function sokany_lost_otp_consume_token(string $token, string $phone_e164) {
     return $data;
 }
 
+/**
+ * Shared handlers — used by admin-ajax (primary) and REST (backup).
+ *
+ * @return array<string,mixed>|WP_Error
+ */
+function sokany_lost_otp_handle_request(string $phone_raw) {
+    $phone = sokany_lost_otp_normalize_phone($phone_raw);
+    if ($phone === '') {
+        return new WP_Error('sokany_lost_otp_phone', 'رقم الموبايل غير صحيح.', ['status' => 400]);
+    }
+
+    $user = sokany_lost_otp_find_user($phone);
+    if (!$user) {
+        return [
+            'ok' => false,
+            'status' => 'user_not_found',
+            'message' => 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.',
+        ];
+    }
+
+    if (get_transient('sokany_lost_otp_sent_' . md5($phone))) {
+        return new WP_Error('sokany_lost_otp_rate', 'انتظر قليلاً قبل إعادة إرسال الكود.', ['status' => 429]);
+    }
+
+    $settings = sokany_lost_otp_settings();
+    $digits = in_array((int) ($settings['otp_digits'] ?? 6), [4, 6], true) ? (int) $settings['otp_digits'] : 6;
+    $otp = (string) random_int((int) pow(10, $digits - 1), (int) pow(10, $digits) - 1);
+
+    sokany_lost_otp_store($phone, $otp, (int) $user->ID);
+    $sent = sokany_lost_otp_send_whatsapp($phone, $otp);
+    if (is_wp_error($sent)) {
+        return $sent;
+    }
+
+    return [
+        'ok' => true,
+        'status' => 'otp_sent',
+        'expiresInMinutes' => (int) ($settings['otp_ttl_minutes'] ?? SOKANY_LOST_OTP_TTL),
+        'testMode' => ($settings['mode'] ?? 'live') === 'test',
+    ];
+}
+
+/**
+ * @return array<string,mixed>|WP_Error
+ */
+function sokany_lost_otp_handle_verify(string $phone_raw, string $otp_raw) {
+    $phone = sokany_lost_otp_normalize_phone($phone_raw);
+    $otp = preg_replace('/\D+/', '', $otp_raw);
+
+    if ($phone === '' || $otp === '') {
+        return new WP_Error('sokany_lost_otp_payload', 'رقم الموبايل وكود التحقق مطلوبان.', ['status' => 400]);
+    }
+
+    $key = 'sokany_lost_otp_code_' . md5($phone);
+    $record = get_transient($key);
+    if (!is_array($record) || empty($record['hash'])) {
+        return new WP_Error('sokany_lost_otp_missing', 'لا يوجد كود تحقق صالح لهذا الرقم.', ['status' => 404]);
+    }
+
+    $attempts = (int) ($record['attempts'] ?? 0);
+    if ($attempts >= SOKANY_LOST_OTP_MAX_ATTEMPTS) {
+        return new WP_Error('sokany_lost_otp_attempts', 'تم تجاوز عدد المحاولات المسموح.', ['status' => 429]);
+    }
+
+    $record['attempts'] = $attempts + 1;
+    set_transient($key, $record, SOKANY_LOST_OTP_TTL * MINUTE_IN_SECONDS);
+
+    if (!wp_check_password($otp, (string) $record['hash'])) {
+        return new WP_Error('sokany_lost_otp_invalid', 'كود التحقق غير صحيح.', ['status' => 400]);
+    }
+
+    delete_transient($key);
+    $user_id = (int) ($record['user_id'] ?? 0);
+    if ($user_id < 1) {
+        $user = sokany_lost_otp_find_user($phone);
+        $user_id = $user ? (int) $user->ID : 0;
+    }
+    if ($user_id < 1) {
+        return new WP_Error('sokany_user_not_found', 'لا يوجد حساب بهذا الرقم.', ['status' => 404]);
+    }
+
+    return [
+        'ok' => true,
+        'status' => 'verified',
+        'token' => sokany_lost_otp_create_token($phone, $user_id),
+    ];
+}
+
+/**
+ * @return array<string,mixed>|WP_Error
+ */
+function sokany_lost_otp_handle_session(string $phone_raw, string $token, string $nonce) {
+    if (!wp_verify_nonce($nonce, 'sokany_lost_otp_session')) {
+        return new WP_Error('sokany_lost_otp_nonce', 'انتهت صلاحية الجلسة. حدّث الصفحة وحاول مرة أخرى.', ['status' => 403]);
+    }
+
+    $phone = sokany_lost_otp_normalize_phone($phone_raw);
+    if ($phone === '' || $token === '') {
+        return new WP_Error('sokany_lost_otp_payload', 'بيانات الجلسة غير مكتملة.', ['status' => 400]);
+    }
+
+    $data = sokany_lost_otp_consume_token($token, $phone);
+    if (is_wp_error($data)) {
+        return $data;
+    }
+
+    $user_id = (int) $data['user_id'];
+    $user = get_user_by('id', $user_id);
+    if (!$user) {
+        return new WP_Error('sokany_user_not_found', 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.', ['status' => 404]);
+    }
+
+    wp_set_current_user($user_id);
+    wp_set_auth_cookie($user_id, true);
+
+    return [
+        'ok' => true,
+        'status' => 'logged_in',
+        'userId' => $user_id,
+        'redirect' => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : home_url('/'),
+    ];
+}
+
+function sokany_lost_otp_send_json($result): void {
+    if (is_wp_error($result)) {
+        $status = (int) ($result->get_error_data()['status'] ?? 400);
+        status_header($status);
+        wp_send_json([
+            'ok' => false,
+            'code' => $result->get_error_code(),
+            'message' => $result->get_error_message(),
+            'status' => $result->get_error_code() === 'sokany_user_not_found' ? 'user_not_found' : '',
+        ], $status);
+    }
+
+    wp_send_json($result);
+}
+
+function sokany_lost_otp_ajax_request(): void {
+    check_ajax_referer('sokany_lost_otp_ajax', 'nonce');
+    $phone = isset($_POST['phone']) ? (string) wp_unslash($_POST['phone']) : '';
+    sokany_lost_otp_send_json(sokany_lost_otp_handle_request($phone));
+}
+
+function sokany_lost_otp_ajax_verify(): void {
+    check_ajax_referer('sokany_lost_otp_ajax', 'nonce');
+    $phone = isset($_POST['phone']) ? (string) wp_unslash($_POST['phone']) : '';
+    $otp = isset($_POST['otp']) ? (string) wp_unslash($_POST['otp']) : '';
+    sokany_lost_otp_send_json(sokany_lost_otp_handle_verify($phone, $otp));
+}
+
+function sokany_lost_otp_ajax_session(): void {
+    check_ajax_referer('sokany_lost_otp_ajax', 'nonce');
+    $phone = isset($_POST['phone']) ? (string) wp_unslash($_POST['phone']) : '';
+    $token = isset($_POST['token']) ? (string) wp_unslash($_POST['token']) : '';
+    $session_nonce = isset($_POST['sessionNonce']) ? (string) wp_unslash($_POST['sessionNonce']) : '';
+    sokany_lost_otp_send_json(sokany_lost_otp_handle_session($phone, $token, $session_nonce));
+}
+
+add_action('wp_ajax_sokany_lost_otp_request', 'sokany_lost_otp_ajax_request');
+add_action('wp_ajax_nopriv_sokany_lost_otp_request', 'sokany_lost_otp_ajax_request');
+add_action('wp_ajax_sokany_lost_otp_verify', 'sokany_lost_otp_ajax_verify');
+add_action('wp_ajax_nopriv_sokany_lost_otp_verify', 'sokany_lost_otp_ajax_verify');
+add_action('wp_ajax_sokany_lost_otp_session', 'sokany_lost_otp_ajax_session');
+add_action('wp_ajax_nopriv_sokany_lost_otp_session', 'sokany_lost_otp_ajax_session');
+
 add_action('rest_api_init', function () {
     register_rest_route('sokany-lost-otp/v1', '/request', [
         'methods' => 'POST',
         'permission_callback' => '__return_true',
         'callback' => function (WP_REST_Request $request) {
-            $phone_raw = (string) $request->get_param('phone');
-            $phone = sokany_lost_otp_normalize_phone($phone_raw);
-            if ($phone === '') {
-                return new WP_Error('sokany_lost_otp_phone', 'رقم الموبايل غير صحيح.', ['status' => 400]);
-            }
-
-            $user = sokany_lost_otp_find_user($phone);
-            if (!$user) {
-                return rest_ensure_response([
-                    'ok' => false,
-                    'status' => 'user_not_found',
-                    'message' => 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.',
-                ]);
-            }
-
-            if (get_transient('sokany_lost_otp_sent_' . md5($phone))) {
-                return new WP_Error('sokany_lost_otp_rate', 'انتظر قليلاً قبل إعادة إرسال الكود.', ['status' => 429]);
-            }
-
-            $settings = sokany_lost_otp_settings();
-            $digits = in_array((int) ($settings['otp_digits'] ?? 6), [4, 6], true) ? (int) $settings['otp_digits'] : 6;
-            $otp = (string) random_int((int) pow(10, $digits - 1), (int) pow(10, $digits) - 1);
-
-            sokany_lost_otp_store($phone, $otp, (int) $user->ID);
-            $sent = sokany_lost_otp_send_whatsapp($phone, $otp);
-            if (is_wp_error($sent)) {
-                return $sent;
-            }
-
-            return rest_ensure_response([
-                'ok' => true,
-                'status' => 'otp_sent',
-                'expiresInMinutes' => (int) ($settings['otp_ttl_minutes'] ?? SOKANY_LOST_OTP_TTL),
-                'testMode' => ($settings['mode'] ?? 'live') === 'test',
-            ]);
+            $result = sokany_lost_otp_handle_request((string) $request->get_param('phone'));
+            return is_wp_error($result) ? $result : rest_ensure_response($result);
         },
     ]);
 
@@ -487,46 +625,11 @@ add_action('rest_api_init', function () {
         'methods' => 'POST',
         'permission_callback' => '__return_true',
         'callback' => function (WP_REST_Request $request) {
-            $phone = sokany_lost_otp_normalize_phone((string) $request->get_param('phone'));
-            $otp = preg_replace('/\D+/', '', (string) $request->get_param('otp'));
-
-            if ($phone === '' || $otp === '') {
-                return new WP_Error('sokany_lost_otp_payload', 'رقم الموبايل وكود التحقق مطلوبان.', ['status' => 400]);
-            }
-
-            $key = 'sokany_lost_otp_code_' . md5($phone);
-            $record = get_transient($key);
-            if (!is_array($record) || empty($record['hash'])) {
-                return new WP_Error('sokany_lost_otp_missing', 'لا يوجد كود تحقق صالح لهذا الرقم.', ['status' => 404]);
-            }
-
-            $attempts = (int) ($record['attempts'] ?? 0);
-            if ($attempts >= SOKANY_LOST_OTP_MAX_ATTEMPTS) {
-                return new WP_Error('sokany_lost_otp_attempts', 'تم تجاوز عدد المحاولات المسموح.', ['status' => 429]);
-            }
-
-            $record['attempts'] = $attempts + 1;
-            set_transient($key, $record, SOKANY_LOST_OTP_TTL * MINUTE_IN_SECONDS);
-
-            if (!wp_check_password($otp, (string) $record['hash'])) {
-                return new WP_Error('sokany_lost_otp_invalid', 'كود التحقق غير صحيح.', ['status' => 400]);
-            }
-
-            delete_transient($key);
-            $user_id = (int) ($record['user_id'] ?? 0);
-            if ($user_id < 1) {
-                $user = sokany_lost_otp_find_user($phone);
-                $user_id = $user ? (int) $user->ID : 0;
-            }
-            if ($user_id < 1) {
-                return new WP_Error('sokany_user_not_found', 'لا يوجد حساب بهذا الرقم.', ['status' => 404]);
-            }
-
-            return rest_ensure_response([
-                'ok' => true,
-                'status' => 'verified',
-                'token' => sokany_lost_otp_create_token($phone, $user_id),
-            ]);
+            $result = sokany_lost_otp_handle_verify(
+                (string) $request->get_param('phone'),
+                (string) $request->get_param('otp')
+            );
+            return is_wp_error($result) ? $result : rest_ensure_response($result);
         },
     ]);
 
@@ -534,37 +637,12 @@ add_action('rest_api_init', function () {
         'methods' => 'POST',
         'permission_callback' => '__return_true',
         'callback' => function (WP_REST_Request $request) {
-            $nonce = (string) $request->get_param('nonce');
-            if (!wp_verify_nonce($nonce, 'sokany_lost_otp_session')) {
-                return new WP_Error('sokany_lost_otp_nonce', 'انتهت صلاحية الجلسة. حدّث الصفحة وحاول مرة أخرى.', ['status' => 403]);
-            }
-
-            $phone = sokany_lost_otp_normalize_phone((string) $request->get_param('phone'));
-            $token = (string) $request->get_param('token');
-            if ($phone === '' || $token === '') {
-                return new WP_Error('sokany_lost_otp_payload', 'بيانات الجلسة غير مكتملة.', ['status' => 400]);
-            }
-
-            $data = sokany_lost_otp_consume_token($token, $phone);
-            if (is_wp_error($data)) {
-                return $data;
-            }
-
-            $user_id = (int) $data['user_id'];
-            $user = get_user_by('id', $user_id);
-            if (!$user) {
-                return new WP_Error('sokany_user_not_found', 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.', ['status' => 404]);
-            }
-
-            wp_set_current_user($user_id);
-            wp_set_auth_cookie($user_id, true);
-
-            return rest_ensure_response([
-                'ok' => true,
-                'status' => 'logged_in',
-                'userId' => $user_id,
-                'redirect' => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : home_url('/'),
-            ]);
+            $result = sokany_lost_otp_handle_session(
+                (string) $request->get_param('phone'),
+                (string) $request->get_param('token'),
+                (string) $request->get_param('nonce')
+            );
+            return is_wp_error($result) ? $result : rest_ensure_response($result);
         },
     ]);
 });
@@ -589,15 +667,15 @@ body.woocommerce-account.woocommerce-lost-password form.woocommerce-ResetPasswor
 body.woocommerce-account form.lost_reset_password{display:none!important}
 CSS;
 
-    wp_register_style('sokany-lost-password-otp', false, [], '2.0.0');
+    wp_register_style('sokany-lost-password-otp', false, [], '2.1.0');
     wp_enqueue_style('sokany-lost-password-otp');
     wp_add_inline_style('sokany-lost-password-otp', $css);
 
-    wp_register_script('sokany-lost-password-otp', false, [], '2.0.0', true);
+    wp_register_script('sokany-lost-password-otp', false, [], '2.1.0', true);
     wp_enqueue_script('sokany-lost-password-otp');
     wp_localize_script('sokany-lost-password-otp', 'sokanyLostOtp', [
-        'restBase' => esc_url_raw(rest_url('sokany-lost-otp/v1')),
-        'restNonce' => wp_create_nonce('wp_rest'),
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'ajaxNonce' => wp_create_nonce('sokany_lost_otp_ajax'),
         'sessionNonce' => wp_create_nonce('sokany_lost_otp_session'),
         'redirectUrl' => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : home_url('/'),
         'registerUrl' => sokany_lost_otp_register_url(),
@@ -608,6 +686,7 @@ CSS;
             'invalidOtp' => 'أدخل كود التحقق المكوّن من 6 أرقام.',
             'userNotFound' => 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.',
             'registerCta' => 'إنشاء حساب / الاشتراك',
+            'snippetMissing' => 'السنابت غير مفعّل أو لم يُحفظ بشكل صحيح. من Code Snippets: فعّل السنابت على Everywhere ثم احفظ الصفحة وحاول مرة أخرى.',
         ],
     ]);
 
@@ -615,7 +694,7 @@ CSS;
 (function () {
   "use strict";
   var cfg = window.sokanyLostOtp || {};
-  var restBase = (cfg.restBase || "").replace(/\/$/, "");
+  var ajaxUrl = cfg.ajaxUrl || "/wp-admin/admin-ajax.php";
   var i18n = cfg.i18n || {};
 
   function $(sel, root) {
@@ -654,30 +733,86 @@ CSS;
     return false;
   }
 
-  async function postJson(url, body) {
-    var response = await fetch(url, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-WP-Nonce": cfg.restNonce || "",
-      },
-      body: JSON.stringify(body || {}),
+  function isRouteMissing(data, err) {
+    var code = (data && data.code) || (err && err.code) || "";
+    var message = ((data && data.message) || (err && err.message) || "").toString();
+    if (code === "rest_no_route") return true;
+    if (code === "sokany_lost_otp_ajax_missing") return true;
+    if (/لم يتم العثور على مسار/.test(message)) return true;
+    if (/No route was found/i.test(message)) return true;
+    if (err && err.status === 404 && /route|مسار/i.test(message)) return true;
+    return false;
+  }
+
+  function friendlyError(data, err) {
+    if (isRouteMissing(data, err)) {
+      return i18n.snippetMissing || "السنابت غير مفعّل أو لم يُحفظ — راجع Code Snippets (Everywhere).";
+    }
+    return (
+      (data && data.message) ||
+      (err && err.message) ||
+      i18n.errorGeneric ||
+      "Request failed."
+    );
+  }
+
+  async function postAjax(action, fields) {
+    var body = new FormData();
+    body.append("action", action);
+    body.append("nonce", cfg.ajaxNonce || "");
+    Object.keys(fields || {}).forEach(function (key) {
+      body.append(key, fields[key] == null ? "" : String(fields[key]));
     });
 
-    var data = null;
-    try { data = await response.json(); } catch (e) { data = null; }
+    var response;
+    try {
+      response = await fetch(ajaxUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        body: body,
+      });
+    } catch (networkErr) {
+      var fail = new Error(i18n.snippetMissing || "Network error");
+      fail.code = "sokany_lost_otp_ajax_missing";
+      fail.status = 0;
+      fail.payload = null;
+      throw fail;
+    }
 
-    if (!response.ok) {
-      var message =
-        (data && (data.message || (data.data && data.data.message))) ||
-        i18n.errorGeneric ||
-        "Request failed.";
+    var text = await response.text();
+    var data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (e) {
+      data = null;
+    }
+
+    // admin-ajax returns 0 / -1 / empty HTML when action handler is missing.
+    if (
+      !data ||
+      text === "0" ||
+      text === "-1" ||
+      (typeof text === "string" && text.trim() === "")
+    ) {
+      var missing = new Error(i18n.snippetMissing || "Snippet missing");
+      missing.code = "sokany_lost_otp_ajax_missing";
+      missing.status = response.status || 404;
+      missing.payload = { code: "sokany_lost_otp_ajax_missing", message: missing.message };
+      throw missing;
+    }
+
+    if (!response.ok || data.ok === false) {
+      var message = friendlyError(data, null);
       var err = new Error(message);
       err.code = (data && data.code) || "";
       err.status = response.status;
       err.payload = data;
+      if (data && data.status === "user_not_found") {
+        // soft business response still returns HTTP 200 usually; handled by caller
+      }
+      if (data && data.ok === false && data.status === "user_not_found") {
+        return data;
+      }
       throw err;
     }
 
@@ -712,7 +847,7 @@ CSS;
 
       setBusy(requestBtn, true);
       try {
-        var data = await postJson(restBase + "/request", { phone: phone });
+        var data = await postAjax("sokany_lost_otp_request", { phone: phone });
         if (data.ok === false) {
           if (isUserNotFound(data, null)) { showNotRegistered(statusEl); return; }
           throw new Error(data.message || i18n.errorGeneric);
@@ -722,7 +857,7 @@ CSS;
         show(statusEl, i18n.otpSent || "OTP sent", false);
       } catch (err) {
         if (isUserNotFound(err.payload, err)) showNotRegistered(statusEl);
-        else show(statusEl, err.message || i18n.errorGeneric, true);
+        else show(statusEl, friendlyError(err.payload, err), true);
       } finally {
         setBusy(requestBtn, false);
       }
@@ -745,19 +880,19 @@ CSS;
 
       setBusy(verifyBtn, true);
       try {
-        var verified = await postJson(restBase + "/verify", { phone: phone, otp: otp });
+        var verified = await postAjax("sokany_lost_otp_verify", { phone: phone, otp: otp });
         var token = verified.token || "";
         if (!token) throw new Error(i18n.errorGeneric || "Missing token");
 
-        var session = await postJson(restBase + "/session", {
+        var session = await postAjax("sokany_lost_otp_session", {
           phone: phone,
           token: token,
-          nonce: cfg.sessionNonce || "",
+          sessionNonce: cfg.sessionNonce || "",
         });
         window.location.href = session.redirect || cfg.redirectUrl || "/my-account/";
       } catch (err) {
         if (isUserNotFound(err.payload, err)) showNotRegistered(statusEl);
-        else show(statusEl, err.message || i18n.errorGeneric, true);
+        else show(statusEl, friendlyError(err.payload, err), true);
       } finally {
         setBusy(verifyBtn, false);
       }

@@ -8,7 +8,7 @@ WordPress plugin for WhatsApp OTP customer flows **and** WooCommerce order confi
 
 - Sends OTP for password reset, login, and registration (REST API for the headless storefront).
 - Optional **My Account OTP** UI on the native WooCommerce account page (login + register with WhatsApp code + WordPress cookie session).
-- **Lost-password Code Snippet** (optional, standalone): replace Woo email reset with phone OTP — see `wordpress-plugin/snippets/sokany-lost-password-otp.php`. Uses its own REST (`sokany-lost-otp/v1`) and does not call this plugin’s PHP class; order WhatsApp stays unchanged.
+- **Lost-password Code Snippet** (optional, standalone): replace Woo email reset with phone OTP — see `wordpress-plugin/snippets/sokany-lost-password-otp.php`. Uses **admin-ajax** (`sokany_lost_otp_*`, Run Everywhere). Does not call this plugin’s PHP class; order WhatsApp stays unchanged.
 - Sends customer **order confirmation** WhatsApp via MazBot when a WooCommerce order is placed from:
   - Classic shortcode checkout
   - Checkout Blocks / Store API

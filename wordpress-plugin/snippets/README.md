@@ -11,37 +11,44 @@
 3. إن الرقم مسجّل: إدخال الكود → تسجيل دخول WordPress
 4. إن الرقم غير مسجّل: رسالة + رابط إنشاء حساب
 
-**مستقل عن بلجن OTP** (لا يستدعي `Sokany_WhatsApp_OTP` ولا `/sokany-otp/v1/*`).  
-**لا يغيّر تأكيد الأوردر** — منطق الأوردر يبقى في بلجن MazBot كما هو.
+**مستقل عن بلجن OTP** (لا يستدعي `Sokany_WhatsApp_OTP`).  
+**لا يغيّر تأكيد الأوردر.**
 
-## من أين تأتي بيانات MazBot؟
+## لماذا كانت تظهر «لم يتم العثور على مسار...»؟
 
-1. افتراضياً يقرأ من option البلجن الموجود: `sokany_whatsapp_otp_settings`  
-   (نفس API Key / البريد / كلمة المرور التي تعمل لتأكيد الأوردر)
-2. يستخدم **`mazbot_template_id`** = قالب **OTP** فقط (ليس `mazbot_order_template_id`)
-3. يمكن تجاوز الإعدادات من أعلى السنابت عبر `SOKANY_LOST_OTP_OVERRIDES`
+هذه رسالة `rest_no_route`. غالباً لأن السنابت القديم كان يستدعي  
+`/wp-json/sokany-otp/v1/lost-password-session` وهو غير موجود على السيرفر،  
+أو لأن REST الخاص بالسنابت لم يُسجَّل. النسخة الحالية تستخدم **admin-ajax** أولاً.
 
-## التثبيت
+## التثبيت (مهم)
 
-1. **Snippets → Add New**
-2. الصق محتوى الملف **بدون** `<?php` في البداية
-3. Run: **Everywhere** → Activate
-4. تأكد أن **Template ID لقالب OTP** موجود في إعدادات البلجن (أو في الـ overrides)
-5. اختبر: `/my-account/lost-password/`
+1. عطّل أي سنابت قديم لـ lost-password OTP
+2. **Snippets → Add New** — الصق الملف **بدون** `<?php`
+3. Run snippet: **Everywhere** (ليس Front-end only)
+4. Activate → Save
+5. اختياري: Settings → Permalinks → Save
+6. اختبر `/my-account/lost-password/`
 
-## Endpoints الخاصة بالسنابت
+## Ajax actions
 
 ```
-POST /wp-json/sokany-lost-otp/v1/request
-POST /wp-json/sokany-lost-otp/v1/verify
-POST /wp-json/sokany-lost-otp/v1/session
+admin-ajax.php?action=sokany_lost_otp_request
+admin-ajax.php?action=sokany_lost_otp_verify
+admin-ajax.php?action=sokany_lost_otp_session
 ```
 
-## اختبار سريع
+(REST احتياطي ما زال مسجّلاً تحت `sokany-lost-otp/v1` لكن الواجهة لا تعتمد عليه.)
+
+## MazBot
+
+- يقرأ `sokany_whatsapp_otp_settings` (نفس بيانات تأكيد الأوردر)
+- يستخدم **`mazbot_template_id`** = قالب OTP فقط (ليس قالب الأوردر)
+- يمكن التجاوز من `SOKANY_LOST_OTP_OVERRIDES` أعلى السنابت
+
+## اختبار
 
 | الحالة | المتوقع |
 |--------|---------|
-| رقم مسجّل | كود واتساب → دخول → حسابي |
+| رقم مسجّل | كود واتساب → دخول |
 | رقم غير مسجّل | رسالة إنشاء حساب |
-| كود خاطئ | خطأ بدون دخول |
-| `mode=test` في الإعدادات | لا يرسل واتساب؛ الكود يُحفظ في option `sokany_lost_otp_last_test` |
+| سنابت غير مفعّل / Front-end only | رسالة عربية توضّح تفعيل Everywhere |
