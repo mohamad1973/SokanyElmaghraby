@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SOKANY WhatsApp OTP
  * Description: WhatsApp OTP + customer order confirmation via MazBot for WooCommerce (Classic, Blocks, REST) and My Account OTP.
- * Version: 1.3.1
+ * Version: 1.3.2
  * Author: SOKANY Egypt
  */
 
@@ -17,7 +17,7 @@ final class Sokany_WhatsApp_OTP {
     use Sokany_WhatsApp_OTP_Order_Trait;
     use Sokany_WhatsApp_OTP_Account_Trait;
 
-    private const VERSION = '1.3.1';
+    private const VERSION = '1.3.2';
     private const OPTION_KEY = 'sokany_whatsapp_otp_settings';
     private const LAST_TEST_OTP_OPTION = 'sokany_whatsapp_otp_last_test';
     private const LAST_ORDER_WA_OPTION = 'sokany_mazbot_last_order_wa';
@@ -1105,8 +1105,32 @@ final class Sokany_WhatsApp_OTP {
     }
 
     private static function find_user_by_phone(string $phone): ?WP_User {
-        $local_phone = self::starts_with($phone, '20') ? '0' . substr($phone, 2) : $phone;
-        $candidates = array_values(array_unique([$phone, '+' . $phone, $local_phone]));
+        $digits = preg_replace('/\D+/', '', $phone);
+        if ($digits === '') {
+            return null;
+        }
+
+        $local_phone = self::starts_with($digits, '20') && strlen($digits) >= 12
+            ? '0' . substr($digits, 2)
+            : (self::starts_with($digits, '0') ? $digits : $digits);
+        $national10 = '';
+        if (self::starts_with($digits, '20') && strlen($digits) >= 12) {
+            $national10 = substr($digits, 2);
+        } elseif (self::starts_with($digits, '0') && strlen($digits) === 11) {
+            $national10 = substr($digits, 1);
+        } elseif (strlen($digits) === 10 && self::starts_with($digits, '1')) {
+            $national10 = $digits;
+            $local_phone = '0' . $digits;
+        }
+
+        $candidates = array_values(array_unique(array_filter([
+            $digits,
+            '+' . $digits,
+            $local_phone,
+            $national10 !== '' ? '20' . $national10 : '',
+            $national10 !== '' ? '+20' . $national10 : '',
+            $national10,
+        ])));
         $meta_keys = ['billing_phone', 'phone', 'mobile'];
 
         foreach ($meta_keys as $meta_key) {
@@ -1120,6 +1144,42 @@ final class Sokany_WhatsApp_OTP {
 
                 if (!empty($users[0]) && $users[0] instanceof WP_User) {
                     return $users[0];
+                }
+            }
+        }
+
+        // Broader match: phones stored with spaces, dashes, or other punctuation.
+        $suffix = $national10 !== '' ? $national10 : (strlen($digits) >= 10 ? substr($digits, -10) : '');
+        if ($suffix === '' || strlen($suffix) < 10) {
+            return null;
+        }
+
+        global $wpdb;
+        foreach ($meta_keys as $meta_key) {
+            $user_id = (int) $wpdb->get_var($wpdb->prepare(
+                "SELECT user_id FROM {$wpdb->usermeta}
+                 WHERE meta_key = %s
+                   AND meta_value <> ''
+                   AND (
+                     meta_value = %s
+                     OR meta_value = %s
+                     OR meta_value = %s
+                     OR meta_value = %s
+                     OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(meta_value,' ',''),'-',''),'+',''),'.',''),'(','') LIKE %s
+                   )
+                 LIMIT 1",
+                $meta_key,
+                $suffix,
+                '0' . $suffix,
+                '20' . $suffix,
+                '+20' . $suffix,
+                '%' . $wpdb->esc_like($suffix)
+            ));
+
+            if ($user_id > 0) {
+                $user = get_user_by('id', $user_id);
+                if ($user instanceof WP_User) {
+                    return $user;
                 }
             }
         }

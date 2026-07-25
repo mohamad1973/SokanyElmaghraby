@@ -11,11 +11,11 @@
 3. إن الرقم مسجّل: إدخال الكود → تسجيل دخول إلى الحساب
 4. إن الرقم غير مسجّل: رسالة + رابط إنشاء حساب / الاشتراك
 
-مستقل عن Next.js. يعتمد على بلجن **SOKANY WhatsApp OTP v1.3.1+** (endpoint `/lost-password-session`).
+مستقل عن Next.js. يعتمد على بلجن **SOKANY WhatsApp OTP v1.3.2+** (endpoint `/lost-password-session` + بحث رقم محسّن).
 
 ## التثبيت
 
-1. ارفع/حدّث بلجن OTP إلى **1.3.1** على ووردبريس وفعّله.
+1. ارفع/حدّث بلجن OTP إلى **1.3.2** على ووردبريس وفعّله.
 2. افتح **Snippets → Add New** (بلجن Code Snippets).
 3. الصق محتوى `sokany-lost-password-otp.php` **بدون** سطر `<?php` في البداية — Code Snippets يضيفه تلقائياً، ولصقه يسبب خطأ syntax.
 4. العنوان مثلاً: `SOKANY Lost Password OTP`

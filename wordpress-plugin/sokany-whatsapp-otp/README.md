@@ -2,13 +2,13 @@
 
 WordPress plugin for WhatsApp OTP customer flows **and** WooCommerce order confirmation via MazBot.
 
-**Current version: 1.3.1**
+**Current version: 1.3.2**
 
 ## What It Does
 
 - Sends OTP for password reset, login, and registration (REST API for the headless storefront).
 - Optional **My Account OTP** UI on the native WooCommerce account page (login + register with WhatsApp code + WordPress cookie session).
-- **Lost-password Code Snippet** (optional): replace Woo email reset with phone OTP — see `wordpress-plugin/snippets/sokany-lost-password-otp.php` (needs plugin **1.3.1+** for `/lost-password-session`).
+- **Lost-password Code Snippet** (optional): replace Woo email reset with phone OTP — see `wordpress-plugin/snippets/sokany-lost-password-otp.php` (needs plugin **1.3.2+** for `/lost-password-session` + improved phone lookup).
 - Sends customer **order confirmation** WhatsApp via MazBot when a WooCommerce order is placed from:
   - Classic shortcode checkout
   - Checkout Blocks / Store API
@@ -65,7 +65,7 @@ POST /account-session
 
 Creates a WordPress logged-in cookie after OTP verify. Requires `nonce` from the localized My Account script.
 
-### Lost-password session (Code Snippet UI) — v1.3.1
+### Lost-password session (Code Snippet UI) — v1.3.1+
 
 ```http
 POST /lost-password-session
@@ -122,7 +122,7 @@ Confirm button URL stays configured inside the MazBot template.
 
 ## Install / upgrade
 
-1. Upload the ZIP (or replace the plugin folder) so version shows **v1.3.0**.
+1. Upload the ZIP (or replace the plugin folder) so version shows **v1.3.2**.
 2. Keep Live + MazBot credentials.
 3. Enable order notifications + Order Template ID.
 4. Optionally enable My Account OTP.
@@ -130,6 +130,15 @@ Confirm button URL stays configured inside the MazBot template.
 6. Check WooCommerce → Status → Logs → `sokany-whatsapp-otp` if needed.
 
 ## Changelog
+
+### 1.3.2
+
+- Stronger `find_user_by_phone`: Egyptian format variants (`01…` / `20…` / `+20…`) + SQL fallback for spaced/dashed stored numbers
+- Lost-password snippet: treat only real `user_not_found` (not every HTTP 404) as «create account»
+
+### 1.3.1
+
+- `/lost-password-session` for Code Snippet lost-password OTP UI
 
 ### 1.3.0
 

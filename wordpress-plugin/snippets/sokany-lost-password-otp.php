@@ -1,10 +1,12 @@
 /**
  * Snippet Name: SOKANY Lost Password OTP (phone)
  * Description: Replaces WooCommerce lost-password email field with mobile + WhatsApp OTP.
- * Requires SOKANY WhatsApp OTP plugin v1.3.1+.
+ * Requires SOKANY WhatsApp OTP plugin v1.3.2+.
  *
  * Code Snippets: Do NOT paste a <?php opening tag — the plugin adds it automatically.
  * Paste from this comment block downward → Run everywhere → Activate.
+ *
+ * Source in repo: wordpress-plugin/snippets/sokany-lost-password-otp.php
  */
 
 /**
@@ -61,11 +63,11 @@ body.woocommerce-account.woocommerce-lost-password form.woocommerce-ResetPasswor
 body.woocommerce-account form.lost_reset_password{display:none!important}
 CSS;
 
-    wp_register_style('sokany-lost-password-otp', false, [], '1.0.0');
+    wp_register_style('sokany-lost-password-otp', false, [], '1.0.1');
     wp_enqueue_style('sokany-lost-password-otp');
     wp_add_inline_style('sokany-lost-password-otp', $css);
 
-    wp_register_script('sokany-lost-password-otp', false, [], '1.0.0', true);
+    wp_register_script('sokany-lost-password-otp', false, [], '1.0.1', true);
     wp_enqueue_script('sokany-lost-password-otp');
     wp_localize_script('sokany-lost-password-otp', 'sokanyLostOtp', [
         'restBase' => esc_url_raw(rest_url('sokany-otp/v1')),
@@ -124,6 +126,16 @@ CSS;
     return /^01[0-9]{9}$/.test(normalizeLocalPhone(value));
   }
 
+  function isUserNotFound(data, err) {
+    if (data && data.status === "user_not_found") {
+      return true;
+    }
+    if (err && err.code === "sokany_user_not_found") {
+      return true;
+    }
+    return false;
+  }
+
   async function postJson(url, body) {
     var response = await fetch(url, {
       method: "POST",
@@ -149,7 +161,7 @@ CSS;
         i18n.errorGeneric ||
         "Request failed.";
       var err = new Error(message);
-      err.code = data && data.code ? data.code : "";
+      err.code = (data && data.code) || "";
       err.status = response.status;
       err.payload = data;
       throw err;
@@ -199,7 +211,7 @@ CSS;
         });
 
         if (data.ok === false) {
-          if (data.status === "user_not_found" || /حساب/.test(String(data.message || ""))) {
+          if (isUserNotFound(data, null)) {
             showNotRegistered(statusEl);
             return;
           }
@@ -210,7 +222,7 @@ CSS;
         if (codeInput) codeInput.focus();
         show(statusEl, i18n.otpSent || "OTP sent", false);
       } catch (err) {
-        if (err.status === 404 || /حساب|user_not_found/i.test(String(err.message || ""))) {
+        if (isUserNotFound(err.payload, err)) {
           showNotRegistered(statusEl);
         } else {
           show(statusEl, err.message || i18n.errorGeneric, true);
@@ -256,7 +268,7 @@ CSS;
 
         window.location.href = session.redirect || cfg.redirectUrl || "/my-account/";
       } catch (err) {
-        if (err.status === 404 || /حساب|user_not_found/i.test(String(err.message || ""))) {
+        if (isUserNotFound(err.payload, err)) {
           showNotRegistered(statusEl);
         } else {
           show(statusEl, err.message || i18n.errorGeneric, true);
