@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SOKANY WhatsApp OTP
  * Description: WhatsApp OTP + customer order confirmation via MazBot for WooCommerce (Classic, Blocks, REST) and My Account OTP.
- * Version: 1.3.2
+ * Version: 1.3.3
  * Author: SOKANY Egypt
  */
 
@@ -17,7 +17,7 @@ final class Sokany_WhatsApp_OTP {
     use Sokany_WhatsApp_OTP_Order_Trait;
     use Sokany_WhatsApp_OTP_Account_Trait;
 
-    private const VERSION = '1.3.2';
+    private const VERSION = '1.3.3';
     private const OPTION_KEY = 'sokany_whatsapp_otp_settings';
     private const LAST_TEST_OTP_OPTION = 'sokany_whatsapp_otp_last_test';
     private const LAST_ORDER_WA_OPTION = 'sokany_mazbot_last_order_wa';
@@ -154,6 +154,7 @@ final class Sokany_WhatsApp_OTP {
             'order_wa_enabled' => false,
             'mazbot_order_template_id' => 0,
             'woo_account_otp_enabled' => false,
+            'woo_lost_password_otp_enabled' => true,
             'api_base_url' => '',
             'api_token' => '',
             'api_token_header' => 'Authorization',
@@ -228,6 +229,7 @@ final class Sokany_WhatsApp_OTP {
             'order_wa_enabled' => !empty($settings['order_wa_enabled']),
             'mazbot_order_template_id' => max(0, (int) ($settings['mazbot_order_template_id'] ?? 0)),
             'woo_account_otp_enabled' => !empty($settings['woo_account_otp_enabled']),
+            'woo_lost_password_otp_enabled' => !empty($settings['woo_lost_password_otp_enabled']),
             'api_base_url' => esc_url_raw((string) ($settings['api_base_url'] ?? '')),
             'api_token' => self::clean_secret((string) ($settings['api_token'] ?? '')),
             'api_token_header' => sanitize_key((string) ($settings['api_token_header'] ?? 'Authorization')),
@@ -475,6 +477,16 @@ final class Sokany_WhatsApp_OTP {
                                 <input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[woo_account_otp_enabled]" value="1" <?php checked(!empty($settings['woo_account_otp_enabled'])); ?> />
                                 أظهر دخول وتسجيل برمز واتساب على ووردبريس
                             </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">نسيت كلمة المرور بموبايل</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="<?php echo esc_attr(self::OPTION_KEY); ?>[woo_lost_password_otp_enabled]" value="1" <?php checked(!empty($settings['woo_lost_password_otp_enabled'])); ?> />
+                                استبدل نموذج الإيميل بموبايل + كود واتساب في صفحة lost-password (مفعّل افتراضياً)
+                            </label>
+                            <p class="description">لا يحتاج Code Snippets. عطّل أي سنابت قديم لـ lost-password لتجنب التعارض.</p>
                         </td>
                     </tr>
                 </table>

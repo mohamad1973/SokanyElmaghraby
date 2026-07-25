@@ -12,6 +12,129 @@ trait Sokany_WhatsApp_OTP_Account_Trait {
         add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_account_otp_assets']);
         add_action('woocommerce_before_customer_login_form', [__CLASS__, 'render_account_otp_login_panel'], 5);
         add_action('woocommerce_register_form_start', [__CLASS__, 'render_account_otp_register_panel'], 5);
+
+        // Lost-password phone OTP UI (independent of My Account OTP toggle).
+        add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_lost_password_otp_assets']);
+        add_action('woocommerce_before_lost_password_form', [__CLASS__, 'render_lost_password_otp_panel'], 5);
+        add_filter('woocommerce_lost_password_message', [__CLASS__, 'filter_lost_password_message']);
+    }
+
+    private static function lost_password_otp_enabled(): bool {
+        $settings = self::settings();
+        // Default ON when setting is absent (fresh install / upgrade without re-save).
+        return !array_key_exists('woo_lost_password_otp_enabled', $settings)
+            || !empty($settings['woo_lost_password_otp_enabled']);
+    }
+
+    private static function is_lost_password_page(): bool {
+        if (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('lost-password')) {
+            return true;
+        }
+
+        if (function_exists('is_account_page') && is_account_page()) {
+            global $wp;
+            if (isset($wp->query_vars['lost-password'])) {
+                return true;
+            }
+            if (isset($_GET['action']) && sanitize_key((string) $_GET['action']) === 'lostpassword') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function lost_password_register_url(): string {
+        if (function_exists('wc_get_page_permalink')) {
+            $myaccount = wc_get_page_permalink('myaccount');
+            return $myaccount ? trailingslashit($myaccount) . '#customer_login' : home_url('/');
+        }
+
+        return wp_registration_url();
+    }
+
+    public static function enqueue_lost_password_otp_assets(): void {
+        if (is_admin() || is_user_logged_in() || !self::lost_password_otp_enabled()) {
+            return;
+        }
+
+        if (!self::is_lost_password_page()) {
+            return;
+        }
+
+        $assets_base = trailingslashit(plugin_dir_url(__DIR__));
+
+        wp_enqueue_style(
+            'sokany-otp-lost-password',
+            $assets_base . 'assets/lost-password-otp.css',
+            [],
+            self::VERSION
+        );
+
+        wp_enqueue_script(
+            'sokany-otp-lost-password',
+            $assets_base . 'assets/lost-password-otp.js',
+            [],
+            self::VERSION,
+            true
+        );
+
+        wp_localize_script('sokany-otp-lost-password', 'sokanyLostPasswordOtp', [
+            'restBase' => esc_url_raw(rest_url('sokany-otp/v1')),
+            'restNonce' => wp_create_nonce('wp_rest'),
+            'sessionNonce' => wp_create_nonce('sokany_lost_password_session'),
+            'redirectUrl' => function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : home_url('/'),
+            'registerUrl' => self::lost_password_register_url(),
+            'i18n' => [
+                'otpSent' => 'تم إرسال كود التحقق على واتساب.',
+                'errorGeneric' => 'تعذر إكمال العملية. حاول مرة أخرى.',
+                'invalidPhone' => 'أدخل رقم موبايل صحيح يبدأ بـ 01 ويتكون من 11 رقماً.',
+                'invalidOtp' => 'أدخل كود التحقق المكوّن من 6 أرقام.',
+                'userNotFound' => 'لا يوجد حساب بهذا الرقم. برجاء إنشاء حساب جديد.',
+                'registerCta' => 'إنشاء حساب / الاشتراك',
+            ],
+        ]);
+    }
+
+    public static function render_lost_password_otp_panel(): void {
+        if (is_user_logged_in() || !self::lost_password_otp_enabled()) {
+            return;
+        }
+        ?>
+        <div class="sokany-lost-otp-wrap" data-sokany-lost-otp>
+            <h3>استعادة الدخول برقم الموبايل</h3>
+            <p class="description">أدخل رقم الموبايل المسجّل لاستلام كود واتساب والدخول إلى حسابك. إذا لم يكن الرقم مسجلاً سيُطلب منك إنشاء حساب.</p>
+            <div class="sokany-lost-otp-fields">
+                <label>
+                    رقم الموبايل
+                    <input class="sokany-lost-otp-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" maxlength="15" />
+                </label>
+            </div>
+            <div class="sokany-lost-otp-actions">
+                <button type="button" class="button sokany-lost-otp-request">إرسال كود واتساب</button>
+            </div>
+            <div class="sokany-lost-otp-step-code" hidden>
+                <div class="sokany-lost-otp-fields">
+                    <label>
+                        كود التحقق
+                        <input class="sokany-lost-otp-code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="8" />
+                    </label>
+                </div>
+                <div class="sokany-lost-otp-actions">
+                    <button type="button" class="button button-primary sokany-lost-otp-verify">تأكيد الدخول</button>
+                </div>
+            </div>
+            <div class="sokany-lost-otp-status" hidden></div>
+        </div>
+        <?php
+    }
+
+    public static function filter_lost_password_message(string $message): string {
+        if (!self::lost_password_otp_enabled()) {
+            return $message;
+        }
+
+        return 'أدخل رقم الموبايل المسجّل على الحساب لإرسال كود التحقق عبر واتساب.';
     }
 
     public static function register_account_routes(): void {

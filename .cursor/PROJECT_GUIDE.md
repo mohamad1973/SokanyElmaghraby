@@ -169,15 +169,16 @@
 ### SOKANY WhatsApp OTP
 
 - **المسار في المشروع:** `wordpress-plugin/sokany-whatsapp-otp/`
-- **الإصدار الحالي:** `1.3.2`
-- **ZIP للرفع:** `dist/sokany-whatsapp-otp.zip` (أو `wordpress-plugin/sokany-whatsapp-otp.zip`)
+- **الإصدار الحالي:** `1.3.3`
+- **ZIP للرفع من داشبورد ووردبريس:** `dist/sokany-whatsapp-otp.zip` (Plugins → Upload Plugin — بدون مدير ملفات)
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1`
 - **Endpoints:** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`, `/account-session`, `/lost-password-session`
-- **Code Snippet (نسيت كلمة المرور بموبايل):** `wordpress-plugin/snippets/sokany-lost-password-otp.php` — مستقل عبر **admin-ajax** (`sokany_lost_otp_*`) + REST احتياطي؛ يجب Run **Everywhere**؛ لا يلمس تأكيد الأوردر؛ يعيد استخدام بيانات MazBot من نفس الـ option
+- **نسيت كلمة المرور بموبايل:** مدمج في البلجن v1.3.3 (مفعّل افتراضياً). عطّل سنابت Code Snippets القديم إن وُجد.
 - **Test Mode (بلجن):** الكود يظهر في Settings → SOKANY WhatsApp OTP
-- **v1.3.2:** تحسين `find_user_by_phone` (صيغ مصر + أرقام بفواصل) + سنابت لا يعتبر كل 404 «رقم غير مسجّل»
-- **v1.3.1:** endpoint `/lost-password-session` + سنابت استبدال نموذج lost-password بموبايل/OTP
+- **v1.3.3:** واجهة lost-password بموبايل/OTP داخل البلجن + `/lost-password-session` — رفع ZIP من لوحة Plugins
+- **v1.3.2:** تحسين `find_user_by_phone` (صيغ مصر + أرقام بفواصل)
+- **v1.3.1:** endpoint `/lost-password-session`
 - **v1.3.0:** هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account + إعادة إرسال من الأدمن
 - **v1.2.3:** ملخص أوردر واتساب بعد اكتمال البنود — بدون إرسال مبكر بـ `woocommerce_new_order`
 - **v1.2.2:** إصلاح تسجيل المتجر عبر Woo REST — تمرير `billing.phone` من JSON إلى `$_POST` وإزالة `phone_error` الكاذب
@@ -334,7 +335,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
-| نسيت كلمة المرور بموبايل OTP على Woo | سنابت مستقل عبر admin-ajax (إصلاح rest_no_route)؛ تأكيد الأوردر يبقى في البلجن | `wordpress-plugin/snippets/sokany-lost-password-otp.php` |
+| نسيت كلمة المرور بموبايل OTP على Woo | مدمج في بلجن v1.3.3 (رفع ZIP من داشبورد Plugins)؛ تأكيد الأوردر كما هو؛ تجاهل Code Snippets عند 403 | `wordpress-plugin/sokany-whatsapp-otp/` + `assets/lost-password-otp.*` |
 | Meta Catalog / Pixel على Woo | تدقيق كتالوج Woo؛ Pixel `1249252143469785`؛ فرض sync على قلايات in-stock؛ إصلاح تصنيف حلة بخار داخل قلايات؛ دليل Ads Manager في PROJECT_GUIDE | `scripts/audit-meta-*.mjs`, `scripts/check-meta-pixel.mjs`, `PROJECT_GUIDE.md` |
 | محول لغة واحد + وضع اللغة | إصلاح تكرار المحول في هيدر الموبايل؛ إعداد `localeMode` (لغتين / عربي فقط) في الثيم مع فرض العربية عبر middleware | `header.tsx`, `theme-settings.ts`, `settings-form.tsx`, `api/public/locale-mode`, `middleware.ts` |
 | ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |

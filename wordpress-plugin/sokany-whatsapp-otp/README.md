@@ -2,13 +2,13 @@
 
 WordPress plugin for WhatsApp OTP customer flows **and** WooCommerce order confirmation via MazBot.
 
-**Current version: 1.3.2**
+**Current version: 1.3.3**
 
 ## What It Does
 
 - Sends OTP for password reset, login, and registration (REST API for the headless storefront).
 - Optional **My Account OTP** UI on the native WooCommerce account page (login + register with WhatsApp code + WordPress cookie session).
-- **Lost-password Code Snippet** (optional, standalone): replace Woo email reset with phone OTP — see `wordpress-plugin/snippets/sokany-lost-password-otp.php`. Uses **admin-ajax** (`sokany_lost_otp_*`, Run Everywhere). Does not call this plugin’s PHP class; order WhatsApp stays unchanged.
+- **Lost-password phone OTP UI** (enabled by default): replaces Woo email reset form with mobile + WhatsApp OTP on `/my-account/lost-password/`. Upload this plugin ZIP from the WordPress dashboard — no Code Snippets required. Disable any old lost-password Code Snippet to avoid conflicts.
 - Sends customer **order confirmation** WhatsApp via MazBot when a WooCommerce order is placed from:
   - Classic shortcode checkout
   - Checkout Blocks / Store API
@@ -122,14 +122,21 @@ Confirm button URL stays configured inside the MazBot template.
 
 ## Install / upgrade
 
-1. Upload the ZIP (or replace the plugin folder) so version shows **v1.3.2**.
+1. Upload the ZIP from **Plugins → Add New → Upload Plugin** so version shows **v1.3.3** (WordPress dashboard upload — no file manager needed).
 2. Keep Live + MazBot credentials.
 3. Enable order notifications + Order Template ID.
-4. Optionally enable My Account OTP.
-5. Place a test order from the **native Woo checkout** and confirm WhatsApp delivery.
-6. Check WooCommerce → Status → Logs → `sokany-whatsapp-otp` if needed.
+4. Lost-password phone OTP is **on by default** (Settings → SOKANY WhatsApp OTP).
+5. Optionally enable My Account OTP.
+6. Place a test order from the **native Woo checkout** and confirm WhatsApp delivery.
+7. Check WooCommerce → Status → Logs → `sokany-whatsapp-otp` if needed.
 
 ## Changelog
+
+### 1.3.3
+
+- Built-in lost-password phone OTP UI (default ON) using existing `/request`, `/verify`, `/lost-password-session`
+- Setting: `woo_lost_password_otp_enabled`
+- Prefer plugin ZIP upload over Code Snippets for this feature
 
 ### 1.3.2
 
