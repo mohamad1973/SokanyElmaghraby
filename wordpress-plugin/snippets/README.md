@@ -1,6 +1,8 @@
 # Lost Password OTP — Code Snippet (متوافق مع بلجن 1.2.3)
 
-ملف: [`sokany-lost-password-otp.php`](sokany-lost-password-otp.php)
+> **المفضّل الآن:** ارفع البلجن الصغير `dist/sokany-lost-password-otp.zip` بدل Code Snippets (الحفظ كان يفشل بـ 403 على السيرفر).
+
+ملف السنابت (احتياطي): [`sokany-lost-password-otp.php`](sokany-lost-password-otp.php)
 
 ## ماذا يفعل؟
 
@@ -12,7 +14,7 @@
 4. يفتح جلسة ووردبريس عبر **admin-ajax** بعد التحقق بـ `/login`  
    (بدون `/lost-password-session` — غير موجود في 1.2.3)
 
-## التثبيت
+## التثبيت (سنابت — احتياطي فقط)
 
 1. تأكد أن بلجن **SOKANY WhatsApp OTP 1.2.3** مفعّل
 2. Code Snippets → Add New
