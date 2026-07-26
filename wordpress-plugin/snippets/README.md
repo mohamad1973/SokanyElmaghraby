@@ -1,19 +1,29 @@
-# Lost Password OTP
-
-## الطريقة الموصى بها: بلجن OTP v1.3.3+
-
-ارفع `dist/sokany-whatsapp-otp.zip` من لوحة ووردبريس:
-
-**Plugins → Add New → Upload Plugin → Choose File → Replace current with uploaded**
-
-بعد التفعيل تظهر واجهة الموبايل تلقائياً على `/my-account/lost-password/` (الإعداد مفعّل افتراضياً).
-
-**عطّل** أي سنابت Code Snippets قديم لـ lost-password إن وُجد (لا تحاول تعديله إذا ظهر 403).
-
----
-
-## سنابت مستقل (احتياطي فقط)
+# Lost Password OTP — Code Snippet (متوافق مع بلجن 1.2.3)
 
 ملف: [`sokany-lost-password-otp.php`](sokany-lost-password-otp.php)
 
-استخدمه فقط إذا لم تستطع رفع البلجن. يحتاج Run **Everywhere**. إذا Code Snippets يرفض الحفظ بـ 403، استخدم البلجن أعلاه.
+## ماذا يفعل؟
+
+على `/my-account/lost-password/`:
+
+1. يخفي فورم الإيميل
+2. يطلب الموبايل ويرسل OTP عبر واتساب (بلجن `/request`)
+3. يتحقق من الكود (`/verify`)
+4. يفتح جلسة ووردبريس عبر **admin-ajax** بعد التحقق بـ `/login`  
+   (بدون `/lost-password-session` — غير موجود في 1.2.3)
+
+## التثبيت
+
+1. تأكد أن بلجن **SOKANY WhatsApp OTP 1.2.3** مفعّل
+2. Code Snippets → Add New
+3. الصق الملف **بدون** `<?php`
+4. Run: **Everywhere** → Activate
+5. عطّل أي سنابت lost-password قديم متعارض
+
+## اختبار
+
+| الحالة | المتوقع |
+|--------|---------|
+| رقم مسجّل | كود واتساب → دخول حسابي |
+| رقم غير مسجّل | رسالة إنشاء حساب |
+| بلجن غير مفعّل | رسالة تحذير |

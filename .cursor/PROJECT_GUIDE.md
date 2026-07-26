@@ -335,7 +335,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
-| نسيت كلمة المرور بموبايل OTP على Woo | مدمج في بلجن v1.3.3 (رفع ZIP من داشبورد Plugins)؛ تأكيد الأوردر كما هو؛ تجاهل Code Snippets عند 403 | `wordpress-plugin/sokany-whatsapp-otp/` + `assets/lost-password-otp.*` |
+| نسيت كلمة المرور بموبايل OTP على Woo | سنابت متوافق مع بلجن 1.2.3: `/request`+`/verify` ثم جلسة عبر admin-ajax + `/login` (بدون lost-password-session) | `wordpress-plugin/snippets/sokany-lost-password-otp.php` |
 | Meta Catalog / Pixel على Woo | تدقيق كتالوج Woo؛ Pixel `1249252143469785`؛ فرض sync على قلايات in-stock؛ إصلاح تصنيف حلة بخار داخل قلايات؛ دليل Ads Manager في PROJECT_GUIDE | `scripts/audit-meta-*.mjs`, `scripts/check-meta-pixel.mjs`, `PROJECT_GUIDE.md` |
 | محول لغة واحد + وضع اللغة | إصلاح تكرار المحول في هيدر الموبايل؛ إعداد `localeMode` (لغتين / عربي فقط) في الثيم مع فرض العربية عبر middleware | `header.tsx`, `theme-settings.ts`, `settings-form.tsx`, `api/public/locale-mode`, `middleware.ts` |
 | ربط Woo الأصلي بـ MazBot + OTP | بلجن v1.3.0: هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account؛ منع تكرار وإعادة محاولة وتشخيص | `wordpress-plugin/sokany-whatsapp-otp/` |
