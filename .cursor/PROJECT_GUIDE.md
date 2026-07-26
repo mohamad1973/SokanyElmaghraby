@@ -171,38 +171,40 @@
 
 - **المسار في المشروع:** `wordpress-plugin/sokany-whatsapp-otp/`
 - **كود الريبو (أحدث):** `1.3.3` — يشمل واجهة lost-password داخل البلجن
-- **التثبيت الموصى به حالياً على السيرفر (مستقر):** `1.2.3` + بلجن صغير منفصل لـ lost-password
-- **ZIP إنتاج مستقر:** `dist/sokany-whatsapp-otp-1.2.3.zip`
+- **التثبيت الموصى به حالياً على السيرفر (مستقر):** `1.2.4` + بلجن صغير منفصل لـ lost-password
+- **ZIP إنتاج مستقر:** `dist/sokany-whatsapp-otp-1.2.4.zip` (نفس 1.2.3 + مطابقة موبايل أقوى فقط)
+- **ZIP سابق:** `dist/sokany-whatsapp-otp-1.2.3.zip`
 - **ZIP تجريبي أحدث:** `dist/sokany-whatsapp-otp.zip` (1.3.3 — ارفعه فقط بعد حذف المجلد القديم بالكامل)
 - **توثيق API:** `wordpress-plugin/sokany-whatsapp-otp/README.md`
 - **REST Base:** `https://sokany-eg.com/wp-json/sokany-otp/v1` — **لازم يظهر في** `https://sokany-eg.com/wp-json/` كمفتاح `sokany-otp` وإلا OTP/واتساب الأوردر عاطلان
-- **Endpoints (1.2.3):** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`
+- **Endpoints (1.2.x):** `/request`, `/verify`, `/login`, `/reset-password`, `/register`, `/change-password`
 - **Endpoints إضافية (1.3.x):** `/account-session`, `/lost-password-session`
 - **Test Mode (بلجن):** الكود يظهر في Settings → SOKANY WhatsApp OTP
 - **v1.3.3:** واجهة lost-password بموبايل/OTP داخل البلجن + `/lost-password-session` — رفع ZIP من لوحة Plugins
 - **v1.3.2:** تحسين `find_user_by_phone` (صيغ مصر + أرقام بفواصل)
 - **v1.3.1:** endpoint `/lost-password-session`
 - **v1.3.0:** هوك Checkout Blocks + طابور Action Scheduler + OTP في My Account + إعادة إرسال من الأدمن
+- **v1.2.4:** نفس 1.2.3 + `find_user_by_phone` الأقوى فقط (إصلاح user_not_found على Woo lost-password بدون لمس هوكات الأوردر)
 - **v1.2.3:** ملخص أوردر واتساب بعد اكتمال البنود — بدون إرسال مبكر بـ `woocommerce_new_order`
 - **v1.2.2:** إصلاح تسجيل المتجر عبر Woo REST — تمرير `billing.phone` من JSON إلى `$_POST` وإزالة `phone_error` الكاذب
 
-#### تثبيت نظيف من هوستنجر (إصلاح rest_no_route)
+#### تثبيت نظيف من هوستنجر (إصلاح rest_no_route / مطابقة الموبايل)
 
 1. File Manager → احذف بالكامل إن وُجد: `public_html/wp-content/plugins/sokany-whatsapp-otp` (مهم إذا ظهر مجلد متداخل بعد رفع Replace فاشل)
-2. ووردبريس → إضافات → ارفع `dist/sokany-whatsapp-otp-1.2.3.zip` → فعّل
+2. ووردبريس → إضافات → ارفع `dist/sokany-whatsapp-otp-1.2.4.zip` → فعّل
 3. تحقق: افتح `https://sokany-eg.com/wp-json/sokany-otp/v1` (لازم بدون 404 namespace)
 4. Settings → SOKANY WhatsApp OTP: Live + MazBot + Template OTP + Template الأوردر + تفعيل إشعار الأوردر
-5. ارفع وفعّل `dist/sokany-lost-password-otp.zip` (واجهة نسيت كلمة المرور على Woo)
+5. ارفع وفعّل `dist/sokany-lost-password-otp.zip` إن لم يكن مفعّلاً (واجهة نسيت كلمة المرور على Woo)
 6. عطّل أي Code Snippet قديم لـ lost-password OTP
 7. JWT: تأكد أن **JWT Authentication for WP REST API** Active؛ إن فشل دخول الإيميل راجع `JWT_AUTH_SECRET_KEY` أو كلمة مرور الحساب + Permalinks → Save
 
-هذا يصلح: OTP في Next.js، تأكيد أوردر واتساب، وواجهة `/my-account/lost-password/` بموبايل.
+هذا يصلح: OTP في Next.js، تأكيد أوردر واتساب، وواجهة `/my-account/lost-password/` بموبايل (بما فيها أرقام محفوظة بمسافات/صيغ مختلفة).
 
 ### SOKANY Lost Password OTP (بلجن صغير)
 
 - **المسار:** `wordpress-plugin/sokany-lost-password-otp/`
 - **ZIP:** `dist/sokany-lost-password-otp.zip`
-- **يعتمد على:** بلجن OTP 1.2.3+ (`/request` + `/verify` + `/login`)
+- **يعتمد على:** بلجن OTP 1.2.4+ مفضّل (`/request` + `/verify` + `/login`)
 - **الوظيفة:** يستبدل فورم الإيميل في نسيت كلمة المرور على ووكومرس بحقل موبايل + OTP ثم جلسة عبر `admin-ajax`
 
 ### SOKANY Headless Settings
@@ -357,6 +359,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إصلاح Woo lost-password OTP فقط | 1.2.4 = 1.2.3 + `find_user_by_phone` أقوى (صيغ مصر + أرقام بفواصل)؛ بدون لمس Next أو هوكات تأكيد الأوردر | `dist/sokany-whatsapp-otp-1.2.4.zip` |
 | إصلاح جذري OTP + واتساب أوردر | تثبيت نظيف 1.2.3 من هوستنجر + بلجن صغير lost-password ZIP؛ توثيق خطوات Hostinger/JWT؛ السبب: namespace sokany-otp غائب من wp-json | `dist/sokany-whatsapp-otp-1.2.3.zip`, `dist/sokany-lost-password-otp.zip`, `wordpress-plugin/sokany-lost-password-otp/` |
 | نسيت كلمة المرور بموبايل OTP على Woo | سنابت متوافق مع بلجن 1.2.3: `/request`+`/verify` ثم جلسة عبر admin-ajax + `/login` (بدون lost-password-session) | `wordpress-plugin/snippets/sokany-lost-password-otp.php` |
 | Meta Catalog / Pixel على Woo | تدقيق كتالوج Woo؛ Pixel `1249252143469785`؛ فرض sync على قلايات in-stock؛ إصلاح تصنيف حلة بخار داخل قلايات؛ دليل Ads Manager في PROJECT_GUIDE | `scripts/audit-meta-*.mjs`, `scripts/check-meta-pixel.mjs`, `PROJECT_GUIDE.md` |
