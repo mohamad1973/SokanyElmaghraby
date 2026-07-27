@@ -101,6 +101,7 @@
 |-----------|-----|
 | إعدادات OTP (Test Mode + آخر كود) | ووردبريس → **Settings → SOKANY WhatsApp OTP** |
 | تثبيت نظيف OTP + lost-password | انظر قسم «تثبيت نظيف من هوستنجر» تحت بلجنات ووردبريس |
+| تنسيق Cart/Checkout في Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-cart-checkout-style.php` |
 | عملاء / أرقام موبايل | **Users** → حقول `billing_phone`, `phone`, `mobile` |
 | JWT Authentication | بلجن JWT في ووردبريس |
 
@@ -206,6 +207,13 @@
 - **ZIP:** `dist/sokany-lost-password-otp.zip`
 - **يعتمد على:** بلجن OTP 1.2.4+ مفضّل (`/request` + `/verify` + `/login`)
 - **الوظيفة:** يستبدل فورم الإيميل في نسيت كلمة المرور على ووكومرس بحقل موبايل + OTP ثم جلسة عبر `admin-ajax`
+
+### تنسيق Cart / Checkout في ووردبريس (Code Snippets فقط)
+
+- **الملف:** `wordpress-plugin/snippets/sokany-cart-checkout-style.php`
+- **الوظيفة:** CSS لشكل أقرب لـ Next (رسالة خضراء بدل الحمراء + كروت السلة/الدفع) + JS يحفظ بيانات العميل في `localStorage`
+- **مهم:** يعمل على `sokany-eg.com` فقط — لا يلمس Next.js
+- **التثبيت:** Snippets → Add New → الصق بدون `<?php` → Run: Only run on site front-end → Activate
 
 ### SOKANY Headless Settings
 
@@ -359,6 +367,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تنسيق Woo Cart/Checkout + حفظ بيانات | سنابت Code Snippets: CSS (رسالة خضراء بدل الحمراء + شكل أقرب لـ Next) + JS localStorage لبيانات العميل؛ بدون لمس Next | `wordpress-plugin/snippets/sokany-cart-checkout-style.php` |
 | إصلاح Woo lost-password OTP فقط | 1.2.4 = 1.2.3 + `find_user_by_phone` أقوى (صيغ مصر + أرقام بفواصل)؛ بدون لمس Next أو هوكات تأكيد الأوردر | `dist/sokany-whatsapp-otp-1.2.4.zip` |
 | إصلاح جذري OTP + واتساب أوردر | تثبيت نظيف 1.2.3 من هوستنجر + بلجن صغير lost-password ZIP؛ توثيق خطوات Hostinger/JWT؛ السبب: namespace sokany-otp غائب من wp-json | `dist/sokany-whatsapp-otp-1.2.3.zip`, `dist/sokany-lost-password-otp.zip`, `wordpress-plugin/sokany-lost-password-otp/` |
 | نسيت كلمة المرور بموبايل OTP على Woo | سنابت متوافق مع بلجن 1.2.3: `/request`+`/verify` ثم جلسة عبر admin-ajax + `/login` (بدون lost-password-session) | `wordpress-plugin/snippets/sokany-lost-password-otp.php` |
