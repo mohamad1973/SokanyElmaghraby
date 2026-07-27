@@ -101,7 +101,7 @@
 |-----------|-----|
 | إعدادات OTP (Test Mode + آخر كود) | ووردبريس → **Settings → SOKANY WhatsApp OTP** |
 | تثبيت نظيف OTP + lost-password | انظر قسم «تثبيت نظيف من هوستنجر» تحت بلجنات ووردبريس |
-| تنسيق Cart/Checkout في Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.2.php` |
+| تنسيق Cart/Checkout في Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php` |
 | عملاء / أرقام موبايل | **Users** → حقول `billing_phone`, `phone`, `mobile` |
 | JWT Authentication | بلجن JWT في ووردبريس |
 
@@ -210,11 +210,11 @@
 
 ### تنسيق Cart / Checkout في ووردبريس (Code Snippets فقط)
 
-- **الملف الحالي:** `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.2.php`
-- **الملفات القديمة:** `...-v1.1.php` و `sokany-cart-checkout-style.php` (عطّلهما)
-- **الوظيفة:** عرض 80vw على الديسكتوب + عمودين قسريين (flex) للسلة والتشيك أوت + إخفاء البلد (EG) + نص أسود في Select2 + حفظ بيانات `localStorage`
+- **الملف الحالي:** `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php`
+- **الملفات القديمة:** `...-v1.2.php` و `...-v1.1.php` و `sokany-cart-checkout-style.php` (عطّلها)
+- **الوظيفة:** 80vw + عمودين + ملء جدول أوردرك + ترجمة COD/الشروط + إخفاء دعوة المراجعة + إخفاء البلد + Select2 أسود + localStorage
 - **مهم:** يعمل على `sokany-eg.com` فقط — لا يلمس Next.js
-- **التثبيت:** عطّل v1.0/v1.1 → أضف v1.2 بدون `<?php` → Run: Only run on site front-end → Activate
+- **التثبيت:** عطّل الإصدارات الأقدم → أضف v1.3 بدون `<?php` → Run: Only run on site front-end → Activate
 
 ### SOKANY Headless Settings
 
@@ -368,6 +368,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تنسيق Woo Cart/Checkout v1.3 | ملء جدول أوردرك + ترجمة الدفع عند الاستلام والشروط + إخفاء دعوة المراجعة؛ استبدل به v1.2 | `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php` |
 | تنسيق Woo Cart/Checkout v1.2 | عرض 80vw + flex عمودين قسريين للسلة والتشيك أوت؛ استبدل به v1.1 | `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.2.php` |
 | تنسيق Woo Cart/Checkout v1.1 | عرض أوسع + إجمالي جنب المنتجات + تشيك أوت أعرض + إخفاء البلد + Select2 نص أسود؛ استبدل به v1.0 | `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.1.php` |
 | تنسيق Woo Cart/Checkout + حفظ بيانات | سنابت Code Snippets: CSS (رسالة خضراء بدل الحمراء + شكل أقرب لـ Next) + JS localStorage لبيانات العميل؛ بدون لمس Next | `wordpress-plugin/snippets/sokany-cart-checkout-style.php` |

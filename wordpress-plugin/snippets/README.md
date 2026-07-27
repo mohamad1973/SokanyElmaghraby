@@ -5,45 +5,35 @@
 
 ---
 
-## 1) Cart + Checkout Style v1.2 (الحالي — استبدل به v1.1)
+## 1) Cart + Checkout Style v1.3 (الحالي — استبدل به v1.2)
 
-ملف: [`sokany-cart-checkout-style-v1.2.php`](sokany-cart-checkout-style-v1.2.php)
+ملف: [`sokany-cart-checkout-style-v1.3.php`](sokany-cart-checkout-style-v1.3.php)
 
 ### ماذا يفعل؟
 
-- عرض **80% من عرض الشاشة** على الديسكتوب (`80vw`)
-- السلة: منتجات + إجمالي **جنب بعض** (موبايل يبقى تحت بعض)
-- التشيك أوت: بيانات الدفع + أوردرك **جنب بعض** وبعرض أوسع
-- إخفاء حقل **البلد** (مصر افتراضياً)
-- نص القوائم المنسدلة **أسود** على الخلفية الخضراء/الليمون
-- رسالة Woo الحمراء → أخضر داكن
-- حفظ بيانات العميل في `localStorage`
+- كل ميزات v1.2 (عرض 80vw + عمودين + إخفاء البلد + Select2 أسود + حفظ بيانات)
+- جدول منتجات **أوردرك** يملأ عرض الصندوق بالكامل
+- ترجمة: `Cash on delivery` → **الدفع عند الاستلام**
+- ترجمة الشروط → **أوافق على الشروط والأحكام**
+- إخفاء جملة دعوة مراجعة الطلب
 
-### استبدال v1.1 / v1.0
+### استبدال v1.2 / الأقدم
 
-1. Snippets → عطّل أو احذف `SOKANY Cart Checkout Style` و `v1.1`
-2. Add New → Title: `SOKANY Cart Checkout Style v1.2`
-3. الصق محتوى `sokany-cart-checkout-style-v1.2.php` **بدون** `<?php`
+1. Snippets → عطّل أو احذف v1.2 (وأي أقدم)
+2. Add New → Title: `SOKANY Cart Checkout Style v1.3`
+3. الصق محتوى `sokany-cart-checkout-style-v1.3.php` **بدون** `<?php`
 4. Run: **Only run on site front-end**
 5. Save & Activate
 6. امسح كاش LiteSpeed/Cloudflare
-7. اختبر `/cart/` و `/checkout/` على ديسكتوب عريض
-
-### اختبار سريع
-
-| الحالة | المتوقع |
-|--------|---------|
-| سلة ديسكتوب | عرض ~80% + إجمالي جنب المنتجات |
-| سلة موبايل | عمودي (تحت بعض) |
-| دفع ديسكتوب | نموذجان جنب بعض بعرض أوسع؛ بدون بلد |
-| اختيار محافظة | كلام أسود واضح على خلفية خضراء |
+7. اختبر `/checkout/`
 
 ---
 
 ## 1b) إصدارات قديمة (لا تستخدمها)
 
-- [`sokany-cart-checkout-style-v1.1.php`](sokany-cart-checkout-style-v1.1.php) — استُبدل بـ v1.2
-- [`sokany-cart-checkout-style.php`](sokany-cart-checkout-style.php) — v1.0 قديم
+- [`sokany-cart-checkout-style-v1.2.php`](sokany-cart-checkout-style-v1.2.php)
+- [`sokany-cart-checkout-style-v1.1.php`](sokany-cart-checkout-style-v1.1.php)
+- [`sokany-cart-checkout-style.php`](sokany-cart-checkout-style.php)
 
 ---
 
