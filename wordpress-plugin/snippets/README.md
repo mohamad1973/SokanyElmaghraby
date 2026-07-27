@@ -5,68 +5,50 @@
 
 ---
 
-## 1) Cart + Checkout Style v1.1 (الحالي — استبدل به v1.0)
+## 1) Cart + Checkout Style v1.2 (الحالي — استبدل به v1.1)
 
-ملف: [`sokany-cart-checkout-style-v1.1.php`](sokany-cart-checkout-style-v1.1.php)
+ملف: [`sokany-cart-checkout-style-v1.2.php`](sokany-cart-checkout-style-v1.2.php)
 
 ### ماذا يفعل؟
 
-- عرض أوسع للسلة والتشيك أوت (`~1240px` / `~1280px`)
-- السلة: **إجمالي سلة المشتريات** جنب مربع المنتجات (شمال في RTL)
-- التشيك أوت: عمودا **بيانات الدفع** و**أوردرك** أعرض ومتجاوران
-- إخفاء حقل **البلد** (مصر افتراضياً في الطلب)
-- نص القوائم المنسدلة **أسود** على الخلفية الخضراء/الليمون (Select2)
+- عرض **80% من عرض الشاشة** على الديسكتوب (`80vw`)
+- السلة: منتجات + إجمالي **جنب بعض** (موبايل يبقى تحت بعض)
+- التشيك أوت: بيانات الدفع + أوردرك **جنب بعض** وبعرض أوسع
+- إخفاء حقل **البلد** (مصر افتراضياً)
+- نص القوائم المنسدلة **أسود** على الخلفية الخضراء/الليمون
 - رسالة Woo الحمراء → أخضر داكن
 - حفظ بيانات العميل في `localStorage`
 
-### استبدال v1.0
+### استبدال v1.1 / v1.0
 
-1. Snippets → عطّل أو احذف `SOKANY Cart Checkout Style` (الملف القديم)
-2. Add New → Title: `SOKANY Cart Checkout Style v1.1`
-3. الصق محتوى `sokany-cart-checkout-style-v1.1.php` **بدون** `<?php`
+1. Snippets → عطّل أو احذف `SOKANY Cart Checkout Style` و `v1.1`
+2. Add New → Title: `SOKANY Cart Checkout Style v1.2`
+3. الصق محتوى `sokany-cart-checkout-style-v1.2.php` **بدون** `<?php`
 4. Run: **Only run on site front-end**
 5. Save & Activate
 6. امسح كاش LiteSpeed/Cloudflare
-7. اختبر `/cart/` و `/checkout/`
+7. اختبر `/cart/` و `/checkout/` على ديسكتوب عريض
 
 ### اختبار سريع
 
 | الحالة | المتوقع |
 |--------|---------|
-| صفحة السلة ديسكتوب | منتجات + إجمالي جنب بعض، عرض أوسع |
-| صفحة الدفع | نموذجان أعرض جنب بعض؛ بدون حقل بلد |
+| سلة ديسكتوب | عرض ~80% + إجمالي جنب المنتجات |
+| سلة موبايل | عمودي (تحت بعض) |
+| دفع ديسكتوب | نموذجان جنب بعض بعرض أوسع؛ بدون بلد |
 | اختيار محافظة | كلام أسود واضح على خلفية خضراء |
-| Refresh بعد إدخال بيانات | البيانات ترجع تلقائياً |
 
 ---
 
-## 1b) Cart + Checkout Style v1.0 (قديم — لا تستخدمه)
+## 1b) إصدارات قديمة (لا تستخدمها)
 
-ملف قديم: [`sokany-cart-checkout-style.php`](sokany-cart-checkout-style.php)  
-استُبدل بـ **v1.1** أعلاه.
+- [`sokany-cart-checkout-style-v1.1.php`](sokany-cart-checkout-style-v1.1.php) — استُبدل بـ v1.2
+- [`sokany-cart-checkout-style.php`](sokany-cart-checkout-style.php) — v1.0 قديم
 
 ---
 
 ## 2) Lost Password OTP (احتياطي)
 
-> **المفضّل الآن:** ارفع البلجن الصغير `dist/sokany-lost-password-otp.zip` بدل Code Snippets (الحفظ كان يفشل بـ 403 على السيرفر).
+> **المفضّل الآن:** ارفع البلجن الصغير `dist/sokany-lost-password-otp.zip` بدل Code Snippets.
 
 ملف السنابت (احتياطي): [`sokany-lost-password-otp.php`](sokany-lost-password-otp.php)
-
-### ماذا يفعل؟
-
-على `/my-account/lost-password/`:
-
-1. يخفي فورم الإيميل
-2. يطلب الموبايل ويرسل OTP عبر واتساب (بلجن `/request`)
-3. يتحقق من الكود (`/verify`)
-4. يفتح جلسة ووردبريس عبر **admin-ajax** بعد التحقق بـ `/login`  
-   (بدون `/lost-password-session` — غير موجود في 1.2.3)
-
-### التثبيت (سنابت — احتياطي فقط)
-
-1. تأكد أن بلجن **SOKANY WhatsApp OTP 1.2.4** مفعّل
-2. Code Snippets → Add New
-3. الصق الملف **بدون** `<?php`
-4. Run: **Everywhere** → Activate
-5. عطّل أي سنابت lost-password قديم متعارض
