@@ -102,7 +102,7 @@
 | إعدادات OTP (Test Mode + آخر كود) | ووردبريس → **Settings → SOKANY WhatsApp OTP** |
 | تثبيت نظيف OTP + lost-password | انظر قسم «تثبيت نظيف من هوستنجر» تحت بلجنات ووردبريس |
 | تنسيق Cart/Checkout في Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php` |
-| مقارنة منتجات Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-product-compare-v1.1.2.php` |
+| مقارنة منتجات Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-product-compare-v1.1.3.php` |
 | عملاء / أرقام موبايل | **Users** → حقول `billing_phone`, `phone`, `mobile` |
 | JWT Authentication | بلجن JWT في ووردبريس |
 
@@ -219,11 +219,11 @@
 
 ### مقارنة المنتجات في ووردبريس (Code Snippets فقط)
 
-- **الملف الحالي:** `wordpress-plugin/snippets/sokany-product-compare-v1.1.2.php`
-- **الإصدار السابق:** `...-v1.1.1.php` (عطّله لتجنب تضارب أيقونات المقارنة)
-- **الوظيفة:** ديسكتوب عائمة فوق السوشيال + موبايل بجوار سوشيال الفوتر + عداد + صفحة `/compare-products/` + مزامنة زر الثيم الأصلي
-- **مهم:** لا يلمس Next.js
-- **التثبيت:** عطّل v1.1.1 (وأي أقدم) → أضف v1.1.2 بدون `<?php` → Run: Only run on site front-end → Activate → Permalinks Save مرة واحدة
+- **الملف الحالي:** `wordpress-plugin/snippets/sokany-product-compare-v1.1.3.php`
+- **الإصدار السابق:** عطّل أي أقدم من v1.1.3
+- **الوظيفة:** أيقونة ظاهرة دائمًا فوق السوشيال (ديسكتوب) + بجوار سوشيال الفوتر (موبايل) + صفحة مقارنة + مزامنة زر الثيم
+- **مهم:** ووردبريس فقط — لا يلمس Next.js ولا يحتاج Vercel
+- **التثبيت:** عطّل الأقدم → الصق v1.1.3 بدون `<?php` → Activate → Permalinks Save → امسح الكاش
 
 ### SOKANY Headless Settings
 
@@ -377,6 +377,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مقارنة منتجات Woo v1.1.3 | أيقونة مقارنة ظاهرة دائمًا (CSS/JS مباشر في head/footer) فوق السوشيال ديسكتوب + فوتر موبايل؛ بدون Vercel | `wordpress-plugin/snippets/sokany-product-compare-v1.1.3.php` |
 | مقارنة منتجات Woo v1.1.2 | نقل أيقونة المقارنة: ديسكتوب فوق أيقونات السوشيال (RTL/LTR تلقائي) + موبايل بجوار سوشيال الفوتر؛ بدون الاعتماد على هيدر البحث | `wordpress-plugin/snippets/sokany-product-compare-v1.1.2.php`, `wordpress-plugin/snippets/README.md` |
 | مقارنة منتجات Woo v1.1.1 | إصلاح ظهور أيقونة المقارنة داخل الهيدر قرب البحث عبر selectors أوسع للثيم (خصوصاً WoodMart) + fallback هيدر صارم بدون أيقونة عائمة | `wordpress-plugin/snippets/sokany-product-compare-v1.1.1.php`, `wordpress-plugin/snippets/README.md` |
 | مقارنة منتجات Woo v1.1 | إلغاء زر المقارنة المكرر داخل الكارت؛ ربط زر/أيقونة الثيم الأصلية مع localStorage؛ نقل أيقونة المقارنة للهيدر قرب البحث + عداد + صفحة مقارنة موحدة | `wordpress-plugin/snippets/sokany-product-compare-v1.1.php`, `wordpress-plugin/snippets/README.md` |
