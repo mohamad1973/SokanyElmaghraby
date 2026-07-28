@@ -5,16 +5,16 @@
 
 ---
 
-## 1) Product Compare v1.1.1 (الحالي)
+## 1) Product Compare v1.1.2 (الحالي)
 
-ملف: [`sokany-product-compare-v1.1.1.php`](sokany-product-compare-v1.1.1.php)
+ملف: [`sokany-product-compare-v1.1.2.php`](sokany-product-compare-v1.1.2.php)
 
 ### ماذا يفعل؟
 
-- أيقونة مقارنة في الهيدر بجوار البحث (يسار شريط البحث) مع عداد
+- ديسكتوب: أيقونة مقارنة عائمة فوق أيقونات السوشيال (محاذاة تلقائية RTL/LTR)
+- موبايل: أيقونة مقارنة داخل الفوتر بجوار أيقونات السوشيال
 - بدون زر مقارنة إضافي داخل الكارت (يستخدم زر/أيقونة الثيم الأصلية)
 - مزامنة الزر الأصلي مع `localStorage` وصفحة المقارنة
-- تحسين selectors للهيدر/البحث (مناسب أكثر مع WoodMart والثيمات المشابهة)
 - صفحة مقارنة على `/compare-products/`
 - مقارنة المواصفات جنبًا إلى جنب (حتى 4 منتجات)
 - حفظ قائمة المقارنة في `localStorage`
@@ -22,8 +22,8 @@
 ### التثبيت
 
 1. Snippets → Add New
-2. عطّل سنابت `v1.1` أو `v1.0` (لو مفعّل)
-3. Title: `SOKANY Product Compare v1.1.1`
+2. عطّل سنابت `v1.1.1` أو أي أقدم (لو مفعّل)
+3. Title: `SOKANY Product Compare v1.1.2`
 4. الصق الملف **بدون** `<?php`
 5. Run: **Only run on site front-end**
 6. Save & Activate
