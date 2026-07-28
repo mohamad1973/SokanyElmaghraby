@@ -1,11 +1,35 @@
-# WordPress Code Snippets (Woo only)
+﻿# WordPress Code Snippets (Woo only)
 
 ملفات جاهزة للصق داخل بلجن **Code Snippets** على `sokany-eg.com` فقط.  
 **لا تلمس موقع Next.js.**
 
 ---
 
-## 1) Cart + Checkout Style v1.3 (الحالي — استبدل به v1.2)
+## 1) Product Compare v1.0 (جديد)
+
+ملف: [`sokany-product-compare-v1.0.php`](sokany-product-compare-v1.0.php)
+
+### ماذا يفعل؟
+
+- أيقونة مقارنة عائمة أعلى الصفحة مع عداد
+- زر "إضافة إلى المقارنة" على كروت/صفحات المنتج
+- صفحة مقارنة على `/compare-products/`
+- مقارنة المواصفات جنبًا إلى جنب (حتى 4 منتجات)
+- حفظ قائمة المقارنة في `localStorage`
+
+### التثبيت
+
+1. Snippets → Add New
+2. Title: `SOKANY Product Compare v1.0`
+3. الصق الملف **بدون** `<?php`
+4. Run: **Only run on site front-end**
+5. Save & Activate
+6. Settings → Permalinks → Save مرة واحدة
+7. امسح الكاش واختبر المقارنة
+
+---
+
+## 2) Cart + Checkout Style v1.3 (الحالي)
 
 ملف: [`sokany-cart-checkout-style-v1.3.php`](sokany-cart-checkout-style-v1.3.php)
 
@@ -29,15 +53,7 @@
 
 ---
 
-## 1b) إصدارات قديمة (لا تستخدمها)
-
-- [`sokany-cart-checkout-style-v1.2.php`](sokany-cart-checkout-style-v1.2.php)
-- [`sokany-cart-checkout-style-v1.1.php`](sokany-cart-checkout-style-v1.1.php)
-- [`sokany-cart-checkout-style.php`](sokany-cart-checkout-style.php)
-
----
-
-## 2) Lost Password OTP (احتياطي)
+## 3) Lost Password OTP (احتياطي)
 
 > **المفضّل الآن:** ارفع البلجن الصغير `dist/sokany-lost-password-otp.zip` بدل Code Snippets.
 
