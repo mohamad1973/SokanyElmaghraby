@@ -102,6 +102,7 @@
 | إعدادات OTP (Test Mode + آخر كود) | ووردبريس → **Settings → SOKANY WhatsApp OTP** |
 | تثبيت نظيف OTP + lost-password | انظر قسم «تثبيت نظيف من هوستنجر» تحت بلجنات ووردبريس |
 | تنسيق Cart/Checkout في Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php` |
+| مقارنة منتجات Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-product-compare-v1.1.php` |
 | عملاء / أرقام موبايل | **Users** → حقول `billing_phone`, `phone`, `mobile` |
 | JWT Authentication | بلجن JWT في ووردبريس |
 
@@ -215,6 +216,14 @@
 - **الوظيفة:** 80vw + عمودين + ملء جدول أوردرك + ترجمة COD/الشروط + إخفاء دعوة المراجعة + إخفاء البلد + Select2 أسود + localStorage
 - **مهم:** يعمل على `sokany-eg.com` فقط — لا يلمس Next.js
 - **التثبيت:** عطّل الإصدارات الأقدم → أضف v1.3 بدون `<?php` → Run: Only run on site front-end → Activate
+
+### مقارنة المنتجات في ووردبريس (Code Snippets فقط)
+
+- **الملف الحالي:** `wordpress-plugin/snippets/sokany-product-compare-v1.1.php`
+- **الإصدار السابق:** `...-v1.0.php` (عطّله لتجنب تضارب أزرار المقارنة)
+- **الوظيفة:** أيقونة مقارنة في الهيدر قرب البحث + عداد + صفحة `/compare-products/` + مزامنة مع زر المقارنة الأصلي للثيم
+- **مهم:** لا يلمس Next.js
+- **التثبيت:** عطّل v1.0 → أضف v1.1 بدون `<?php` → Run: Only run on site front-end → Activate → Permalinks Save مرة واحدة
 
 ### SOKANY Headless Settings
 
@@ -368,6 +377,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مقارنة منتجات Woo v1.1 | إلغاء زر المقارنة المكرر داخل الكارت؛ ربط زر/أيقونة الثيم الأصلية مع localStorage؛ نقل أيقونة المقارنة للهيدر قرب البحث + عداد + صفحة مقارنة موحدة | `wordpress-plugin/snippets/sokany-product-compare-v1.1.php`, `wordpress-plugin/snippets/README.md` |
 | تنسيق Woo Cart/Checkout v1.3 | ملء جدول أوردرك + ترجمة الدفع عند الاستلام والشروط + إخفاء دعوة المراجعة؛ استبدل به v1.2 | `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php` |
 | تنسيق Woo Cart/Checkout v1.2 | عرض 80vw + flex عمودين قسريين للسلة والتشيك أوت؛ استبدل به v1.1 | `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.2.php` |
 | تنسيق Woo Cart/Checkout v1.1 | عرض أوسع + إجمالي جنب المنتجات + تشيك أوت أعرض + إخفاء البلد + Select2 نص أسود؛ استبدل به v1.0 | `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.1.php` |
