@@ -7,23 +7,28 @@
 
 ## 0) CMaster Mobile Overflow Fix v1.0 (`cmaster-eg.com`)
 
+### لو تستخدم HFCM (Header Footer Code Manager) — الموصى به عندك
+
+ملف: [`cmaster-mobile-overflow-fix-v1.0-hfcm.html`](cmaster-mobile-overflow-fix-v1.0-hfcm.html)
+
+1. احذف أي لصق PHP قديم من HFCM
+2. HFCM → Add New
+3. Snippet Type: **HTML**
+4. Location: **Header**
+5. Site Display: **Site Wide**
+6. الصق محتوى ملف `-hfcm.html` كاملًا (style + script) **بدون أي PHP**
+7. Active → Save → امسح الكاش واختبر الموبايل
+
+### لو تستخدم بلجن Code Snippets (PHP)
+
 ملف: [`cmaster-mobile-overflow-fix-v1.0.php`](cmaster-mobile-overflow-fix-v1.0.php)
 
-### ماذا يفعل؟
+1. Title: `CMaster Mobile Overflow Fix v1.0`
+2. الصق الملف **بدون** `<?php`
+3. Run: **Only run on site front-end**
+4. Activate → امسح الكاش
 
-- يمنع السكرول الأفقي (يمين/شمال) على الموبايل
-- يقفل عرض الصفحة على `100%` تحت `900px`
-- يضبط الصور/الجداول/Elementor والعناصر العريضة الشائعة
-- يصحح `viewport` إن كان ناقصًا
-
-### التثبيت
-
-1. على `cmaster-eg.com` → Snippets → Add New
-2. Title: `CMaster Mobile Overflow Fix v1.0`
-3. الصق الملف **بدون** `<?php`
-4. Run: **Only run on site front-end**
-5. Save & Activate
-6. امسح الكاش واختبر على الموبايل
+> خطأ HFCM الأحمر يظهر لأنك لصقت PHP داخل HFCM. HFCM يقبل HTML/CSS/JS فقط.
 
 ---
 

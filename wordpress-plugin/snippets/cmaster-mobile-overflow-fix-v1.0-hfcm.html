@@ -1,55 +1,34 @@
-/**
- * Snippet Name: CMaster Mobile Overflow Fix v1.0
- * Description: يمنع السكرول الأفقي (يمين/شمال) على الموبايل لموقع cmaster-eg.com.
- *
- * مهم:
- * - هذا الملف لبلجن Code Snippets (PHP) فقط — مش HFCM.
- * - لو عندك HFCM: استخدم الملف cmaster-mobile-overflow-fix-v1.0-hfcm.html
- *
- * Code Snippets:
- * - Do NOT paste a <?php opening tag
- * - Run snippet: Only run on site front-end
- * - Activate
- * - امسح الكاش ثم اختبر على الموبايل
- *
- * Source: wordpress-plugin/snippets/cmaster-mobile-overflow-fix-v1.0.php
- * WordPress only — لا يلمس Next.js / Vercel.
- */
+<!--
+  CMaster Mobile Overflow Fix v1.0 — نسخة HFCM
+  الصق هذا في HFCM (Header Footer Code Manager) كما هو.
+  لا تضع كود PHP هنا.
 
-if (!defined('ABSPATH')) {
-    exit;
-}
-
-add_action('wp_head', function () {
-    if (is_admin()) {
-        return;
-    }
-    ?>
+  إعدادات HFCM المقترحة:
+  - Snippet Type: HTML
+  - Site Display: Site Wide
+  - Location: Header (أو Footer — الاثنين شغالين)
+  - Device Display: All / Mobile فقط إن وُجد
+  - Status: Active
+-->
 <style id="cmaster-mobile-overflow-fix-v1">
-/* قفل عرض الصفحة على الموبايل */
 @media (max-width: 900px) {
   html, body {
     max-width: 100% !important;
     overflow-x: hidden !important;
     position: relative !important;
   }
-
   body {
     width: 100% !important;
   }
-
-  /* عناصر شائعة تسبب عرض زائد */
   img, video, iframe, embed, object, svg {
     max-width: 100% !important;
     height: auto !important;
   }
-
   table {
     max-width: 100% !important;
     display: block !important;
     overflow-x: auto !important;
   }
-
   .container,
   .container-fluid,
   .row,
@@ -76,8 +55,6 @@ add_action('wp_head', function () {
     max-width: 100% !important;
     overflow-x: clip !important;
   }
-
-  /* منع عناصر مطلقة/ثابتة عريضة من توسيع الصفحة */
   .elementor-section.elementor-section-stretched,
   .elementor-top-section {
     left: 0 !important;
@@ -87,28 +64,16 @@ add_action('wp_head', function () {
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
-
-  /* نصوص طويلة بدون كسر تسبب سكرول */
   p, h1, h2, h3, h4, h5, h6, li, a, span {
     overflow-wrap: anywhere;
     word-wrap: break-word;
   }
-
-  /* حقول النماذج */
   input, select, textarea {
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
 }
 </style>
-    <?php
-}, 99);
-
-add_action('wp_footer', function () {
-    if (is_admin()) {
-        return;
-    }
-    ?>
 <script id="cmaster-mobile-overflow-fix-v1-js">
 (function () {
   function ensureViewport() {
@@ -136,7 +101,8 @@ add_action('wp_footer', function () {
       if (rect.width > docWidth + 2) {
         el.style.maxWidth = '100%';
         el.style.boxSizing = 'border-box';
-        if (getComputedStyle(el).position === 'absolute' || getComputedStyle(el).position === 'fixed') {
+        var pos = getComputedStyle(el).position;
+        if (pos === 'absolute' || pos === 'fixed') {
           if (rect.left < 0) el.style.left = '0px';
           if (rect.right > docWidth) el.style.right = '0px';
         }
@@ -159,5 +125,3 @@ add_action('wp_footer', function () {
   setTimeout(clampWideNodes, 800);
 })();
 </script>
-    <?php
-}, 99);
