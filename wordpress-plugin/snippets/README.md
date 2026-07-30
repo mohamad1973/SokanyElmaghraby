@@ -1,7 +1,29 @@
 ﻿# WordPress Code Snippets (Woo only)
 
-ملفات جاهزة للصق داخل بلجن **Code Snippets** على `sokany-eg.com` فقط.  
+ملفات جاهزة للصق داخل بلجن **Code Snippets**.  
 **لا تلمس موقع Next.js.**
+
+---
+
+## 0) CMaster Mobile Overflow Fix v1.0 (`cmaster-eg.com`)
+
+ملف: [`cmaster-mobile-overflow-fix-v1.0.php`](cmaster-mobile-overflow-fix-v1.0.php)
+
+### ماذا يفعل؟
+
+- يمنع السكرول الأفقي (يمين/شمال) على الموبايل
+- يقفل عرض الصفحة على `100%` تحت `900px`
+- يضبط الصور/الجداول/Elementor والعناصر العريضة الشائعة
+- يصحح `viewport` إن كان ناقصًا
+
+### التثبيت
+
+1. على `cmaster-eg.com` → Snippets → Add New
+2. Title: `CMaster Mobile Overflow Fix v1.0`
+3. الصق الملف **بدون** `<?php`
+4. Run: **Only run on site front-end**
+5. Save & Activate
+6. امسح الكاش واختبر على الموبايل
 
 ---
 
