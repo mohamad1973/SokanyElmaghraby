@@ -5,7 +5,33 @@
 
 ---
 
-## 0) CMaster Mobile Overflow Fix v1.0 (`cmaster-eg.com`)
+## 0) SOKANY Contact Form v1.0 (`sokany-eg.com`)
+
+ملف: [`sokany-contact-form-v1.0.php`](sokany-contact-form-v1.0.php)
+
+### ماذا يفعل؟
+
+- فورم اتصل بنا بشكل قريب من Next (حقول مستديرة + زر أخضر `#daff00`)
+- إرسال مباشر عبر SMTP داخل السنابت إلى `info@sokanyelmaghraby.com`
+- بديل لـ Contact Form 7 (لا يعتمد عليه)
+- شورت كود: `[sokany_contact_form]`
+
+### التثبيت
+
+1. Snippets → Add New
+2. Title: `SOKANY Contact Form v1.0`
+3. الصق الملف **بدون** `<?php`
+4. غيّر `SOKANY_CF_SMTP_PASS` إلى كلمة مرور بريد Hostinger (لبريد `info@sokanyelmaghraby.com`)
+5. Run: **Run everywhere** (موصى به) أو Only front-end
+6. Save & Activate
+7. صفحة اتصل بنا → احذف شورت كود CF7 → ضع `[sokany_contact_form]`
+8. امسح الكاش وأرسل رسالة تجريبية
+
+> بيانات SMTP الافتراضية: `smtp.hostinger.com` / منفذ `465` / SSL.
+
+---
+
+## 1) CMaster Mobile Overflow Fix v1.0 (`cmaster-eg.com`)
 
 ### لو تستخدم HFCM (Header Footer Code Manager) — الموصى به عندك
 
@@ -32,7 +58,7 @@
 
 ---
 
-## 1) Product Compare v1.1.3 (الحالي — الصق هذا)
+## 2) Product Compare v1.1.3 (الحالي — الصق هذا)
 
 ملف: [`sokany-product-compare-v1.1.3.php`](sokany-product-compare-v1.1.3.php)
 
