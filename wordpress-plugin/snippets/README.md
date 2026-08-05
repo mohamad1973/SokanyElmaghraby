@@ -5,29 +5,30 @@
 
 ---
 
-## 0) SOKANY Contact Form v1.0 (`sokany-eg.com`)
+## 0) SOKANY Contact Form v1.1 (`sokany-eg.com`) — الحالي
 
-ملف: [`sokany-contact-form-v1.0.php`](sokany-contact-form-v1.0.php)
+ملف: [`sokany-contact-form-v1.1.php`](sokany-contact-form-v1.1.php)
 
 ### ماذا يفعل؟
 
-- فورم اتصل بنا بشكل قريب من Next (حقول مستديرة + زر أخضر `#daff00`)
-- إرسال مباشر عبر SMTP داخل السنابت إلى `info@sokanyelmaghraby.com`
-- بديل لـ Contact Form 7 (لا يعتمد عليه)
-- شورت كود: `[sokany_contact_form]`
+- يستبدل فورم Contact Form 7 **تلقائيًا** على صفحة اتصل بنا (بدون تعديل الصفحة)
+- شكل قريب من Next (حقول مستديرة + زر أخضر `#daff00`)
+- إرسال SMTP إلى `info@sokanyelmaghraby.com`
+- عطّل `v1.0` إن كان مفعّلًا
 
-### التثبيت
+### التثبيت (مهم)
 
-1. Snippets → Add New
-2. Title: `SOKANY Contact Form v1.0`
+1. عطّل سنابت `SOKANY Contact Form v1.0`
+2. Snippets → Add New → Title: `SOKANY Contact Form v1.1`
 3. الصق الملف **بدون** `<?php`
-4. غيّر `SOKANY_CF_SMTP_PASS` إلى كلمة مرور بريد Hostinger (لبريد `info@sokanyelmaghraby.com`)
-5. Run: **Run everywhere** (موصى به) أو Only front-end
+4. غيّر `SOKANY_CF11_SMTP_PASS` إلى كلمة مرور بريد Hostinger لـ `info@sokanyelmaghraby.com`
+5. Run: **Run everywhere**
 6. Save & Activate
-7. صفحة اتصل بنا → احذف شورت كود CF7 → ضع `[sokany_contact_form]`
-8. امسح الكاش وأرسل رسالة تجريبية
+7. امسح كاش LiteSpeed/Cloudflare
+8. افتح `/contact-us/` — لازم يظهر الفورم الجديد مكان CF7
+9. أرسل رسالة تجريبية وتأكد من وصول الإيميل
 
-> بيانات SMTP الافتراضية: `smtp.hostinger.com` / منفذ `465` / SSL.
+> بدون ملء كلمة مرور SMTP لن يُرسل الإيميل (ستظهر رسالة عربية توضح ذلك).
 
 ---
 
