@@ -85,7 +85,7 @@
 
 ---
 
-## 2) Cart + Checkout Style v1.3 (الحالي)
+## 3) Cart + Checkout Style v1.3 (الحالي)
 
 ملف: [`sokany-cart-checkout-style-v1.3.php`](sokany-cart-checkout-style-v1.3.php)
 
@@ -109,7 +109,7 @@
 
 ---
 
-## 3) Lost Password OTP (احتياطي)
+## 4) Lost Password OTP (احتياطي)
 
 > **المفضّل الآن:** ارفع البلجن الصغير `dist/sokany-lost-password-otp.zip` بدل Code Snippets.
 
