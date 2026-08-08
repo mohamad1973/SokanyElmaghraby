@@ -5,28 +5,27 @@
 
 ---
 
-## 0) SOKANY Contact Form v1.1 (`sokany-eg.com`) — الحالي
+## 0) SOKANY Contact Form v1.1.1 (`sokany-eg.com`) — الحالي
 
-ملف: [`sokany-contact-form-v1.1.php`](sokany-contact-form-v1.1.php)
+ملف: [`sokany-contact-form-v1.1.1.php`](sokany-contact-form-v1.1.1.php)
 
 ### ماذا يفعل؟
 
-- يستبدل فورم Contact Form 7 **تلقائيًا** على صفحة اتصل بنا (بدون تعديل الصفحة)
-- شكل قريب من Next (حقول مستديرة + زر أخضر `#daff00`)
+- يظهر فورم Next بشكل مضمون (لا يخفي CF7 إلا بعد ظهور الفورم الجديد)
+- استبدال PHP لـ Contact Form 7 + حقن احتياطي في صفحة `/contact-us/`
 - إرسال SMTP إلى `info@sokanyelmaghraby.com`
-- عطّل `v1.0` إن كان مفعّلًا
+- يصلح اختفاء الفورم الذي حصل مع v1.1
 
 ### التثبيت (مهم)
 
-1. عطّل سنابت `SOKANY Contact Form v1.0`
-2. Snippets → Add New → Title: `SOKANY Contact Form v1.1`
+1. عطّل **كل** من: Contact Form v1.0 و v1.1
+2. Snippets → Add New → Title: `SOKANY Contact Form v1.1.1`
 3. الصق الملف **بدون** `<?php`
-4. غيّر `SOKANY_CF11_SMTP_PASS` إلى كلمة مرور بريد Hostinger لـ `info@sokanyelmaghraby.com`
+4. غيّر `SOKANY_CF111_SMTP_PASS` لكلمة مرور بريد Hostinger
 5. Run: **Run everywhere**
 6. Save & Activate
-7. امسح كاش LiteSpeed/Cloudflare
-8. افتح `/contact-us/` — لازم يظهر الفورم الجديد مكان CF7
-9. أرسل رسالة تجريبية وتأكد من وصول الإيميل
+7. امسح الكاش وافتح `/contact-us/`
+8. أرسل رسالة تجريبية
 
 > بدون ملء كلمة مرور SMTP لن يُرسل الإيميل (ستظهر رسالة عربية توضح ذلك).
 
