@@ -5,37 +5,25 @@
 
 ---
 
-## 0) SOKANY Contact Form v1.1.2 (`sokany-eg.com`) — الحالي
+## 0) SOKANY Contact Form v1.1.3 (`sokany-eg.com`) — الحالي
 
-ملف: [`sokany-contact-form-v1.1.2.php`](sokany-contact-form-v1.1.2.php)
+ملف: [`sokany-contact-form-v1.1.3.php`](sokany-contact-form-v1.1.3.php)
 
 ### ماذا يفعل؟
 
-- يظهر فورم Next بشكل مضمون (لا يخفي CF7 إلا بعد ظهور الفورم الجديد)
-- استبدال PHP لـ Contact Form 7 + حقن احتياطي في صفحة `/contact-us/`
-- **إرسال افتراضي عبر** `https://sokany-storefront.vercel.app/api/contact` — **بدون** كلمة مرور SMTP في السنابت
-- احتياطي اختياري: SMTP محلي عبر `SOKANY_SMTP_PASS` في `wp-config.php`
-- يصلح خطأ «لم يتم ضبط كلمة مرور SMTP» في v1.1 / v1.1.1
+- **نفس v1.1** (شكل الفورم + SMTP إلى `info@sokanyelmaghraby.com`)
+- إصلاح خطأ «انتهت صلاحية الجلسة» الناتج عن كاش الصفحة
+- بدون ميزات إضافية من v1.1.1 / v1.1.2
 
 ### التثبيت (مهم)
 
-1. عطّل **كل** من: Contact Form v1.0 و v1.1 و v1.1.1
-2. Snippets → Add New → Title: `SOKANY Contact Form v1.1.2`
+1. عطّل **كل** سنابتات Contact Form القديمة (v1.0 → v1.1.2)
+2. Snippets → Add New → Title: `SOKANY Contact Form v1.1.3`
 3. الصق الملف **بدون** `<?php`
-4. Run: **Run everywhere**
-5. Save & Activate
-6. امسح الكاش وافتح `/contact-us/`
-7. أرسل رسالة تجريبية
-
-> لا حاجة لملء كلمة مرور في السنابت. تأكد أن `SMTP_*` مضبوطة على Vercel لفورم المتجر.
-
-### احتياطي SMTP محلي (اختياري)
-
-في `wp-config.php` قبل `That's all, stop editing!`:
-
-```php
-define('SOKANY_SMTP_PASS', 'كلمة_مرور_بريد_info_من_Hostinger');
-```
+4. غيّر `SOKANY_CF113_SMTP_PASS` لكلمة مرور بريد Hostinger
+5. Run: **Run everywhere**
+6. Save & Activate
+7. امسح الكاش وافتح `/contact-us/` وأرسل رسالة تجريبية
 
 ---
 
