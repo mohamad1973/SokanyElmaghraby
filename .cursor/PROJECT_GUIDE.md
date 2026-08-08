@@ -377,6 +377,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فورم تواصل Woo v1.1.2 | إرسال عبر Next `/api/contact` (SMTP على Vercel) بدون كلمة مرور في السنابت؛ احتياطي `SOKANY_SMTP_PASS` في wp-config؛ يصلح خطأ SMTP_PASS في v1.1 | `wordpress-plugin/snippets/sokany-contact-form-v1.1.2.php` |
 | مقارنة منتجات Woo v1.1.3 | أيقونة مقارنة ظاهرة دائمًا (CSS/JS مباشر في head/footer) فوق السوشيال ديسكتوب + فوتر موبايل؛ بدون Vercel | `wordpress-plugin/snippets/sokany-product-compare-v1.1.3.php` |
 | مقارنة منتجات Woo v1.1.2 | نقل أيقونة المقارنة: ديسكتوب فوق أيقونات السوشيال (RTL/LTR تلقائي) + موبايل بجوار سوشيال الفوتر؛ بدون الاعتماد على هيدر البحث | `wordpress-plugin/snippets/sokany-product-compare-v1.1.2.php`, `wordpress-plugin/snippets/README.md` |
 | مقارنة منتجات Woo v1.1.1 | إصلاح ظهور أيقونة المقارنة داخل الهيدر قرب البحث عبر selectors أوسع للثيم (خصوصاً WoodMart) + fallback هيدر صارم بدون أيقونة عائمة | `wordpress-plugin/snippets/sokany-product-compare-v1.1.1.php`, `wordpress-plugin/snippets/README.md` |
