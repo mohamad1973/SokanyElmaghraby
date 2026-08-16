@@ -6,7 +6,7 @@
 - **HTML (موصى به):** [`docs/SOKANY_HANDBOOK_AR.html`](../docs/SOKANY_HANDBOOK_AR.html) — الديسكتوب: `C:\Users\mm\Desktop\SOKANY_STOREFRONT_دليل.html`
 - **Markdown:** [`docs/SOKANY_HANDBOOK_AR.md`](../docs/SOKANY_HANDBOOK_AR.md)
 
-**آخر تحديث:** يوليو 2026
+**آخر تحديث:** أغسطس 2026
 
 ---
 
@@ -241,12 +241,20 @@
   - `node scripts/audit-air-fryer-set.mjs` — مجموعة «قلايه هوائيه»
   - `node scripts/check-meta-pixel.mjs` — التحقق من Pixel في HTML
   - `node scripts/enable-air-fryer-meta-sync.mjs` — فرض Sync على القلايات الجاهزة
-- **نتائج تدقيق 2026-07-24:** ~1392 منتج منشور؛ ~123 بدون صورة؛ ~136 بدون سعر؛ تصنيف «قلايه هوائيه» فيه 5 قلايات in-stock جاهزة للإعلان بعد إزالة منتج خاطئ (حلة بخار SK-07018).
+- **نتائج تدقيق 2026-08-16:** 1400 منتج منشور؛ 123 بدون صورة؛ 136 بدون سعر؛ 1027 غير متوفر؛ 0 بدون تصنيف. (يوليو 2026 كان ~1392 / ~123 / ~136 — الأرقام الناقصة لم تتحسن بعد).
 - **إنشاء إعلان الفئة (يدوي في Ads Manager):**
   1. Commerce Manager → Catalog → Products / Product sets → تأكد من set «قلايه هوائيه» (أو أنشئ فلتر category).
   2. Marketing → Facebook في WP → View all synced products + مزامنة يدوية إن لزم.
   3. Ads Manager → حملة **Sales** → Catalog → Product set = قلايات → قالب Carousel/Collection/Advantage+.
   4. Business Settings → Domains → وثّق `sokany-eg.com`؛ فعّل Conversions API من إعدادات البلجن إن ظهر الخيار.
+
+### مودريتور بيزنس سوت (كارت منتج + ردود جاهزة)
+
+- **لا تطبيق ردود جديد.** المودريتور يرد من [Business Suite Inbox](https://business.facebook.com/latest/inbox): يبحث بـ SK → يرسل كارت الكتالوج → يلصق Saved reply.
+- **دليل الفريق (عربي بسيط + القوالب للنسخ):** [`docs/MODERATOR_SAVED_REPLIES_AR.md`](../docs/MODERATOR_SAVED_REPLIES_AR.md)
+- **قائمة إصلاح صور/أسعار:** [`docs/MODERATOR_CATALOG_ISSUES.md`](../docs/MODERATOR_CATALOG_ISSUES.md)
+- **اختبار القبول:** إرسال كارت SK معروف من Inbox يظهر على موبايل العميل بصورة وسعر ورابط — ليس سكرين شوت. كرّر على Messenger وInstagram وللصفحتين.
+- **إعادة التدقيق:** `node scripts/audit-meta-catalog.mjs` ثم `node scripts/write-moderator-catalog-issues.mjs`
 
 ---
 
@@ -377,6 +385,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مودريتور بيزنس سوت + تدقيق كتالوج | تدقيق Woo 2026-08-16 (1400 منشور / 123 بدون صورة / 136 بدون سعر)؛ دليل إرسال كارت المنتج + قوالب Saved replies عربية؛ قائمة إصلاح SK | `docs/MODERATOR_SAVED_REPLIES_AR.md`, `docs/MODERATOR_CATALOG_ISSUES.md`, `scripts/audit-meta-catalog.mjs` |
 | فورم تواصل Woo v1.1.3 | نفس v1.1 + إصلاح خطأ nonce/كاش «انتهت صلاحية الجلسة»؛ SMTP إلى info@؛ بدون ميزات v1.1.1/v1.1.2 | `wordpress-plugin/snippets/sokany-contact-form-v1.1.3.php` |
 | فورم تواصل Woo v1.1.2 | إرسال عبر Next `/api/contact` (SMTP على Vercel) بدون كلمة مرور في السنابت؛ احتياطي `SOKANY_SMTP_PASS` في wp-config؛ يصلح خطأ SMTP_PASS في v1.1 | `wordpress-plugin/snippets/sokany-contact-form-v1.1.2.php` |
 | مقارنة منتجات Woo v1.1.3 | أيقونة مقارنة ظاهرة دائمًا (CSS/JS مباشر في head/footer) فوق السوشيال ديسكتوب + فوتر موبايل؛ بدون Vercel | `wordpress-plugin/snippets/sokany-product-compare-v1.1.3.php` |
@@ -447,6 +456,8 @@
 
 | ماذا | أين |
 |------|-----|
+| **دليل المودريتور (كارت منتج + ردود جاهزة)** | `docs/MODERATOR_SAVED_REPLIES_AR.md` |
+| قائمة منتجات ناقصة صورة/سعر | `docs/MODERATOR_CATALOG_ISSUES.md` |
 | **دليل شامل (بناء، env، تعديل كل ميزة)** | `docs/SOKANY_HANDBOOK_AR.md` |
 | كل الصفحات والـ API | `src/app/` |
 | منطق الأعمال | `src/lib/` |
@@ -471,7 +482,8 @@
 
 | الميزة | الحالة |
 |--------|--------|
-| كتالوج منتجات وتصنيفات | جاهز |
+| كتالوج منتجات وتصنيفات | جاهز (Woo) |
+| كروت منتج للمودريتور (بيزنس سوت) | جاهز جزئيًا — راجع `docs/MODERATOR_SAVED_REPLIES_AR.md` |
 | صفحة منتج + SEO | جاهز |
 | بحث / compare / wishlist | جاهز |
 | حساب عميل + OTP + كلمة مرور | جاهز |

@@ -73,6 +73,9 @@ const fryerLike = categories.filter((category) =>
 const topCats = [...categories].sort((a, b) => b.count - a.count).slice(0, 25);
 
 const issues = [];
+const missingImageList = [];
+const missingPriceList = [];
+const noCategoryList = [];
 let missingImage = 0;
 let missingPrice = 0;
 let outOfStock = 0;
@@ -81,6 +84,15 @@ const syncStats = { show: 0, hide: 0, no: 0, unknown: 0 };
 const byCat = new Map();
 const fbKeys = new Set();
 
+function skim(product, issue) {
+  return {
+    id: product.id,
+    name: product.name,
+    issue,
+    permalink: product.permalink,
+  };
+}
+
 for (const product of products) {
   const img = product.images?.[0]?.src;
   const price = product.price || product.regular_price;
@@ -88,37 +100,19 @@ for (const product of products) {
 
   if (!img) {
     missingImage += 1;
-    if (issues.length < 80) {
-      issues.push({
-        id: product.id,
-        name: product.name,
-        issue: "no_image",
-        permalink: product.permalink,
-      });
-    }
+    missingImageList.push(skim(product, "no_image"));
+    if (issues.length < 80) issues.push(skim(product, "no_image"));
   }
   if (!price || Number(price) <= 0) {
     missingPrice += 1;
-    if (issues.length < 80) {
-      issues.push({
-        id: product.id,
-        name: product.name,
-        issue: "no_price",
-        permalink: product.permalink,
-      });
-    }
+    missingPriceList.push(skim(product, "no_price"));
+    if (issues.length < 80) issues.push(skim(product, "no_price"));
   }
   if (product.stock_status !== "instock") outOfStock += 1;
   if (!cats.length) {
     noCats += 1;
-    if (issues.length < 80) {
-      issues.push({
-        id: product.id,
-        name: product.name,
-        issue: "no_category",
-        permalink: product.permalink,
-      });
-    }
+    noCategoryList.push(skim(product, "no_category"));
+    if (issues.length < 80) issues.push(skim(product, "no_category"));
   }
 
   for (const category of cats) {
@@ -170,9 +164,12 @@ const report = {
     .slice(0, 25)
     .map(([name, count]) => ({ name, count })),
   sampleIssues: issues,
+  missingImageList,
+  missingPriceList,
+  noCategoryList,
 };
 
 const outPath = resolve("scripts/meta-catalog-audit-report.json");
 writeFileSync(outPath, JSON.stringify(report, null, 2), "utf8");
-console.log(JSON.stringify(report, null, 2));
+console.log(JSON.stringify({ ...report, missingImageList: undefined, missingPriceList: undefined, noCategoryList: undefined, facebookMetaSample: undefined }, null, 2));
 console.error(`Wrote ${outPath}`);
