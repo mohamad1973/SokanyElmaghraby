@@ -250,8 +250,8 @@
 
 ### مودريتور بيزنس سوت (كارت منتج + ردود جاهزة)
 
-- **لا تطبيق ردود جديد.** المودريتور يرد من [Business Suite Inbox](https://business.facebook.com/latest/inbox): يبحث بـ SK → يرسل كارت الكتالوج → يلصق Saved reply.
-- **دليل الفريق (عربي بسيط + القوالب للنسخ):** [`docs/MODERATOR_SAVED_REPLIES_AR.md`](../docs/MODERATOR_SAVED_REPLIES_AR.md)
+- **لا تطبيق ردود جديد.** كارت الكتالوج يظهر في **Inbox → Messages** فقط، ليس في رد تعليقات البوست.
+- **تعليق على بوست:** رد عام قصير ثم **Send message** ثم كارت المنتج في المحادثة الخاصة. التفاصيل والقوالب: [`docs/MODERATOR_SAVED_REPLIES_AR.md`](../docs/MODERATOR_SAVED_REPLIES_AR.md)
 - **قائمة إصلاح صور/أسعار:** [`docs/MODERATOR_CATALOG_ISSUES.md`](../docs/MODERATOR_CATALOG_ISSUES.md)
 - **اختبار القبول:** إرسال كارت SK معروف من Inbox يظهر على موبايل العميل بصورة وسعر ورابط — ليس سكرين شوت. كرّر على Messenger وInstagram وللصفحتين.
 - **إعادة التدقيق:** `node scripts/audit-meta-catalog.mjs` ثم `node scripts/write-moderator-catalog-issues.mjs`
@@ -385,6 +385,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تعليقات البوست مقابل Inbox | توضيح أن كارت المنتج في Messages بعد Send message وليس في رد التعليق؛ قالب رد عام + تحديث دليل المودريتور | `docs/MODERATOR_SAVED_REPLIES_AR.md` |
 | مودريتور بيزنس سوت + تدقيق كتالوج | تدقيق Woo 2026-08-16 (1400 منشور / 123 بدون صورة / 136 بدون سعر)؛ دليل إرسال كارت المنتج + قوالب Saved replies عربية؛ قائمة إصلاح SK | `docs/MODERATOR_SAVED_REPLIES_AR.md`, `docs/MODERATOR_CATALOG_ISSUES.md`, `scripts/audit-meta-catalog.mjs` |
 | فورم تواصل Woo v1.1.3 | نفس v1.1 + إصلاح خطأ nonce/كاش «انتهت صلاحية الجلسة»؛ SMTP إلى info@؛ بدون ميزات v1.1.1/v1.1.2 | `wordpress-plugin/snippets/sokany-contact-form-v1.1.3.php` |
 | فورم تواصل Woo v1.1.2 | إرسال عبر Next `/api/contact` (SMTP على Vercel) بدون كلمة مرور في السنابت؛ احتياطي `SOKANY_SMTP_PASS` في wp-config؛ يصلح خطأ SMTP_PASS في v1.1 | `wordpress-plugin/snippets/sokany-contact-form-v1.1.2.php` |
