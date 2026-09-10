@@ -20,6 +20,11 @@
 # production
 /build
 
+# Hostinger standalone pack output (regenerate with npm run pack:final)
+/final/app/
+/final/config.env
+/final/app/.env
+
 # misc
 .DS_Store
 *.pem

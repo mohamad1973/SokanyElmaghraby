@@ -6,7 +6,7 @@
 - **HTML (موصى به):** [`docs/SOKANY_HANDBOOK_AR.html`](../docs/SOKANY_HANDBOOK_AR.html) — الديسكتوب: `C:\Users\mm\Desktop\SOKANY_STOREFRONT_دليل.html`
 - **Markdown:** [`docs/SOKANY_HANDBOOK_AR.md`](../docs/SOKANY_HANDBOOK_AR.md)
 
-**آخر تحديث:** أغسطس 2026
+**آخر تحديث:** سبتمبر 2026
 
 ---
 
@@ -256,6 +256,16 @@
 - **اختبار القبول:** إرسال كارت SK معروف من Inbox يظهر على موبايل العميل بصورة وسعر ورابط — ليس سكرين شوت. كرّر على Messenger وInstagram وللصفحتين.
 - **إعادة التدقيق:** `node scripts/audit-meta-catalog.mjs` ثم `node scripts/write-moderator-catalog-issues.mjs`
 
+### نقل المتجر إلى هوستنجر (مجلد final)
+
+- **الهدف:** تشغيل نفس فرونت Next بدون Vercel مع الإبقاء على الشكل الحالي.
+- **الشرط:** hPanel → **Add Website → Node.js web app** (باقة Business أو Cloud). رفع HTML على `public_html` فقط **لا يكفي**.
+- **المجلد:** [`final/`](../final/) — دليل عربي [`final/README_AR.md`](../final/README_AR.md)
+- **الإعدادات:** انسخ [`final/config.env.example`](../final/config.env.example) → `.env` واملأ `NEXTAUTH_URL` + `DATABASE_URL` + Woo + أدمن.
+- **قاعدة البيانات:** استورد [`final/database/schema.sql`](../final/database/schema.sql) في MySQL هوستنجر (جداول Prisma فقط؛ Woo يبقى منفصلًا على `sokany-eg.com`).
+- **التعبئة:** `npm run pack:final` → ينتج `final/app` (`node server.js`). المجلد `final/app` مستثنى من Git لكبر حجمه؛ أعد التعبئة محليًا قبل الرفع.
+- **البناء:** `next.config.ts` يستخدم `output: "standalone"`.
+
 ---
 
 ## الداشبورد — صفحات الأدمن (فرونت)
@@ -385,6 +395,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| حزمة final لهوستنجر | `output: standalone` + مجلد `final/` (config + schema.sql + README + pack) لتعبئة Node.js Web App بدون فقدان الشكل | `final/`, `next.config.ts`, `package.json` |
 | تعليقات البوست مقابل Inbox | توضيح أن كارت المنتج في Messages بعد Send message وليس في رد التعليق؛ قالب رد عام + تحديث دليل المودريتور | `docs/MODERATOR_SAVED_REPLIES_AR.md` |
 | مودريتور بيزنس سوت + تدقيق كتالوج | تدقيق Woo 2026-08-16 (1400 منشور / 123 بدون صورة / 136 بدون سعر)؛ دليل إرسال كارت المنتج + قوالب Saved replies عربية؛ قائمة إصلاح SK | `docs/MODERATOR_SAVED_REPLIES_AR.md`, `docs/MODERATOR_CATALOG_ISSUES.md`, `scripts/audit-meta-catalog.mjs` |
 | فورم تواصل Woo v1.1.3 | نفس v1.1 + إصلاح خطأ nonce/كاش «انتهت صلاحية الجلسة»؛ SMTP إلى info@؛ بدون ميزات v1.1.1/v1.1.2 | `wordpress-plugin/snippets/sokany-contact-form-v1.1.3.php` |
@@ -457,6 +468,7 @@
 
 | ماذا | أين |
 |------|-----|
+| **حزمة نشر هوستنجر (final)** | `final/README_AR.md` |
 | **دليل المودريتور (كارت منتج + ردود جاهزة)** | `docs/MODERATOR_SAVED_REPLIES_AR.md` |
 | قائمة منتجات ناقصة صورة/سعر | `docs/MODERATOR_CATALOG_ISSUES.md` |
 | **دليل شامل (بناء، env، تعديل كل ميزة)** | `docs/SOKANY_HANDBOOK_AR.md` |

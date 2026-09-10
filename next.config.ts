@@ -4,6 +4,8 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
+  // Self-host on Hostinger Node.js (or any Node server) without Vercel.
+  output: "standalone",
   images: {
     remotePatterns: [
       {
