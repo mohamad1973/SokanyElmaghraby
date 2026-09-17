@@ -262,7 +262,9 @@
 - **الشرط:** hPanel → **Add Website → Node.js web app** (باقة Business أو Cloud). رفع HTML على `public_html` فقط **لا يكفي**.
 - **المجلد:** [`final/`](../final/) — دليل عربي [`final/README_AR.md`](../final/README_AR.md)
 - **الإعدادات:** انسخ [`final/config.env.example`](../final/config.env.example) → `.env` واملأ `NEXTAUTH_URL` + `DATABASE_URL` + Woo + أدمن.
-- **قاعدة البيانات:** استورد [`final/database/schema.sql`](../final/database/schema.sql) في MySQL هوستنجر (جداول Prisma فقط؛ Woo يبقى منفصلًا على `sokany-eg.com`).
+- **قاعدة البيانات:** استورد [`final/database/schema.sql`](../final/database/schema.sql) ثم [`final/database/group-buy-schema.sql`](../final/database/group-buy-schema.sql) في MySQL هوستنجر.
+- **تجميد v001 قبل الدمج:** [`C:\Users\mm\SokanyElmaghraby\v001-archives`](../../v001-archives) — تاج `v001-sokany` / `v001-tooliano` + ZIP + mirrors + `RESTORE_AR.txt`
+- **فيندور / شراء جماعي (فكرة توليانو على فرونت سوكاني):** `/vendor/register`، `/campaign/offer/[id]`، `/admin/group-buy` — Woo يبقى `sokany-eg.com`؛ الدومين المستهدف `tooliano.com`
 - **التعبئة:** `npm run pack:final` → ينتج `final/app` (`node server.js`). المجلد `final/app` مستثنى من Git لكبر حجمه؛ أعد التعبئة محليًا قبل الرفع.
 - **البناء:** `next.config.ts` يستخدم `output: "standalone"`.
 
