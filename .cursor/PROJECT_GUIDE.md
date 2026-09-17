@@ -397,6 +397,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| tooliano.com على Vercel + MySQL Hostinger | Remote MySQL `srv1729.hstgr.io`؛ موافقة الحملة تنشر Woo؛ قرارات EXTEND/EXECUTE/CANCEL؛ كرون `/api/cron/sync-campaigns` | `publish-woo.ts`, `campaign-decision.ts`, `vercel.json`, `docs/TOOLIANO_MERGE_STATUS_AR.md` |
 | حزمة final لهوستنجر | `output: standalone` + مجلد `final/` (config + schema.sql + README + pack) لتعبئة Node.js Web App بدون فقدان الشكل | `final/`, `next.config.ts`, `package.json` |
 | تعليقات البوست مقابل Inbox | توضيح أن كارت المنتج في Messages بعد Send message وليس في رد التعليق؛ قالب رد عام + تحديث دليل المودريتور | `docs/MODERATOR_SAVED_REPLIES_AR.md` |
 | مودريتور بيزنس سوت + تدقيق كتالوج | تدقيق Woo 2026-08-16 (1400 منشور / 123 بدون صورة / 136 بدون سعر)؛ دليل إرسال كارت المنتج + قوالب Saved replies عربية؛ قائمة إصلاح SK | `docs/MODERATOR_SAVED_REPLIES_AR.md`, `docs/MODERATOR_CATALOG_ISSUES.md`, `scripts/audit-meta-catalog.mjs` |

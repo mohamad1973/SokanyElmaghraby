@@ -7,6 +7,7 @@ import {
   GB_APPROVAL_STATUS,
   GB_CAMPAIGN_OUTCOME,
 } from "@/lib/group-buy/constants";
+import { publishSubmissionToWoo } from "@/lib/group-buy/publish-woo";
 
 type Body = {
   action?: "approve" | "reject";
@@ -91,9 +92,13 @@ export async function PATCH(
     },
   });
 
+  const woo = await publishSubmissionToWoo(updated);
+
   return NextResponse.json({
     ok: true,
     status: updated.status,
     campaignEndsAt: updated.campaignEndsAt,
+    wooProductId: woo.ok ? woo.wooProductId : null,
+    wooError: woo.ok ? null : woo.message,
   });
 }

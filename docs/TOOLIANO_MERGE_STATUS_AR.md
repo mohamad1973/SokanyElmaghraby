@@ -1,28 +1,60 @@
 # دمج توليانو → سوكاني (حالة التنفيذ)
 
-تاريخ: 2026-09-17  
+تاريخ التحديث: 2026-09-17  
 فرع العمل: `feature/tooliano-merge`
 
-## تم (v001 + أساس الفيندور)
+## البنية المعتمدة
 
-- تجميد v001:
-  - تاج `v001-sokany` @ `21ed4ba`
-  - تاج `v001-tooliano` @ `328d40c`
-  - مرآة + ZIP: `C:\Users\mm\SokanyElmaghraby\v001-archives\`
-  - الرجوع: افتح `RESTORE_AR.txt`
-- Prisma: جداول `GbUser` / `GbVendorProfile` / `GbProductSubmission` / `GbGroupBuyOrder`
-- SQL: `final/database/group-buy-schema.sql`
-- صفحات: `/vendor/register` ، `/campaign/offer/[id]` ، `/admin/group-buy`
-- سكشن فرص شراء جماعي في الرئيسية
-- API: تسجيل فيندور، موافقة عرض، حجز كمية (عربون COD مبسّط)
+| الطبقة | أين |
+|--------|-----|
+| Next.js | **Vercel** (مش Hostinger Node) |
+| MySQL / Prisma | **Hostinger** Remote MySQL |
+| المنتجات / الطلبات | Woo **sokany-eg.com** |
+| الدومين العام | **tooliano.com** → DNS إلى Vercel |
 
-## متبقي (يحتاجك على هوستنجر + تكملة كود)
+## تم (كود + DB)
 
-1. باك أب tooliano.com WordPress → `BACKUP_OK`
-2. MySQL على هوستنجر: استيراد `schema.sql` ثم `group-buy-schema.sql`
-3. `NEXTAUTH_URL=https://tooliano.com` + رفع Node app
-4. نشر منتج الحملة تلقائيًا إلى Woo `sokany-eg.com` (لم يُربط بعد)
-5. قرارات EXTEND/EXECUTE/CANCEL + كرون الحملات (نسخة لاحقة)
+- تجميد v001 + Prisma `Gb*` + UI فيندور/حملات
+- MySQL: `u419683418_sokanytooliano` / user `u419683418_tooliano` + استيراد schema + group-buy
+- موافقة الحملة → إنشاء/تحديث منتج Woo (`src/lib/group-buy/publish-woo.ts`)
+- قرارات EXTEND / EXECUTE / CANCEL + كرون `/api/cron/sync-campaigns` (كل ساعة عبر `vercel.json`)
+
+## Remote MySQL (Hostinger)
+
+Hostname حساب هوستنجر (نفس `u419683418_*`): **`srv1729.hstgr.io`**
+
+1. hPanel → **Databases** → **Remote MySQL**
+2. أضف `%` (أو Any Host) ليسمح لـ Vercel بالاتصال
+3. `DATABASE_URL` على Vercel:
+
+```text
+mysql://u419683418_tooliano:Aml%40suba%23123@srv1729.hstgr.io:3306/u419683418_sokanytooliano
+```
+
+(`%40` = `@` ، `%23` = `#`)
+
+## Vercel Environment Variables
+
+```text
+NEXTAUTH_URL=https://tooliano.com
+NEXTAUTH_SECRET=...
+ADMIN_EMAIL=...
+ADMIN_PASSWORD=...
+DATABASE_URL=mysql://u419683418_tooliano:Aml%40suba%23123@srv1729.hstgr.io:3306/u419683418_sokanytooliano
+WOOCOMMERCE_STORE_URL=https://sokany-eg.com
+WOOCOMMERCE_CONSUMER_KEY=...
+WOOCOMMERCE_CONSUMER_SECRET=...
+CRON_SECRET=...
+NODE_ENV=production
+```
+
+ثم Redeploy من الفرع المرتبط بـ Production.
+
+## DNS: tooliano.com → Vercel
+
+1. Vercel → Project → **Domains** → أضف `tooliano.com` (+ `www`)
+2. ضع سجلات A/CNAME اللي Vercel يعرضها عند مسجّل النطاق / Hostinger DNS
+3. لا تضف Node.js Web App على Hostinger لهذا الدومين
 
 ## رجوع فوري لـ v001
 
