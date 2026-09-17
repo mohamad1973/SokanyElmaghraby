@@ -12,12 +12,20 @@
 | المنتجات / الطلبات | Woo **sokany-eg.com** |
 | الدومين العام | **tooliano.com** → DNS إلى Vercel |
 
-## تم (كود + DB)
+## تم (كود + DB + GitHub)
 
 - تجميد v001 + Prisma `Gb*` + UI فيندور/حملات
 - MySQL: `u419683418_sokanytooliano` / user `u419683418_tooliano` + استيراد schema + group-buy
 - موافقة الحملة → إنشاء/تحديث منتج Woo (`src/lib/group-buy/publish-woo.ts`)
 - قرارات EXTEND / EXECUTE / CANCEL + كرون `/api/cron/sync-campaigns` (كل ساعة عبر `vercel.json`)
+- دُمج في **master** عبر PR: https://github.com/mohamad1973/SokanyElmaghraby/pull/1
+
+## متبقي عندك (لوحة فقط)
+
+1. Hostinger → Remote MySQL → أضف `%` (انظر `docs/HOSTINGER_REMOTE_MYSQL_AR.md`) ثم `node scripts/probe-hostinger-db.cjs`
+2. سجّل دخول Vercel → env + Domains (انظر `docs/VERCEL_TOOLIANO_CUTOVER_AR.md`)
+   - أو: `npx vercel login` ثم `node scripts/set-vercel-tooliano-env.mjs` ثم `npx vercel --prod --yes`
+3. DNS لـ `tooliano.com` حسب سجلات Vercel
 
 ## Remote MySQL (Hostinger)
 
