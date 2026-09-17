@@ -143,3 +143,95 @@ model SocialProofEvent {
 
   @@index([createdAt])
 }
+
+// ——— Group buy / Vendor (ported idea from Tooliano v001; Woo remains sokany-eg.com) ———
+
+model GbUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String
+  phone        String?
+  email        String?
+  disabled     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vendorProfile      GbVendorProfile?
+  productSubmissions GbProductSubmission[] @relation("VendorSubmissions")
+  groupBuyOrders     GbGroupBuyOrder[]     @relation("BuyerOrders")
+}
+
+model GbVendorProfile {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  user                    GbUser    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName             String
+  contactName             String
+  phone                   String
+  contactEmail            String
+  address                 String    @db.Text
+  businessType            String
+  teamSize                Int       @default(1)
+  productTypesDescription String    @db.Text
+  status                  String    @default("PENDING")
+  adminNote               String?   @db.Text
+  reviewedAt              DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+model GbProductSubmission {
+  id                        String    @id @default(cuid())
+  vendorId                  String
+  vendor                    GbUser    @relation("VendorSubmissions", fields: [vendorId], references: [id], onDelete: Cascade)
+  productName               String
+  productType               String
+  productCondition          String    @default("NEW")
+  productDescription        String    @default("") @db.Text
+  suggestedQuantity         Int
+  suggestedRetailPrice      Float?
+  suggestedGroupPrice       Float?
+  vendorSettlementUnitPrice Float?
+  productImageUrl           String?   @db.VarChar(500)
+  status                    String    @default("PENDING")
+  adminNote                 String?   @db.Text
+  reviewedAt                DateTime?
+  wooProductId              Int?
+  campaignEndsAt            DateTime?
+  dealDurationDays          Int       @default(7)
+  reservedQuantity          Int       @default(0)
+  publishedOnStore          Boolean   @default(false)
+  adminHidden               Boolean   @default(false)
+  wooSyncStatus             String    @default("none")
+  campaignOutcome           String    @default("ACTIVE")
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  groupBuyOrders GbGroupBuyOrder[]
+
+  @@index([status, publishedOnStore, adminHidden])
+  @@index([campaignEndsAt])
+}
+
+model GbGroupBuyOrder {
+  id               String              @id @default(cuid())
+  buyerId          String
+  buyer            GbUser              @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Cascade)
+  submissionId     String
+  submission       GbProductSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  wooCustomerId    Int?
+  quantity         Int
+  unitGroupPrice   Float
+  lineTotal        Float
+  depositPercent   Float               @default(5)
+  depositAmount    Float
+  codAmount        Float
+  status           String              @default("PENDING_PAYMENT")
+  paymentRef       String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([buyerId])
+  @@index([submissionId, status])
+}

@@ -5,6 +5,7 @@ import { setRequestLocale } from "next-intl/server";
 import { CategoryScroller } from "@/components/category-scroller";
 import { CustomProductSection } from "@/components/custom-product-section";
 import { CustomerReviewsSection } from "@/components/customer-reviews-section";
+import { GroupBuyHomeSection } from "@/components/group-buy-home-section";
 import { HeroSection } from "@/components/hero-section";
 import { MainGroupsSection } from "@/components/main-groups-section";
 import { ProductRowScroller } from "@/components/product-row-scroller";
@@ -408,6 +409,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   return (
     <div>
       {renderHomeSections(homeSections, settings)}
+      <GroupBuyHomeSection />
     </div>
   );
 }

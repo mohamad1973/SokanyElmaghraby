@@ -22,6 +22,7 @@ const navItemKeys = [
   { href: "/admin/categories", key: "categories" as const },
   { href: "/admin/orders", key: "orders" as const },
   { href: "/admin/reports", key: "reports" as const },
+  { href: "/admin/group-buy", key: "groupBuy" as const },
   { href: "/admin/dispatch/setup", key: "dispatchSetup" as const },
   { href: "/admin/dispatch/board", key: "dispatchBoard" as const },
   { href: "/admin/dispatch/drivers", key: "drivers" as const },

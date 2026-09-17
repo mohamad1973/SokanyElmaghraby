@@ -202,7 +202,8 @@
       "dispatchBoard": "Dispatch board",
       "drivers": "Drivers",
       "zones": "Zones",
-      "dispatchReports": "Delivery reports"
+      "dispatchReports": "Delivery reports",
+      "groupBuy": "Vendors / Group buy"
     }
   }
 }
