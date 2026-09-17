@@ -37,8 +37,14 @@ function parseEnv(file) {
 const local = parseEnv(envPath);
 
 const DATABASE_URL =
-  process.env.TOOLIANO_DATABASE_URL ||
-  "mysql://u419683418_tooliano:Aml%40suba%23123@srv1729.hstgr.io:3306/u419683418_sokanytooliano";
+  process.env.TOOLIANO_DATABASE_URL || local.DATABASE_URL || process.env.DATABASE_URL;
+
+if (!DATABASE_URL || !/srv\d+\.hstgr\.io|localhost|127\.0\.0\.1/.test(DATABASE_URL)) {
+  console.error(
+    "DATABASE_URL missing. Set Remote MySQL URL in .env.local (see docs/HOSTINGER_REMOTE_MYSQL_AR.md).",
+  );
+  process.exit(1);
+}
 
 const vars = {
   NEXTAUTH_URL: "https://tooliano.com",
