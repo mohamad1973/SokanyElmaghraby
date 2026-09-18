@@ -14,6 +14,16 @@ type ImageUploadFieldProps = {
 
 const supportedFormats = "JPG, PNG, WEBP, SVG, GIF, AVIF";
 
+function extractMediaId(url: string): number | null {
+  const match = url.match(/\/api\/media\/(\d+)(?:\?|$)/);
+  if (!match) {
+    return null;
+  }
+
+  const id = Number(match[1]);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 export function ImageUploadField({
   label,
   value,
@@ -24,6 +34,7 @@ export function ImageUploadField({
 }: ImageUploadFieldProps) {
   const [status, setStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -57,6 +68,32 @@ export function ImageUploadField({
     setStatus("تم رفع الصورة بنجاح.");
   }
 
+  async function handleClear() {
+    if (!value || isClearing) {
+      return;
+    }
+
+    setIsClearing(true);
+    setStatus("");
+
+    const mediaId = extractMediaId(value);
+    if (mediaId) {
+      try {
+        const response = await fetch(`/api/admin/media/${mediaId}`, { method: "DELETE" });
+        if (!response.ok && response.status !== 404) {
+          const error = (await response.json().catch(() => null)) as { message?: string } | null;
+          setStatus(error?.message || "تعذر حذف الملف من قاعدة البيانات، لكن تم مسح الحقل.");
+        }
+      } catch {
+        setStatus("تعذر حذف الملف من قاعدة البيانات، لكن تم مسح الحقل.");
+      }
+    }
+
+    onUploaded("");
+    setIsClearing(false);
+    setStatus((prev) => prev || "تم مسح الملف. احفظ البنر لتثبيت التغيير.");
+  }
+
   return (
     <div className="rounded-xl border border-black/10 bg-white p-4">
       <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
@@ -84,12 +121,24 @@ export function ImageUploadField({
           />
 
           {isUploading ? <p className="text-xs text-zinc-500">جاري رفع الصورة...</p> : null}
+          {isClearing ? <p className="text-xs text-zinc-500">جاري المسح...</p> : null}
           {status ? <p className="text-xs text-zinc-600">{status}</p> : null}
         </div>
 
         <div className="relative min-h-32 overflow-hidden rounded-xl bg-zinc-100">
           {value ? (
-            <Image src={value} alt={label} fill sizes="180px" className="object-contain p-3" unoptimized />
+            <>
+              <Image src={value} alt={label} fill sizes="180px" className="object-contain p-3" unoptimized />
+              <button
+                type="button"
+                onClick={() => void handleClear()}
+                disabled={isClearing}
+                aria-label="مسح الصورة"
+                className="absolute end-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-60"
+              >
+                ×
+              </button>
+            </>
           ) : (
             <div className="flex h-full min-h-32 items-center justify-center p-4 text-center text-xs text-zinc-400">
               لا توجد صورة
@@ -100,4 +149,3 @@ export function ImageUploadField({
     </div>
   );
 }
-

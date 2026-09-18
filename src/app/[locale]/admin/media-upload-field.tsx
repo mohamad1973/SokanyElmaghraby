@@ -20,6 +20,16 @@ function isVideoUrl(url: string) {
   return /\.(mp4|webm)(\?|$)/i.test(url);
 }
 
+function extractMediaId(url: string): number | null {
+  const match = url.match(/\/api\/media\/(\d+)(?:\?|$)/);
+  if (!match) {
+    return null;
+  }
+
+  const id = Number(match[1]);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 export function MediaUploadField({
   label,
   value,
@@ -31,6 +41,7 @@ export function MediaUploadField({
 }: MediaUploadFieldProps) {
   const [status, setStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const accept =
     mediaType === "video"
@@ -78,6 +89,32 @@ export function MediaUploadField({
     setStatus("تم رفع الملف بنجاح.");
   }
 
+  async function handleClear() {
+    if (!value || isClearing) {
+      return;
+    }
+
+    setIsClearing(true);
+    setStatus("");
+
+    const mediaId = extractMediaId(value);
+    if (mediaId) {
+      try {
+        const response = await fetch(`/api/admin/media/${mediaId}`, { method: "DELETE" });
+        if (!response.ok && response.status !== 404) {
+          const error = (await response.json().catch(() => null)) as { message?: string } | null;
+          setStatus(error?.message || "تعذر حذف الملف من قاعدة البيانات، لكن تم مسح الحقل.");
+        }
+      } catch {
+        setStatus("تعذر حذف الملف من قاعدة البيانات، لكن تم مسح الحقل.");
+      }
+    }
+
+    onUploaded("");
+    setIsClearing(false);
+    setStatus((prev) => prev || "تم مسح الملف. احفظ البنر لتثبيت التغيير.");
+  }
+
   const previewIsVideo = mediaType === "video" || (mediaType === "both" && value && isVideoUrl(value));
 
   return (
@@ -107,16 +144,28 @@ export function MediaUploadField({
           />
 
           {isUploading ? <p className="text-xs text-zinc-500">جاري رفع الملف...</p> : null}
+          {isClearing ? <p className="text-xs text-zinc-500">جاري المسح...</p> : null}
           {status ? <p className="text-xs text-zinc-600">{status}</p> : null}
         </div>
 
         <div className="relative min-h-32 overflow-hidden rounded-xl bg-zinc-100">
           {value ? (
-            previewIsVideo ? (
-              <video src={value} className="h-full min-h-32 w-full object-contain p-2" muted playsInline controls />
-            ) : (
-              <Image src={value} alt={label} fill sizes="180px" className="object-contain p-3" unoptimized />
-            )
+            <>
+              {previewIsVideo ? (
+                <video src={value} className="h-full min-h-32 w-full object-contain p-2" muted playsInline controls />
+              ) : (
+                <Image src={value} alt={label} fill sizes="180px" className="object-contain p-3" unoptimized />
+              )}
+              <button
+                type="button"
+                onClick={() => void handleClear()}
+                disabled={isClearing}
+                aria-label="مسح الملف"
+                className="absolute end-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-60"
+              >
+                ×
+              </button>
+            </>
           ) : (
             <div className="flex h-full min-h-32 items-center justify-center p-4 text-center text-xs text-zinc-400">
               لا يوجد ملف

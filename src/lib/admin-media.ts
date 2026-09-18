@@ -105,3 +105,20 @@ export async function getMediaAsset(id: number): Promise<MediaAsset | null> {
     data: Buffer.from(asset.data),
   };
 }
+
+export async function deleteMediaAsset(id: number): Promise<boolean> {
+  const prisma = getPrismaClient();
+
+  if (!prisma) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  await ensureMediaTable(prisma);
+
+  const result = await prisma.$executeRaw`
+    DELETE FROM AdminMediaAsset
+    WHERE id = ${id}
+  `;
+
+  return Number(result) > 0;
+}
