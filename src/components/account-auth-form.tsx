@@ -170,7 +170,8 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-5 rounded-[2rem] bg-white p-6 shadow-sm" dir="rtl">
+    <div className="grid gap-4" dir="rtl">
+    <form onSubmit={handleSubmit} className="grid gap-5 rounded-[2rem] bg-white p-6 shadow-sm">
       {mode === "register" ? (
         <>
           <label className="grid gap-2 text-sm font-bold text-zinc-700">
@@ -319,5 +320,13 @@ export function AccountAuthForm({ mode }: AccountAuthFormProps) {
                 : "تأكيد الدخول"}
       </button>
     </form>
+    {mode === "login" && loginView === "login" ? (
+      <p className="text-center text-sm text-zinc-500">
+        <Link href="/admin/login" className="font-bold text-zinc-700 underline underline-offset-2 hover:text-zinc-950">
+          دخول لوحة تحكم الإدارة
+        </Link>
+      </p>
+    ) : null}
+    </div>
   );
 }
