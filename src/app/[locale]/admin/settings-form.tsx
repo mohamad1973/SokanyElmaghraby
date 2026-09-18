@@ -2171,184 +2171,6 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 ))}
               </div>
             ) : null}
-            <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-zinc-950">سكشن المجموعات الرئيسية</h2>
-                  <p className="mt-1 text-sm text-zinc-500">
-                    3 صور متساوية لعرض التصنيفات الرئيسية. المقاس الموصى به ~600×300 (نسبة 2:1).
-                  </p>
-                </div>
-                <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
-                  <input
-                    type="checkbox"
-                    checked={settings.sections.mainGroups.enabled}
-                    onChange={(event) =>
-                      setSettings({
-                        ...settings,
-                        sections: {
-                          ...settings.sections,
-                          mainGroups: {
-                            ...settings.sections.mainGroups,
-                            enabled: event.target.checked,
-                          },
-                        },
-                      })
-                    }
-                  />
-                  تفعيل السكشن
-                </label>
-              </div>
-              {settings.sections.mainGroups.items.map((item, itemIndex) => (
-                <div key={item.id} className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
-                  <h4 className="text-base font-bold text-zinc-950">المجموعة {itemIndex + 1}</h4>
-                  <Field label="نص بديل للصورة - اختياري">
-                    <input
-                      value={item.alt}
-                      onChange={(event) =>
-                        setSettings({
-                          ...settings,
-                          sections: {
-                            ...settings.sections,
-                            mainGroups: {
-                              ...settings.sections.mainGroups,
-                              items: settings.sections.mainGroups.items.map((groupItem, index) =>
-                                index === itemIndex ? { ...groupItem, alt: event.target.value } : groupItem,
-                              ) as typeof settings.sections.mainGroups.items,
-                            },
-                          },
-                        })
-                      }
-                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                    />
-                  </Field>
-                  <Field label="رابط المجموعة - اختياري">
-                    <input
-                      value={item.linkUrl}
-                      onChange={(event) =>
-                        setSettings({
-                          ...settings,
-                          sections: {
-                            ...settings.sections,
-                            mainGroups: {
-                              ...settings.sections.mainGroups,
-                              items: settings.sections.mainGroups.items.map((groupItem, index) =>
-                                index === itemIndex ? { ...groupItem, linkUrl: event.target.value } : groupItem,
-                              ) as typeof settings.sections.mainGroups.items,
-                            },
-                          },
-                        })
-                      }
-                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                      placeholder="/shop?category=example"
-                    />
-                  </Field>
-                  <ImageUploadField
-                    label={`صورة المجموعة ${itemIndex + 1}`}
-                    value={item.image}
-                    purpose={`main-group-${item.id}`}
-                    recommendation="~600x300px (نسبة 2:1)"
-                    aspectRatio="2:1"
-                    onUploaded={(url) =>
-                      setSettings({
-                        ...settings,
-                        sections: {
-                          ...settings.sections,
-                          mainGroups: {
-                            ...settings.sections.mainGroups,
-                            enabled: true,
-                            items: settings.sections.mainGroups.items.map((groupItem, index) =>
-                              index === itemIndex ? { ...groupItem, image: url } : groupItem,
-                            ) as typeof settings.sections.mainGroups.items,
-                          },
-                        },
-                      })
-                    }
-                  />
-                </div>
-              ))}
-            </article>
-            <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-zinc-950">تسوق حسب التصنيف</h2>
-                  <p className="mt-1 text-sm text-zinc-500">
-                    التحكم في عدد التصنيفات الظاهرة وسرعة تحريك الكاروسيل على الشاشات المختلفة.
-                  </p>
-                </div>
-                <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
-                  <input
-                    type="checkbox"
-                    checked={settings.sections.categories.enabled}
-                    onChange={(event) =>
-                      setSettings({
-                        ...settings,
-                        sections: {
-                          ...settings.sections,
-                          categories: {
-                            ...settings.sections.categories,
-                            enabled: event.target.checked,
-                          },
-                        },
-                      })
-                    }
-                  />
-                  تفعيل السكشن
-                </label>
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-2">
-                {[
-                  ["desktopVisibleCount", "عدد التصنيفات — ديسكتوب", 1, 20],
-                  ["tabletVisibleCount", "عدد التصنيفات — تابلت", 1, 12],
-                  ["mobileVisibleCount", "عدد التصنيفات — موبايل", 1, 8],
-                ].map(([key, label, min, max]) => (
-                  <Field key={String(key)} label={String(label)}>
-                    <input
-                      type="number"
-                      min={Number(min)}
-                      max={Number(max)}
-                      value={settings.sections.categories[key as "desktopVisibleCount" | "tabletVisibleCount" | "mobileVisibleCount"]}
-                      onChange={(event) =>
-                        setSettings({
-                          ...settings,
-                          sections: {
-                            ...settings.sections,
-                            categories: {
-                              ...settings.sections.categories,
-                              [key]: Math.min(Number(max), Math.max(Number(min), Number(event.target.value) || Number(min))),
-                            },
-                          },
-                        })
-                      }
-                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                    />
-                  </Field>
-                ))}
-
-                <Field label="سرعة الكاروسيل (ثوانٍ)">
-                  <input
-                    type="number"
-                    min={2}
-                    max={30}
-                    value={settings.sections.categories.carouselIntervalSeconds}
-                    onChange={(event) =>
-                      setSettings({
-                        ...settings,
-                        sections: {
-                          ...settings.sections,
-                          categories: {
-                            ...settings.sections.categories,
-                            carouselIntervalSeconds: Math.min(30, Math.max(2, Number(event.target.value) || 3)),
-                          },
-                        },
-                      })
-                    }
-                    className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
-                  />
-                </Field>
-              </div>
-            </article>
             <div className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -2586,6 +2408,185 @@ export function SettingsForm({ settings: initialSettings, focus }: SettingsFormP
                 </div>
               ))}
             </div>
+            <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-950">سكشن المجموعات الرئيسية</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    3 صور متساوية لعرض التصنيفات الرئيسية. المقاس الموصى به ~600×300 (نسبة 2:1).
+                  </p>
+                </div>
+                <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={settings.sections.mainGroups.enabled}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        sections: {
+                          ...settings.sections,
+                          mainGroups: {
+                            ...settings.sections.mainGroups,
+                            enabled: event.target.checked,
+                          },
+                        },
+                      })
+                    }
+                  />
+                  تفعيل السكشن
+                </label>
+              </div>
+              {settings.sections.mainGroups.items.map((item, itemIndex) => (
+                <div key={item.id} className="grid gap-4 rounded-2xl border border-black/10 bg-zinc-50 p-4">
+                  <h4 className="text-base font-bold text-zinc-950">المجموعة {itemIndex + 1}</h4>
+                  <Field label="نص بديل للصورة - اختياري">
+                    <input
+                      value={item.alt}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          sections: {
+                            ...settings.sections,
+                            mainGroups: {
+                              ...settings.sections.mainGroups,
+                              items: settings.sections.mainGroups.items.map((groupItem, index) =>
+                                index === itemIndex ? { ...groupItem, alt: event.target.value } : groupItem,
+                              ) as typeof settings.sections.mainGroups.items,
+                            },
+                          },
+                        })
+                      }
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                    />
+                  </Field>
+                  <Field label="رابط المجموعة - اختياري">
+                    <input
+                      value={item.linkUrl}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          sections: {
+                            ...settings.sections,
+                            mainGroups: {
+                              ...settings.sections.mainGroups,
+                              items: settings.sections.mainGroups.items.map((groupItem, index) =>
+                                index === itemIndex ? { ...groupItem, linkUrl: event.target.value } : groupItem,
+                              ) as typeof settings.sections.mainGroups.items,
+                            },
+                          },
+                        })
+                      }
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                      placeholder="/shop?category=example"
+                    />
+                  </Field>
+                  <ImageUploadField
+                    label={`صورة المجموعة ${itemIndex + 1}`}
+                    value={item.image}
+                    purpose={`main-group-${item.id}`}
+                    recommendation="~600x300px (نسبة 2:1)"
+                    aspectRatio="2:1"
+                    onUploaded={(url) =>
+                      setSettings({
+                        ...settings,
+                        sections: {
+                          ...settings.sections,
+                          mainGroups: {
+                            ...settings.sections.mainGroups,
+                            enabled: true,
+                            items: settings.sections.mainGroups.items.map((groupItem, index) =>
+                              index === itemIndex ? { ...groupItem, image: url } : groupItem,
+                            ) as typeof settings.sections.mainGroups.items,
+                          },
+                        },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </article>
+            <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-950">تسوق حسب التصنيف</h2>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    التحكم في عدد التصنيفات الظاهرة وسرعة تحريك الكاروسيل على الشاشات المختلفة.
+                  </p>
+                </div>
+                <label className="flex items-center gap-3 rounded-xl bg-zinc-50 p-4 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={settings.sections.categories.enabled}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        sections: {
+                          ...settings.sections,
+                          categories: {
+                            ...settings.sections.categories,
+                            enabled: event.target.checked,
+                          },
+                        },
+                      })
+                    }
+                  />
+                  تفعيل السكشن
+                </label>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                {[
+                  ["desktopVisibleCount", "عدد التصنيفات — ديسكتوب", 1, 20],
+                  ["tabletVisibleCount", "عدد التصنيفات — تابلت", 1, 12],
+                  ["mobileVisibleCount", "عدد التصنيفات — موبايل", 1, 8],
+                ].map(([key, label, min, max]) => (
+                  <Field key={String(key)} label={String(label)}>
+                    <input
+                      type="number"
+                      min={Number(min)}
+                      max={Number(max)}
+                      value={settings.sections.categories[key as "desktopVisibleCount" | "tabletVisibleCount" | "mobileVisibleCount"]}
+                      onChange={(event) =>
+                        setSettings({
+                          ...settings,
+                          sections: {
+                            ...settings.sections,
+                            categories: {
+                              ...settings.sections.categories,
+                              [key]: Math.min(Number(max), Math.max(Number(min), Number(event.target.value) || Number(min))),
+                            },
+                          },
+                        })
+                      }
+                      className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                    />
+                  </Field>
+                ))}
+
+                <Field label="سرعة الكاروسيل (ثوانٍ)">
+                  <input
+                    type="number"
+                    min={2}
+                    max={30}
+                    value={settings.sections.categories.carouselIntervalSeconds}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        sections: {
+                          ...settings.sections,
+                          categories: {
+                            ...settings.sections.categories,
+                            carouselIntervalSeconds: Math.min(30, Math.max(2, Number(event.target.value) || 3)),
+                          },
+                        },
+                      })
+                    }
+                    className="rounded-xl border border-black/10 px-4 py-3 outline-none focus:border-brand-gold"
+                  />
+                </Field>
+              </div>
+            </article>
+
           </article>
 
           <article className="grid gap-5 rounded-xl border border-black/10 bg-white p-6 shadow-sm">
