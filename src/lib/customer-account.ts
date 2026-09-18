@@ -371,7 +371,27 @@ export async function loginCustomerWithWordPress(input: { username: string; pass
   });
 
   if (!response.ok) {
-    throw new Error("تعذر تسجيل الدخول. تأكد من بيانات الحساب أو تفعيل JWT في ووردبريس.");
+    let wpCode = "";
+    try {
+      const errBody = (await response.json()) as { code?: string; message?: string };
+      wpCode = String(errBody.code || "");
+    } catch {
+      // ignore parse errors
+    }
+
+    if (wpCode.includes("invalid_username") || wpCode.includes("invalid_email")) {
+      throw new Error("البريد أو اسم المستخدم غير موجود. أنشئ حساباً جديداً أو استخدم بيانات حساب ووكومرس الصحيحة.");
+    }
+
+    if (wpCode.includes("incorrect_password")) {
+      throw new Error("كلمة المرور غير صحيحة. استخدم «نسيت كلمة المرور؟» أو أعد المحاولة.");
+    }
+
+    if (response.status === 404 || wpCode.includes("rest_no_route")) {
+      throw new Error("خدمة دخول ووردبريس (JWT) غير مفعّلة. فعّل إضافة JWT Authentication ثم احفظ الروابط الدائمة.");
+    }
+
+    throw new Error("تعذر تسجيل الدخول. تأكد من بيانات حساب العميل في المتجر (ليست بيانات داشبورد الأدمن).");
   }
 
   const payload = (await response.json()) as JwtAuthResponse;
