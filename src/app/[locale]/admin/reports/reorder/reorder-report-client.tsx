@@ -88,7 +88,7 @@ function buildPrintHtml(products: ReorderProduct[], fetchedAt: string, filterLab
         </style>
       </head>
       <body>
-        <h1>تقرير حد الطلب — سوكاني</h1>
+        <h1>تقرير حد الطلب — توليانو</h1>
         <p class="meta">التاريخ: ${formatReportDate(fetchedAt)} — العرض: ${filterLabel} — عدد الأصناف: ${products.length}</p>
         <p class="meta">الغرض: تحويل من المخزن الرئيسي إلى مخزن الأونلاين على الموقع</p>
         <table>

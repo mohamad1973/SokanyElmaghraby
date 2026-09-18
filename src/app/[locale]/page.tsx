@@ -19,7 +19,7 @@ import { getThemeSettings, type CustomHomeSection, type HomeSectionOrderItem } f
 import { getCategories, getFeaturedProducts, getProducts } from "@/lib/woocommerce";
 
 const trustItems = [
-  { title: "الوكيل الحصري", text: "منتجات أصلية من مؤسسة المغربي في مصر", icon: "shield" },
+  { title: "الوكيل الحصري", text: "منتجات أصلية من توليانو في مصر", icon: "shield" },
   { title: "ضمان عام كامل", text: "ضد عيوب الصناعة مع دعم ما بعد البيع", icon: "check" },
   { title: "دفع مرن", text: "فوري للدفع الإلكتروني أو كاش عند الاستلام", icon: "card" },
   { title: "شحن داخل مصر", text: "تأكيد الطلب قبل الشحن ومتابعة العميل", icon: "truck" },
@@ -363,11 +363,11 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           <div className="grid gap-8 rounded-[2.5rem] bg-zinc-950 p-8 text-white lg:grid-cols-[1fr_0.8fr] lg:p-12">
             <div>
               <p className="text-sm font-bold text-brand-gold">
-                <VisualEditableText textKey="competitive.official.eyebrow">سوكاني الرسمية</VisualEditableText>
+                <VisualEditableText textKey="competitive.official.eyebrow">توليانو الرسمية</VisualEditableText>
               </p>
               <h2 className="mt-3 text-3xl font-bold leading-tight sm:text-4xl">
                 <VisualEditableText textKey="competitive.official.title">
-                  ميزة الشراء من الموقع الرسمي لسوكاني
+                  ميزة الشراء من الموقع الرسمي لتوليانو
                 </VisualEditableText>
               </h2>
             </div>
@@ -375,7 +375,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
               {[
                 {
                   key: "authentic",
-                  text: "مصدر موثوق للحصول على منتجات سوكاني الأصلية من مؤسسة المغربي",
+                  text: "مصدر موثوق للحصول على منتجات توليانو الأصلية من توليانو",
                 },
                 {
                   key: "partsWarranty",

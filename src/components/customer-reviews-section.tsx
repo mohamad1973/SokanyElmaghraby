@@ -183,7 +183,7 @@ function ReviewCard({
             </div>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">{item.productName || "منتج سوكاني"}</p>
+            <p className="truncate text-sm font-bold">{item.productName || "منتج توليانو"}</p>
             <Link
               href={item.productUrl || "/shop"}
               className={`mt-1 inline-flex text-xs font-bold hover:underline ${

@@ -142,7 +142,7 @@ export function OrdersExportActions({ orders }: { orders: ExportOrder[] }) {
     const file = new File([csvBlob], filename, { type: "text/csv" });
     const shareData = {
       title: "تصدير الطلبات",
-      text: `تصدير ${orders.length} طلب من لوحة Sokany.`,
+      text: `تصدير ${orders.length} طلب من لوحة Tooliano.`,
       files: [file],
     };
     const navigatorWithFiles = navigator as Navigator & {

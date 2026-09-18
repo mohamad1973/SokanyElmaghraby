@@ -17,7 +17,7 @@ export function ProductShareButtons({ productName, productSlug }: ProductShareBu
     setCanNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
   }, [productSlug]);
 
-  const shareText = `${productName} — سوكاني`;
+  const shareText = `${productName} — توليانو`;
   const encodedUrl = encodeURIComponent(url || `https://sokany-storefront.vercel.app/product/${productSlug}`);
   const encodedText = encodeURIComponent(`${shareText}\n${url}`);
 

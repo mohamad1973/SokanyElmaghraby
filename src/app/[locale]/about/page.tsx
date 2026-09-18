@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { VisualEditableText } from "@/components/visual-editable-text";
 
 export const metadata: Metadata = {
-  title: "عن سوكاني",
-  description: "نبذة عن سوكاني ومؤسسة المغربي الوكيل الحصري في مصر لمنتجات الأجهزة الكهربائية والمنزلية.",
+  title: "عن توليانو",
+  description: "نبذة عن توليانو ومنتجاتها من الأجهزة الكهربائية والمنزلية في مصر.",
 };
 
 const highlights = [
@@ -17,7 +17,7 @@ const services = [
   { key: "warranty", text: "ضمان رسمي معتمد على جميع منتجاتنا." },
   { key: "centers", text: "شبكة واسعة من مراكز الضمان والصيانة في مختلف المحافظات." },
   { key: "parts", text: "توفير قطع غيار أصلية وصيانة متكاملة للحفاظ على كفاءة جهازك." },
-  { key: "distribution", text: "توزيع معتمد لمنتجات سوكاني في كبرى المتاجر وسلاسل البيع داخل مصر." },
+  { key: "distribution", text: "توزيع معتمد لمنتجات توليانو في كبرى المتاجر وسلاسل البيع داخل مصر." },
 ];
 
 const reasons = [
@@ -33,14 +33,14 @@ export default function AboutPage() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="rounded-[2.5rem] bg-white p-8 shadow-sm">
           <p className="text-sm font-bold text-brand-gold">
-            <VisualEditableText textKey="about.eyebrow">عن سوكاني</VisualEditableText>
+            <VisualEditableText textKey="about.eyebrow">عن توليانو</VisualEditableText>
           </p>
           <h1 className="mt-3 text-4xl font-bold text-zinc-950">
-            <VisualEditableText textKey="about.title">نبذة عن المغربي</VisualEditableText>
+            <VisualEditableText textKey="about.title">نبذة عن توليانو</VisualEditableText>
           </h1>
           <p className="mt-5 text-lg leading-9 text-zinc-600">
             <VisualEditableText textKey="about.intro">
-              على مدار أكثر من 10 سنوات، أثبتت سوكاني وجودها كواحدة من أبرز العلامات التجارية في سوق
+              على مدار أكثر من 10 سنوات، أثبتت توليانو وجودها كواحدة من أبرز العلامات التجارية في سوق
               الأجهزة الكهربائية والمنزلية وأجهزة العناية الشخصية داخل مصر. منتجاتنا أصبحت جزء أساسي من
               حياة آلاف البيوت المصرية لأنها بتجمع بين الجودة والتكنولوجيا والتصميم العصري.
             </VisualEditableText>
@@ -56,14 +56,14 @@ export default function AboutPage() {
 
           <p className="mt-8 text-lg leading-9 text-zinc-600">
             <VisualEditableText textKey="about.agent">
-              ومن أول يوم كان هدفنا نقدّم لعملائنا الأمان والراحة في كل جهاز. وبنفخر إن مؤسسة المغربي
-              هي الوكيل الحصري والوحيد لسوكاني في مصر، مش بس بتوفّر الضمان والصيانة وقطع الغيار الأصلية،
-              لكن كمان بتتولى توزيع منتجات سوكاني لأكبر المتاجر وسلاسل البيع على مستوى الجمهورية.
+              ومن أول يوم كان هدفنا نقدّم لعملائنا الأمان والراحة في كل جهاز. بنوفّر الضمان والصيانة
+              وقطع الغيار الأصلية، وكمان بنتولى توزيع منتجات توليانو لأكبر المتاجر وسلاسل البيع على
+              مستوى الجمهورية.
             </VisualEditableText>
           </p>
 
           <h2 className="mt-10 text-2xl font-bold text-zinc-950">
-            <VisualEditableText textKey="about.servicesTitle">خدمات مؤسسة المغربي تشمل</VisualEditableText>
+            <VisualEditableText textKey="about.servicesTitle">خدمات توليانو تشمل</VisualEditableText>
           </h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             {services.map((item) => (
@@ -74,7 +74,7 @@ export default function AboutPage() {
           </div>
 
           <h2 className="mt-10 text-2xl font-bold text-zinc-950">
-            <VisualEditableText textKey="about.whyTitle">ليه تختار سوكاني؟</VisualEditableText>
+            <VisualEditableText textKey="about.whyTitle">ليه تختار توليانو؟</VisualEditableText>
           </h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             {reasons.map((item) => (
@@ -90,9 +90,8 @@ export default function AboutPage() {
           <p className="mt-5 text-lg leading-9 text-zinc-600">
             <VisualEditableText textKey="about.vision">
               رؤيتنا إننا نكون الاختيار الأول لكل بيت مصري وكل شخص بيدوّر على الأمان والجودة والابتكار.
-              وبالتعاون مع مؤسسة المغربي كوكيل حصري وموزّع رئيسي لمنتجات سوكاني في أكبر المتاجر، بنوعدكم
-              إن منتجات سوكاني تفضل دائمًا قريبة منكم وسهلة الوصول. سوكاني مش مجرد منتجات، لكنها رحلة نجاح
-              مبنية على الأمان والثقة… ومعاكم المستقبل أجمل.
+              بنوعدكم إن منتجات توليانو تفضل دائمًا قريبة منكم وسهلة الوصول. توليانو مش مجرد منتجات،
+              لكنها رحلة نجاح مبنية على الأمان والثقة… ومعاكم المستقبل أجمل.
             </VisualEditableText>
           </p>
 

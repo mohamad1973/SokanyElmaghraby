@@ -69,14 +69,14 @@ export function TrustBadgesSection({
       >
         <div dir="rtl" className="flex flex-col items-start text-right">
           <p className="mb-6 inline-flex bg-brand-gold px-3 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-black">
-            <VisualEditableText textKey="trust.section.badge">لماذا سوكاني؟</VisualEditableText>
+            <VisualEditableText textKey="trust.section.badge">لماذا توليانو؟</VisualEditableText>
           </p>
           <h2 className="max-w-xl text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl lg:text-[2.75rem] lg:leading-[1.15]">
             <VisualEditableText textKey="trust.section.title">تسوق بثقة مع الوكيل الحصري في مصر</VisualEditableText>
           </h2>
           <p className="mt-5 max-w-xl text-base leading-8 text-zinc-400 sm:text-lg">
             <VisualEditableText textKey="trust.section.description">
-              منتجات سوكاني الأصلية من مؤسسة المغربي، بضمان رسمي وشحن داخل الجمهورية وخيارات دفع مرنة تناسب
+              منتجات توليانو الأصلية من توليانو، بضمان رسمي وشحن داخل الجمهورية وخيارات دفع مرنة تناسب
               احتياجك.
             </VisualEditableText>
           </p>

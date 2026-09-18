@@ -6,7 +6,7 @@ import { VisualEditableText } from "@/components/visual-editable-text";
 import { getProducts } from "@/lib/woocommerce";
 
 export const metadata: Metadata = {
-  title: "عروض سوكاني",
+  title: "عروض توليانو",
 };
 
 export default async function OffersPage() {
@@ -17,7 +17,7 @@ export default async function OffersPage() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionTitle
           eyebrow="Offers"
-          title={<VisualEditableText textKey="offers.title">عروض سوكاني</VisualEditableText>}
+          title={<VisualEditableText textKey="offers.title">عروض توليانو</VisualEditableText>}
           description={
             <VisualEditableText textKey="offers.description">
               صفحة مخصصة للعروض الموسمية والحملات، وهي نقطة مهمة للتفوق التجاري على المنافس.

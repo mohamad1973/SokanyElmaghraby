@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 import { DriverShell } from "./driver-shell";
 
 export const metadata: Metadata = {
-  title: "SOKANY Driver",
-  description: "تطبيق مندوب التوصيل — SOKANY Egypt",
+  title: "Tooliano Driver",
+  description: "تطبيق مندوب التوصيل — Tooliano",
   manifest: "/driver-manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "SOKANY Driver",
+    title: "Tooliano Driver",
   },
 };
 

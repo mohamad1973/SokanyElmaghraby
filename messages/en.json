@@ -1,8 +1,8 @@
 {
   "meta": {
-    "titleDefault": "SOKANY Egypt | Exclusive Agent El Maghraby",
-    "titleTemplate": "%s | SOKANY Egypt",
-    "description": "Shop original SOKANY products in Egypt from El Maghraby, the exclusive agent — one-year warranty, Fawry or cash on delivery, and nationwide shipping."
+    "titleDefault": "Tooliano",
+    "titleTemplate": "%s | Tooliano",
+    "description": "Shop original Tooliano products in Egypt — one-year warranty, Fawry or cash on delivery, and nationwide shipping."
   },
   "common": {
     "loading": "Loading...",
@@ -61,13 +61,13 @@
     "contact": "Contact us",
     "warranty": "Warranty",
     "returnPolicy": "Return policy",
-    "aboutTitle": "About SOKANY",
+    "aboutTitle": "About Tooliano",
     "about": "About us",
     "account": "My account"
   },
   "home": {
     "bestSellers": "Best sellers",
-    "bestSellersDesc": "Top-rated SOKANY products chosen by customers.",
+    "bestSellersDesc": "Top-rated Tooliano products chosen by customers.",
     "categories": "Shop by category"
   },
   "shop": {
@@ -180,10 +180,12 @@
     "title": "Offers"
   },
   "admin": {
-    "brand": "SOKANY Admin",
+    "brand": "Tooliano Admin",
     "brandSub": "Storefront control panel",
-    "headerTitle": "SOKANY storefront control",
+    "headerTitle": "Tooliano storefront control",
     "headerSub": "Manage the store and front-end experience",
+    "navSearch": "Search admin...",
+    "navSearchEmpty": "No results",
     "logout": "Log out",
     "nav": {
       "dashboard": "Dashboard",

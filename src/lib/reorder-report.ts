@@ -155,7 +155,7 @@ function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
   return {
     id: product.id,
     name: product.name,
-    sku: product.sku || `SOKANY-${product.id}`,
+    sku: product.sku || `TOOLIANO-${product.id}`,
     stockQuantity: qty,
     threshold: thresholdSafe,
     stockStatus: product.stock_status || "instock",

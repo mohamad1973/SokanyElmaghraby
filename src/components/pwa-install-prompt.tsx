@@ -93,10 +93,10 @@ export function PwaInstallPrompt() {
     <div className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-3xl border border-white/10 bg-black/95 p-4 text-white shadow-2xl shadow-black/40 backdrop-blur">
       <div className="flex items-start gap-3">
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
-          <Image src="/sokany-logo.png" alt="SOKANY" fill className="object-cover" sizes="56px" />
+          <Image src="/sokany-logo.png" alt="Tooliano" fill className="object-cover" sizes="56px" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-[var(--brand-gold)]">ثبت تطبيق SOKANY</p>
+          <p className="text-sm font-bold text-[var(--brand-gold)]">ثبت تطبيق Tooliano</p>
           <p className="mt-1 text-sm leading-6 text-white/80">
             افتح الموقع كتطبيق على الموبايل أو الديسكتوب للوصول السريع للمنتجات والعروض.
           </p>

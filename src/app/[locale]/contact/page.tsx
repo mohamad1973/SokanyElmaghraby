@@ -20,7 +20,7 @@ export default function ContactPage() {
           </h1>
           <p className="mt-5 leading-8 text-zinc-300">
             <VisualEditableText textKey="contact.description">
-              مؤسسة المغربي مؤسسة عريقة تسعى لخدمة العملاء وإرضائهم، ونرحب بتواصلكم معنا لأي
+              توليانو مؤسسة عريقة تسعى لخدمة العملاء وإرضائهم، ونرحب بتواصلكم معنا لأي
               استفسار عن المنتجات أو الضمان أو الشحن.
             </VisualEditableText>
           </p>
@@ -32,7 +32,7 @@ export default function ContactPage() {
               <VisualEditableText textKey="contact.phone">الهاتف: يتم إضافة رقم خدمة العملاء</VisualEditableText>
             </p>
             <p>
-              <VisualEditableText textKey="contact.address">العنوان: يتم إضافة بيانات مؤسسة المغربي</VisualEditableText>
+              <VisualEditableText textKey="contact.address">العنوان: يتم إضافة بيانات توليانو</VisualEditableText>
             </p>
           </div>
         </aside>

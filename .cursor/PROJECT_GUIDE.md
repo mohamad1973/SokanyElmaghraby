@@ -437,6 +437,7 @@
 | كاروسيل تصنيفات مستمر | أُضيف ثم **أُلغي** | `b6f361d` → `045b2a4` |
 | تحكم كاروسيل التصنيفات من الداشبورد | عدد (ديسكتوب/تابلت/موبايل) + سرعة | `/admin/banners` — `045b2a4` |
 | موضع الأزرار العائمة | واتساب / صعود / سوشيال | `/admin/social-media` — `045b2a4` |
+| ريبراند Tooliano + بحث/سكرول أدمن | سوكاني→توليانو، SOKANY→Tooliano؛ توب بار/شعار Tooliano؛ بحث سايدبار + overflow | `admin-shell.tsx`, `theme-settings.ts`, `messages/*`, `scripts/rebrand-theme-tooliano.cjs` |
 | رسائل خطأ دخول العميل أوضح | تمييز اسم مستخدم/باسورد خاطئ عن تعطيل JWT؛ فصل عن بيانات أدمن Next | `customer-account.ts` |
 | إصلاح دخول JWT | بحث بريد + `user_id` من JWT | `76e5219`, `8f6531a` — `customer-account.ts` |
 | OTP دخول + تغيير كلمة مرور | بلجن WP + API + UI | `46cb115` |

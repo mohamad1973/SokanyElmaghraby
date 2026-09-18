@@ -50,7 +50,7 @@ export const authOptions: NextAuthOptions = {
           return {
             id: "sokany-admin",
             email: adminEmail,
-            name: "SOKANY Admin",
+            name: "Tooliano Admin",
             role: "admin" as const,
           };
         }

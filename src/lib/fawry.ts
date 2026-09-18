@@ -71,7 +71,7 @@ export function createFawryPaymentRedirect(input: FawryChargeInput): { ok: true;
     chargeItems: [
       {
         itemId,
-        description: `SOKANY order ${merchantRefNum}`,
+        description: `Tooliano order ${merchantRefNum}`,
         price: Number(price),
         quantity: qty,
       },

@@ -65,7 +65,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     sku: product.sku,
     brand: {
       "@type": "Brand",
-      name: "SOKANY",
+      name: "Tooliano",
     },
     image: product.image,
     description: product.shortDescription,

@@ -4,12 +4,12 @@ import { VisualEditableText } from "@/components/visual-editable-text";
 
 export const metadata: Metadata = {
   title: "الضمان والصيانة",
-  description: "ضمان منتجات سوكاني الأصلية من مؤسسة المغربي الوكيل الحصري في مصر.",
+  description: "ضمان منتجات توليانو الأصلية من Tooliano في مصر.",
 };
 
 const items = [
   { key: "manufacturing", text: "ضمان لمدة عام كامل ضد عيوب الصناعة." },
-  { key: "original", text: "منتجات أصلية من مؤسسة المغربي الوكيل الحصري في مصر." },
+  { key: "original", text: "منتجات أصلية من Tooliano في مصر." },
   { key: "support", text: "خدمة متابعة بعد البيع وتأكيد بيانات الطلب." },
   { key: "policy", text: "توفير معلومات واضحة عن سياسة الاستبدال والاسترجاع." },
 ];

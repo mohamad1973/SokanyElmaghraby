@@ -49,7 +49,7 @@ export function VendorRegisterForm() {
     <form onSubmit={onSubmit} className="space-y-4 rounded-[2rem] bg-white p-6 shadow-sm">
       <h2 className="text-xl font-bold text-zinc-950">تسجيل فيندور + أول منتج</h2>
       <p className="text-sm leading-7 text-zinc-600">
-        بعد الموافقة يظهر عرضك كفرصة شراء جماعي على tooliano.com (واجهة سوكاني + منتجات Woo سوكاني).
+        بعد الموافقة يظهر عرضك كفرصة شراء جماعي على tooliano.com (واجهة توليانو + منتجات Woo توليانو).
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -4,7 +4,7 @@ import { CheckoutForm } from "@/components/checkout-form";
 
 export const metadata: Metadata = {
   title: "إتمام الطلب",
-  description: "إتمام طلب منتجات سوكاني مع دعم فوري أو كاش عند الاستلام.",
+  description: "إتمام طلب منتجات توليانو مع دعم فوري أو كاش عند الاستلام.",
 };
 
 export default function CheckoutPage() {

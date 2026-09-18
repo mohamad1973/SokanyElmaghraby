@@ -384,7 +384,7 @@ export const defaultHomeSectionsOrder: HomeSectionOrderItem[] = [
 
 export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
   enabled: true,
-  title: "آراء عملاء سوكاني",
+  title: "آراء عملاء توليانو",
   ratingValue: "4.9",
   trustText: "أكثر من آلاف العملاء وثقوا فينا",
   guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
@@ -399,7 +399,7 @@ export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
       rating: 5,
       text: "منتجات أصلية وتوصيل سريع، تجربة ممتازة.",
       audioUrl: "",
-      productName: "خلاط سوكاني",
+      productName: "خلاط توليانو",
       productUrl: "/shop",
       productImage: "",
       verified: true,
@@ -423,8 +423,8 @@ export const defaultCustomerReviewsSettings: CustomerReviewsSectionSettings = {
 export const defaultThemeSettings: ThemeSettings = {
   brand: {
     logoUrl: "",
-    logoText: "SOKANY",
-    tagline: "مؤسسة المغربي",
+    logoText: "Tooliano",
+    tagline: "",
     logoDesktopWidth: 144,
     logoDesktopHeight: 48,
     logoMobileWidth: 96,
@@ -436,7 +436,7 @@ export const defaultThemeSettings: ThemeSettings = {
   },
   topBanner: {
     enabled: true,
-    text: "منتجات عالية الجودة\nتوصيل سريع لجميع المحافظات\nأسعار تنافسية وعروض مميزة\nدفع آمن ومضمون 100%\nخدمة عملاء متميزة 24/7\nضمان على جميع المنتجات",
+    text: "Tooliano",
     url: "/shop",
     desktopImage: "",
     mobileImage: "",
@@ -465,8 +465,8 @@ export const defaultThemeSettings: ThemeSettings = {
   ],
   hero: {
     enabled: true,
-    eyebrow: "مؤسسة المغربي الوكيل الحصري لسوكاني في مصر",
-    title: "سوكاني الأصلية بضمان رسمي وتجربة شراء أسرع من أي متجر تقليدي",
+    eyebrow: "Tooliano",
+    title: "توليانو الأصلية بضمان رسمي وتجربة شراء أسرع من أي متجر تقليدي",
     subtitle: "واجهة حديثة مستوحاة من الشركة الأم، مصممة للبيع في مصر: منتجات أصلية، دفع فوري أو كاش، شحن داخل الجمهورية، وصفحات منتجات غنية بالمواصفات.",
     primaryCtaText: "تسوق المنتجات",
     primaryCtaUrl: "/shop",
@@ -522,7 +522,7 @@ export const defaultThemeSettings: ThemeSettings = {
     competitiveBanner: true,
     customBanner: {
       enabled: false,
-      title: "عرض خاص من سوكاني",
+      title: "عرض خاص من توليانو",
       desktopImage: "",
       tabletImage: "",
       mobileImage: "",
@@ -533,8 +533,8 @@ export const defaultThemeSettings: ThemeSettings = {
   },
   footer: {
     description:
-      "تجربة شراء مباشرة لمنتجات سوكاني الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
-    copyright: "SOKANY. جميع الحقوق محفوظة.",
+      "تجربة شراء مباشرة لمنتجات توليانو الأصلية بضمان لمدة عام ضد عيوب الصناعة وخدمة شحن داخل محافظات الجمهورية.",
+    copyright: "Tooliano. جميع الحقوق محفوظة.",
     logoUrl: "",
     logoDesktopWidth: 144,
     logoDesktopHeight: 48,

@@ -16,7 +16,7 @@ export function DriverShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-zinc-100 pb-20 text-zinc-900" dir="rtl">
       <header className="sticky top-0 z-20 border-b border-black/10 bg-white px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-lg items-center justify-between">
-          <p className="font-bold">SOKANY — المندوب</p>
+          <p className="font-bold">Tooliano — المندوب</p>
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/driver/login" })}

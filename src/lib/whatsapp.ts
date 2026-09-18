@@ -20,7 +20,7 @@ function formatOrderItems(order: AdminOrder) {
 
 export function formatNewOrderWhatsAppMessage(order: AdminOrder) {
   return [
-    "طلب جديد من SOKANY Egypt",
+    "طلب جديد من Tooliano",
     `رقم الطلب: #${order.number}`,
     `العميل: ${order.customerName}`,
     `الموبايل: ${order.phone}`,
@@ -159,7 +159,7 @@ export async function sendNewOrderWhatsApp(order: AdminOrder): Promise<WhatsAppS
 
 export async function sendDeliveryOtp(phone: string, orderNumber: string, otpCode: string) {
   const message = [
-    "SOKANY Egypt — تأكيد التسليم",
+    "Tooliano — تأكيد التسليم",
     `طلبك #${orderNumber}`,
     `كود الاستلام: ${otpCode}`,
     "أعطِ هذا الكود للمندوب عند استلام الطلب.",

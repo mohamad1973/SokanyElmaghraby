@@ -286,9 +286,11 @@ export function Header({ settings, menu }: { settings: ThemeSettings; menu: Menu
             <span className="block truncate text-sm font-bold tracking-tight text-zinc-950 sm:text-lg lg:text-xl">
               <VisualEditableText textKey="header.logoText">{settings.brand.logoText}</VisualEditableText>
             </span>
-            <span className="block truncate text-[10px] font-semibold text-zinc-500 sm:text-xs">
-              <VisualEditableText textKey="header.tagline">{settings.brand.tagline}</VisualEditableText>
-            </span>
+            {settings.brand.tagline.trim() ? (
+              <span className="block truncate text-[10px] font-semibold text-zinc-500 sm:text-xs">
+                <VisualEditableText textKey="header.tagline">{settings.brand.tagline}</VisualEditableText>
+              </span>
+            ) : null}
           </span>
           </Link>
         </div>

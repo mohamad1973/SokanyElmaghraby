@@ -23,13 +23,13 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   metadataBase: new URL("https://sokany-eg.com"),
   manifest: "/manifest.webmanifest",
-  applicationName: "SOKANY Egypt",
+  applicationName: "Tooliano",
   title: {
-    default: "SOKANY Egypt | مؤسسة المغربي الوكيل الحصري",
-    template: "%s | SOKANY Egypt",
+    default: "Tooliano",
+    template: "%s | Tooliano",
   },
   description:
-    "تسوق منتجات سوكاني الأصلية في مصر من مؤسسة المغربي الوكيل الحصري مع ضمان عام، دفع فوري أو كاش عند الاستلام، وشحن داخل الجمهورية.",
+    "تسوق منتجات توليانو الأصلية في مصر مع ضمان عام، دفع فوري أو كاش عند الاستلام، وشحن داخل الجمهورية.",
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "SOKANY",
+    title: "Tooliano",
   },
 };
 

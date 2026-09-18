@@ -16,7 +16,7 @@ export default function AdminLoginPage() {
             SK
           </span>
           <div>
-            <h1 className="text-2xl font-bold text-zinc-950">SOKANY Admin</h1>
+            <h1 className="text-2xl font-bold text-zinc-950">Tooliano Admin</h1>
             <p className="text-sm text-zinc-500">لوحة تحكم الواجهة والطلبات</p>
           </div>
         </div>

@@ -1,8 +1,8 @@
 {
   "meta": {
-    "titleDefault": "SOKANY Egypt | مؤسسة المغربي الوكيل الحصري",
-    "titleTemplate": "%s | SOKANY Egypt",
-    "description": "تسوق منتجات سوكاني الأصلية في مصر من مؤسسة المغربي الوكيل الحصري مع ضمان عام، دفع فوري أو كاش عند الاستلام، وشحن داخل الجمهورية."
+    "titleDefault": "Tooliano",
+    "titleTemplate": "%s | Tooliano",
+    "description": "تسوق منتجات توليانو الأصلية في مصر مع ضمان عام، دفع فوري أو كاش عند الاستلام، وشحن داخل الجمهورية."
   },
   "common": {
     "loading": "جاري التحميل...",
@@ -61,13 +61,13 @@
     "contact": "تواصل معنا",
     "warranty": "الضمان",
     "returnPolicy": "سياسة الاسترجاع",
-    "aboutTitle": "عن سوكاني",
+    "aboutTitle": "عن توليانو",
     "about": "من نحن",
     "account": "حسابي"
   },
   "home": {
     "bestSellers": "الأكثر مبيعاً",
-    "bestSellersDesc": "منتجات مختارة من سوكاني بأعلى تقييمات العملاء.",
+    "bestSellersDesc": "منتجات مختارة من توليانو بأعلى تقييمات العملاء.",
     "categories": "تسوق حسب التصنيف"
   },
   "shop": {
@@ -180,10 +180,12 @@
     "title": "العروض"
   },
   "admin": {
-    "brand": "إدارة سوكاني",
+    "brand": "إدارة توليانو",
     "brandSub": "لوحة تحكم الواجهة",
-    "headerTitle": "تحكم واجهة سوكاني",
+    "headerTitle": "تحكم واجهة توليانو",
     "headerSub": "لوحة تحكم للمتجر والواجهة الأمامية",
+    "navSearch": "بحث في لوحة التحكم...",
+    "navSearchEmpty": "لا نتائج",
     "logout": "تسجيل الخروج",
     "nav": {
       "dashboard": "لوحة التحكم",

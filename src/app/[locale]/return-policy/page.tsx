@@ -20,7 +20,7 @@ export default function ReturnPolicyPage() {
           <div className="mt-6 space-y-5 leading-8 text-zinc-600">
             <p>
               <VisualEditableText textKey="returnPolicy.paragraph1">
-                هذه صفحة مبدئية سيتم ضبط نصها النهائي حسب سياسة مؤسسة المغربي
+                هذه صفحة مبدئية سيتم ضبط نصها النهائي حسب سياسة توليانو
                 الرسمية، وهي ضرورية لثقة العميل وتحسين قبول بوابات الدفع.
               </VisualEditableText>
             </p>

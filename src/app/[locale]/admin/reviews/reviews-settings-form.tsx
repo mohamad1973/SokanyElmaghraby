@@ -10,7 +10,7 @@ type ReviewsSettingsFormProps = {
 
 const fallbackReviews: CustomerReviewsSectionSettings = {
   enabled: true,
-  title: "آراء عملاء سوكاني",
+  title: "آراء عملاء توليانو",
   ratingValue: "4.9",
   trustText: "أكثر من آلاف العملاء وثقوا فينا",
   guaranteeText: "ضمان استبدال واسترجاع 14 يوم",
