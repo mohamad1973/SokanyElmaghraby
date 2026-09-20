@@ -265,6 +265,7 @@
 - **قاعدة البيانات:** استورد [`final/database/schema.sql`](../final/database/schema.sql) ثم [`final/database/group-buy-schema.sql`](../final/database/group-buy-schema.sql) في MySQL هوستنجر.
 - **تجميد v001 قبل الدمج:** [`C:\Users\mm\SokanyElmaghraby\v001-archives`](../../v001-archives) — تاج `v001-sokany` / `v001-tooliano` + ZIP + mirrors + `RESTORE_AR.txt`
 - **فيندور / شراء جماعي (فكرة توليانو على فرونت سوكاني):** `/vendor/register`، `/campaign/offer/[id]`، `/admin/group-buy` — Woo يبقى `sokany-eg.com`؛ الدومين المستهدف `tooliano.com`
+- **تشغيل الشراء الجماعي:** جداول `Gb*` على Hostinger + `DATABASE_URL`/`CRON_SECRET` على Vercel. مسار التحقق: تسجيل فيندور → موافقة من `/admin/group-buy` → ظهور على الرئيسية → حجز من صفحة الحملة → نشر Woo. سكربت فحص الجداول: `node scripts/ensure-group-buy-tables.cjs`
 - **التعبئة:** `npm run pack:final` → ينتج `final/app` (`node server.js`). المجلد `final/app` مستثنى من Git لكبر حجمه؛ أعد التعبئة محليًا قبل الرفع.
 - **البناء:** `next.config.ts` يستخدم `output: "standalone"`.
 
@@ -437,6 +438,7 @@
 | كاروسيل تصنيفات مستمر | أُضيف ثم **أُلغي** | `b6f361d` → `045b2a4` |
 | تحكم كاروسيل التصنيفات من الداشبورد | عدد (ديسكتوب/تابلت/موبايل) + سرعة | `/admin/banners` — `045b2a4` |
 | موضع الأزرار العائمة | واتساب / صعود / سوشيال | `/admin/social-media` — `045b2a4` |
+| تفعيل/تحقق الشراء الجماعي على tooliano | جداول Gb* موجودة؛ مسار فيندور→موافقة→حجز→Woo ناجح؛ سكشن الرئيسية يظهر حتى بدون حملات + CTA فيندور | `group-buy-home-section.tsx`, `scripts/ensure-group-buy-tables.cjs` |
 | ريبراند Tooliano + بحث/سكرول أدمن | سوكاني→توليانو، SOKANY→Tooliano؛ توب بار/شعار Tooliano؛ بحث سايدبار + overflow | `admin-shell.tsx`, `theme-settings.ts`, `messages/*`, `scripts/rebrand-theme-tooliano.cjs` |
 | رسائل خطأ دخول العميل أوضح | تمييز اسم مستخدم/باسورد خاطئ عن تعطيل JWT؛ فصل عن بيانات أدمن Next | `customer-account.ts` |
 | إصلاح دخول JWT | بحث بريد + `user_id` من JWT | `76e5219`, `8f6531a` — `customer-account.ts` |
