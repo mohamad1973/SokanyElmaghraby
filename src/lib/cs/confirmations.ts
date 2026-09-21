@@ -111,6 +111,22 @@ export async function listCsConfirmations(status?: string) {
   });
 }
 
+export function serializeCsQueueItem(row: Awaited<ReturnType<typeof listCsConfirmations>>[number]) {
+  return {
+    id: row.id,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    status: row.status,
+    assignedAgent: row.assignedAgent ? { name: row.assignedAgent.name } : null,
+    customerSnapshot: (row.customerSnapshot as {
+      customerName?: string;
+      phone?: string;
+      total?: string;
+    } | null) || null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export async function getCsConfirmation(id: number) {
   const prisma = getPrismaClient();
   if (!prisma) return null;

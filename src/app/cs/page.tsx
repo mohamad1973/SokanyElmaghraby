@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { listCsConfirmations } from "@/lib/cs/confirmations";
+import { listCsConfirmations, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { ensureDefaultCsAgent } from "@/lib/cs/agents";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -12,20 +12,7 @@ export default async function CsHomePage() {
 
   await ensureDefaultCsAgent();
   const rows = await listCsConfirmations();
-
-  const initialItems = rows.map((row) => ({
-    id: row.id,
-    wooOrderId: row.wooOrderId,
-    wooOrderNumber: row.wooOrderNumber,
-    status: row.status,
-    assignedAgent: row.assignedAgent ? { name: row.assignedAgent.name } : null,
-    customerSnapshot: (row.customerSnapshot as {
-      customerName?: string;
-      phone?: string;
-      total?: string;
-    } | null) || null,
-    createdAt: row.createdAt.toISOString(),
-  }));
+  const initialItems = rows.map(serializeCsQueueItem);
 
   return <CsQueueClient initialItems={initialItems} />;
 }

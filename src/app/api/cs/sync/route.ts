@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { syncRecentOrdersForCs } from "@/lib/cs/confirmations";
+import { listCsConfirmations, serializeCsQueueItem, syncRecentOrdersForCs } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function POST() {
@@ -14,10 +14,14 @@ export async function POST() {
     return NextResponse.json({ message: result.message }, { status: 503 });
   }
 
+  const rows = await listCsConfirmations();
+  const items = rows.map(serializeCsQueueItem);
+
   return NextResponse.json({
     ok: true,
     imported: result.imported,
     totalFetched: result.totalFetched,
+    items,
     message: `تمت المزامنة (${result.imported} جديد من ${result.totalFetched}).`,
   });
 }
