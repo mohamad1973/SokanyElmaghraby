@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { listCsAgents } from "@/lib/cs/agents";
+import { ensureCsTables, ensureDefaultCsAgent, listCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
-import { ensureDefaultCsAgent } from "@/lib/cs/agents";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -11,7 +10,9 @@ export default async function CsHomePage() {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
 
+  await ensureCsTables();
   await ensureDefaultCsAgent();
+
   const viewer = await resolveCsViewer(session.user.csAgentId);
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
 

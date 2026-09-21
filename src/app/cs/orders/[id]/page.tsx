@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { ensureCsTables } from "@/lib/cs/agents";
 import { getCsConfirmation, startCsConfirmation } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -10,6 +11,8 @@ type Props = { params: Promise<{ id: string }> };
 export default async function CsOrderPage({ params }: Props) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
+
+  await ensureCsTables();
 
   const { id } = await params;
   const numericId = Number(id);

@@ -170,11 +170,71 @@ export async function listCsConfirmationsForViewer(opts: {
   if (!prisma) return [];
   await ensureCsTables();
 
-  const rows = await prisma.csOrderConfirmation.findMany({
-    include: { assignedAgent: true, answers: true },
-    orderBy: { createdAt: "desc" },
-    take: 300,
-  });
+  type Row = Awaited<ReturnType<typeof prisma.csOrderConfirmation.findMany>>[number] & {
+    assignedAgent?: { id: number; name: string } | null;
+    answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
+    shippingCompany?: string | null;
+    handedToCarrier?: boolean;
+    deliveredToCustomer?: boolean;
+    customerFollowUp?: boolean;
+  };
+
+  let rows: Row[] = [];
+  try {
+    rows = (await prisma.csOrderConfirmation.findMany({
+      include: { assignedAgent: true, answers: true },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    })) as Row[];
+  } catch (error) {
+    console.error("[cs] listCsConfirmationsForViewer failed, retry after migrate:", error);
+    await ensureCsTables();
+    try {
+      rows = (await prisma.csOrderConfirmation.findMany({
+        include: { assignedAgent: true, answers: true },
+        orderBy: { createdAt: "desc" },
+        take: 300,
+      })) as Row[];
+    } catch (retryError) {
+      console.error("[cs] listCsConfirmationsForViewer legacy fallback:", retryError);
+      const legacy = await prisma.$queryRawUnsafe<
+        Array<{
+          id: number;
+          wooOrderId: number;
+          wooOrderNumber: string;
+          status: string;
+          assignedAgentId: number | null;
+          customerSnapshot: unknown;
+          failReason: string | null;
+          startedAt: Date | null;
+          confirmedAt: Date | null;
+          createdAt: Date;
+          updatedAt: Date;
+        }>
+      >(
+        `SELECT \`id\`, \`wooOrderId\`, \`wooOrderNumber\`, \`status\`, \`assignedAgentId\`, \`customerSnapshot\`, \`failReason\`, \`startedAt\`, \`confirmedAt\`, \`createdAt\`, \`updatedAt\`
+         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC LIMIT 300`,
+      );
+      const agentIds = [...new Set(legacy.map((r) => r.assignedAgentId).filter(Boolean))] as number[];
+      const agents =
+        agentIds.length > 0
+          ? await prisma.csAgent.findMany({ where: { id: { in: agentIds } } })
+          : [];
+      const agentById = new Map(agents.map((a) => [a.id, a]));
+      rows = legacy.map((r) => ({
+        ...r,
+        shippingCompany: null,
+        handedToCarrier: false,
+        deliveredToCustomer: false,
+        customerFollowUp: false,
+        handedToCarrierAt: null,
+        deliveredToCustomerAt: null,
+        customerFollowUpAt: null,
+        assignedAgent: r.assignedAgentId ? agentById.get(r.assignedAgentId) || null : null,
+        answers: [],
+      })) as unknown as Row[];
+    }
+  }
 
   const inWindow = rows.filter((row) => {
     const snap = row.customerSnapshot as { dateCreated?: string } | null;
@@ -185,7 +245,12 @@ export async function listCsConfirmationsForViewer(opts: {
     return sortByOrderNumberDesc(inWindow);
   }
 
-  const ranges = await getAssignmentRangesForAgent(opts.agentId);
+  let ranges: Array<{ from: number; to: number }> = [];
+  try {
+    ranges = await getAssignmentRangesForAgent(opts.agentId);
+  } catch (error) {
+    console.error("[cs] getAssignmentRangesForAgent failed:", error);
+  }
 
   const filtered = inWindow.filter((row) => {
     if (
@@ -219,9 +284,20 @@ export async function listCsConfirmations(status?: string) {
   );
 }
 
-export function serializeCsQueueItem(
-  row: Awaited<ReturnType<typeof listCsConfirmationsForViewer>>[number],
-) {
+export function serializeCsQueueItem(row: {
+  id: number;
+  wooOrderId: number;
+  wooOrderNumber: string;
+  status: string;
+  shippingCompany?: string | null;
+  handedToCarrier?: boolean | null;
+  deliveredToCustomer?: boolean | null;
+  customerFollowUp?: boolean | null;
+  customerSnapshot?: unknown;
+  createdAt: Date;
+  assignedAgent?: { id: number; name: string } | null;
+  answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
+}) {
   const raw = (row.customerSnapshot as CsQueueSnapshot | null) || null;
   const paidOnlineHighlight =
     raw?.paidOnlineHighlight ??

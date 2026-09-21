@@ -10,7 +10,9 @@ export function isSupervisorAgent(agent: { name: string; email: string; isSuperv
   return agent.name.replace(/\s+/g, " ").trim() === "منى عباس";
 }
 
-export async function ensureCsTables() {
+let ensureCsTablesPromise: Promise<void> | null = null;
+
+async function runEnsureCsTables() {
   const prisma = getPrismaClient();
   if (!prisma) return;
 
@@ -85,7 +87,6 @@ export async function ensureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
-  // Safe additive columns for older tables
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingCompany` VARCHAR(64) NULL",
@@ -96,13 +97,29 @@ export async function ensureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `deliveredToCustomerAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `customerFollowUpAt` DATETIME(3) NULL",
   ];
+
   for (const sql of alters) {
     try {
       await prisma.$executeRawUnsafe(sql);
-    } catch {
-      // column already exists
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Duplicate column is expected on repeat runs
+      if (!/Duplicate column|already exists|1060/i.test(message)) {
+        console.warn("[cs] ensureCsTables ALTER warning:", message.slice(0, 200));
+      }
     }
   }
+}
+
+/** Idempotent schema migration for CS tables — safe to call before every CS query. */
+export async function ensureCsTables() {
+  if (!ensureCsTablesPromise) {
+    ensureCsTablesPromise = runEnsureCsTables().catch((error) => {
+      ensureCsTablesPromise = null;
+      throw error;
+    });
+  }
+  await ensureCsTablesPromise;
 }
 
 export async function authenticateCsAgent(email: string, password: string) {
@@ -112,20 +129,40 @@ export async function authenticateCsAgent(email: string, password: string) {
   await ensureCsTables();
   await ensureDefaultCsAgent();
 
-  const agent = await prisma.csAgent.findUnique({
-    where: { email: email.trim().toLowerCase() },
-  });
+  let agent: {
+    id: number;
+    name: string;
+    email: string;
+    passwordHash: string;
+    isActive: boolean;
+    isSupervisor?: boolean;
+  } | null = null;
+
+  try {
+    agent = await prisma.csAgent.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+  } catch {
+    await ensureCsTables();
+    agent = await prisma.csAgent.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+  }
 
   if (!agent || !agent.isActive) return null;
   const ok = await verifyPassword(password, agent.passwordHash);
   if (!ok) return null;
 
   const shouldBeSupervisor = isSupervisorAgent(agent);
-  if (shouldBeSupervisor && !(agent as { isSupervisor?: boolean }).isSupervisor) {
-    await prisma.csAgent.update({
-      where: { id: agent.id },
-      data: { isSupervisor: true },
-    });
+  if (shouldBeSupervisor && !agent.isSupervisor) {
+    try {
+      await prisma.csAgent.update({
+        where: { id: agent.id },
+        data: { isSupervisor: true },
+      });
+    } catch {
+      // column may still be missing — name match still grants supervisor in resolveCsViewer
+    }
     return { ...agent, isSupervisor: true };
   }
 
@@ -136,17 +173,32 @@ export async function ensureDefaultCsAgent() {
   const prisma = getPrismaClient();
   if (!prisma) return;
 
+  await ensureCsTables();
+
   const email = (process.env.CS_AGENT_EMAIL || "cs@tooliano.com").trim().toLowerCase();
   const password = process.env.CS_AGENT_PASSWORD || "Cs@Tooliano123";
   const name = process.env.CS_AGENT_NAME || "خدمة العملاء";
 
-  const existing = await prisma.csAgent.findUnique({ where: { email } });
+  let existing = null as Awaited<ReturnType<typeof prisma.csAgent.findUnique>> | null;
+  try {
+    existing = await prisma.csAgent.findUnique({ where: { email } });
+  } catch {
+    await ensureCsTables();
+    existing = await prisma.csAgent.findUnique({ where: { email } });
+  }
   if (existing) return existing;
 
   const passwordHash = await hashPassword(password);
-  return prisma.csAgent.create({
-    data: { email, name, passwordHash, isActive: true, isSupervisor: false },
-  });
+  try {
+    return await prisma.csAgent.create({
+      data: { email, name, passwordHash, isActive: true, isSupervisor: false },
+    });
+  } catch {
+    // Fallback without isSupervisor if schema still lagging
+    return prisma.csAgent.create({
+      data: { email, name, passwordHash, isActive: true },
+    });
+  }
 }
 
 export async function createCsAgent(input: { name: string; email: string; password: string }) {
@@ -161,28 +213,50 @@ export async function createCsAgent(input: { name: string; email: string; passwo
   const name = input.name.trim();
   const passwordHash = await hashPassword(input.password);
   const isSupervisor = isSupervisorAgent({ name, email });
-  const agent = await prisma.csAgent.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-      isActive: true,
-      isSupervisor,
-    },
-  });
-  return { ok: true as const, agent };
+  try {
+    const agent = await prisma.csAgent.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        isActive: true,
+        isSupervisor,
+      },
+    });
+    return { ok: true as const, agent };
+  } catch {
+    const agent = await prisma.csAgent.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        isActive: true,
+      },
+    });
+    return { ok: true as const, agent: { ...agent, isSupervisor } };
+  }
 }
 
 export async function listCsAgents() {
   const prisma = getPrismaClient();
   if (!prisma) return [];
   await ensureCsTables();
-  return prisma.csAgent.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  try {
+    return await prisma.csAgent.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  } catch {
+    await ensureCsTables();
+    return prisma.csAgent.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  }
 }
 
 export async function getCsAgentById(id: number) {
   const prisma = getPrismaClient();
   if (!prisma) return null;
   await ensureCsTables();
-  return prisma.csAgent.findUnique({ where: { id } });
+  try {
+    return await prisma.csAgent.findUnique({ where: { id } });
+  } catch {
+    await ensureCsTables();
+    return prisma.csAgent.findUnique({ where: { id } });
+  }
 }

@@ -32,11 +32,25 @@ export async function getAssignmentRangesForAgent(agentId: number) {
   const prisma = getPrismaClient();
   if (!prisma) return [] as Array<{ from: number; to: number }>;
   await ensureCsTables();
-  const rows = await prisma.csOrderAssignment.findMany({ where: { agentId } });
-  return rows.map((row) => ({
-    from: Math.min(row.wooOrderNumberFrom, row.wooOrderNumberTo),
-    to: Math.max(row.wooOrderNumberFrom, row.wooOrderNumberTo),
-  }));
+  try {
+    const rows = await prisma.csOrderAssignment.findMany({ where: { agentId } });
+    return rows.map((row) => ({
+      from: Math.min(row.wooOrderNumberFrom, row.wooOrderNumberTo),
+      to: Math.max(row.wooOrderNumberFrom, row.wooOrderNumberTo),
+    }));
+  } catch (error) {
+    console.error("[cs] getAssignmentRangesForAgent:", error);
+    await ensureCsTables();
+    try {
+      const rows = await prisma.csOrderAssignment.findMany({ where: { agentId } });
+      return rows.map((row) => ({
+        from: Math.min(row.wooOrderNumberFrom, row.wooOrderNumberTo),
+        to: Math.max(row.wooOrderNumberFrom, row.wooOrderNumberTo),
+      }));
+    } catch {
+      return [];
+    }
+  }
 }
 
 export function orderNumberInRanges(orderNumber: string, ranges: Array<{ from: number; to: number }>) {
