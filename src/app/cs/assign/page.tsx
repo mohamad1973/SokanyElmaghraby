@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { ensureCsTables, ensureDefaultCsAgent, listCsAgents } from "@/lib/cs/agents";
-import { resolveCsViewer } from "@/lib/cs/confirmations";
+import { listCsConfirmationsForViewer, resolveCsViewer } from "@/lib/cs/confirmations";
+import { isWithinCairoTodayOrYesterday } from "@/lib/cs/order-window";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsAssignClient } from "./assign-client";
@@ -17,5 +18,17 @@ export default async function CsAssignPage() {
   if (!isSupervisor) redirect("/cs");
 
   const agents = (await listCsAgents()).map((a) => ({ id: a.id, name: a.name, email: a.email }));
-  return <CsAssignClient agents={agents} />;
+  const rows = await listCsConfirmationsForViewer({
+    agentId: session.user.csAgentId,
+    isSupervisor: true,
+  });
+  // Same default visible window as the main queue (today + yesterday)
+  const visibleOrderIds = rows
+    .filter((row) => {
+      const snap = row.customerSnapshot as { dateCreated?: string } | null;
+      return isWithinCairoTodayOrYesterday(snap?.dateCreated);
+    })
+    .map((row) => row.id);
+
+  return <CsAssignClient agents={agents} visibleOrderIds={visibleOrderIds} />;
 }

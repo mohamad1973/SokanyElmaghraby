@@ -107,7 +107,7 @@ export async function fairSplitAssign(input: {
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
 
-  const { isWithinCairoLastDays } = await import("@/lib/cs/order-window");
+  const { isWithinCairoTodayOrYesterday } = await import("@/lib/cs/order-window");
 
   const agentIds = [...new Set(input.agentIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (agentIds.length < 2) return { ok: false as const, message: "اختاري مسؤولين اثنين على الأقل." };
@@ -128,46 +128,42 @@ export async function fairSplitAssign(input: {
     return h === n || h.includes(n) || n.includes(h);
   }
 
-  function inWindow(row: { customerSnapshot: unknown }) {
-    const snap = row.customerSnapshot as { dateCreated?: string } | null;
-    return isWithinCairoLastDays(snap?.dateCreated, 30);
-  }
+  let rows: Awaited<ReturnType<typeof prisma.csOrderConfirmation.findMany>>;
 
-  function matchesLocation(row: { customerSnapshot: unknown }) {
-    const snap = row.customerSnapshot as { governorate?: string; area?: string } | null;
-    if (input.governorate && !locMatch(snap?.governorate, input.governorate)) return false;
-    if (input.area && !locMatch(snap?.area, input.area)) return false;
-    return true;
-  }
-
-  let rows = await prisma.csOrderConfirmation.findMany({
-    where: input.confirmationIds?.length
-      ? { id: { in: input.confirmationIds } }
-      : { status: { in: ["PENDING", "IN_PROGRESS"] } },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
-
-  const beforeWindow = rows.length;
-  rows = rows.filter(inWindow);
-  const beforeLocation = rows.length;
-  rows = rows.filter(matchesLocation);
-
-  if (rows.length === 0) {
-    // Fallback: include CONFIRMED in same window/location
-    let fallback = await prisma.csOrderConfirmation.findMany({
-      where: { status: { in: ["PENDING", "IN_PROGRESS", "CONFIRMED"] } },
+  if (input.confirmationIds?.length) {
+    // Visible-queue mode: distribute exactly these IDs
+    rows = await prisma.csOrderConfirmation.findMany({
+      where: { id: { in: input.confirmationIds } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (rows.length === 0) {
+      return { ok: false as const, message: "لا توجد أوردرات ظاهرة للتوزيع. زامني القائمة أولاً." };
+    }
+  } else {
+    rows = await prisma.csOrderConfirmation.findMany({
+      where: { status: { in: ["PENDING", "IN_PROGRESS"] } },
       orderBy: { createdAt: "desc" },
       take: 500,
     });
-    fallback = fallback.filter(inWindow).filter(matchesLocation);
-    if (fallback.length === 0) {
+    // Same default window as the main queue (today + yesterday)
+    rows = rows.filter((row) => {
+      const snap = row.customerSnapshot as { dateCreated?: string } | null;
+      return isWithinCairoTodayOrYesterday(snap?.dateCreated);
+    });
+    if (input.governorate || input.area) {
+      rows = rows.filter((row) => {
+        const snap = row.customerSnapshot as { governorate?: string; area?: string } | null;
+        if (input.governorate && !locMatch(snap?.governorate, input.governorate)) return false;
+        if (input.area && !locMatch(snap?.area, input.area)) return false;
+        return true;
+      });
+    }
+    if (rows.length === 0) {
       return {
         ok: false as const,
-        message: `لا توجد أوردرات للتوزيع (مرشحون أوليون: ${beforeWindow}، بعد نافذة 30 يوم: ${beforeLocation}، بعد فلتر المحافظة/المنطقة: 0). جرّبي بدون محافظة أو زامني أولاً.`,
+        message: "لا توجد أوردرات ظاهرة (اليوم/أمس) للتوزيع. زامني أو اتركي فلتر المحافظة فارغاً.",
       };
     }
-    rows = fallback;
   }
 
   rows = [...rows].sort(
@@ -188,7 +184,6 @@ export async function fairSplitAssign(input: {
     assigned += 1;
   }
 
-  // Create numeric ranges so agents see orders via range OR assignedAgentId
   for (const agentId of agentIds) {
     const nums = byAgent.get(agentId)!.filter((n) => n > 0);
     if (!nums.length) continue;

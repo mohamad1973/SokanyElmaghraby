@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { listCsGovernorates, mergeAreaOptions } from "@/lib/cs/egypt-areas";
@@ -156,9 +156,51 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   const [printMode, setPrintMode] = useState<PrintMode>("none");
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
+  const syncingRef = useRef(false);
+
   useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
+
+  async function syncOrders(opts?: { quiet?: boolean }) {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (!opts?.quiet) {
+      setLoading(true);
+      setMessage("");
+    }
+    try {
+      const res = await fetch("/api/cs/sync", { method: "POST" });
+      const data = (await res.json()) as {
+        message?: string;
+        imported?: number;
+        items?: CsQueueItem[];
+      };
+      if (!res.ok) {
+        if (!opts?.quiet) setMessage(data.message || "تعذر المزامنة.");
+        return;
+      }
+      if (data.items) setItems(data.items);
+      if (!opts?.quiet) {
+        setMessage(`تمت المزامنة. طلبات جديدة: ${data.imported ?? 0}`);
+        router.refresh();
+      } else if ((data.imported ?? 0) > 0) {
+        setMessage(`مزامنة تلقائية: طلبات جديدة ${data.imported}`);
+      }
+    } finally {
+      syncingRef.current = false;
+      if (!opts?.quiet) setLoading(false);
+    }
+  }
+
+  // Auto-sync every 30 seconds
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void syncOrders({ quiet: true });
+    }, 30000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const governorates = useMemo(() => {
     const fromOrders = items.map((i) => i.customerSnapshot?.governorate || "").filter(Boolean);
@@ -191,25 +233,6 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     }, 50);
     return () => window.clearTimeout(timer);
   }, [printMode]);
-
-  async function syncOrders() {
-    setLoading(true);
-    setMessage("");
-    const res = await fetch("/api/cs/sync", { method: "POST" });
-    const data = (await res.json()) as {
-      message?: string;
-      imported?: number;
-      items?: CsQueueItem[];
-    };
-    setLoading(false);
-    if (!res.ok) {
-      setMessage(data.message || "تعذر المزامنة.");
-      return;
-    }
-    if (data.items) setItems(data.items);
-    setMessage(`تمت المزامنة. طلبات جديدة: ${data.imported ?? 0}`);
-    router.refresh();
-  }
 
   async function openOrder(id: number) {
     const res = await fetch(`/api/cs/confirmations/${id}/start`, { method: "POST" });
@@ -505,7 +528,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                       {item.customerSnapshot?.phone || ""}
                     </span>
                     {paidOnline ? (
-                      <span className="w-fit rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
+                      <span className="w-fit rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col gap-0.5">

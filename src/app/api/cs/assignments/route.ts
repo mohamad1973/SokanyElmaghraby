@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     from?: number;
     to?: number;
     agentIds?: number[];
+    confirmationIds?: number[];
     governorate?: string;
     area?: string;
     ruleMode?: "shipping" | "paid" | "region_agent" | "region_shipping";
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
   if (mode === "fair") {
     const result = await fairSplitAssign({
       agentIds: body.agentIds || [],
+      confirmationIds: body.confirmationIds,
       governorate: body.governorate || undefined,
       area: body.area || undefined,
       createdById: session.user.csAgentId,

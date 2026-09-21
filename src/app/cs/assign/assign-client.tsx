@@ -17,7 +17,13 @@ type Assignment = {
 
 type Tab = "range" | "fair" | "rules";
 
-export function CsAssignClient({ agents }: { agents: Agent[] }) {
+export function CsAssignClient({
+  agents,
+  visibleOrderIds = [],
+}: {
+  agents: Agent[];
+  visibleOrderIds?: number[];
+}) {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -81,14 +87,18 @@ export function CsAssignClient({ agents }: { agents: Agent[] }) {
   async function runFair() {
     setLoading(true);
     setMessage("");
+    if (visibleOrderIds.length === 0) {
+      setLoading(false);
+      setMessage("لا توجد أوردرات ظاهرة في القائمة (اليوم/أمس). زامني من قائمة الانتظار أولاً.");
+      return;
+    }
     const res = await fetch("/api/cs/assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mode: "fair",
         agentIds: fairIds,
-        governorate: governorate || undefined,
-        area: area || undefined,
+        confirmationIds: visibleOrderIds,
       }),
     });
     const data = (await res.json()) as { message?: string; assigned?: number };
@@ -97,7 +107,8 @@ export function CsAssignClient({ agents }: { agents: Agent[] }) {
       setMessage(data.message || "تعذر التقسيم.");
       return;
     }
-    setMessage(`تم التوزيع العادل على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر.`);
+    setMessage(`تم التوزيع العادل على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر من القائمة الظاهرة.`);
+    await load();
   }
 
   async function runRules() {
@@ -267,7 +278,8 @@ export function CsAssignClient({ agents }: { agents: Agent[] }) {
       {tab === "fair" ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
           <p className="text-sm font-bold text-[#14213D]">
-            اختاري 2–4 مسؤولين للتوزيع العادل (round-robin). اتركي المحافظة فارغة لتوزيع كل الأوردرات في آخر 30 يوماً.
+            اختاري 2–4 مسؤولين للتوزيع العادل. سيتم توزيع الأوردرات الظاهرة حالياً في القائمة فقط (
+            {visibleOrderIds.length} أوردر — اليوم وأمس بعد المزامنة).
           </p>
           <div className="flex flex-wrap gap-2">
             {agents.map((a) => (

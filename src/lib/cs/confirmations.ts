@@ -23,6 +23,7 @@ import {
   isWithinCairoTodayOrYesterday,
 } from "@/lib/cs/order-window";
 import { getShipmentsByOrderIds } from "@/lib/shipping/shipments";
+import { looksLikeLocationCode, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
 
 export type CsQueueSnapshot = {
   customerName?: string;
@@ -170,6 +171,62 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
       },
     });
     imported += 1;
+  }
+
+  // Refresh snapshots for existing CS rows that still show codes / missing area
+  const existingRows = await prisma.csOrderConfirmation.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  for (const row of existingRows) {
+    const snap = row.customerSnapshot as CsQueueSnapshot | null;
+    if (!snap) continue;
+    const needs =
+      looksLikeLocationCode(snap.governorate || "") ||
+      !snap.area ||
+      snap.area === "غير محدد" ||
+      looksLikeLocationCode(snap.area || "");
+    if (!needs) continue;
+    if (windowOrders.some((o) => o.id === row.wooOrderId)) continue; // already refreshed above
+
+    const live = await getAdminOrder(String(row.wooOrderId));
+    if (!live) {
+      // Still normalize codes on existing snapshot
+      const fixed = resolveSnapshotLocation({
+        governorate: snap.governorate,
+        area: snap.area,
+        address: snap.address,
+      });
+      if (fixed.governorate !== snap.governorate || fixed.area !== snap.area) {
+        await prisma.csOrderConfirmation.update({
+          where: { id: row.id },
+          data: {
+            customerSnapshot: { ...snap, governorate: fixed.governorate, area: fixed.area, address: fixed.address },
+          },
+        });
+      }
+      continue;
+    }
+    const trackingOne = await trackingMapForOrders([live.id]);
+    const next = snapshotFromOrder(live, trackingOne.get(live.id)) as CsQueueSnapshot;
+    try {
+      const ships = await getShipmentsByOrderIds([live.id]);
+      const fromShip = ships.get(live.id);
+      if (fromShip) {
+        if (looksLikeLocationCode(next.governorate || "") || next.governorate === "غير محدد") {
+          if (fromShip.governorate) next.governorate = fromShip.governorate;
+        }
+        if (!next.area || next.area === "غير محدد") {
+          if (fromShip.area) next.area = fromShip.area;
+        }
+      }
+    } catch {
+      // optional
+    }
+    await prisma.csOrderConfirmation.update({
+      where: { id: row.id },
+      data: { customerSnapshot: next, wooOrderNumber: live.number },
+    });
   }
 
   return { ok: true as const, imported, totalFetched: windowOrders.length };
@@ -336,6 +393,12 @@ export function serializeCsQueueItem(row: {
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
   const shippingCompany = row.shippingCompany || shippingFromAnswer || "bosta";
 
+  const loc = resolveSnapshotLocation({
+    governorate: raw?.governorate,
+    area: raw?.area,
+    address: raw?.address,
+  });
+
   return {
     id: row.id,
     wooOrderId: row.wooOrderId,
@@ -352,10 +415,12 @@ export function serializeCsQueueItem(row: {
       ? {
           customerName: raw.customerName,
           phone: raw.phone,
-          address: raw.address || "",
-          area: raw.area || "",
-          governorate: raw.governorate || "",
-          addressFull: [raw.address, raw.area, raw.governorate].filter(Boolean).join(" — "),
+          address: loc.address === "غير محدد" ? raw.address || "" : loc.address,
+          area: loc.area,
+          governorate: loc.governorate,
+          addressFull: [loc.address !== "غير محدد" ? loc.address : raw.address, loc.area, loc.governorate]
+            .filter((x) => x && x !== "غير محدد")
+            .join(" — "),
           total: raw.total,
           dateCreated: raw.dateCreated,
           paymentMethod: raw.paymentMethod,
