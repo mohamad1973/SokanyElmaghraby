@@ -25,6 +25,13 @@ export type WooOrder = {
     city?: string;
     state?: string;
   };
+  shipping?: {
+    address_1?: string;
+    address_2?: string;
+    city?: string;
+    state?: string;
+  };
+  meta_data?: Array<{ id?: number; key: string; value?: unknown }>;
   line_items: Array<{
     id: number;
     name: string;
@@ -161,16 +168,35 @@ async function wooOrdersFetch<T>(path: string): Promise<WooFetchResult<T>> {
 
 export function mapOrder(order: WooOrder, shipping?: OrderShippingInfo): AdminOrder {
   const customerName = `${order.billing.first_name || ""} ${order.billing.last_name || ""}`.trim();
-  const governorate = order.billing.state || "غير محدد";
+
+  const meta = order.meta_data || [];
+  const metaGov = String(meta.find((m) => m.key === "_sokany_governorate")?.value || "").trim();
+  const metaArea = String(meta.find((m) => m.key === "_sokany_area")?.value || "").trim();
+
+  // Checkout stores: city = governorate, address_2 = area, state = "area - governorate"
+  const governorate =
+    metaGov ||
+    order.billing.city?.trim() ||
+    order.shipping?.city?.trim() ||
+    "غير محدد";
+  const area =
+    metaArea ||
+    order.billing.address_2?.trim() ||
+    order.shipping?.address_2?.trim() ||
+    "غير محدد";
+  const street =
+    order.billing.address_1?.trim() ||
+    order.shipping?.address_1?.trim() ||
+    "غير محدد";
 
   return {
     id: order.id,
     number: order.number,
     customerName: customerName || "غير محدد",
     phone: order.billing.phone || "غير محدد",
-    address: [order.billing.address_1, order.billing.address_2].filter(Boolean).join(" - ") || "غير محدد",
+    address: street,
     governorate,
-    area: order.billing.city || "غير محدد",
+    area,
     status: order.status,
     paymentMethod: order.payment_method_title || "غير محدد",
     paymentMethodId: order.payment_method || undefined,

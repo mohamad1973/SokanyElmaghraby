@@ -72,6 +72,21 @@ function defaultDraft(): DraftFilters {
   };
 }
 
+function norm(value: string | null | undefined) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function locMatch(haystack: string | null | undefined, needle: string) {
+  if (!needle) return true;
+  const h = norm(haystack);
+  const n = norm(needle);
+  if (!h || !n) return false;
+  return h === n || h.includes(n) || n.includes(h);
+}
+
 function searchableText(item: CsQueueItem) {
   const snap = item.customerSnapshot;
   const products = (snap?.items || []).map((i) => i.name).join(" ");
@@ -113,8 +128,8 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters) {
       if (f.payment === "cod" && item.customerSnapshot?.paidOnlineHighlight) return false;
       if (f.shipping !== "all" && (item.shippingCompany || "") !== f.shipping) return false;
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
-      if (f.governorate && (item.customerSnapshot?.governorate || "") !== f.governorate) return false;
-      if (f.area && (item.customerSnapshot?.area || "") !== f.area) return false;
+      if (f.governorate && !locMatch(item.customerSnapshot?.governorate, f.governorate)) return false;
+      if (f.area && !locMatch(item.customerSnapshot?.area, f.area)) return false;
       if (f.dateFrom && f.dateTo) {
         if (!isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo)) return false;
       }
@@ -129,6 +144,8 @@ type Props = {
   agents?: Array<{ id: number; name: string }>;
 };
 
+type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
+
 export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -136,6 +153,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<DraftFilters>(defaultDraft);
   const [applied, setApplied] = useState<DraftFilters>(defaultDraft);
+  const [printMode, setPrintMode] = useState<PrintMode>("none");
+  const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
   useEffect(() => {
     setItems(initialItems);
@@ -150,13 +169,28 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     const gov = draft.governorate;
     if (!gov) return [] as string[];
     const fromOrders = items
-      .filter((i) => i.customerSnapshot?.governorate === gov)
+      .filter((i) => locMatch(i.customerSnapshot?.governorate, gov))
       .map((i) => i.customerSnapshot?.area || "")
       .filter(Boolean);
     return mergeAreaOptions(gov, fromOrders);
   }, [draft.governorate, items]);
 
   const filtered = useMemo(() => applyFilters(items, applied), [items, applied]);
+
+  const printRows = useMemo(() => {
+    if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
+    if (printMode === "sayed_temima") return filtered.filter((i) => i.shippingCompany === "sayed_temima");
+    return filtered;
+  }, [filtered, printMode]);
+
+  useEffect(() => {
+    if (printMode === "none") return;
+    const timer = window.setTimeout(() => {
+      window.print();
+      setPrintMode("none");
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [printMode]);
 
   async function syncOrders() {
     setLoading(true);
@@ -187,6 +221,27 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     router.push(`/cs/orders/${id}`);
   }
 
+  async function setShipping(id: number, shippingCompany: string) {
+    setSavingShipId(id);
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shippingCompany: shippingCompany || null }),
+    });
+    const data = (await res.json()) as { message?: string; shippingCompany?: string | null };
+    setSavingShipId(null);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر حفظ شركة الشحن.");
+      return;
+    }
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, shippingCompany: data.shippingCompany || shippingCompany || null } : item,
+      ),
+    );
+  }
+
   function patchDraft(patch: Partial<DraftFilters>) {
     setDraft((prev) => ({ ...prev, ...patch }));
   }
@@ -207,7 +262,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         <div>
           <h1 className="text-2xl font-extrabold text-[#14213D]">قائمة تأكيد الطلبات</h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
-            عدد النتائج: <span className="text-[#FCA311]">{filtered.length}</span> من أصل {items.length}
+            عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span> من
+            أصل {items.length}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -218,10 +274,24 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
           ) : null}
           <button
             type="button"
-            onClick={() => window.print()}
-            className="rounded-xl bg-black px-4 py-2.5 text-sm font-extrabold text-white"
+            onClick={() => setPrintMode("bosta")}
+            className="rounded-xl bg-black px-3 py-2.5 text-sm font-extrabold text-white"
           >
-            طباعة A4
+            طباعة بوسطة
+          </button>
+          <button
+            type="button"
+            onClick={() => setPrintMode("sayed_temima")}
+            className="rounded-xl bg-black px-3 py-2.5 text-sm font-extrabold text-white"
+          >
+            طباعة سيد تميمة
+          </button>
+          <button
+            type="button"
+            onClick={() => setPrintMode("all")}
+            className="rounded-xl bg-[#E5E5E5] px-3 py-2.5 text-sm font-extrabold text-[#14213D]"
+          >
+            طباعة الكل
           </button>
           <button
             type="button"
@@ -386,73 +456,89 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         <p className="no-print rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      <p className="no-print text-sm font-extrabold text-[#14213D]">
-        نتائج الجدول: {filtered.length} أوردر
-      </p>
+      <p className="no-print text-sm font-extrabold text-[#14213D]">نتائج الجدول: {filtered.length} أوردر</p>
 
       <div className="no-print space-y-2">
         {filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
             {items.length === 0 ? (
               isSupervisor ? (
-                <p className="font-bold">لا توجد طلبات في النطاق — راجعي Woo أو رسالة المزامنة أو وسّعي تاريخ الفلتر.</p>
+                <p className="font-bold">لا توجد طلبات — راجعي المزامنة أو وسّعي تاريخ الفلتر.</p>
               ) : (
-                <p className="font-bold">لم يُوزَّع عليكِ نطاق أوردرات بعد — اطلبي من المشرفة (منى عباس / الأدمن).</p>
+                <p className="font-bold">لم يُوزَّع عليكِ نطاق بعد — اطلبي من المشرفة.</p>
               )
             ) : (
-              <p className="font-bold">لا توجد نتائج مطابقة — اضغطي «فلتر» بعد تعديل الشروط أو أعيدي الضبط.</p>
+              <p className="font-bold">لا توجد نتائج مطابقة — اضغطي «فلتر» بعد التعديل أو أعيدي الضبط.</p>
             )}
           </div>
         ) : (
           filtered.map((item) => {
-            const confirmed = item.status === "CONFIRMED";
+            const isConfirmed = item.status === "CONFIRMED";
             const paidOnline = Boolean(item.customerSnapshot?.paidOnlineHighlight);
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
-            const addr =
-              item.customerSnapshot?.addressFull ||
-              [item.customerSnapshot?.address, item.customerSnapshot?.area, item.customerSnapshot?.governorate]
-                .filter(Boolean)
-                .join(" — ");
 
             return (
               <div
                 key={item.id}
-                className={`rounded-xl px-3 py-2.5 shadow-sm ring-1 ${
-                  confirmed
-                    ? "bg-[#FCA311]/25 ring-[#FCA311]"
-                    : paidOnline
-                      ? "bg-white ring-[#14213D]/40"
-                      : "bg-white ring-[#E5E5E5]"
+                className={`rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ${
+                  isConfirmed ? "ring-[#FCA311]" : paidOnline ? "ring-[#14213D]/35" : "ring-[#E5E5E5]"
                 }`}
               >
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm font-bold text-[#14213D] sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm font-bold text-[#14213D] sm:grid-cols-5">
                   <div className="flex flex-col gap-0.5">
                     <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] ${meta.className}`}>{meta.label}</span>
                     <span className="text-base font-extrabold">#{item.wooOrderNumber}</span>
-                    <span className="text-xs text-[#14213D]/60">{day}</span>
+                    <span className="text-xs text-[#14213D]/55">{day}</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span>{item.customerSnapshot?.customerName || "—"}</span>
                     <span className="text-xs" dir="ltr">
                       {item.customerSnapshot?.phone || ""}
                     </span>
-                    {paidOnline ? <span className="w-fit rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] text-white">مدفوع</span> : null}
+                    {paidOnline ? (
+                      <span className="w-fit rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
+                    ) : null}
                   </div>
-                  <div className="col-span-2 flex flex-col gap-0.5 sm:col-span-1">
-                    <span className="text-xs leading-snug">{addr || "—"}</span>
-                    <span className="text-xs">
-                      {item.shippingCompany ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany : "—"}
-                      {" · "}
-                      {item.assignedAgent?.name || "—"}
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs text-[#14213D]/55">المحافظة</span>
+                    <span>{item.customerSnapshot?.governorate || "—"}</span>
+                    <span className="text-xs text-[#14213D]/55">المنطقة</span>
+                    <span>{item.customerSnapshot?.area || "—"}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs leading-snug text-[#14213D]/80">
+                      {item.customerSnapshot?.address || "—"}
                     </span>
+                    <span className="text-xs">{item.assignedAgent?.name || "—"}</span>
+                    {isSupervisor ? (
+                      <select
+                        value={item.shippingCompany || ""}
+                        disabled={savingShipId === item.id}
+                        onChange={(e) => void setShipping(item.id, e.target.value)}
+                        className="mt-1 rounded-lg border border-[#E5E5E5] bg-[#E5E5E5]/50 px-2 py-1 text-xs font-bold"
+                      >
+                        <option value="">شركة الشحن...</option>
+                        <option value="bosta">بوسطة</option>
+                        <option value="sayed_temima">سيد تميمة</option>
+                      </select>
+                    ) : (
+                      <span className="text-xs text-[#14213D]/70">
+                        {item.shippingCompany
+                          ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany
+                          : "شحن: لم تُحدد"}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex flex-col items-start gap-1 sm:items-end">
-                    <span className="rounded bg-[#FCA311] px-2 py-1 text-base font-extrabold text-black underline decoration-[#14213D] decoration-2 underline-offset-4">
+                  <div className="flex flex-col items-start gap-1.5 sm:items-end">
+                    <span className="rounded-lg bg-[#14213D] px-2.5 py-1 text-base font-extrabold text-[#FCA311]">
                       {item.customerSnapshot?.total || "—"} ج.م
                     </span>
-                    {confirmed ? (
-                      <Link href={`/cs/orders/${item.id}`} className="rounded-lg bg-[#14213D] px-3 py-1.5 text-xs font-extrabold text-white">
+                    {isConfirmed ? (
+                      <Link
+                        href={`/cs/orders/${item.id}`}
+                        className="rounded-lg bg-[#14213D] px-3 py-1.5 text-xs font-extrabold text-white"
+                      >
                         فتح
                       </Link>
                     ) : (
@@ -473,37 +559,47 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
       </div>
 
       <div className="print-only hidden">
-        <h1 className="mb-3 text-center text-lg font-bold">شيت تأكيد الطلبات — Tooliano CS</h1>
+        <h1 className="mb-2 text-center text-lg font-bold">
+          شيت مخزن —{" "}
+          {printMode === "bosta"
+            ? "بوسطة"
+            : printMode === "sayed_temima"
+              ? "سيد تميمة"
+              : "كل الشركات"}
+        </h1>
         <p className="mb-2 text-center text-xs">
-          {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {filtered.length}
+          {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
         </p>
         <table className="w-full border-collapse text-[10px]">
           <thead>
             <tr>
-              {["الرقم", "الاسم", "موبايل", "العنوان", "الإجمالي", "الشحن", "الوكيلة", "حالة CS"].map((h) => (
-                <th key={h} className="border border-black px-1 py-1 text-right">
-                  {h}
-                </th>
-              ))}
+              {["الرقم", "الاسم", "موبايل", "المحافظة", "المنطقة", "العنوان", "الإجمالي", "الشحن", "المسؤول"].map(
+                (h) => (
+                  <th key={h} className="border border-black px-1 py-1 text-right">
+                    {h}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((item) => (
+            {printRows.map((item) => (
               <tr key={item.id}>
                 <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
                 <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
                 <td className="border border-black px-1 py-1" dir="ltr">
                   {item.customerSnapshot?.phone}
                 </td>
-                <td className="border border-black px-1 py-1">
-                  {item.customerSnapshot?.addressFull || item.customerSnapshot?.address}
-                </td>
+                <td className="border border-black px-1 py-1">{item.customerSnapshot?.governorate}</td>
+                <td className="border border-black px-1 py-1">{item.customerSnapshot?.area}</td>
+                <td className="border border-black px-1 py-1">{item.customerSnapshot?.address}</td>
                 <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
                 <td className="border border-black px-1 py-1">
-                  {item.shippingCompany ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany : ""}
+                  {item.shippingCompany
+                    ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany
+                    : ""}
                 </td>
                 <td className="border border-black px-1 py-1">{item.assignedAgent?.name || ""}</td>
-                <td className="border border-black px-1 py-1">{statusMeta[item.status]?.label || item.status}</td>
               </tr>
             ))}
           </tbody>

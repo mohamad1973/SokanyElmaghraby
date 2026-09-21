@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   CS_CHECKLIST_ITEMS,
   CS_FOLLOWUP_ITEMS,
+  SHIPPING_COMPANY_LABEL,
   type CsChecklistAnswerInput,
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
@@ -61,9 +62,9 @@ function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | nul
     }
     if (!value) {
       if (item.key === "customer_name") value = snapshot?.customerName || "";
-      if (item.key === "address_complete") {
-        value = [snapshot?.address, snapshot?.area, snapshot?.governorate].filter(Boolean).join(" — ");
-      }
+      if (item.key === "address_complete") value = snapshot?.address || "";
+      if (item.key === "governorate_confirm") value = snapshot?.governorate || "";
+      if (item.key === "area_confirm") value = snapshot?.area || "";
       if (item.key === "primary_phone") value = snapshot?.phone || "";
       if (item.key === "invoice_total") value = `${snapshot?.total || ""} ${snapshot?.currency || "EGP"}`.trim();
     }
@@ -86,10 +87,13 @@ export function CsCallSheet({
   shippingCompany,
 }: Props) {
   const confirmed = status === "CONFIRMED";
+  const lockedShipping =
+    shippingCompany === "bosta" || shippingCompany === "sayed_temima" ? shippingCompany : null;
+
   const [answers, setAnswers] = useState(() => {
     const base = buildInitial(initialAnswers, snapshot);
-    if (shippingCompany && !base.shipping_company.value) {
-      base.shipping_company.value = shippingCompany;
+    if (lockedShipping) {
+      base.shipping_company.value = lockedShipping;
       base.shipping_company.confirmed = true;
     }
     return base;
@@ -109,6 +113,15 @@ export function CsCallSheet({
     () =>
       CS_CHECKLIST_ITEMS.map((item) => {
         const state = answers[item.key];
+        if (item.key === "shipping_company" && lockedShipping) {
+          return {
+            itemKey: item.key,
+            confirmed: true,
+            value: lockedShipping,
+            note: null,
+            yesNo: null,
+          };
+        }
         return {
           itemKey: item.key,
           confirmed: state.confirmed,
@@ -117,7 +130,7 @@ export function CsCallSheet({
           yesNo: item.type === "yes_no_extra" ? state.yesNo || null : null,
         };
       }),
-    [answers],
+    [answers, lockedShipping],
   );
 
   function update(key: string, patch: Partial<AnswerState>) {
@@ -128,6 +141,12 @@ export function CsCallSheet({
     setSaving(true);
     setMessage("");
     if (finalize && !failContact && !confirmed) {
+      if (!lockedShipping) {
+        setSaving(false);
+        setMessage("يجب أن تحدد المشرفة شركة الشحن أولاً من قائمة الأوردرات.");
+        setMissing(["shipping_company"]);
+        return;
+      }
       const validation = validateChecklistAnswers(payloadAnswers);
       setMissing(validation.missing);
       if (!validation.ok) {
@@ -168,6 +187,8 @@ export function CsCallSheet({
 
   const inputCls =
     "w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
+
+  const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
   return (
     <div className="flex min-h-[calc(100dvh-4.5rem)] flex-col gap-3 overflow-auto p-2" dir="rtl">
@@ -230,12 +251,21 @@ export function CsCallSheet({
             {snapshot?.total} {snapshot?.currency || "EGP"}
           </span>
           <span>{snapshot?.paymentMethod}</span>
+          {lockedShipping ? (
+            <span className="rounded bg-white/15 px-2 py-0.5">
+              شحن: {SHIPPING_COMPANY_LABEL[lockedShipping]}
+            </span>
+          ) : (
+            <span className="rounded bg-black/40 px-2 py-0.5 text-[#FCA311]">شحن: لم تُحدد المشرفة بعد</span>
+          )}
           {snapshot?.trackingNumber ? (
             <span dir="ltr">تتبع: {snapshot.trackingNumber}</span>
           ) : null}
-          <span className="min-w-0 flex-1">
-            {snapshot?.address} — {snapshot?.area} — {snapshot?.governorate}
-          </span>
+        </div>
+        <div className="mt-2 grid gap-1 text-white/90 sm:grid-cols-3">
+          <span>الشارع: {snapshot?.address || "—"}</span>
+          <span>المحافظة: {snapshot?.governorate || "—"}</span>
+          <span>المنطقة: {snapshot?.area || "—"}</span>
         </div>
         <div className="mt-2 text-white/80">
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}
@@ -254,7 +284,7 @@ export function CsCallSheet({
 
       {!confirmed ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-          {CS_CHECKLIST_ITEMS.map((item) => {
+          {checklistVisible.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
             return (
@@ -367,6 +397,18 @@ export function CsCallSheet({
               </div>
             );
           })}
+
+          <div
+            className={`flex min-h-[9rem] flex-col rounded-2xl p-3 shadow-sm ring-2 ${
+              missing.includes("shipping_company") ? "ring-red-500 bg-white" : "ring-[#FCA311] bg-[#FCA311]/15"
+            }`}
+          >
+            <p className="text-sm font-extrabold text-[#14213D]">شركة الشحن</p>
+            <p className="mt-1 text-[11px] text-[#14213D]/60">تحددها المشرفة من القائمة الرئيسية</p>
+            <p className="mt-3 text-lg font-extrabold text-[#14213D]">
+              {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
+            </p>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

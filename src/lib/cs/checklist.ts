@@ -32,8 +32,22 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
   },
   {
     key: "address_complete",
-    label: "تأكيد العنوان كامل",
-    help: "هل العنوان كامل وواضح للتوصيل؟",
+    label: "تأكيد العنوان (الشارع)",
+    help: "أكد عنوان الشارع فقط مع العميل (بدون محافظة/منطقة).",
+    type: "confirm_text",
+    required: true,
+  },
+  {
+    key: "governorate_confirm",
+    label: "تأكيد المحافظة",
+    help: "أكد اسم المحافظة مع العميل وصحّحه إن لزم.",
+    type: "confirm_text",
+    required: true,
+  },
+  {
+    key: "area_confirm",
+    label: "تأكيد المنطقة",
+    help: "أكد اسم المنطقة/الحي مع العميل وصحّحه إن لزم.",
     type: "confirm_text",
     required: true,
   },
@@ -102,7 +116,7 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
   {
     key: "shipping_company",
     label: "شركة الشحن",
-    help: "اختر بوسطة أو سيد تميمة.",
+    help: "تحددها المشرفة من قائمة الأوردرات (بوسطة أو سيد تميمة).",
     type: "choice",
     required: true,
     choices: [

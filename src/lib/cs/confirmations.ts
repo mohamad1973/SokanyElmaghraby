@@ -467,7 +467,11 @@ export async function saveCsConfirmation(input: {
     });
   }
 
-  const shippingCompany = shippingCompanyFromAnswers(input.answers);
+  const shippingFromRow =
+    row.shippingCompany === "bosta" || row.shippingCompany === "sayed_temima"
+      ? row.shippingCompany
+      : null;
+  const shippingCompany = shippingFromRow || shippingCompanyFromAnswers(input.answers);
 
   if (!input.finalize) {
     await prisma.csOrderConfirmation.update({
@@ -475,13 +479,27 @@ export async function saveCsConfirmation(input: {
       data: {
         status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
         assignedAgentId: input.agentId,
-        ...(shippingCompany ? { shippingCompany } : {}),
       },
     });
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
   }
 
-  const validation = validateChecklistAnswers(input.answers);
+  // Ensure shipping_company answer is present for validation when supervisor already set it
+  const answersForValidation = [...input.answers];
+  if (shippingFromRow) {
+    const idx = answersForValidation.findIndex((a) => a.itemKey === "shipping_company");
+    const filled = {
+      itemKey: "shipping_company",
+      confirmed: true,
+      value: shippingFromRow,
+      note: null as string | null,
+      yesNo: null as "yes" | "no" | null,
+    };
+    if (idx >= 0) answersForValidation[idx] = { ...answersForValidation[idx], ...filled };
+    else answersForValidation.push(filled);
+  }
+
+  const validation = validateChecklistAnswers(answersForValidation);
   if (!validation.ok) {
     return {
       ok: false as const,
@@ -493,7 +511,7 @@ export async function saveCsConfirmation(input: {
   if (!shippingCompany) {
     return {
       ok: false as const,
-      message: "اختاري شركة الشحن (بوسطة أو سيد تميمة).",
+      message: "يجب أن تحدد المشرفة شركة الشحن أولاً من قائمة الأوردرات.",
       missing: ["shipping_company"],
     };
   }
@@ -510,6 +528,52 @@ export async function saveCsConfirmation(input: {
   });
 
   return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+}
+
+export async function setCsShippingCompany(input: {
+  id: number;
+  shippingCompany: "bosta" | "sayed_temima" | null;
+  agentId: number;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const viewer = await resolveCsViewer(input.agentId);
+  if (!viewer.isSupervisor) {
+    return { ok: false as const, message: "للمشرفة فقط." };
+  }
+
+  const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
+  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+
+  await prisma.csOrderConfirmation.update({
+    where: { id: input.id },
+    data: { shippingCompany: input.shippingCompany },
+  });
+
+  if (input.shippingCompany) {
+    await prisma.csChecklistAnswer.upsert({
+      where: {
+        confirmationId_itemKey: {
+          confirmationId: input.id,
+          itemKey: "shipping_company",
+        },
+      },
+      create: {
+        confirmationId: input.id,
+        itemKey: "shipping_company",
+        confirmed: true,
+        value: input.shippingCompany,
+      },
+      update: {
+        confirmed: true,
+        value: input.shippingCompany,
+      },
+    });
+  }
+
+  return { ok: true as const, shippingCompany: input.shippingCompany };
 }
 
 export async function isOrderCsConfirmed(wooOrderId: number) {
