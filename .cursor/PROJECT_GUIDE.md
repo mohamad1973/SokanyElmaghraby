@@ -95,6 +95,16 @@
 | ترتيب المحطات | `/driver/route` |
 | تأكيد تسليم + OTP | `/driver/order/[id]` |
 
+### خدمة العملاء (تأكيد المكالمة)
+
+| ماذا تريد | افتح |
+|-----------|------|
+| دخول CS | `/cs/login` |
+| قائمة الانتظار | `/cs` |
+| صفحة سكربت المكالمة | `/cs/orders/[id]` |
+
+دخول افتراضي (إن لم يُنشأ وكيل): `CS_AGENT_EMAIL` / `CS_AGENT_PASSWORD` أو `cs@tooliano.com` / `Cs@Tooliano123`.
+
 ### ووردبريس (خارج Next.js)
 
 | ماذا تريد | أين |
@@ -335,6 +345,20 @@
 | `/driver/route` | محطات + خرائط |
 | `/driver/order/[id]` | تفاصيل + OTP تسليم |
 
+## تطبيق خدمة العملاء
+
+| المسار | الوظيفة |
+|--------|---------|
+| `/cs/login` | دخول وكيل CS |
+| `/cs` | قائمة تأكيد + مزامنة Woo |
+| `/cs/orders/[id]` | سكربت المكالمة (بنود إلزامية) |
+
+| API | الوظيفة |
+|-----|---------|
+| `POST /api/cs/sync` | استيراد طلبات جديدة من Woo |
+| `POST /api/cs/confirmations/[id]/start` | بدء المكالمة وتعيين الوكيل |
+| `PUT /api/cs/confirmations/[id]` | مسودة / تأكيد كامل / تعذر تواصل |
+
 | API | الوظيفة |
 |-----|---------|
 | `GET /api/driver/today` | مسار اليوم |
@@ -364,7 +388,7 @@
 | Bosta | `src/lib/shipping/bosta-client.ts` |
 | إنشاء طلب من المتجر | `src/lib/woocommerce-orders.ts`, `src/app/api/checkout/route.ts` |
 | فوري | `src/lib/fawry.ts`, `src/app/api/fawry/callback/route.ts` |
-| middleware (حماية admin/driver) | `middleware.ts` |
+| middleware (حماية admin/driver/cs) | `middleware.ts` |
 
 ---
 
@@ -398,6 +422,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| داشبورد خدمة العملاء M1+M2 | مسار `/cs` منفصل؛ استيراد Woo؛ سكربت مكالمة إلزامي؛ منع التأكيد الناقص؛ شرط قبل التوزيع؛ webhook يضيف للطابور | `src/app/cs/`, `src/lib/cs/`, `api/cs/*`, `auth.ts`, `middleware.ts`, Prisma Cs* |
 | tooliano.com على Vercel + MySQL Hostinger | Remote MySQL `srv1729.hstgr.io`؛ موافقة الحملة تنشر Woo؛ قرارات EXTEND/EXECUTE/CANCEL؛ كرون `/api/cron/sync-campaigns` | `publish-woo.ts`, `campaign-decision.ts`, `vercel.json`, `docs/TOOLIANO_MERGE_STATUS_AR.md` |
 | حزمة final لهوستنجر | `output: standalone` + مجلد `final/` (config + schema.sql + README + pack) لتعبئة Node.js Web App بدون فقدان الشكل | `final/`, `next.config.ts`, `package.json` |
 | تعليقات البوست مقابل Inbox | توضيح أن كارت المنتج في Messages بعد Send message وليس في رد التعليق؛ قالب رد عام + تحديث دليل المودريتور | `docs/MODERATOR_SAVED_REPLIES_AR.md` |

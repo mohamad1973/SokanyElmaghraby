@@ -235,3 +235,50 @@ model GbGroupBuyOrder {
   @@index([buyerId])
   @@index([submissionId, status])
 }
+
+// ——— Customer Service order confirmation (call script) ———
+
+model CsAgent {
+  id           Int                    @id @default(autoincrement())
+  name         String
+  email        String                 @unique
+  passwordHash String
+  isActive     Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  confirmations CsOrderConfirmation[]
+}
+
+model CsOrderConfirmation {
+  id              Int                 @id @default(autoincrement())
+  wooOrderId      Int                 @unique
+  wooOrderNumber  String
+  status          String              @default("PENDING")
+  assignedAgentId Int?
+  assignedAgent   CsAgent?            @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  customerSnapshot Json?
+  failReason      String?             @db.Text
+  startedAt       DateTime?
+  confirmedAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  answers         CsChecklistAnswer[]
+
+  @@index([status])
+  @@index([assignedAgentId])
+  @@index([createdAt])
+}
+
+model CsChecklistAnswer {
+  id             Int                  @id @default(autoincrement())
+  confirmationId Int
+  confirmation   CsOrderConfirmation  @relation(fields: [confirmationId], references: [id], onDelete: Cascade)
+  itemKey        String
+  confirmed      Boolean              @default(false)
+  value          String?              @db.Text
+  note           String?              @db.Text
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([confirmationId, itemKey])
+  @@index([confirmationId])
+}

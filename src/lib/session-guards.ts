@@ -23,3 +23,13 @@ export async function requireDriverSession() {
 
   return session;
 }
+
+export async function requireCsSession() {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user || session.user.role !== "cs" || !session.user.csAgentId) {
+    return null;
+  }
+
+  return session;
+}

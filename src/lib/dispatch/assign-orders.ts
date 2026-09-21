@@ -265,6 +265,15 @@ export async function assignOrderToDriver(order: AdminOrder, driverId: number, o
     return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   }
 
+  const { isOrderCsConfirmed } = await import("@/lib/cs/confirmations");
+  const csOk = await isOrderCsConfirmed(order.id);
+  if (!csOk) {
+    return {
+      ok: false as const,
+      message: "يجب تأكيد الطلب من خدمة العملاء أولاً قبل التوزيع على المندوب.",
+    };
+  }
+
   if (resolveFulfillmentMode(order.governorate) !== "internal") {
     return { ok: false as const, message: "هذا الطلب يُدار عبر Bosta وليس المندوبين الداخليين." };
   }

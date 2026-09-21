@@ -16,6 +16,10 @@ function isDriverPath(pathname: string) {
   return pathname.startsWith("/driver") || pathname.startsWith("/api/driver");
 }
 
+function isCsPath(pathname: string) {
+  return pathname.startsWith("/cs") || pathname.startsWith("/api/cs");
+}
+
 function isAdminApiPath(pathname: string) {
   return pathname.startsWith("/api/admin");
 }
@@ -59,7 +63,26 @@ async function getSiteLocaleMode(req: NextRequest): Promise<SiteLocaleMode> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/api/") && !isAdminApiPath(pathname) && !pathname.startsWith("/api/driver")) {
+  if (pathname.startsWith("/api/") && !isAdminApiPath(pathname) && !pathname.startsWith("/api/driver") && !pathname.startsWith("/api/cs")) {
+    return nextWithLocale(req, "ar");
+  }
+
+  if (isCsPath(pathname)) {
+    if (pathname === "/cs/login") {
+      return nextWithLocale(req, "ar");
+    }
+
+    const token = await getToken({ req, secret });
+    const role = token?.role as "admin" | "driver" | "cs" | undefined;
+
+    if (!token || role !== "cs") {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      }
+
+      return NextResponse.redirect(new URL("/cs/login", req.url));
+    }
+
     return nextWithLocale(req, "ar");
   }
 
@@ -69,7 +92,7 @@ export async function middleware(req: NextRequest) {
     }
 
     const token = await getToken({ req, secret });
-    const role = token?.role as "admin" | "driver" | undefined;
+    const role = token?.role as "admin" | "driver" | "cs" | undefined;
 
     if (!token || role !== "driver") {
       if (pathname.startsWith("/api/")) {
@@ -84,7 +107,7 @@ export async function middleware(req: NextRequest) {
 
   if (isAdminApiPath(pathname)) {
     const token = await getToken({ req, secret });
-    const role = token?.role as "admin" | "driver" | undefined;
+    const role = token?.role as "admin" | "driver" | "cs" | undefined;
 
     if (!token) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
+import { enqueueOrderFromWebhook } from "@/lib/cs/confirmations";
 import { mapOrder, type WooOrder } from "@/lib/orders";
 import { recordSocialProofEvent } from "@/lib/social-proof";
 import { sendNewOrderWhatsApp } from "@/lib/whatsapp";
@@ -52,11 +53,14 @@ export async function POST(request: Request) {
     await recordSocialProofEvent(firstItem.name, firstItem.sku || "");
   }
 
+  await enqueueOrderFromWebhook(order);
+
   const whatsappResult = await sendNewOrderWhatsApp(order);
 
   return NextResponse.json({
     ok: true,
     orderNumber: order.number,
+    csQueued: true,
     whatsapp: whatsappResult,
   });
 }
