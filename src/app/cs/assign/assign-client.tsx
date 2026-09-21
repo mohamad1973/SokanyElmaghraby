@@ -266,7 +266,9 @@ export function CsAssignClient({ agents }: { agents: Agent[] }) {
 
       {tab === "fair" ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
-          <p className="text-sm font-bold text-[#14213D]">اختاري 2–4 مسؤولين للتوزيع العادل (round-robin)</p>
+          <p className="text-sm font-bold text-[#14213D]">
+            اختاري 2–4 مسؤولين للتوزيع العادل (round-robin). اتركي المحافظة فارغة لتوزيع كل الأوردرات في آخر 30 يوماً.
+          </p>
           <div className="flex flex-wrap gap-2">
             {agents.map((a) => (
               <label

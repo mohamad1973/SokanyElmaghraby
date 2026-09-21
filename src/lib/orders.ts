@@ -1,6 +1,6 @@
 import "server-only";
 
-import { resolveFulfillmentMode } from "@/lib/shipping/bosta-zones";
+import { BOSTA_CITY_MAP, resolveFulfillmentMode } from "@/lib/shipping/bosta-zones";
 import type { OrderShippingInfo } from "@/lib/shipping/shipments";
 
 const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
@@ -166,24 +166,102 @@ async function wooOrdersFetch<T>(path: string): Promise<WooFetchResult<T>> {
   }
 }
 
+function metaValue(meta: Array<{ key: string; value?: unknown }> | undefined, keys: string[]) {
+  if (!meta?.length) return "";
+  for (const key of keys) {
+    const hit = meta.find((m) => m.key === key);
+    const val = String(hit?.value ?? "").trim();
+    if (val) return val;
+  }
+  return "";
+}
+
+function looksLikeLocationCode(value: string) {
+  const v = value.trim();
+  if (!v) return false;
+  if (/^EG-?\d+/i.test(v)) return true;
+  if (/^[a-f0-9]{20,}$/i.test(v)) return true;
+  if (/^\d{4,}$/.test(v)) return true;
+  return false;
+}
+
+function resolveArabicGovernorate(raw: string) {
+  const value = raw.trim();
+  if (!value || value === "غير محدد") return "";
+
+  const direct = BOSTA_CITY_MAP[value] || BOSTA_CITY_MAP[value.toLowerCase()];
+  if (direct?.nameAr) return direct.nameAr;
+
+  const upper = value.toUpperCase().replace(/\s+/g, "");
+  for (const entry of Object.values(BOSTA_CITY_MAP)) {
+    const code = entry.code.toUpperCase().replace(/-/g, "");
+    if (entry.code.toUpperCase() === upper || code === upper.replace(/-/g, "")) {
+      return entry.nameAr;
+    }
+  }
+
+  // Already Arabic / human name
+  if (!looksLikeLocationCode(value)) return value;
+  return value;
+}
+
+function parseStateComposite(state: string | undefined) {
+  const raw = String(state || "").trim();
+  if (!raw || !/[-–—]/.test(raw)) return null;
+  const parts = raw.split(/\s*[-–—]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  return { area: parts[0], governorate: parts.slice(1).join(" - ") };
+}
+
 export function mapOrder(order: WooOrder, shipping?: OrderShippingInfo): AdminOrder {
   const customerName = `${order.billing.first_name || ""} ${order.billing.last_name || ""}`.trim();
-
   const meta = order.meta_data || [];
-  const metaGov = String(meta.find((m) => m.key === "_sokany_governorate")?.value || "").trim();
-  const metaArea = String(meta.find((m) => m.key === "_sokany_area")?.value || "").trim();
 
-  // Checkout stores: city = governorate, address_2 = area, state = "area - governorate"
-  const governorate =
-    metaGov ||
-    order.billing.city?.trim() ||
-    order.shipping?.city?.trim() ||
-    "غير محدد";
-  const area =
+  const metaGov = metaValue(meta, [
+    "_sokany_governorate",
+    "sokany_governorate",
+    "_billing_city",
+    "bosta_city_name",
+  ]);
+  const metaArea = metaValue(meta, [
+    "_sokany_area",
+    "sokany_area",
+    "bosta_district_name",
+    "bosta_zone_name",
+  ]);
+
+  const fromState = parseStateComposite(order.billing.state) || parseStateComposite(order.shipping?.state);
+
+  let governorate =
+    resolveArabicGovernorate(metaGov) ||
+    resolveArabicGovernorate(order.billing.city || "") ||
+    resolveArabicGovernorate(order.shipping?.city || "") ||
+    resolveArabicGovernorate(fromState?.governorate || "") ||
+    "";
+
+  let area =
     metaArea ||
     order.billing.address_2?.trim() ||
     order.shipping?.address_2?.trim() ||
-    "غير محدد";
+    fromState?.area ||
+    "";
+
+  // If city held a code and state had names, prefer parsed names
+  if (looksLikeLocationCode(governorate) && fromState?.governorate) {
+    governorate = resolveArabicGovernorate(fromState.governorate) || governorate;
+  }
+  if ((!area || area === "غير محدد") && fromState?.area) {
+    area = fromState.area;
+  }
+
+  // Drop code-like area masquerading as district id without a name
+  if (looksLikeLocationCode(area)) {
+    area = fromState?.area || metaArea || "";
+  }
+
+  governorate = resolveArabicGovernorate(governorate) || governorate || "غير محدد";
+  area = area.trim() || "غير محدد";
+
   const street =
     order.billing.address_1?.trim() ||
     order.shipping?.address_1?.trim() ||

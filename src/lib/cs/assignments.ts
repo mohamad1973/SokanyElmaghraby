@@ -107,32 +107,75 @@ export async function fairSplitAssign(input: {
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
 
+  const { isWithinCairoLastDays } = await import("@/lib/cs/order-window");
+
   const agentIds = [...new Set(input.agentIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (agentIds.length < 2) return { ok: false as const, message: "اختاري مسؤولين اثنين على الأقل." };
 
   const agents = await prisma.csAgent.findMany({ where: { id: { in: agentIds }, isActive: true } });
   if (agents.length !== agentIds.length) {
-    return { ok: false as const, message: "أحد المسؤولين غير موجود." };
+    return { ok: false as const, message: "أحد المسؤولين غير موجود أو غير نشط." };
+  }
+
+  function locMatch(haystack: string | null | undefined, needle: string) {
+    if (!needle) return true;
+    const h = String(haystack || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+    const n = needle.trim().replace(/\s+/g, " ").toLowerCase();
+    if (!h || !n) return false;
+    return h === n || h.includes(n) || n.includes(h);
+  }
+
+  function inWindow(row: { customerSnapshot: unknown }) {
+    const snap = row.customerSnapshot as { dateCreated?: string } | null;
+    return isWithinCairoLastDays(snap?.dateCreated, 30);
+  }
+
+  function matchesLocation(row: { customerSnapshot: unknown }) {
+    const snap = row.customerSnapshot as { governorate?: string; area?: string } | null;
+    if (input.governorate && !locMatch(snap?.governorate, input.governorate)) return false;
+    if (input.area && !locMatch(snap?.area, input.area)) return false;
+    return true;
   }
 
   let rows = await prisma.csOrderConfirmation.findMany({
     where: input.confirmationIds?.length
       ? { id: { in: input.confirmationIds } }
       : { status: { in: ["PENDING", "IN_PROGRESS"] } },
-    orderBy: { wooOrderNumber: "desc" },
+    orderBy: { createdAt: "desc" },
     take: 500,
   });
 
-  if (input.governorate || input.area) {
-    rows = rows.filter((row) => {
-      const snap = row.customerSnapshot as { governorate?: string; area?: string } | null;
-      if (input.governorate && snap?.governorate !== input.governorate) return false;
-      if (input.area && snap?.area !== input.area) return false;
-      return true;
+  const beforeWindow = rows.length;
+  rows = rows.filter(inWindow);
+  const beforeLocation = rows.length;
+  rows = rows.filter(matchesLocation);
+
+  if (rows.length === 0) {
+    // Fallback: include CONFIRMED in same window/location
+    let fallback = await prisma.csOrderConfirmation.findMany({
+      where: { status: { in: ["PENDING", "IN_PROGRESS", "CONFIRMED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
     });
+    fallback = fallback.filter(inWindow).filter(matchesLocation);
+    if (fallback.length === 0) {
+      return {
+        ok: false as const,
+        message: `لا توجد أوردرات للتوزيع (مرشحون أوليون: ${beforeWindow}، بعد نافذة 30 يوم: ${beforeLocation}، بعد فلتر المحافظة/المنطقة: 0). جرّبي بدون محافظة أو زامني أولاً.`,
+      };
+    }
+    rows = fallback;
   }
 
-  if (rows.length === 0) return { ok: false as const, message: "لا توجد أوردرات للتوزيع." };
+  rows = [...rows].sort(
+    (a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber),
+  );
+
+  const byAgent = new Map<number, number[]>();
+  for (const id of agentIds) byAgent.set(id, []);
 
   let assigned = 0;
   for (let i = 0; i < rows.length; i++) {
@@ -141,10 +184,31 @@ export async function fairSplitAssign(input: {
       where: { id: rows[i].id },
       data: { assignedAgentId: agentId },
     });
+    byAgent.get(agentId)!.push(parseWooOrderNumber(rows[i].wooOrderNumber));
     assigned += 1;
   }
 
-  return { ok: true as const, assigned, perAgent: Math.ceil(rows.length / agentIds.length) };
+  // Create numeric ranges so agents see orders via range OR assignedAgentId
+  for (const agentId of agentIds) {
+    const nums = byAgent.get(agentId)!.filter((n) => n > 0);
+    if (!nums.length) continue;
+    const from = Math.min(...nums);
+    const to = Math.max(...nums);
+    await prisma.csOrderAssignment.create({
+      data: {
+        agentId,
+        wooOrderNumberFrom: from,
+        wooOrderNumberTo: to,
+        createdById: input.createdById,
+      },
+    });
+  }
+
+  return {
+    ok: true as const,
+    assigned,
+    perAgent: Math.ceil(rows.length / agentIds.length),
+  };
 }
 
 export async function ruleBasedAssign(input: {

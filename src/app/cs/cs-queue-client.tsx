@@ -221,23 +221,26 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     router.push(`/cs/orders/${id}`);
   }
 
-  async function setShipping(id: number, shippingCompany: string) {
+  async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima") {
     setSavingShipId(id);
     setMessage("");
+    // Optimistic UI
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, shippingCompany } : item)));
     const res = await fetch(`/api/cs/confirmations/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shippingCompany: shippingCompany || null }),
+      body: JSON.stringify({ shippingCompany }),
     });
     const data = (await res.json()) as { message?: string; shippingCompany?: string | null };
     setSavingShipId(null);
     if (!res.ok) {
       setMessage(data.message || "تعذر حفظ شركة الشحن.");
+      router.refresh();
       return;
     }
     setItems((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, shippingCompany: data.shippingCompany || shippingCompany || null } : item,
+        item.id === id ? { ...item, shippingCompany: data.shippingCompany || shippingCompany } : item,
       ),
     );
   }
@@ -477,6 +480,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             const paidOnline = Boolean(item.customerSnapshot?.paidOnlineHighlight);
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
+            const ship = item.shippingCompany === "sayed_temima" ? "sayed_temima" : "bosta";
 
             return (
               <div
@@ -485,7 +489,11 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                   isConfirmed ? "ring-[#FCA311]" : paidOnline ? "ring-[#14213D]/35" : "ring-[#E5E5E5]"
                 }`}
               >
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm font-bold text-[#14213D] sm:grid-cols-5">
+                <div
+                  className={`grid gap-x-3 gap-y-2 text-sm font-bold text-[#14213D] ${
+                    isSupervisor ? "grid-cols-2 sm:grid-cols-7" : "grid-cols-2 sm:grid-cols-5"
+                  }`}
+                >
                   <div className="flex flex-col gap-0.5">
                     <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] ${meta.className}`}>{meta.label}</span>
                     <span className="text-base font-extrabold">#{item.wooOrderNumber}</span>
@@ -511,25 +519,36 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                       {item.customerSnapshot?.address || "—"}
                     </span>
                     <span className="text-xs">{item.assignedAgent?.name || "—"}</span>
-                    {isSupervisor ? (
-                      <select
-                        value={item.shippingCompany || ""}
-                        disabled={savingShipId === item.id}
-                        onChange={(e) => void setShipping(item.id, e.target.value)}
-                        className="mt-1 rounded-lg border border-[#E5E5E5] bg-[#E5E5E5]/50 px-2 py-1 text-xs font-bold"
-                      >
-                        <option value="">شركة الشحن...</option>
-                        <option value="bosta">بوسطة</option>
-                        <option value="sayed_temima">سيد تميمة</option>
-                      </select>
-                    ) : (
+                    {!isSupervisor ? (
                       <span className="text-xs text-[#14213D]/70">
-                        {item.shippingCompany
-                          ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany
-                          : "شحن: لم تُحدد"}
+                        شحن: {SHIPPING_COMPANY_LABEL[ship] || ship}
                       </span>
-                    )}
+                    ) : null}
                   </div>
+                  {isSupervisor ? (
+                    <>
+                      <label className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[#E5E5E5]/60 px-1 py-1 text-center text-[11px]">
+                        <span>بوسطة</span>
+                        <input
+                          type="checkbox"
+                          className="size-5 accent-[#FCA311]"
+                          checked={ship === "bosta"}
+                          disabled={savingShipId === item.id}
+                          onChange={() => void setShipping(item.id, "bosta")}
+                        />
+                      </label>
+                      <label className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[#E5E5E5]/60 px-1 py-1 text-center text-[11px]">
+                        <span>سيد تميمة</span>
+                        <input
+                          type="checkbox"
+                          className="size-5 accent-[#FCA311]"
+                          checked={ship === "sayed_temima"}
+                          disabled={savingShipId === item.id}
+                          onChange={() => void setShipping(item.id, "sayed_temima")}
+                        />
+                      </label>
+                    </>
+                  ) : null}
                   <div className="flex flex-col items-start gap-1.5 sm:items-end">
                     <span className="rounded-lg bg-[#14213D] px-2.5 py-1 text-base font-extrabold text-[#FCA311]">
                       {item.customerSnapshot?.total || "—"} ج.م

@@ -111,9 +111,40 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
   );
   const tracking = await trackingMapForOrders(windowOrders.map((o) => o.id));
 
+  // Enrich gov/area from Shipment rows when Woo snapshot is incomplete
+  const shipmentByWoo = new Map<number, { governorate: string; area: string }>();
+  try {
+    const ships = await getShipmentsByOrderIds(windowOrders.map((o) => o.id));
+    for (const [wooId, ship] of ships) {
+      if (ship?.governorate || ship?.area) {
+        shipmentByWoo.set(wooId, {
+          governorate: ship.governorate || "",
+          area: ship.area || "",
+        });
+      }
+    }
+  } catch {
+    // shipping tables optional
+  }
+
   let imported = 0;
   for (const order of windowOrders) {
-    const snap = snapshotFromOrder(order, tracking.get(order.id));
+    const snap = snapshotFromOrder(order, tracking.get(order.id)) as CsQueueSnapshot & {
+      governorate?: string;
+      area?: string;
+    };
+    const fromShip = shipmentByWoo.get(order.id);
+    if (fromShip) {
+      const govBad =
+        !snap.governorate ||
+        snap.governorate === "غير محدد" ||
+        /^EG-?\d+/i.test(snap.governorate) ||
+        /^[a-f0-9]{20,}$/i.test(snap.governorate);
+      const areaBad = !snap.area || snap.area === "غير محدد";
+      if (govBad && fromShip.governorate) snap.governorate = fromShip.governorate;
+      if (areaBad && fromShip.area) snap.area = fromShip.area;
+    }
+
     const existing = await prisma.csOrderConfirmation.findUnique({
       where: { wooOrderId: order.id },
     });
@@ -123,6 +154,7 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
         data: {
           wooOrderNumber: order.number,
           customerSnapshot: snap,
+          ...(!existing.shippingCompany ? { shippingCompany: "bosta" } : {}),
         },
       });
       continue;
@@ -134,6 +166,7 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
         wooOrderNumber: order.number,
         status: CS_CONFIRMATION_STATUS.PENDING,
         customerSnapshot: snap,
+        shippingCompany: "bosta",
       },
     });
     imported += 1;
@@ -155,6 +188,7 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       wooOrderNumber: order.number,
       status: CS_CONFIRMATION_STATUS.PENDING,
       customerSnapshot: snapshotFromOrder(order, tracking.get(order.id)),
+      shippingCompany: "bosta",
     },
     update: {
       wooOrderNumber: order.number,
@@ -300,7 +334,7 @@ export function serializeCsQueueItem(row: {
     isPaidOnlineHighlight(raw?.paymentMethod || "", raw?.paymentMethodId);
 
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
-  const shippingCompany = row.shippingCompany || shippingFromAnswer || null;
+  const shippingCompany = row.shippingCompany || shippingFromAnswer || "bosta";
 
   return {
     id: row.id,
