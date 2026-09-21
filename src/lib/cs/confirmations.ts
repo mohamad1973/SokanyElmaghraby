@@ -139,11 +139,15 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
       const govBad =
         !snap.governorate ||
         snap.governorate === "غير محدد" ||
-        /^EG-?\d+/i.test(snap.governorate) ||
-        /^[a-f0-9]{20,}$/i.test(snap.governorate);
-      const areaBad = !snap.area || snap.area === "غير محدد";
-      if (govBad && fromShip.governorate) snap.governorate = fromShip.governorate;
-      if (areaBad && fromShip.area) snap.area = fromShip.area;
+        looksLikeLocationCode(snap.governorate);
+      const areaBad =
+        !snap.area || snap.area === "غير محدد" || looksLikeLocationCode(snap.area);
+      if (govBad && fromShip.governorate && !looksLikeLocationCode(fromShip.governorate)) {
+        snap.governorate = fromShip.governorate;
+      }
+      if (areaBad && fromShip.area && !looksLikeLocationCode(fromShip.area)) {
+        snap.area = fromShip.area;
+      }
     }
 
     const existing = await prisma.csOrderConfirmation.findUnique({
@@ -344,8 +348,11 @@ export async function listCsConfirmationsForViewer(opts: {
     console.error("[cs] getAssignmentRangesForAgent failed:", error);
   }
 
+  // If an order is explicitly assigned, only that agent sees it (no overlapping ranges).
   const filtered = inWindow.filter((row) => {
-    if (row.assignedAgentId === opts.agentId) return true;
+    if (row.assignedAgentId != null) {
+      return row.assignedAgentId === opts.agentId;
+    }
     return orderNumberInRanges(row.wooOrderNumber, ranges);
   });
 
@@ -398,6 +405,9 @@ export function serializeCsQueueItem(row: {
     area: raw?.area,
     address: raw?.address,
   });
+  const addressOnly = loc.address || raw?.address || "";
+  const govOk = Boolean(loc.governorate);
+  const areaOk = Boolean(loc.area);
 
   return {
     id: row.id,
@@ -415,11 +425,12 @@ export function serializeCsQueueItem(row: {
       ? {
           customerName: raw.customerName,
           phone: raw.phone,
-          address: loc.address === "غير محدد" ? raw.address || "" : loc.address,
-          area: loc.area,
-          governorate: loc.governorate,
-          addressFull: [loc.address !== "غير محدد" ? loc.address : raw.address, loc.area, loc.governorate]
-            .filter((x) => x && x !== "غير محدد")
+          address: addressOnly,
+          // Empty when unresolved codes (EG / 25 / …) so UI can hide the columns
+          area: areaOk ? loc.area : "",
+          governorate: govOk ? loc.governorate : "",
+          addressFull: [addressOnly, areaOk ? loc.area : "", govOk ? loc.governorate : ""]
+            .filter(Boolean)
             .join(" — "),
           total: raw.total,
           dateCreated: raw.dateCreated,

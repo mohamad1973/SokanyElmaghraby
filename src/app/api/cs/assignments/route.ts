@@ -69,7 +69,12 @@ export async function POST(request: Request) {
       createdById: session.user.csAgentId,
     });
     if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
-    return NextResponse.json({ ok: true, assigned: result.assigned, perAgent: result.perAgent });
+    return NextResponse.json({
+      ok: true,
+      assigned: result.assigned,
+      perAgent: result.perAgent,
+      ranges: result.ranges,
+    });
   }
 
   if (mode === "rules") {

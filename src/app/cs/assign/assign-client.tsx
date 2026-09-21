@@ -101,13 +101,23 @@ export function CsAssignClient({
         confirmationIds: visibleOrderIds,
       }),
     });
-    const data = (await res.json()) as { message?: string; assigned?: number };
+    const data = (await res.json()) as {
+      message?: string;
+      assigned?: number;
+      ranges?: Array<{ agentId: number; from: number; to: number; count: number }>;
+    };
     setLoading(false);
     if (!res.ok) {
       setMessage(data.message || "تعذر التقسيم.");
       return;
     }
-    setMessage(`تم التوزيع العادل على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر من القائمة الظاهرة.`);
+    const byId = new Map(agents.map((a) => [a.id, a.name]));
+    const rangeText = (data.ranges || [])
+      .map((r) => `${byId.get(r.agentId) || r.agentId}: ${r.from}→${r.to} (${r.count})`)
+      .join(" · ");
+    setMessage(
+      `تم التوزيع بنطاقات متتالية على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر. ${rangeText}`,
+    );
     await load();
   }
 
@@ -278,8 +288,9 @@ export function CsAssignClient({
       {tab === "fair" ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
           <p className="text-sm font-bold text-[#14213D]">
-            اختاري 2–4 مسؤولين للتوزيع العادل. سيتم توزيع الأوردرات الظاهرة حالياً في القائمة فقط (
-            {visibleOrderIds.length} أوردر — اليوم وأمس بعد المزامنة).
+            اختاري 2–4 مسؤولين. التوزيع يقسم أرقام الأوردر الظاهرة إلى نطاقات متتالية غير متداخلة (مثلاً
+            1150–1200 ثم 1201–1250)، وكل مسؤول يرى فقط نطاقه في قائمته. حالياً: {visibleOrderIds.length} أوردر
+            (اليوم/أمس).
           </p>
           <div className="flex flex-wrap gap-2">
             {agents.map((a) => (

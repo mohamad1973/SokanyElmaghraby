@@ -166,27 +166,38 @@ export async function fairSplitAssign(input: {
     }
   }
 
+  // Contiguous blocks by order number (not round-robin):
+  // agent1 gets lowest N, agent2 next block, … — non-overlapping ranges.
   rows = [...rows].sort(
-    (a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber),
+    (a, b) => parseWooOrderNumber(a.wooOrderNumber) - parseWooOrderNumber(b.wooOrderNumber),
   );
 
-  const byAgent = new Map<number, number[]>();
-  for (const id of agentIds) byAgent.set(id, []);
+  const n = rows.length;
+  const k = agentIds.length;
+  const base = Math.floor(n / k);
+  const rem = n % k;
 
+  const ranges: Array<{ agentId: number; from: number; to: number; count: number }> = [];
   let assigned = 0;
-  for (let i = 0; i < rows.length; i++) {
-    const agentId = agentIds[i % agentIds.length];
-    await prisma.csOrderConfirmation.update({
-      where: { id: rows[i].id },
-      data: { assignedAgentId: agentId },
-    });
-    byAgent.get(agentId)!.push(parseWooOrderNumber(rows[i].wooOrderNumber));
-    assigned += 1;
-  }
+  let cursor = 0;
 
-  for (const agentId of agentIds) {
-    const nums = byAgent.get(agentId)!.filter((n) => n > 0);
+  for (let i = 0; i < k; i++) {
+    const size = base + (i < rem ? 1 : 0);
+    if (size <= 0) continue;
+    const chunk = rows.slice(cursor, cursor + size);
+    cursor += size;
+    const agentId = agentIds[i];
+    const nums = chunk.map((r) => parseWooOrderNumber(r.wooOrderNumber)).filter((x) => x > 0);
     if (!nums.length) continue;
+
+    for (const row of chunk) {
+      await prisma.csOrderConfirmation.update({
+        where: { id: row.id },
+        data: { assignedAgentId: agentId },
+      });
+      assigned += 1;
+    }
+
     const from = Math.min(...nums);
     const to = Math.max(...nums);
     await prisma.csOrderAssignment.create({
@@ -197,12 +208,14 @@ export async function fairSplitAssign(input: {
         createdById: input.createdById,
       },
     });
+    ranges.push({ agentId, from, to, count: chunk.length });
   }
 
   return {
     ok: true as const,
     assigned,
-    perAgent: Math.ceil(rows.length / agentIds.length),
+    perAgent: Math.ceil(n / k),
+    ranges,
   };
 }
 

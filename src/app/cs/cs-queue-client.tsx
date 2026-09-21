@@ -513,8 +513,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                 }`}
               >
                 <div
-                  className={`grid gap-x-3 gap-y-2 text-sm font-bold text-[#14213D] ${
-                    isSupervisor ? "grid-cols-2 sm:grid-cols-7" : "grid-cols-2 sm:grid-cols-5"
+                  className={`grid gap-x-2 gap-y-2 text-sm font-bold text-[#14213D] ${
+                    isSupervisor ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
                   }`}
                 >
                   <div className="flex flex-col gap-0.5">
@@ -531,16 +531,17 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                       <span className="w-fit rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
                     ) : null}
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs text-[#14213D]/55">المحافظة</span>
-                    <span>{item.customerSnapshot?.governorate || "—"}</span>
-                    <span className="text-xs text-[#14213D]/55">المنطقة</span>
-                    <span>{item.customerSnapshot?.area || "—"}</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-0.5 sm:col-span-1">
                     <span className="text-xs leading-snug text-[#14213D]/80">
-                      {item.customerSnapshot?.address || "—"}
+                      {item.customerSnapshot?.addressFull ||
+                        item.customerSnapshot?.address ||
+                        "—"}
                     </span>
+                    {item.customerSnapshot?.governorate && item.customerSnapshot?.area ? (
+                      <span className="text-[11px] text-[#14213D]/55">
+                        {item.customerSnapshot.governorate} · {item.customerSnapshot.area}
+                      </span>
+                    ) : null}
                     <span className="text-xs">{item.assignedAgent?.name || "—"}</span>
                     {!isSupervisor ? (
                       <span className="text-xs text-[#14213D]/70">
@@ -549,28 +550,28 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     ) : null}
                   </div>
                   {isSupervisor ? (
-                    <>
-                      <label className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[#E5E5E5]/60 px-1 py-1 text-center text-[11px]">
-                        <span>بوسطة</span>
+                    <div className="flex items-center justify-center gap-2 self-center">
+                      <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
                         <input
                           type="checkbox"
-                          className="size-5 accent-[#FCA311]"
+                          className="size-3.5 accent-[#FCA311]"
                           checked={ship === "bosta"}
                           disabled={savingShipId === item.id}
                           onChange={() => void setShipping(item.id, "bosta")}
                         />
+                        بوسطة
                       </label>
-                      <label className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[#E5E5E5]/60 px-1 py-1 text-center text-[11px]">
-                        <span>سيد تميمة</span>
+                      <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
                         <input
                           type="checkbox"
-                          className="size-5 accent-[#FCA311]"
+                          className="size-3.5 accent-[#FCA311]"
                           checked={ship === "sayed_temima"}
                           disabled={savingShipId === item.id}
                           onChange={() => void setShipping(item.id, "sayed_temima")}
                         />
+                        تميمة
                       </label>
-                    </>
+                    </div>
                   ) : null}
                   <div className="flex flex-col items-start gap-1.5 sm:items-end">
                     <span className="rounded-lg bg-[#14213D] px-2.5 py-1 text-base font-extrabold text-[#FCA311]">
@@ -615,7 +616,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         <table className="w-full border-collapse text-[10px]">
           <thead>
             <tr>
-              {["الرقم", "الاسم", "موبايل", "المحافظة", "المنطقة", "العنوان", "الإجمالي", "الشحن", "المسؤول"].map(
+              {["الرقم", "الاسم", "موبايل", "العنوان", "الإجمالي", "الشحن", "المسؤول"].map(
                 (h) => (
                   <th key={h} className="border border-black px-1 py-1 text-right">
                     {h}
@@ -632,9 +633,9 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                 <td className="border border-black px-1 py-1" dir="ltr">
                   {item.customerSnapshot?.phone}
                 </td>
-                <td className="border border-black px-1 py-1">{item.customerSnapshot?.governorate}</td>
-                <td className="border border-black px-1 py-1">{item.customerSnapshot?.area}</td>
-                <td className="border border-black px-1 py-1">{item.customerSnapshot?.address}</td>
+                <td className="border border-black px-1 py-1">
+                  {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
+                </td>
                 <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
                 <td className="border border-black px-1 py-1">
                   {item.shippingCompany
