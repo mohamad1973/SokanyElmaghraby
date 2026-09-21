@@ -422,6 +422,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| يوزرات CS متعددة + اسم في الهيدر | تسجيل ذاتي من `/cs/login`؛ عرض اسم الوكيلة فوق الداشبورد | `api/cs/register`, `cs-shell.tsx`, `middleware.ts` |
 | داشبورد خدمة العملاء M1+M2 | مسار `/cs` منفصل؛ استيراد Woo؛ سكربت مكالمة إلزامي؛ منع التأكيد الناقص؛ شرط قبل التوزيع؛ webhook يضيف للطابور | `src/app/cs/`, `src/lib/cs/`, `api/cs/*`, `auth.ts`, `middleware.ts`, Prisma Cs* |
 | tooliano.com على Vercel + MySQL Hostinger | Remote MySQL `srv1729.hstgr.io`؛ موافقة الحملة تنشر Woo؛ قرارات EXTEND/EXECUTE/CANCEL؛ كرون `/api/cron/sync-campaigns` | `publish-woo.ts`, `campaign-decision.ts`, `vercel.json`, `docs/TOOLIANO_MERGE_STATUS_AR.md` |
 | حزمة final لهوستنجر | `output: standalone` + مجلد `final/` (config + schema.sql + README + pack) لتعبئة Node.js Web App بدون فقدان الشكل | `final/`, `next.config.ts`, `package.json` |

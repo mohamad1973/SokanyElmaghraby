@@ -68,7 +68,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (isCsPath(pathname)) {
-    if (pathname === "/cs/login") {
+    if (pathname === "/cs/login" || pathname === "/api/cs/register") {
       return nextWithLocale(req, "ar");
     }
 
