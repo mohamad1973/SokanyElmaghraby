@@ -9,6 +9,7 @@ import {
   type CsChecklistAnswerInput,
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
+import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 type Snapshot = {
   customerName?: string;
@@ -24,6 +25,7 @@ type Snapshot = {
   wooStatus?: string;
   trackingNumber?: string | null;
   freeShippingHint?: string;
+  dateCreated?: string;
   items?: Array<{ name: string; quantity: number; total: string; sku?: string }>;
 };
 
@@ -101,6 +103,8 @@ export function CsCallSheet({
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const when = formatCairoOrderDateTime(snapshot?.dateCreated);
+
   const payloadAnswers: CsChecklistAnswerInput[] = useMemo(
     () =>
       CS_CHECKLIST_ITEMS.map((item) => {
@@ -162,88 +166,132 @@ export function CsCallSheet({
     if (finalize) window.location.href = "/cs";
   }
 
-  const inputCls = "w-full rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] font-bold";
+  const inputCls =
+    "w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
 
   return (
-    <div className="flex h-[calc(100dvh-4.5rem)] flex-col gap-2 overflow-hidden p-1" dir="rtl">
+    <div className="flex min-h-[calc(100dvh-4.5rem)] flex-col gap-3 overflow-auto p-2" dir="rtl">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <Link href="/cs" className="text-[11px] font-bold text-teal-700 underline">
+          <Link href="/cs" className="text-sm font-bold text-[#14213D] underline">
             رجوع
           </Link>
-          <h1 className="truncate text-lg font-extrabold">طلب #{snapshot?.number || confirmationId}</h1>
+          <h1 className="truncate text-xl font-extrabold text-[#14213D]">طلب #{snapshot?.number || confirmationId}</h1>
+          <p className="text-xs font-bold text-[#14213D]/60">
+            {when.absolute} · {when.relative}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {!confirmed ? (
             <>
-              <button type="button" disabled={saving} onClick={() => void save(false)} className="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-extrabold ring-1 ring-slate-200 disabled:opacity-60">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void save(false)}
+                className="rounded-xl bg-white px-3 py-2 text-sm font-extrabold text-[#14213D] ring-1 ring-[#E5E5E5] disabled:opacity-60"
+              >
                 مسودة
               </button>
-              <button type="button" disabled={saving} onClick={() => void save(true)} className="rounded-lg bg-brand-gold px-2.5 py-1.5 text-[11px] font-extrabold text-black disabled:opacity-60">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void save(true)}
+                className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black disabled:opacity-60"
+              >
                 حفظ نهائي
               </button>
-              <button type="button" disabled={saving} onClick={() => void save(true, true)} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-60">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void save(true, true)}
+                className="rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+              >
                 تعذر
               </button>
             </>
           ) : (
-            <button type="button" disabled={saving} onClick={() => void save(false)} className="rounded-lg bg-teal-700 px-2.5 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-60">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save(false)}
+              className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+            >
               حفظ المتابعة
             </button>
           )}
         </div>
       </div>
 
-      <section className="shrink-0 rounded-xl bg-teal-800 px-3 py-2 text-[11px] text-white">
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
+      <section className="shrink-0 rounded-2xl bg-[#14213D] px-4 py-3 text-sm text-white">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
           <span className="font-extrabold">{snapshot?.customerName}</span>
           <span dir="ltr">{snapshot?.phone}</span>
-          <span>
+          <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
             {snapshot?.total} {snapshot?.currency || "EGP"}
           </span>
           <span>{snapshot?.paymentMethod}</span>
-          {snapshot?.trackingNumber ? <span dir="ltr">تتبع: {snapshot.trackingNumber}</span> : null}
-          <span className="min-w-0 flex-1 truncate">
+          {snapshot?.trackingNumber ? (
+            <span dir="ltr">تتبع: {snapshot.trackingNumber}</span>
+          ) : null}
+          <span className="min-w-0 flex-1">
             {snapshot?.address} — {snapshot?.area} — {snapshot?.governorate}
           </span>
         </div>
-        <div className="mt-1 truncate text-teal-100">
+        <div className="mt-2 text-white/80">
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}
         </div>
       </section>
 
       {message ? (
-        <p className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold ${missing.length ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
+        <p
+          className={`shrink-0 rounded-xl px-3 py-2 text-sm font-bold ${
+            missing.length ? "bg-red-50 text-red-700" : "bg-[#FCA311]/30 text-[#14213D]"
+          }`}
+        >
           {message}
         </p>
       ) : null}
 
       {!confirmed ? (
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1.5 overflow-hidden md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
           {CS_CHECKLIST_ITEMS.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
             return (
               <div
                 key={item.key}
-                className={`flex min-h-0 flex-col rounded-xl bg-white p-2 shadow-sm ring-1 ${
-                  isMissing ? "ring-red-500" : "ring-teal-100"
+                className={`flex min-h-[9rem] flex-col rounded-2xl bg-white p-3 shadow-sm ring-2 ${
+                  isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
                 }`}
               >
-                <p className="text-[11px] font-extrabold text-teal-900">{item.label}</p>
-                <div className="mt-1 space-y-1">
+                <p className="text-sm font-extrabold text-[#14213D]">{item.label}</p>
+                <p className="mt-1 text-[11px] text-[#14213D]/60">{item.help}</p>
+                <div className="mt-2 flex-1 space-y-2">
                   {item.type === "confirm_text" ? (
                     <>
-                      <input disabled={confirmed} value={state.value} onChange={(e) => update(item.key, { value: e.target.value })} className={inputCls} />
-                      <label className="flex items-center gap-1 text-[10px] font-bold">
-                        <input type="checkbox" checked={state.confirmed} onChange={(e) => update(item.key, { confirmed: e.target.checked })} />
+                      <input
+                        disabled={confirmed}
+                        value={state.value}
+                        onChange={(e) => update(item.key, { value: e.target.value })}
+                        className={inputCls}
+                      />
+                      <label className="flex items-center gap-2 text-sm font-bold">
+                        <input
+                          type="checkbox"
+                          checked={state.confirmed}
+                          onChange={(e) => update(item.key, { confirmed: e.target.checked })}
+                        />
                         تم
                       </label>
                     </>
                   ) : null}
                   {item.type === "confirm_only" ? (
-                    <label className="flex items-center gap-1 text-[10px] font-bold">
-                      <input type="checkbox" checked={state.confirmed} onChange={(e) => update(item.key, { confirmed: e.target.checked })} />
+                    <label className="flex items-center gap-2 text-sm font-bold">
+                      <input
+                        type="checkbox"
+                        checked={state.confirmed}
+                        onChange={(e) => update(item.key, { confirmed: e.target.checked })}
+                      />
                       نعم / تم
                     </label>
                   ) : null}
@@ -251,7 +299,9 @@ export function CsCallSheet({
                     <>
                       <select
                         value={state.value}
-                        onChange={(e) => update(item.key, { value: e.target.value, confirmed: Boolean(e.target.value) })}
+                        onChange={(e) =>
+                          update(item.key, { value: e.target.value, confirmed: Boolean(e.target.value) })
+                        }
                         className={inputCls}
                       >
                         <option value="">اختر...</option>
@@ -261,27 +311,52 @@ export function CsCallSheet({
                           </option>
                         ))}
                       </select>
-                      <label className="flex items-center gap-1 text-[10px] font-bold">
-                        <input type="checkbox" checked={state.confirmed} onChange={(e) => update(item.key, { confirmed: e.target.checked })} />
+                      <label className="flex items-center gap-2 text-sm font-bold">
+                        <input
+                          type="checkbox"
+                          checked={state.confirmed}
+                          onChange={(e) => update(item.key, { confirmed: e.target.checked })}
+                        />
                         تم
                       </label>
                     </>
                   ) : null}
                   {item.type === "yes_no_extra" ? (
                     <>
-                      <div className="flex gap-1">
-                        <button type="button" onClick={() => update(item.key, { yesNo: "yes", confirmed: false })} className={`flex-1 rounded-lg py-1 text-[10px] font-extrabold ${state.yesNo === "yes" ? "bg-teal-700 text-white" : "bg-slate-100"}`}>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => update(item.key, { yesNo: "yes", confirmed: false })}
+                          className={`flex-1 rounded-xl py-2 text-sm font-extrabold ${
+                            state.yesNo === "yes" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                          }`}
+                        >
                           نعم
                         </button>
-                        <button type="button" onClick={() => update(item.key, { yesNo: "no", confirmed: true, note: "" })} className={`flex-1 rounded-lg py-1 text-[10px] font-extrabold ${state.yesNo === "no" ? "bg-slate-800 text-white" : "bg-slate-100"}`}>
+                        <button
+                          type="button"
+                          onClick={() => update(item.key, { yesNo: "no", confirmed: true, note: "" })}
+                          className={`flex-1 rounded-xl py-2 text-sm font-extrabold ${
+                            state.yesNo === "no" ? "bg-black text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                          }`}
+                        >
                           لا
                         </button>
                       </div>
                       {state.yesNo === "yes" ? (
                         <>
-                          <input value={state.note} onChange={(e) => update(item.key, { note: e.target.value })} placeholder="بديل" className={inputCls} />
-                          <label className="flex items-center gap-1 text-[10px] font-bold">
-                            <input type="checkbox" checked={state.confirmed} onChange={(e) => update(item.key, { confirmed: e.target.checked })} />
+                          <input
+                            value={state.note}
+                            onChange={(e) => update(item.key, { note: e.target.value })}
+                            placeholder="بديل"
+                            className={inputCls}
+                          />
+                          <label className="flex items-center gap-2 text-sm font-bold">
+                            <input
+                              type="checkbox"
+                              checked={state.confirmed}
+                              onChange={(e) => update(item.key, { confirmed: e.target.checked })}
+                            />
                             تم
                           </label>
                         </>
@@ -294,31 +369,31 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-4 shadow ring-1 ring-teal-100">
-            <span className="font-extrabold text-teal-900">تم التسليم لشركة الشحن</span>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-lg font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
             <input
               type="checkbox"
-              className="mt-3 size-5 accent-teal-700"
+              className="mt-4 size-6 accent-[#FCA311]"
               checked={fu.handedToCarrier}
               onChange={(e) => setFu((p) => ({ ...p, handedToCarrier: e.target.checked }))}
             />
           </label>
-          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-4 shadow ring-1 ring-teal-100">
-            <span className="font-extrabold text-teal-900">تم التسليم للعميل</span>
-            <p className="mt-1 text-[11px] text-slate-500">من التتبع أو تأكيد الاستلام</p>
+          <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-lg font-extrabold text-[#14213D]">تم التسليم للعميل</span>
+            <p className="mt-1 text-sm text-[#14213D]/60">من التتبع أو تأكيد الاستلام</p>
             <input
               type="checkbox"
-              className="mt-3 size-5 accent-teal-700"
+              className="mt-4 size-6 accent-[#FCA311]"
               checked={fu.deliveredToCustomer}
               onChange={(e) => setFu((p) => ({ ...p, deliveredToCustomer: e.target.checked }))}
             />
           </label>
-          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-4 shadow ring-1 ring-teal-100">
-            <span className="font-extrabold text-teal-900">متابعة العميل</span>
+          <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-lg font-extrabold text-[#14213D]">متابعة العميل</span>
             <input
               type="checkbox"
-              className="mt-3 size-5 accent-teal-700"
+              className="mt-4 size-6 accent-[#FCA311]"
               checked={fu.customerFollowUp}
               onChange={(e) => setFu((p) => ({ ...p, customerFollowUp: e.target.checked }))}
             />

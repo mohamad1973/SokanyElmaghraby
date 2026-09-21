@@ -42,5 +42,14 @@ export async function POST(request: Request, context: RouteContext) {
     );
   }
 
+  if (result.shipment) {
+    const { applyBostaStatusToCsConfirmation } = await import("@/lib/cs/notifications");
+    await applyBostaStatusToCsConfirmation({
+      wooOrderId: result.shipment.wooOrderId,
+      status: payload.state?.value || result.shipment.status,
+      trackingNumber: result.shipment.trackingNumber,
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

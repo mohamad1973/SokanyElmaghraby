@@ -19,6 +19,7 @@ import {
 import {
   getCairoYesterdayStartDateString,
   isPaidOnlineHighlight,
+  isWithinCairoLastDays,
   isWithinCairoTodayOrYesterday,
 } from "@/lib/cs/order-window";
 import { getShipmentsByOrderIds } from "@/lib/shipping/shipments";
@@ -184,7 +185,7 @@ export async function listCsConfirmationsForViewer(opts: {
     rows = (await prisma.csOrderConfirmation.findMany({
       include: { assignedAgent: true, answers: true },
       orderBy: { createdAt: "desc" },
-      take: 300,
+      take: 500,
     })) as Row[];
   } catch (error) {
     console.error("[cs] listCsConfirmationsForViewer failed, retry after migrate:", error);
@@ -193,7 +194,7 @@ export async function listCsConfirmationsForViewer(opts: {
       rows = (await prisma.csOrderConfirmation.findMany({
         include: { assignedAgent: true, answers: true },
         orderBy: { createdAt: "desc" },
-        take: 300,
+        take: 500,
       })) as Row[];
     } catch (retryError) {
       console.error("[cs] listCsConfirmationsForViewer legacy fallback:", retryError);
@@ -213,7 +214,7 @@ export async function listCsConfirmationsForViewer(opts: {
         }>
       >(
         `SELECT \`id\`, \`wooOrderId\`, \`wooOrderNumber\`, \`status\`, \`assignedAgentId\`, \`customerSnapshot\`, \`failReason\`, \`startedAt\`, \`confirmedAt\`, \`createdAt\`, \`updatedAt\`
-         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC LIMIT 300`,
+         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC LIMIT 500`,
       );
       const agentIds = [...new Set(legacy.map((r) => r.assignedAgentId).filter(Boolean))] as number[];
       const agents =
@@ -238,7 +239,7 @@ export async function listCsConfirmationsForViewer(opts: {
 
   const inWindow = rows.filter((row) => {
     const snap = row.customerSnapshot as { dateCreated?: string } | null;
-    return isWithinCairoTodayOrYesterday(snap?.dateCreated);
+    return isWithinCairoLastDays(snap?.dateCreated, 30);
   });
 
   if (opts.isSupervisor) {
@@ -253,12 +254,7 @@ export async function listCsConfirmationsForViewer(opts: {
   }
 
   const filtered = inWindow.filter((row) => {
-    if (
-      row.status === CS_CONFIRMATION_STATUS.CONFIRMED ||
-      row.status === CS_CONFIRMATION_STATUS.FAILED_CONTACT
-    ) {
-      return row.assignedAgentId === opts.agentId;
-    }
+    if (row.assignedAgentId === opts.agentId) return true;
     return orderNumberInRanges(row.wooOrderNumber, ranges);
   });
 
@@ -322,7 +318,10 @@ export function serializeCsQueueItem(row: {
       ? {
           customerName: raw.customerName,
           phone: raw.phone,
-          address: [raw.address, raw.area, raw.governorate].filter(Boolean).join(" — "),
+          address: raw.address || "",
+          area: raw.area || "",
+          governorate: raw.governorate || "",
+          addressFull: [raw.address, raw.area, raw.governorate].filter(Boolean).join(" — "),
           total: raw.total,
           dateCreated: raw.dateCreated,
           paymentMethod: raw.paymentMethod,

@@ -27,6 +27,15 @@ export function getCairoYesterdayStartDateString() {
   return `${parts.y}-${parts.m}-${parts.d}`;
 }
 
+export function cairoTodayYmd() {
+  const { y, m, d } = cairoYmdParts();
+  return `${y}-${m}-${d}`;
+}
+
+export function cairoYesterdayYmd() {
+  return getCairoYesterdayStartDateString();
+}
+
 export function isWithinCairoTodayOrYesterday(iso: string | null | undefined) {
   if (!iso) return false;
   const t = new Date(iso).getTime();
@@ -37,6 +46,46 @@ export function isWithinCairoTodayOrYesterday(iso: string | null | undefined) {
   const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
   const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
   return t >= yesterdayStart && t < tomorrowStart;
+}
+
+/** Inclusive calendar range in Africa/Cairo (fromYmd / toYmd as YYYY-MM-DD). */
+export function isWithinCairoDateRange(
+  iso: string | null | undefined,
+  fromYmd: string,
+  toYmd: string,
+) {
+  if (!iso || !fromYmd || !toYmd) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  const start = cairoDayStartMs(...(fromYmd.split("-") as [string, string, string]));
+  const endExclusive =
+    cairoDayStartMs(...(toYmd.split("-") as [string, string, string])) + 24 * 60 * 60 * 1000;
+  if (Number.isNaN(start) || Number.isNaN(endExclusive)) return false;
+  return t >= start && t < endExclusive;
+}
+
+/** Keep recent rows in memory for CS filters (last N Cairo calendar days). */
+export function isWithinCairoLastDays(iso: string | null | undefined, daysBack = 30) {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  const { y, m, d } = cairoYmdParts();
+  const todayStart = cairoDayStartMs(y, m, d);
+  const fromStart = todayStart - Math.max(0, daysBack - 1) * 24 * 60 * 60 * 1000;
+  const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
+  return t >= fromStart && t < tomorrowStart;
+}
+
+export function formatCairoOrderDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("ar-EG", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 export function isPaidOnlineHighlight(paymentMethod: string, paymentMethodId?: string | null) {
