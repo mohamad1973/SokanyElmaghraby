@@ -107,13 +107,14 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        const { isSupervisorAgent } = await import("@/lib/cs/agents");
         return {
           id: `cs-${agent.id}`,
           email: agent.email,
           name: agent.name,
           role: "cs" as const,
           csAgentId: agent.id,
-          csIsSupervisor: Boolean((agent as { isSupervisor?: boolean }).isSupervisor),
+          csIsSupervisor: isSupervisorAgent(agent),
         };
       },
     }),

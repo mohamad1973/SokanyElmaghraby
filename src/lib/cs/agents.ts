@@ -5,8 +5,11 @@ import { hashPassword, verifyPassword } from "@/lib/security";
 
 export function isSupervisorAgent(agent: { name: string; email: string; isSupervisor?: boolean }) {
   if (agent.isSupervisor) return true;
+  const email = agent.email.trim().toLowerCase();
+  const defaultCsEmail = (process.env.CS_AGENT_EMAIL || "cs@tooliano.com").trim().toLowerCase();
+  if (email === defaultCsEmail || email === "cs@tooliano.com") return true;
   const supervisorEmail = (process.env.CS_SUPERVISOR_EMAIL || "").trim().toLowerCase();
-  if (supervisorEmail && agent.email.toLowerCase() === supervisorEmail) return true;
+  if (supervisorEmail && email === supervisorEmail) return true;
   return agent.name.replace(/\s+/g, " ").trim() === "منى عباس";
 }
 
@@ -186,18 +189,31 @@ export async function ensureDefaultCsAgent() {
     await ensureCsTables();
     existing = await prisma.csAgent.findUnique({ where: { email } });
   }
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.isSupervisor) {
+      try {
+        existing = await prisma.csAgent.update({
+          where: { id: existing.id },
+          data: { isSupervisor: true },
+        });
+      } catch {
+        return { ...existing, isSupervisor: true };
+      }
+    }
+    return existing;
+  }
 
   const passwordHash = await hashPassword(password);
   try {
     return await prisma.csAgent.create({
-      data: { email, name, passwordHash, isActive: true, isSupervisor: false },
+      data: { email, name, passwordHash, isActive: true, isSupervisor: true },
     });
   } catch {
     // Fallback without isSupervisor if schema still lagging
-    return prisma.csAgent.create({
+    const created = await prisma.csAgent.create({
       data: { email, name, passwordHash, isActive: true },
     });
+    return { ...created, isSupervisor: true };
   }
 }
 

@@ -237,7 +237,21 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
       {/* Screen list — one compact row per order */}
       <div className="no-print space-y-2">
         {filtered.length === 0 ? (
-          <div className="rounded-2xl bg-white/70 px-4 py-10 text-center text-slate-500">لا توجد نتائج.</div>
+          <div className="rounded-2xl bg-white/70 px-4 py-10 text-center text-slate-600">
+            {items.length === 0 ? (
+              isSupervisor ? (
+                <p className="font-bold">
+                  لا توجد طلبات لليوم/أمس بالحالات المطلوبة — راجعي Woo أو رسالة المزامنة.
+                </p>
+              ) : (
+                <p className="font-bold">
+                  لم يُوزَّع عليكِ نطاق أوردرات بعد — اطلبي من المشرفة (منى عباس / الأدمن).
+                </p>
+              )
+            ) : (
+              <p className="font-bold">لا توجد نتائج مطابقة للبحث أو الفلاتر.</p>
+            )}
+          </div>
         ) : (
           filtered.map((item) => {
             const confirmed = item.status === "CONFIRMED";
