@@ -74,13 +74,6 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
     required: true,
   },
   {
-    key: "paid_online",
-    label: "تم الدفع من الموقع؟",
-    help: "أكد حالة الدفع الظاهرة على الطلب.",
-    type: "confirm_only",
-    required: true,
-  },
-  {
     key: "payment_preference",
     label: "طريقة الدفع المفضلة / عند الاستلام",
     help: "سجّل طريقة الدفع المتفق عليها.",

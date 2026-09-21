@@ -282,13 +282,11 @@ export function CsCallSheet({ confirmationId, status, snapshot, initialAnswers, 
 
                   {item.type === "confirm_only" ? (
                     <>
-                      {item.key === "invoice_total" || item.key === "paid_online" || item.key === "order_items" ? (
+                      {item.key === "invoice_total" || item.key === "order_items" ? (
                         <div className="rounded-xl bg-white/90 px-3 py-2 text-xs font-bold text-slate-700">
                           {item.key === "invoice_total"
                             ? `${snapshot?.total || "—"} ${snapshot?.currency || "EGP"}`
-                            : item.key === "paid_online"
-                              ? snapshot?.paymentMethod || "—"
-                              : `${snapshot?.items?.length || 0} صنف — راجع القائمة أعلاه`}
+                            : `${snapshot?.items?.length || 0} صنف — راجع القائمة أعلاه`}
                         </div>
                       ) : (
                         <div className="rounded-xl bg-white/90 px-3 py-2 text-xs font-bold text-slate-600">

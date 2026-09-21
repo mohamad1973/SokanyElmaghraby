@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
+
 export type CsQueueItem = {
   id: number;
   wooOrderId: number;
@@ -14,6 +16,9 @@ export type CsQueueItem = {
     customerName?: string;
     phone?: string;
     total?: string;
+    dateCreated?: string;
+    paymentMethod?: string;
+    paidOnlineHighlight?: boolean;
   } | null;
   createdAt: string;
 };
@@ -21,7 +26,7 @@ export type CsQueueItem = {
 const statusMeta: Record<string, { label: string; className: string }> = {
   PENDING: { label: "بانتظار التأكيد", className: "bg-amber-100 text-amber-900 ring-amber-300" },
   IN_PROGRESS: { label: "جاري المكالمة", className: "bg-sky-100 text-sky-900 ring-sky-300" },
-  CONFIRMED: { label: "مؤكد", className: "bg-emerald-100 text-emerald-900 ring-emerald-300" },
+  CONFIRMED: { label: "مؤكد", className: "bg-orange-200 text-orange-950 ring-orange-400" },
   FAILED_CONTACT: { label: "تعذر التواصل", className: "bg-rose-100 text-rose-900 ring-rose-300" },
 };
 
@@ -72,7 +77,7 @@ export function CsQueueClient({ initialItems }: { initialItems: CsQueueItem[] })
         <div>
           <p className="text-sm font-bold text-teal-700">لوحة المتابعة</p>
           <h1 className="mt-1 text-3xl font-extrabold text-slate-900">قائمة تأكيد الطلبات</h1>
-          <p className="mt-2 text-sm text-slate-600">استيراد من Woo سوكاني ثم فتح صفحة المكالمة مباشرة.</p>
+          <p className="mt-2 text-sm text-slate-600">طلبات اليوم وأمس فقط من Woo سوكاني.</p>
         </div>
         <button
           type="button"
@@ -92,45 +97,70 @@ export function CsQueueClient({ initialItems }: { initialItems: CsQueueItem[] })
 
       {items.length === 0 ? (
         <div className="rounded-3xl bg-white/70 px-6 py-14 text-center text-slate-500 shadow-md ring-1 ring-slate-200">
-          لا توجد طلبات. اضغط مزامنة لجلب الطلبات الجديدة من ووردبريس.
+          لا توجد طلبات لليوم أو أمس. اضغط مزامنة لجلب الطلبات من ووردبريس.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {items.map((item) => {
             const meta = statusMeta[item.status] || {
               label: item.status,
               className: "bg-slate-100 text-slate-800 ring-slate-300",
             };
+            const confirmed = item.status === "CONFIRMED";
+            const paidOnline = Boolean(item.customerSnapshot?.paidOnlineHighlight);
+            const when = formatCairoOrderDateTime(item.customerSnapshot?.dateCreated);
+
             return (
               <article
                 key={item.id}
-                className="flex flex-col justify-between rounded-3xl bg-white p-5 shadow-lg ring-1 ring-teal-100 transition hover:-translate-y-0.5 hover:shadow-xl"
+                className={`flex flex-col justify-between rounded-3xl p-4 shadow-lg ring-1 transition hover:-translate-y-0.5 hover:shadow-xl ${
+                  confirmed
+                    ? "bg-orange-100 ring-orange-400"
+                    : paidOnline
+                      ? "bg-emerald-50 ring-emerald-400"
+                      : "bg-white ring-teal-100"
+                }`}
               >
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-2xl font-extrabold text-teal-800">#{item.wooOrderNumber}</p>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${meta.className}`}>
+                    <p className={`text-xl font-extrabold ${confirmed ? "text-orange-900" : "text-teal-800"}`}>
+                      #{item.wooOrderNumber}
+                    </p>
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-bold ring-1 ${meta.className}`}>
                       {meta.label}
                     </span>
                   </div>
+
+                  {paidOnline ? (
+                    <p className="rounded-xl bg-emerald-600 px-2.5 py-1.5 text-center text-[11px] font-extrabold text-white">
+                      مدفوع أونلاين — فوري / محفظة
+                    </p>
+                  ) : null}
+
                   <div>
-                    <p className="text-lg font-bold text-slate-900">
+                    <p className="text-base font-bold text-slate-900">
                       {item.customerSnapshot?.customerName || "عميل بدون اسم"}
                     </p>
-                    <p className="mt-1 text-sm text-slate-500" dir="ltr">
+                    <p className="mt-1 text-xs text-slate-500" dir="ltr">
                       {item.customerSnapshot?.phone || "—"}
                     </p>
-                    <p className="mt-2 text-base font-extrabold text-cyan-700">
+                    <p className={`mt-1.5 text-sm font-extrabold ${confirmed ? "text-orange-800" : "text-cyan-700"}`}>
                       {item.customerSnapshot?.total || "—"} ج.م
                     </p>
                   </div>
-                  <p className="text-xs text-slate-500">المسؤول: {item.assignedAgent?.name || "غير معيَّن"}</p>
+
+                  <div className="rounded-xl bg-white/70 px-2.5 py-2 text-[11px] font-bold text-slate-700 ring-1 ring-black/5">
+                    <p>{when.absolute}</p>
+                    {when.relative ? <p className="mt-0.5 text-teal-700">{when.relative}</p> : null}
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">المسؤول: {item.assignedAgent?.name || "غير معيَّن"}</p>
                 </div>
-                <div className="mt-5">
-                  {item.status === "CONFIRMED" ? (
+                <div className="mt-4">
+                  {confirmed ? (
                     <Link
                       href={`/cs/orders/${item.id}`}
-                      className="inline-flex w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white"
+                      className="inline-flex w-full items-center justify-center rounded-2xl bg-orange-600 px-3 py-2.5 text-sm font-extrabold text-white"
                     >
                       عرض التأكيد
                     </Link>
@@ -138,7 +168,7 @@ export function CsQueueClient({ initialItems }: { initialItems: CsQueueItem[] })
                     <button
                       type="button"
                       onClick={() => void openOrder(item.id)}
-                      className="w-full rounded-2xl bg-gradient-to-l from-teal-600 to-blue-700 px-4 py-3 text-sm font-extrabold text-white shadow"
+                      className="w-full rounded-2xl bg-teal-700 px-3 py-2.5 text-sm font-extrabold text-white shadow"
                     >
                       فتح المكالمة
                     </button>
