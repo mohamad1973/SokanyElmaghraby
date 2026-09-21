@@ -6,17 +6,57 @@ import { getPrismaClient } from "@/lib/db";
 import {
   CS_CHECKLIST_ITEMS,
   CS_CONFIRMATION_STATUS,
+  CS_FOLLOWUP_ITEMS,
   type CsChecklistAnswerInput,
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
 import {
+  getAssignmentRangesForAgent,
+  orderNumberInRanges,
+  parseWooOrderNumber,
+} from "@/lib/cs/assignments";
+import {
   getCairoYesterdayStartDateString,
   isPaidOnlineHighlight,
   isWithinCairoTodayOrYesterday,
 } from "@/lib/cs/order-window";
+import { getShipmentsByOrderIds } from "@/lib/shipping/shipments";
 
-function snapshotFromOrder(order: AdminOrder) {
+export type CsQueueSnapshot = {
+  customerName?: string;
+  phone?: string;
+  address?: string;
+  governorate?: string;
+  area?: string;
+  total?: string;
+  dateCreated?: string;
+  paymentMethod?: string;
+  paymentMethodId?: string | null;
+  paidOnlineHighlight?: boolean;
+  wooStatus?: string;
+  trackingNumber?: string | null;
+  items?: Array<{ name: string; quantity?: number; total?: string; sku?: string }>;
+  freeShippingHint?: string;
+  number?: string;
+  currency?: string;
+  status?: string;
+};
+
+async function trackingMapForOrders(orderIds: number[]) {
+  try {
+    const map = await getShipmentsByOrderIds(orderIds);
+    const out = new Map<number, string | null>();
+    for (const id of orderIds) {
+      out.set(id, map.get(id)?.trackingNumber || null);
+    }
+    return out;
+  } catch {
+    return new Map<number, string | null>();
+  }
+}
+
+function snapshotFromOrder(order: AdminOrder, trackingNumber?: string | null) {
   return {
     id: order.id,
     number: order.number,
@@ -26,15 +66,23 @@ function snapshotFromOrder(order: AdminOrder) {
     governorate: order.governorate,
     area: order.area,
     status: order.status,
+    wooStatus: order.status,
     paymentMethod: order.paymentMethod,
     paymentMethodId: order.paymentMethodId || null,
     total: order.total,
     currency: order.currency,
     dateCreated: order.dateCreated,
     paidOnlineHighlight: isPaidOnlineHighlight(order.paymentMethod, order.paymentMethodId),
+    trackingNumber: trackingNumber || order.shipping?.trackingNumber || null,
     items: order.items,
     freeShippingHint: "راجع رسوم الشحن مع العميل حسب سياسة المتجر",
   };
+}
+
+function sortByOrderNumberDesc<T extends { wooOrderNumber: string }>(rows: T[]) {
+  return [...rows].sort(
+    (a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber),
+  );
 }
 
 export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
@@ -60,9 +108,11 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
   const windowOrders = result.orders.filter((order) =>
     isWithinCairoTodayOrYesterday(order.dateCreated),
   );
+  const tracking = await trackingMapForOrders(windowOrders.map((o) => o.id));
 
   let imported = 0;
   for (const order of windowOrders) {
+    const snap = snapshotFromOrder(order, tracking.get(order.id));
     const existing = await prisma.csOrderConfirmation.findUnique({
       where: { wooOrderId: order.id },
     });
@@ -71,7 +121,7 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
         where: { id: existing.id },
         data: {
           wooOrderNumber: order.number,
-          customerSnapshot: snapshotFromOrder(order),
+          customerSnapshot: snap,
         },
       });
       continue;
@@ -82,7 +132,7 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
         wooOrderId: order.id,
         wooOrderNumber: order.number,
         status: CS_CONFIRMATION_STATUS.PENDING,
-        customerSnapshot: snapshotFromOrder(order),
+        customerSnapshot: snap,
       },
     });
     imported += 1;
@@ -95,6 +145,7 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
   const prisma = getPrismaClient();
   if (!prisma) return;
   await ensureCsTables();
+  const tracking = await trackingMapForOrders([order.id]);
 
   await prisma.csOrderConfirmation.upsert({
     where: { wooOrderId: order.id },
@@ -102,63 +153,107 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       wooOrderId: order.id,
       wooOrderNumber: order.number,
       status: CS_CONFIRMATION_STATUS.PENDING,
-      customerSnapshot: snapshotFromOrder(order),
+      customerSnapshot: snapshotFromOrder(order, tracking.get(order.id)),
     },
     update: {
       wooOrderNumber: order.number,
-      customerSnapshot: snapshotFromOrder(order),
+      customerSnapshot: snapshotFromOrder(order, tracking.get(order.id)),
     },
   });
 }
 
-export async function listCsConfirmations(status?: string) {
+export async function listCsConfirmationsForViewer(opts: {
+  agentId: number;
+  isSupervisor: boolean;
+}) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
   await ensureCsTables();
 
   const rows = await prisma.csOrderConfirmation.findMany({
-    where: status && status !== "all" ? { status } : undefined,
     include: { assignedAgent: true, answers: true },
     orderBy: { createdAt: "desc" },
-    take: 150,
+    take: 300,
   });
 
-  return rows.filter((row) => {
+  const inWindow = rows.filter((row) => {
     const snap = row.customerSnapshot as { dateCreated?: string } | null;
     return isWithinCairoTodayOrYesterday(snap?.dateCreated);
   });
+
+  if (opts.isSupervisor) {
+    return sortByOrderNumberDesc(inWindow);
+  }
+
+  const ranges = await getAssignmentRangesForAgent(opts.agentId);
+
+  const filtered = inWindow.filter((row) => {
+    if (
+      row.status === CS_CONFIRMATION_STATUS.CONFIRMED ||
+      row.status === CS_CONFIRMATION_STATUS.FAILED_CONTACT
+    ) {
+      return row.assignedAgentId === opts.agentId;
+    }
+    return orderNumberInRanges(row.wooOrderNumber, ranges);
+  });
+
+  return sortByOrderNumberDesc(filtered);
 }
 
-export type CsQueueSnapshot = {
-  customerName?: string;
-  phone?: string;
-  total?: string;
-  dateCreated?: string;
-  paymentMethod?: string;
-  paymentMethodId?: string | null;
-  paidOnlineHighlight?: boolean;
-};
+/** @deprecated use listCsConfirmationsForViewer */
+export async function listCsConfirmations(status?: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  await ensureCsTables();
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: status && status !== "all" ? { status } : undefined,
+    include: { assignedAgent: true, answers: true },
+    orderBy: { createdAt: "desc" },
+    take: 300,
+  });
+  return sortByOrderNumberDesc(
+    rows.filter((row) => {
+      const snap = row.customerSnapshot as { dateCreated?: string } | null;
+      return isWithinCairoTodayOrYesterday(snap?.dateCreated);
+    }),
+  );
+}
 
-export function serializeCsQueueItem(row: Awaited<ReturnType<typeof listCsConfirmations>>[number]) {
+export function serializeCsQueueItem(
+  row: Awaited<ReturnType<typeof listCsConfirmationsForViewer>>[number],
+) {
   const raw = (row.customerSnapshot as CsQueueSnapshot | null) || null;
   const paidOnlineHighlight =
     raw?.paidOnlineHighlight ??
     isPaidOnlineHighlight(raw?.paymentMethod || "", raw?.paymentMethodId);
+
+  const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
+  const shippingCompany = row.shippingCompany || shippingFromAnswer || null;
 
   return {
     id: row.id,
     wooOrderId: row.wooOrderId,
     wooOrderNumber: row.wooOrderNumber,
     status: row.status,
-    assignedAgent: row.assignedAgent ? { name: row.assignedAgent.name } : null,
+    shippingCompany,
+    handedToCarrier: Boolean(row.handedToCarrier),
+    deliveredToCustomer: Boolean(row.deliveredToCustomer),
+    customerFollowUp: Boolean(row.customerFollowUp),
+    assignedAgent: row.assignedAgent
+      ? { id: row.assignedAgent.id, name: row.assignedAgent.name }
+      : null,
     customerSnapshot: raw
       ? {
           customerName: raw.customerName,
           phone: raw.phone,
+          address: [raw.address, raw.area, raw.governorate].filter(Boolean).join(" — "),
           total: raw.total,
           dateCreated: raw.dateCreated,
           paymentMethod: raw.paymentMethod,
           paidOnlineHighlight,
+          wooStatus: raw.wooStatus || raw.status,
+          trackingNumber: raw.trackingNumber || null,
+          items: raw.items || [],
         }
       : null,
     createdAt: row.createdAt.toISOString(),
@@ -183,13 +278,17 @@ export async function startCsConfirmation(id: number, agentId: number) {
 
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+
   if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED) {
-    return { ok: false as const, message: "الطلب مؤكد مسبقاً." };
+    const confirmation = await getCsConfirmation(id);
+    return { ok: true as const, confirmation: confirmation! };
   }
 
-  // Refresh snapshot from Woo
   const live = await getAdminOrder(String(row.wooOrderId));
-  const snapshot = live ? snapshotFromOrder(live) : row.customerSnapshot;
+  const tracking = await trackingMapForOrders([row.wooOrderId]);
+  const snapshot = live
+    ? snapshotFromOrder(live, tracking.get(row.wooOrderId))
+    : row.customerSnapshot;
 
   const updated = await prisma.csOrderConfirmation.update({
     where: { id },
@@ -205,6 +304,13 @@ export async function startCsConfirmation(id: number, agentId: number) {
   return { ok: true as const, confirmation: updated };
 }
 
+function shippingCompanyFromAnswers(answers: CsChecklistAnswerInput[]) {
+  const item = answers.find((a) => a.itemKey === "shipping_company");
+  const value = String(item?.value || "").trim();
+  if (value === "bosta" || value === "sayed_temima") return value;
+  return null;
+}
+
 export async function saveCsConfirmation(input: {
   id: number;
   agentId: number;
@@ -212,6 +318,11 @@ export async function saveCsConfirmation(input: {
   finalize: boolean;
   failContact?: boolean;
   failReason?: string;
+  followUp?: {
+    handedToCarrier?: boolean;
+    deliveredToCustomer?: boolean;
+    customerFollowUp?: boolean;
+  };
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", missing: [] as string[] };
@@ -222,6 +333,23 @@ export async function saveCsConfirmation(input: {
     include: { answers: true },
   });
   if (!row) return { ok: false as const, message: "الطلب غير موجود.", missing: [] };
+
+  // Post-confirmation follow-up update
+  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && input.followUp) {
+    const now = new Date();
+    await prisma.csOrderConfirmation.update({
+      where: { id: input.id },
+      data: {
+        handedToCarrier: Boolean(input.followUp.handedToCarrier),
+        deliveredToCustomer: Boolean(input.followUp.deliveredToCustomer),
+        customerFollowUp: Boolean(input.followUp.customerFollowUp),
+        handedToCarrierAt: input.followUp.handedToCarrier ? now : null,
+        deliveredToCustomerAt: input.followUp.deliveredToCustomer ? now : null,
+        customerFollowUpAt: input.followUp.customerFollowUp ? now : null,
+      },
+    });
+    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+  }
 
   if (input.failContact) {
     await prisma.csOrderConfirmation.update({
@@ -235,8 +363,13 @@ export async function saveCsConfirmation(input: {
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
   }
 
+  const allKeys = new Set([
+    ...CS_CHECKLIST_ITEMS.map((i) => i.key),
+    ...CS_FOLLOWUP_ITEMS.map((i) => i.key),
+  ]);
+
   for (const answer of input.answers) {
-    if (!CS_CHECKLIST_ITEMS.some((item) => item.key === answer.itemKey)) continue;
+    if (!allKeys.has(answer.itemKey)) continue;
     await prisma.csChecklistAnswer.upsert({
       where: {
         confirmationId_itemKey: {
@@ -259,12 +392,15 @@ export async function saveCsConfirmation(input: {
     });
   }
 
+  const shippingCompany = shippingCompanyFromAnswers(input.answers);
+
   if (!input.finalize) {
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
         assignedAgentId: input.agentId,
+        ...(shippingCompany ? { shippingCompany } : {}),
       },
     });
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
@@ -279,12 +415,21 @@ export async function saveCsConfirmation(input: {
     };
   }
 
+  if (!shippingCompany) {
+    return {
+      ok: false as const,
+      message: "اختاري شركة الشحن (بوسطة أو سيد تميمة).",
+      missing: ["shipping_company"],
+    };
+  }
+
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {
       status: CS_CONFIRMATION_STATUS.CONFIRMED,
       confirmedAt: new Date(),
       assignedAgentId: input.agentId,
+      shippingCompany,
       failReason: null,
     },
   });
@@ -300,7 +445,16 @@ export async function isOrderCsConfirmed(wooOrderId: number) {
     where: { wooOrderId },
     select: { status: true },
   });
-  // If never imported into CS queue, allow dispatch (legacy orders)
   if (!row) return true;
   return row.status === CS_CONFIRMATION_STATUS.CONFIRMED;
+}
+
+export async function resolveCsViewer(agentId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { isSupervisor: false };
+  await ensureCsTables();
+  const agent = await prisma.csAgent.findUnique({ where: { id: agentId } });
+  if (!agent) return { isSupervisor: false };
+  const { isSupervisorAgent } = await import("@/lib/cs/agents");
+  return { isSupervisor: isSupervisorAgent(agent), agent };
 }

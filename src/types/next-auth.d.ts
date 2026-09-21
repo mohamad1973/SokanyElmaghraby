@@ -9,6 +9,7 @@ declare module "next-auth" {
       role: UserRole;
       driverId?: number;
       csAgentId?: number;
+      csIsSupervisor?: boolean;
     };
   }
 
@@ -16,6 +17,7 @@ declare module "next-auth" {
     role: UserRole;
     driverId?: number;
     csAgentId?: number;
+    csIsSupervisor?: boolean;
   }
 }
 
@@ -24,5 +26,6 @@ declare module "next-auth/jwt" {
     role?: UserRole;
     driverId?: number;
     csAgentId?: number;
+    csIsSupervisor?: boolean;
   }
 }

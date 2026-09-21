@@ -21,6 +21,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.driverId = user.driverId;
         token.csAgentId = user.csAgentId;
+        token.csIsSupervisor = user.csIsSupervisor;
       }
 
       return token;
@@ -31,6 +32,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = (token.role as "admin" | "driver" | "cs") || "admin";
         session.user.driverId = token.driverId as number | undefined;
         session.user.csAgentId = token.csAgentId as number | undefined;
+        session.user.csIsSupervisor = Boolean(token.csIsSupervisor);
       }
 
       return session;
@@ -111,6 +113,7 @@ export const authOptions: NextAuthOptions = {
           name: agent.name,
           role: "cs" as const,
           csAgentId: agent.id,
+          csIsSupervisor: Boolean((agent as { isSupervisor?: boolean }).isSupervisor),
         };
       },
     }),

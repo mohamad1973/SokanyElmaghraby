@@ -239,34 +239,45 @@ model GbGroupBuyOrder {
 // ——— Customer Service order confirmation (call script) ———
 
 model CsAgent {
-  id           Int                    @id @default(autoincrement())
-  name         String
-  email        String                 @unique
-  passwordHash String
-  isActive     Boolean                @default(true)
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
+  id            Int                    @id @default(autoincrement())
+  name          String
+  email         String                 @unique
+  passwordHash  String
+  isActive      Boolean                @default(true)
+  isSupervisor  Boolean                @default(false)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
   confirmations CsOrderConfirmation[]
+  assignments   CsOrderAssignment[]    @relation("AssignmentAgent")
+  createdAssignments CsOrderAssignment[] @relation("AssignmentCreator")
 }
 
 model CsOrderConfirmation {
-  id              Int                 @id @default(autoincrement())
-  wooOrderId      Int                 @unique
-  wooOrderNumber  String
-  status          String              @default("PENDING")
-  assignedAgentId Int?
-  assignedAgent   CsAgent?            @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
-  customerSnapshot Json?
-  failReason      String?             @db.Text
-  startedAt       DateTime?
-  confirmedAt     DateTime?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  answers         CsChecklistAnswer[]
+  id                   Int                 @id @default(autoincrement())
+  wooOrderId           Int                 @unique
+  wooOrderNumber       String
+  status               String              @default("PENDING")
+  assignedAgentId      Int?
+  assignedAgent        CsAgent?            @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  customerSnapshot     Json?
+  failReason           String?             @db.Text
+  shippingCompany      String?
+  handedToCarrier      Boolean             @default(false)
+  deliveredToCustomer  Boolean             @default(false)
+  customerFollowUp     Boolean             @default(false)
+  handedToCarrierAt    DateTime?
+  deliveredToCustomerAt DateTime?
+  customerFollowUpAt   DateTime?
+  startedAt            DateTime?
+  confirmedAt          DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  answers              CsChecklistAnswer[]
 
   @@index([status])
   @@index([assignedAgentId])
   @@index([createdAt])
+  @@index([shippingCompany])
 }
 
 model CsChecklistAnswer {
@@ -281,4 +292,17 @@ model CsChecklistAnswer {
 
   @@unique([confirmationId, itemKey])
   @@index([confirmationId])
+}
+
+model CsOrderAssignment {
+  id                 Int      @id @default(autoincrement())
+  agentId            Int
+  agent              CsAgent  @relation("AssignmentAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  wooOrderNumberFrom Int
+  wooOrderNumberTo   Int
+  createdById        Int?
+  createdBy          CsAgent? @relation("AssignmentCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+
+  @@index([agentId])
 }

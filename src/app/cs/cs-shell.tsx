@@ -22,23 +22,33 @@ function CsHeader() {
           <p className="text-lg font-extrabold tracking-tight">مرحباً، {agentName}</p>
           <p className="text-xs text-teal-100">خدمة العملاء · تأكيد الطلبات بالمكالمة</p>
         </div>
-        <div className="flex items-center gap-3 text-sm font-bold">
-          <Link
-            href="/cs"
-            className={`rounded-full px-3 py-1.5 ${
-              pathname === "/cs" ? "bg-brand-gold text-black" : "bg-white/15 hover:bg-white/25"
-            }`}
-          >
-            قائمة الانتظار
-          </Link>
-          <button
-            type="button"
-            onClick={() => signOut({ callbackUrl: "/cs/login" })}
-            className="rounded-full bg-red-500/90 px-3 py-1.5 hover:bg-red-500"
-          >
-            خروج
-          </button>
-        </div>
+          <div className="flex items-center gap-3 text-sm font-bold">
+            <Link
+              href="/cs"
+              className={`rounded-full px-3 py-1.5 ${
+                pathname === "/cs" ? "bg-brand-gold text-black" : "bg-white/15 hover:bg-white/25"
+              }`}
+            >
+              قائمة الانتظار
+            </Link>
+            {session?.user?.csIsSupervisor ? (
+              <Link
+                href="/cs/assign"
+                className={`rounded-full px-3 py-1.5 ${
+                  pathname.startsWith("/cs/assign") ? "bg-brand-gold text-black" : "bg-white/15 hover:bg-white/25"
+                }`}
+              >
+                توزيع
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => signOut({ callbackUrl: "/cs/login" })}
+              className="rounded-full bg-red-500/90 px-3 py-1.5 hover:bg-red-500"
+            >
+              خروج
+            </button>
+          </div>
       </div>
     </header>
   );

@@ -11,6 +11,11 @@ type Body = {
   finalize?: boolean;
   failContact?: boolean;
   failReason?: string;
+  followUp?: {
+    handedToCarrier?: boolean;
+    deliveredToCustomer?: boolean;
+    customerFollowUp?: boolean;
+  };
 };
 
 export async function PUT(request: Request, context: Context) {
@@ -39,6 +44,7 @@ export async function PUT(request: Request, context: Context) {
     finalize: Boolean(body.finalize),
     failContact: Boolean(body.failContact),
     failReason: body.failReason,
+    followUp: body.followUp,
   });
 
   if (!result.ok) {

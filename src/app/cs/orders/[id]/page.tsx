@@ -32,13 +32,18 @@ export default async function CsOrderPage({ params }: Props) {
       confirmationId={confirmation.id}
       status={confirmation.status}
       snapshot={snapshot}
+      shippingCompany={confirmation.shippingCompany}
+      followUp={{
+        handedToCarrier: Boolean(confirmation.handedToCarrier),
+        deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),
+        customerFollowUp: Boolean(confirmation.customerFollowUp),
+      }}
       initialAnswers={confirmation.answers.map((a) => ({
         itemKey: a.itemKey,
         confirmed: a.confirmed,
         value: a.value,
         note: a.note,
       }))}
-      readOnly={confirmation.status === "CONFIRMED"}
     />
   );
 }

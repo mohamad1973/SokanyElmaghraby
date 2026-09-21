@@ -99,7 +99,48 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
     type: "confirm_only",
     required: true,
   },
+  {
+    key: "shipping_company",
+    label: "شركة الشحن",
+    help: "اختر بوسطة أو سيد تميمة.",
+    type: "choice",
+    required: true,
+    choices: [
+      { value: "bosta", label: "بوسطة" },
+      { value: "sayed_temima", label: "سيد تميمة" },
+    ],
+  },
 ];
+
+/** Optional post-confirmation follow-up cards (not required for first finalize). */
+export const CS_FOLLOWUP_ITEMS: CsChecklistItemDef[] = [
+  {
+    key: "handed_to_carrier",
+    label: "تم التسليم لشركة الشحن",
+    help: "علّمي عند تسليم الشحنة لبوسطة أو سيد تميمة.",
+    type: "confirm_only",
+    required: false,
+  },
+  {
+    key: "delivered_to_customer",
+    label: "تم التسليم للعميل",
+    help: "علّمي عند تسليم الطلب للعميل (من التتبع أو التأكيد).",
+    type: "confirm_only",
+    required: false,
+  },
+  {
+    key: "customer_follow_up",
+    label: "متابعة العميل",
+    help: "متابعة لاحقة مع العميل بعد التسليم.",
+    type: "confirm_only",
+    required: false,
+  },
+];
+
+export const SHIPPING_COMPANY_LABEL: Record<string, string> = {
+  bosta: "بوسطة",
+  sayed_temima: "سيد تميمة",
+};
 
 export type CsChecklistAnswerInput = {
   itemKey: string;
