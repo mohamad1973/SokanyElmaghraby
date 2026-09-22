@@ -16,9 +16,10 @@ import {
 } from "@/lib/cs/assignments";
 import {
   getCairoYesterdayStartDateString,
-  isPaidOnlineHighlight,
   isWithinCairoLastDays,
   isWithinCairoTodayOrYesterday,
+  resolvePaymentState,
+  type CsPaymentState,
 } from "@/lib/cs/order-window";
 import { getShipmentsByOrderIds } from "@/lib/shipping/shipments";
 import { looksLikeLocationCode, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
@@ -34,6 +35,8 @@ export type CsQueueSnapshot = {
   paymentMethod?: string;
   paymentMethodId?: string | null;
   paidOnlineHighlight?: boolean;
+  paymentState?: CsPaymentState;
+  datePaid?: string | null;
   wooStatus?: string;
   trackingNumber?: string | null;
   items?: Array<{ name: string; quantity?: number; total?: string; sku?: string }>;
@@ -57,6 +60,12 @@ async function trackingMapForOrders(orderIds: number[]) {
 }
 
 function snapshotFromOrder(order: AdminOrder, trackingNumber?: string | null) {
+  const paymentState = resolvePaymentState({
+    paymentMethod: order.paymentMethod,
+    paymentMethodId: order.paymentMethodId,
+    wooStatus: order.status,
+    datePaid: order.datePaid,
+  });
   return {
     id: order.id,
     number: order.number,
@@ -69,10 +78,12 @@ function snapshotFromOrder(order: AdminOrder, trackingNumber?: string | null) {
     wooStatus: order.status,
     paymentMethod: order.paymentMethod,
     paymentMethodId: order.paymentMethodId || null,
+    datePaid: order.datePaid || null,
+    paymentState,
     total: order.total,
     currency: order.currency,
     dateCreated: order.dateCreated,
-    paidOnlineHighlight: isPaidOnlineHighlight(order.paymentMethod, order.paymentMethodId),
+    paidOnlineHighlight: paymentState === "paid",
     trackingNumber: trackingNumber || order.shipping?.trackingNumber || null,
     items: order.items,
     freeShippingHint: "راجع رسوم الشحن مع العميل حسب سياسة المتجر",
@@ -379,9 +390,15 @@ export function serializeCsQueueItem(row: {
   answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
 }) {
   const raw = (row.customerSnapshot as CsQueueSnapshot | null) || null;
-  const paidOnlineHighlight =
-    raw?.paidOnlineHighlight ??
-    isPaidOnlineHighlight(raw?.paymentMethod || "", raw?.paymentMethodId);
+  const paymentState: CsPaymentState =
+    raw?.paymentState ||
+    resolvePaymentState({
+      paymentMethod: raw?.paymentMethod,
+      paymentMethodId: raw?.paymentMethodId,
+      wooStatus: raw?.wooStatus || raw?.status,
+      datePaid: raw?.datePaid,
+    });
+  const paidOnlineHighlight = paymentState === "paid";
 
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
   const shippingCompany = row.shippingCompany || shippingFromAnswer || "bosta";
@@ -421,6 +438,9 @@ export function serializeCsQueueItem(row: {
           total: raw.total,
           dateCreated: raw.dateCreated,
           paymentMethod: raw.paymentMethod,
+          paymentMethodId: raw.paymentMethodId || null,
+          paymentState,
+          datePaid: raw.datePaid || null,
           paidOnlineHighlight,
           wooStatus: raw.wooStatus || raw.status,
           trackingNumber: raw.trackingNumber || null,

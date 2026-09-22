@@ -6,7 +6,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { listCsGovernorates, mergeAreaOptions } from "@/lib/cs/egypt-areas";
-import { cairoTodayYmd, cairoYesterdayYmd, formatCairoOrderDate, isWithinCairoDateRange } from "@/lib/cs/order-window";
+import {
+  cairoDaysAgoYmd,
+  cairoTodayYmd,
+  cairoYesterdayYmd,
+  formatCairoOrderDate,
+  isWithinCairoDateRange,
+  resolvePaymentState,
+  type CsPaymentState,
+} from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 
 export type CsQueueItem = {
@@ -29,13 +37,59 @@ export type CsQueueItem = {
     total?: string;
     dateCreated?: string;
     paymentMethod?: string;
+    paymentMethodId?: string | null;
     paidOnlineHighlight?: boolean;
+    paymentState?: CsPaymentState;
+    datePaid?: string | null;
     wooStatus?: string;
     trackingNumber?: string | null;
     items?: Array<{ name: string; quantity?: number }>;
   } | null;
   createdAt: string;
 };
+
+const DATE_FILTER_MAX_DAYS = 30;
+const dateMinYmd = () => cairoDaysAgoYmd(DATE_FILTER_MAX_DAYS);
+const dateMaxYmd = () => cairoTodayYmd();
+
+function itemPaymentState(item: CsQueueItem): CsPaymentState {
+  const snap = item.customerSnapshot;
+  if (snap?.paymentState) return snap.paymentState;
+  return resolvePaymentState({
+    paymentMethod: snap?.paymentMethod,
+    paymentMethodId: snap?.paymentMethodId,
+    wooStatus: snap?.wooStatus,
+    datePaid: snap?.datePaid,
+  });
+}
+
+function clampDateFilters(f: DraftFilters): { filters: DraftFilters; warning: string } {
+  const min = dateMinYmd();
+  const max = dateMaxYmd();
+  let dateFrom = f.dateFrom || min;
+  let dateTo = f.dateTo || max;
+  let warning = "";
+
+  if (dateFrom < min) {
+    dateFrom = min;
+    warning = "أقصى مدى للفلتر 30 يوماً من اليوم.";
+  }
+  if (dateTo > max) {
+    dateTo = max;
+    warning = "أقصى مدى للفلتر 30 يوماً من اليوم.";
+  }
+  if (dateFrom > dateTo) {
+    dateFrom = dateTo;
+    warning = "تم ضبط تاريخ البداية ليطابق النهاية.";
+  }
+  // Span must not exceed 30 calendar days from earliest allowed
+  if (dateFrom < min) {
+    dateFrom = min;
+    warning = "أقصى مدى للفلتر 30 يوماً من اليوم.";
+  }
+
+  return { filters: { ...f, dateFrom, dateTo }, warning };
+}
 
 const statusMeta: Record<string, { label: string; className: string }> = {
   PENDING: { label: "بانتظار", className: "bg-[#E5E5E5] text-[#14213D]" },
@@ -147,8 +201,15 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters) {
         if (f.followUp === "delivered_pending" && item.deliveredToCustomer) return false;
         if (f.followUp === "followup_pending" && item.customerFollowUp) return false;
       }
-      if (f.payment === "paid_online" && !item.customerSnapshot?.paidOnlineHighlight) return false;
-      if (f.payment === "cod" && item.customerSnapshot?.paidOnlineHighlight) return false;
+      if (f.payment === "paid" || f.payment === "paid_online") {
+        if (itemPaymentState(item) !== "paid") return false;
+      }
+      if (f.payment === "awaiting_payment") {
+        if (itemPaymentState(item) !== "awaiting_payment") return false;
+      }
+      if (f.payment === "cod") {
+        if (itemPaymentState(item) !== "cod") return false;
+      }
       if (f.shipping !== "all" && (item.shippingCompany || "") !== f.shipping) return false;
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
       if (f.governorate && !locMatch(item.customerSnapshot?.governorate || item.customerSnapshot?.addressFull, f.governorate)) {
@@ -309,13 +370,17 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   }
 
   function runFilter() {
-    setApplied({ ...draft });
+    const { filters, warning } = clampDateFilters(draft);
+    setDraft(filters);
+    setApplied(filters);
+    if (warning) setMessage(warning);
   }
 
   function resetFilters() {
     const next = defaultDraft();
     setDraft(next);
     setApplied(next);
+    setMessage("");
   }
 
   return (
@@ -409,8 +474,9 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
             >
               <option value="all">كل الدفع</option>
-              <option value="paid_online">مدفوع أونلاين</option>
-              <option value="cod">غير مدفوع أونلاين</option>
+              <option value="paid">مدفوع</option>
+              <option value="awaiting_payment">تحت الدفع</option>
+              <option value="cod">عند الاستلام</option>
             </select>
           )}
         </div>
@@ -423,8 +489,9 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
             >
               <option value="all">كل الدفع</option>
-              <option value="paid_online">مدفوع أونلاين</option>
-              <option value="cod">غير مدفوع أونلاين</option>
+              <option value="paid">مدفوع</option>
+              <option value="awaiting_payment">تحت الدفع</option>
+              <option value="cod">عند الاستلام</option>
             </select>
           ) : null}
           <select
@@ -440,6 +507,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             من يوم
             <input
               type="date"
+              min={dateMinYmd()}
+              max={dateMaxYmd()}
               value={draft.dateFrom}
               onChange={(e) => patchDraft({ dateFrom: e.target.value })}
               className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
@@ -449,6 +518,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             إلى يوم
             <input
               type="date"
+              min={dateMinYmd()}
+              max={dateMaxYmd()}
               value={draft.dateTo}
               onChange={(e) => patchDraft({ dateTo: e.target.value })}
               className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
@@ -539,7 +610,9 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         ) : (
           filtered.map((item) => {
             const isConfirmed = item.status === "CONFIRMED";
-            const paidOnline = Boolean(item.customerSnapshot?.paidOnlineHighlight);
+            const paymentState = itemPaymentState(item);
+            const isPaid = paymentState === "paid";
+            const isAwaiting = paymentState === "awaiting_payment";
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
             const ship = item.shippingCompany === "sayed_temima" ? "sayed_temima" : "bosta";
@@ -548,7 +621,13 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               <div
                 key={item.id}
                 className={`rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ${
-                  isConfirmed ? "ring-[#FCA311]" : paidOnline ? "ring-[#14213D]/35" : "ring-[#E5E5E5]"
+                  isConfirmed
+                    ? "ring-[#FCA311]"
+                    : isPaid
+                      ? "ring-[#14213D]/35"
+                      : isAwaiting
+                        ? "ring-amber-400/70"
+                        : "ring-[#E5E5E5]"
                 }`}
               >
                 <div
@@ -566,8 +645,11 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     <span className="text-xs" dir="ltr">
                       {item.customerSnapshot?.phone || ""}
                     </span>
-                    {paidOnline ? (
+                    {isPaid ? (
                       <span className="w-fit rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
+                    ) : null}
+                    {isAwaiting ? (
+                      <span className="w-fit rounded bg-amber-500 px-1.5 py-0.5 text-[10px] text-black">تحت الدفع</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col gap-0.5 sm:col-span-1">

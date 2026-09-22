@@ -276,6 +276,7 @@ export async function ruleBasedAssign(input: {
       governorate?: string;
       area?: string;
       paidOnlineHighlight?: boolean;
+      paymentState?: string;
     } | null;
 
     if (input.mode === "shipping") {
@@ -293,7 +294,11 @@ export async function ruleBasedAssign(input: {
     } else if (input.mode === "paid") {
       for (const rule of input.rules) {
         if (!rule.agentId || rule.paidOnline === undefined) continue;
-        if (Boolean(snap?.paidOnlineHighlight) === rule.paidOnline) {
+        const snapPayment =
+          snap?.paymentState ||
+          (snap?.paidOnlineHighlight ? "paid" : "cod");
+        const isPaid = snapPayment === "paid";
+        if (isPaid === rule.paidOnline) {
           await prisma.csOrderConfirmation.update({
             where: { id: row.id },
             data: { assignedAgentId: rule.agentId },

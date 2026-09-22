@@ -17,6 +17,7 @@ export type WooOrder = {
   payment_method?: string;
   payment_method_title: string;
   date_created: string;
+  date_paid?: string | null;
   billing: {
     first_name?: string;
     last_name?: string;
@@ -54,6 +55,7 @@ export type AdminOrder = {
   status: string;
   paymentMethod: string;
   paymentMethodId?: string;
+  datePaid?: string | null;
   total: string;
   currency: string;
   dateCreated: string;
@@ -182,6 +184,7 @@ export function mapOrder(order: WooOrder, shipping?: OrderShippingInfo): AdminOr
     status: order.status,
     paymentMethod: order.payment_method_title || "غير محدد",
     paymentMethodId: order.payment_method || undefined,
+    datePaid: order.date_paid || null,
     total: order.total,
     currency: order.currency,
     dateCreated: order.date_created,

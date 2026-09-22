@@ -36,6 +36,14 @@ export function cairoYesterdayYmd() {
   return getCairoYesterdayStartDateString();
 }
 
+/** Cairo YMD for N calendar days before today (0 = today). */
+export function cairoDaysAgoYmd(daysBack: number) {
+  const { y, m, d } = cairoYmdParts();
+  const start = cairoDayStartMs(y, m, d) - Math.max(0, daysBack) * 24 * 60 * 60 * 1000;
+  const parts = cairoYmdParts(new Date(start));
+  return `${parts.y}-${parts.m}-${parts.d}`;
+}
+
 export function isWithinCairoTodayOrYesterday(iso: string | null | undefined) {
   if (!iso) return false;
   const t = new Date(iso).getTime();
@@ -95,6 +103,36 @@ export function isPaidOnlineHighlight(paymentMethod: string, paymentMethodId?: s
   return /fawry|فورى|فوري|wallet|محفظ|vodafone|etisalat|orange|instapay|paymob|card|visa|mastercard|credit/.test(
     s,
   );
+}
+
+export type CsPaymentState = "awaiting_payment" | "paid" | "cod";
+
+/**
+ * Real payment completion for CS badges/filters — not just payment method.
+ * Online + Woo pending (no date_paid) = awaiting; online + paid/processing = paid; COD = cod.
+ */
+export function resolvePaymentState(input: {
+  paymentMethod?: string | null;
+  paymentMethodId?: string | null;
+  wooStatus?: string | null;
+  datePaid?: string | null;
+}): CsPaymentState {
+  const method = String(input.paymentMethod || "");
+  const methodId = String(input.paymentMethodId || "");
+  const online = isPaidOnlineHighlight(method, methodId);
+  if (!online) return "cod";
+
+  const status = String(input.wooStatus || "").toLowerCase().trim();
+  const datePaid = String(input.datePaid || "").trim();
+  if (datePaid && datePaid !== "null") return "paid";
+  if (status === "pending" || status === "failed" || status === "cancelled") {
+    return "awaiting_payment";
+  }
+  if (status === "processing" || status === "on-hold" || status === "completed") {
+    return "paid";
+  }
+  // Unknown online status without date_paid → treat as awaiting to avoid false "مدفوع"
+  return "awaiting_payment";
 }
 
 export function formatCairoOrderDateTime(iso: string | null | undefined) {
