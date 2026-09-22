@@ -1,5 +1,7 @@
 import "server-only";
 
+import { extractModelFromTitle } from "@/lib/product-display-code";
+
 const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
 const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY;
 const consumerSecret = process.env.WOOCOMMERCE_CONSUMER_SECRET;
@@ -8,6 +10,7 @@ export type ReorderProduct = {
   id: number;
   name: string;
   sku: string;
+  model: string;
   stockQuantity: number;
   threshold: number;
   stockStatus: string;
@@ -151,11 +154,14 @@ function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
   const isAtOrBelowThreshold = thresholdSafe > 0 && qty <= thresholdSafe;
   const suggestedTransferQty = isAtOrBelowThreshold ? Math.max(0, thresholdSafe - qty) : 0;
   const categories = product.categories || [];
+  const sku = product.sku || `TOOLIANO-${product.id}`;
+  const model = extractModelFromTitle(product.name) || sku;
 
   return {
     id: product.id,
     name: product.name,
-    sku: product.sku || `TOOLIANO-${product.id}`,
+    sku,
+    model,
     stockQuantity: qty,
     threshold: thresholdSafe,
     stockStatus: product.stock_status || "instock",
@@ -233,7 +239,9 @@ export async function getReorderProducts(options?: {
   if (search) {
     products = products.filter(
       (item) =>
-        item.name.toLowerCase().includes(search) || item.sku.toLowerCase().includes(search),
+        item.name.toLowerCase().includes(search) ||
+        item.sku.toLowerCase().includes(search) ||
+        item.model.toLowerCase().includes(search),
     );
   }
 

@@ -1,7 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-import { authenticateCsAgent, isElevatedCsRole, isCsAdminRole } from "@/lib/cs/agents";
+import { authenticateCsAgent, isElevatedCsRole, isCsAdminRole, isTransfersRole, canAccessTransfers } from "@/lib/cs/agents";
 import { authenticateDriver } from "@/lib/dispatch/drivers";
 
 const adminEmail = process.env.ADMIN_EMAIL || "admin@sokany-eg.com";
@@ -37,6 +37,8 @@ export const authOptions: NextAuthOptions = {
         token.csIsSupervisor = user.csIsSupervisor;
         token.csRole = user.csRole;
         token.csIsAdmin = user.csIsAdmin;
+        token.csIsTransfers = user.csIsTransfers;
+        token.csCanAccessTransfers = user.csCanAccessTransfers;
       }
 
       return token;
@@ -48,8 +50,11 @@ export const authOptions: NextAuthOptions = {
         session.user.driverId = token.driverId as number | undefined;
         session.user.csAgentId = token.csAgentId as number | undefined;
         session.user.csIsSupervisor = Boolean(token.csIsSupervisor);
-        session.user.csRole = (token.csRole as "agent" | "supervisor" | "admin" | undefined) || undefined;
+        session.user.csRole =
+          (token.csRole as "agent" | "supervisor" | "admin" | "transfers" | undefined) || undefined;
         session.user.csIsAdmin = Boolean(token.csIsAdmin);
+        session.user.csIsTransfers = Boolean(token.csIsTransfers);
+        session.user.csCanAccessTransfers = Boolean(token.csCanAccessTransfers);
       }
 
       return session;
@@ -134,6 +139,8 @@ export const authOptions: NextAuthOptions = {
           csIsSupervisor: isElevatedCsRole(csRole),
           csRole,
           csIsAdmin: isCsAdminRole(csRole),
+          csIsTransfers: isTransfersRole(csRole),
+          csCanAccessTransfers: canAccessTransfers(csRole),
         };
       },
     }),

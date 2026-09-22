@@ -3,9 +3,9 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/security";
 
-export type CsRole = "agent" | "supervisor" | "admin";
+export type CsRole = "agent" | "supervisor" | "admin" | "transfers";
 
-export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin"];
+export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin", "transfers"];
 
 export function normalizeCsUsername(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
@@ -21,6 +21,21 @@ export function isElevatedCsRole(role: string | null | undefined) {
 
 export function isCsAdminRole(role: string | null | undefined) {
   return role === "admin";
+}
+
+export function isTransfersRole(role: string | null | undefined) {
+  return role === "transfers";
+}
+
+export function canAccessTransfers(role: string | null | undefined) {
+  return role === "transfers" || role === "supervisor" || role === "admin";
+}
+
+export function normalizeAgentPhone(value: string | null | undefined) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length < 10) return null;
+  return digits;
 }
 
 /** @deprecated use role — kept for gradual migration of callers */
@@ -125,10 +140,31 @@ async function runEnsureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsStockAlert\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`productId\` INT NOT NULL,
+      \`productName\` VARCHAR(191) NOT NULL,
+      \`sku\` VARCHAR(191) NOT NULL DEFAULT '',
+      \`model\` VARCHAR(191) NULL,
+      \`stockQuantity\` INT NOT NULL DEFAULT 0,
+      \`threshold\` INT NOT NULL DEFAULT 0,
+      \`whatsappSent\` BOOLEAN NOT NULL DEFAULT false,
+      \`notifiedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`resolvedAt\` DATETIME(3) NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL,
+      INDEX \`CsStockAlert_productId_idx\`(\`productId\`),
+      INDEX \`CsStockAlert_resolvedAt_idx\`(\`resolvedAt\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",
     "ALTER TABLE `CsAgent` ADD COLUMN `role` VARCHAR(32) NOT NULL DEFAULT 'agent'",
+    "ALTER TABLE `CsAgent` ADD COLUMN `phone` VARCHAR(32) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingCompany` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `handedToCarrier` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `deliveredToCustomer` BOOLEAN NOT NULL DEFAULT false",
@@ -207,6 +243,7 @@ type AgentRow = {
   isActive: boolean;
   isSupervisor: boolean;
   role: string;
+  phone?: string | null;
 };
 
 async function findAgentByUsername(username: string): Promise<AgentRow | null> {
@@ -217,7 +254,8 @@ async function findAgentByUsername(username: string): Promise<AgentRow | null> {
 
   try {
     const rows = await prisma.$queryRawUnsafe<AgentRow[]>(
-      `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`, COALESCE(\`role\`, 'agent') AS \`role\`
+      `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`,
+              COALESCE(\`role\`, 'agent') AS \`role\`, \`phone\`
        FROM \`CsAgent\` WHERE LOWER(\`username\`) = ? LIMIT 1`,
       u,
     );
@@ -372,6 +410,7 @@ export async function createCsAgent(input: {
   username: string;
   password: string;
   role?: CsRole;
+  phone?: string | null;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
@@ -395,17 +434,19 @@ export async function createCsAgent(input: {
   const email = syntheticCsEmail(username);
   const passwordHash = await hashPassword(input.password);
   const isSupervisor = isElevatedCsRole(role);
+  const phone = normalizeAgentPhone(input.phone);
 
   try {
     await prisma.$executeRawUnsafe(
-      `INSERT INTO \`CsAgent\` (\`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`, \`role\`, \`createdAt\`, \`updatedAt\`)
-       VALUES (?, ?, ?, ?, true, ?, ?, NOW(3), NOW(3))`,
+      `INSERT INTO \`CsAgent\` (\`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`, \`role\`, \`phone\`, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, true, ?, ?, ?, NOW(3), NOW(3))`,
       name,
       email,
       username,
       passwordHash,
       isSupervisor,
       role,
+      phone,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -419,7 +460,7 @@ export async function createCsAgent(input: {
   if (!agent) return { ok: false as const, message: "تم الإنشاء لكن تعذر الجلب." };
   return {
     ok: true as const,
-    agent: { ...agent, role, isSupervisor, username },
+    agent: { ...agent, role, isSupervisor, username, phone },
   };
 }
 
@@ -437,11 +478,12 @@ export async function listCsAgents() {
         isActive: boolean;
         isSupervisor: boolean;
         role: string;
+        phone: string | null;
         createdAt: Date;
       }>
     >(
       `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`isActive\`, \`isSupervisor\`,
-              COALESCE(\`role\`, 'agent') AS \`role\`, \`createdAt\`
+              COALESCE(\`role\`, 'agent') AS \`role\`, \`phone\`, \`createdAt\`
        FROM \`CsAgent\` ORDER BY \`name\` ASC`,
     );
     return rows.map((r) => ({
@@ -449,6 +491,7 @@ export async function listCsAgents() {
       username: r.username || normalizeCsUsername(r.email.split("@")[0] || ""),
       role: (CS_ROLES.includes(r.role as CsRole) ? r.role : roleFromLegacy(r)) as CsRole,
       isSupervisor: isElevatedCsRole(r.role) || r.isSupervisor,
+      phone: r.phone || null,
     }));
   } catch {
     await ensureCsTables();
@@ -482,14 +525,20 @@ export async function getCsAgentById(id: number) {
   try {
     const rows = await prisma.$queryRawUnsafe<AgentRow[]>(
       `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`,
-              COALESCE(\`role\`, 'agent') AS \`role\`
+              COALESCE(\`role\`, 'agent') AS \`role\`, \`phone\`
        FROM \`CsAgent\` WHERE \`id\` = ? LIMIT 1`,
       id,
     );
     const r = rows[0];
     if (!r) return null;
     const role = (CS_ROLES.includes(r.role as CsRole) ? r.role : roleFromLegacy(r)) as CsRole;
-    return { ...r, role, isSupervisor: isElevatedCsRole(role), username: r.username || "" };
+    return {
+      ...r,
+      role,
+      isSupervisor: isElevatedCsRole(role),
+      username: r.username || "",
+      phone: r.phone || null,
+    };
   } catch {
     return prisma.csAgent.findUnique({ where: { id } });
   }
@@ -501,6 +550,7 @@ export async function updateCsAgentByAdmin(input: {
   isActive?: boolean;
   name?: string;
   password?: string;
+  phone?: string | null;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
@@ -523,6 +573,10 @@ export async function updateCsAgentByAdmin(input: {
   const isSupervisor = isElevatedCsRole(role);
   const name = input.name?.trim() || agent.name;
   const isActive = input.isActive ?? agent.isActive;
+  const phone =
+    input.phone !== undefined
+      ? normalizeAgentPhone(input.phone)
+      : ((agent as { phone?: string | null }).phone || null);
   let passwordHash = agent.passwordHash;
   if (input.password && input.password.length >= 6) {
     passwordHash = await hashPassword(input.password);
@@ -531,12 +585,13 @@ export async function updateCsAgentByAdmin(input: {
   try {
     await prisma.$executeRawUnsafe(
       `UPDATE \`CsAgent\` SET \`name\` = ?, \`role\` = ?, \`isSupervisor\` = ?, \`isActive\` = ?,
-       \`passwordHash\` = ?, \`updatedAt\` = NOW(3) WHERE \`id\` = ?`,
+       \`passwordHash\` = ?, \`phone\` = ?, \`updatedAt\` = NOW(3) WHERE \`id\` = ?`,
       name,
       role,
       isSupervisor,
       isActive,
       passwordHash,
+      phone,
       input.id,
     );
   } catch {

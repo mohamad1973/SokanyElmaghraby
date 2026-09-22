@@ -705,16 +705,30 @@ export async function isOrderCsConfirmed(wooOrderId: number) {
 }
 
 export async function resolveCsViewer(agentId: number) {
-  const { getCsAgentById, isElevatedCsRole, isCsAdminRole } = await import("@/lib/cs/agents");
+  const { getCsAgentById, isElevatedCsRole, isCsAdminRole, canAccessTransfers, isTransfersRole } =
+    await import("@/lib/cs/agents");
   await ensureCsTables();
   const agent = await getCsAgentById(agentId);
   if (!agent) {
-    return { isSupervisor: false, isAdmin: false, role: "agent" as const, agent: null };
+    return {
+      isSupervisor: false,
+      isAdmin: false,
+      isTransfers: false,
+      canAccessTransfers: false,
+      role: "agent" as const,
+      agent: null,
+    };
   }
-  const role = ((agent as { role?: string }).role || "agent") as "agent" | "supervisor" | "admin";
+  const role = ((agent as { role?: string }).role || "agent") as
+    | "agent"
+    | "supervisor"
+    | "admin"
+    | "transfers";
   return {
     isSupervisor: isElevatedCsRole(role),
     isAdmin: isCsAdminRole(role),
+    isTransfers: isTransfersRole(role),
+    canAccessTransfers: canAccessTransfers(role),
     role,
     agent,
   };

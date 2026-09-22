@@ -31,6 +31,7 @@ export async function GET() {
       name: a.name,
       username: a.username,
       role: a.role,
+      phone: (a as { phone?: string | null }).phone || null,
       isActive: a.isActive,
       createdAt: a.createdAt,
     })),
@@ -41,7 +42,13 @@ export async function POST(request: Request) {
   const session = await requireCsAdmin();
   if (!session) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
 
-  let body: { name?: string; username?: string; password?: string; role?: string } = {};
+  let body: {
+    name?: string;
+    username?: string;
+    password?: string;
+    role?: string;
+    phone?: string;
+  } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -58,6 +65,7 @@ export async function POST(request: Request) {
     username: String(body.username || ""),
     password: String(body.password || ""),
     role,
+    phone: body.phone,
   });
   if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
   return NextResponse.json({ ok: true, agent: result.agent });
@@ -73,6 +81,7 @@ export async function PATCH(request: Request) {
     isActive?: boolean;
     name?: string;
     password?: string;
+    phone?: string | null;
   } = {};
   try {
     body = (await request.json()) as typeof body;
@@ -94,6 +103,7 @@ export async function PATCH(request: Request) {
     isActive: body.isActive,
     name: body.name,
     password: body.password,
+    phone: body.phone,
   });
   if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
   return NextResponse.json({ ok: true, agent: result.agent });

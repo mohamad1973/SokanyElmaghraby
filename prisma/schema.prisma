@@ -247,6 +247,7 @@ model CsAgent {
   isActive      Boolean                @default(true)
   isSupervisor  Boolean                @default(false)
   role          String                 @default("agent")
+  phone         String?
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
   confirmations CsOrderConfirmation[]
@@ -307,4 +308,22 @@ model CsOrderAssignment {
   createdAt          DateTime @default(now())
 
   @@index([agentId])
+}
+
+model CsStockAlert {
+  id            Int       @id @default(autoincrement())
+  productId     Int
+  productName   String
+  sku           String    @default("")
+  model         String?
+  stockQuantity Int       @default(0)
+  threshold     Int       @default(0)
+  whatsappSent  Boolean   @default(false)
+  notifiedAt    DateTime  @default(now())
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([productId])
+  @@index([resolvedAt])
 }

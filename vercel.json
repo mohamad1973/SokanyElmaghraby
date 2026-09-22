@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync-campaigns",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/check-stock-alerts",
+      "schedule": "15 * * * *"
     }
   ]
 }

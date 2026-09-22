@@ -101,6 +101,7 @@
 |-----------|------|
 | دخول CS | `/cs/login` |
 | قائمة الانتظار | `/cs` |
+| التحويلات (مخزون + حد طلب) | `/cs/transfers` |
 | صفحة سكربت المكالمة | `/cs/orders/[id]` |
 
 دخول CS: يوزرنيم + باسورد (بدون إيميل). أدمن ثابت: `mm` / `123456` (دور admin — وحده يغيّر الصلاحيات من `/cs/users`).
@@ -354,6 +355,7 @@
 |--------|---------|
 | `/cs/login` | دخول وكيل CS |
 | `/cs` | قائمة تأكيد + مزامنة Woo |
+| `/cs/transfers` | مخزون الموقع + حد الطلب + تنبيهات |
 | `/cs/orders/[id]` | سكربت المكالمة (بنود إلزامية) |
 
 | API | الوظيفة |
@@ -425,6 +427,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS صلاحية التحويلات + تنبيهات مخزون | دور `transfers`؛ `/cs/transfers` مخزون/موديل/حد طلب؛ جرس + واتساب + كرون hourly | `agents.ts`, `stock-alerts.ts`, `cs/transfers`, `api/cron/check-stock-alerts` |
 | CS حالة دفع حقيقية + فلتر 30 يوم | شارات مدفوع/تحت الدفع/عند الاستلام حسب Woo status و date_paid؛ فلتر تاريخ افتراضي يومين وحد أقصى 30 يوماً | `order-window.ts`, `orders.ts`, `confirmations.ts`, `cs-queue-client.tsx`, `assignments.ts` |
 | CS تطبيق منفصل cs.tooliano.com | PWA مستقل عن متجر Tooliano؛ توجيه host؛ بطاقة تثبيت v2؛ cs-sw + cs-manifest | `middleware.ts`, `cs-manifest.webmanifest`, `cs-sw.js`, `cs-pwa-install-prompt.tsx` |
 | CS موبايل + PWA | داشبورد CS مناسب للموبايل؛ manifest `/cs`؛ نافذة تثبيت أول فتح على الشاشة الرئيسية | `cs-manifest.webmanifest`, `cs-pwa-install-prompt.tsx`, `cs/layout.tsx`, `cs-shell.tsx` |

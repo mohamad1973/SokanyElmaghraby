@@ -7,6 +7,7 @@ type AgentRow = {
   name: string;
   username: string;
   role: string;
+  phone?: string | null;
   isActive: boolean;
   createdAt?: string;
 };
@@ -14,6 +15,7 @@ type AgentRow = {
 const ROLE_LABEL: Record<string, string> = {
   agent: "خدمة عملاء عادي",
   supervisor: "مشرف توزيع",
+  transfers: "التحويلات",
   admin: "أدمن",
 };
 
@@ -21,7 +23,13 @@ export function CsUsersClient() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: "", username: "", password: "", role: "agent" });
+  const [form, setForm] = useState({
+    name: "",
+    username: "",
+    password: "",
+    role: "agent",
+    phone: "",
+  });
 
   const load = useCallback(async () => {
     const res = await fetch("/api/cs/agents");
@@ -52,18 +60,21 @@ export function CsUsersClient() {
       setMessage(data.message || "تعذر الإنشاء.");
       return;
     }
-    setForm({ name: "", username: "", password: "", role: "agent" });
+    setForm({ name: "", username: "", password: "", role: "agent", phone: "" });
     setMessage("تم إنشاء المستخدم.");
     await load();
   }
 
-  async function patch(id: number, patch: Partial<{ role: string; isActive: boolean; password: string }>) {
+  async function patch(
+    id: number,
+    patchBody: Partial<{ role: string; isActive: boolean; password: string; phone: string }>,
+  ) {
     setLoading(true);
     setMessage("");
     const res = await fetch("/api/cs/agents", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, ...patch }),
+      body: JSON.stringify({ id, ...patchBody }),
     });
     const data = (await res.json()) as { message?: string };
     setLoading(false);
@@ -92,14 +103,19 @@ export function CsUsersClient() {
     <div className="space-y-4" dir="rtl">
       <div className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
         <h1 className="text-2xl font-extrabold text-[#14213D]">إدارة مستخدمي خدمة العملاء</h1>
-        <p className="mt-1 text-sm font-bold text-[#14213D]/70">أنت وحدك كأدمن تستطيع تغيير الصلاحيات.</p>
+        <p className="mt-1 text-sm font-bold text-[#14213D]/70">
+          أنت وحدك كأدمن تستطيع تغيير الصلاحيات. دور التحويلات يحتاج رقم واتساب للتنبيهات.
+        </p>
       </div>
 
       {message ? (
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      <form onSubmit={createUser} className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-2 lg:grid-cols-5">
+      <form
+        onSubmit={createUser}
+        className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+      >
         <label className="grid gap-1 text-sm font-bold">
           الاسم
           <input
@@ -141,7 +157,18 @@ export function CsUsersClient() {
           >
             <option value="agent">خدمة عملاء عادي</option>
             <option value="supervisor">مشرف توزيع</option>
+            <option value="transfers">التحويلات</option>
           </select>
+        </label>
+        <label className="grid gap-1 text-sm font-bold">
+          واتساب
+          <input
+            value={form.phone}
+            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            placeholder="01xxxxxxxxx"
+            dir="ltr"
+            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
+          />
         </label>
         <button
           type="submit"
@@ -159,6 +186,7 @@ export function CsUsersClient() {
               <th className="px-3 py-2">الاسم</th>
               <th className="px-3 py-2">اليوزرنيم</th>
               <th className="px-3 py-2">الدور</th>
+              <th className="px-3 py-2">واتساب</th>
               <th className="px-3 py-2">الحالة</th>
               <th className="px-3 py-2">إجراءات</th>
             </tr>
@@ -182,8 +210,25 @@ export function CsUsersClient() {
                     >
                       <option value="agent">خدمة عملاء عادي</option>
                       <option value="supervisor">مشرف توزيع</option>
+                      <option value="transfers">التحويلات</option>
                       {a.role === "admin" ? <option value="admin">أدمن</option> : null}
                     </select>
+                  )}
+                </td>
+                <td className="px-3 py-2" dir="ltr">
+                  {a.username === "mm" ? (
+                    "—"
+                  ) : (
+                    <input
+                      defaultValue={a.phone || ""}
+                      disabled={loading}
+                      placeholder="01…"
+                      className="w-28 rounded-lg border border-[#E5E5E5] px-2 py-1 text-xs"
+                      onBlur={(e) => {
+                        const next = e.target.value.trim();
+                        if (next !== (a.phone || "")) void patch(a.id, { phone: next });
+                      }}
+                    />
                   )}
                 </td>
                 <td className="px-3 py-2">{a.isActive ? "نشط" : "معطّل"}</td>

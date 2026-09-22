@@ -11,7 +11,21 @@ type NotifPayload = {
   handedToCarrier: Array<{ id: number; wooOrderNumber: string }>;
   confirmDelivery: Array<{ id: number; wooOrderNumber: string }>;
   followUpDue: Array<{ id: number; wooOrderNumber: string }>;
-  totals: { handedToCarrier: number; confirmDelivery: number; followUpDue: number; all: number };
+  stockAlerts?: Array<{
+    id: number;
+    productId: number;
+    productName: string;
+    model?: string | null;
+    stockQuantity: number;
+    threshold: number;
+  }>;
+  totals: {
+    handedToCarrier: number;
+    confirmDelivery: number;
+    followUpDue: number;
+    stockAlerts?: number;
+    all: number;
+  };
 };
 
 const CS_VARS = {
@@ -67,6 +81,21 @@ function CsNotificationsBell() {
             <p className="text-xs text-slate-500">لا توجد تنبيهات حالياً.</p>
           ) : (
             <div className="max-h-72 space-y-3 overflow-y-auto text-xs">
+              {data.stockAlerts && data.stockAlerts.length ? (
+                <div>
+                  <p className="font-bold text-amber-600">مخزون تحت الحد ({data.totals.stockAlerts || 0})</p>
+                  <ul className="mt-1 space-y-1">
+                    {data.stockAlerts.slice(0, 8).map((o) => (
+                      <li key={`s-${o.id}`}>
+                        <Link href="/cs/transfers?low=1" className="underline" onClick={() => setOpen(false)}>
+                          {o.productName}
+                          {o.model ? ` · ${o.model}` : ""} ({o.stockQuantity}/{o.threshold})
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {data.handedToCarrier.length ? (
                 <div>
                   <p className="font-bold text-[var(--cs-gold)]">تسليم لشركة الشحن ({data.totals.handedToCarrier})</p>
@@ -121,6 +150,8 @@ function CsHeader() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
+  const isTransfersOnly = Boolean(session?.user?.csIsTransfers);
+  const canTransfers = Boolean(session?.user?.csCanAccessTransfers || session?.user?.csIsTransfers);
 
   const navClass = (active: boolean) =>
     `shrink-0 rounded-full px-3 py-1.5 whitespace-nowrap ${
@@ -135,13 +166,22 @@ function CsHeader() {
       <div className="mx-auto flex max-w-7xl flex-col gap-2 text-white sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">مرحباً، {agentName}</p>
-          <p className="text-[11px] text-white/70 sm:text-xs">خدمة العملاء · تأكيد الطلبات بالمكالمة</p>
+          <p className="text-[11px] text-white/70 sm:text-xs">
+            {isTransfersOnly ? "التحويلات · مخزون الموقع وحد الطلب" : "خدمة العملاء · تأكيد الطلبات بالمكالمة"}
+          </p>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CsNotificationsBell />
-          <Link href="/cs" className={navClass(pathname === "/cs")}>
-            القائمة
-          </Link>
+          {!isTransfersOnly ? (
+            <Link href="/cs" className={navClass(pathname === "/cs")}>
+              القائمة
+            </Link>
+          ) : null}
+          {canTransfers ? (
+            <Link href="/cs/transfers" className={navClass(pathname.startsWith("/cs/transfers"))}>
+              التحويلات
+            </Link>
+          ) : null}
           {session?.user?.csIsSupervisor ? (
             <Link href="/cs/assign" className={navClass(pathname.startsWith("/cs/assign"))}>
               توزيع

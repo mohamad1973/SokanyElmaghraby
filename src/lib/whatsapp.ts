@@ -92,6 +92,11 @@ async function sendWhatsAppText(to: string, body: string): Promise<WhatsAppSendR
   };
 }
 
+/** Public wrapper for stock/CS alerts and other plain text messages. */
+export async function sendPlainWhatsAppText(to: string, body: string) {
+  return sendWhatsAppText(to, body);
+}
+
 export async function sendNewOrderWhatsApp(order: AdminOrder): Promise<WhatsAppSendResult> {
   if (!whatsappAccessToken || !whatsappPhoneNumberId) {
     return {

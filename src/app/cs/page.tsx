@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ensureCsTables, ensureDefaultCsAgent, listActiveCsAgents } from "@/lib/cs/agents";
+import { ensureCsTables, ensureDefaultCsAgent, isTransfersRole, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -14,6 +14,10 @@ export default async function CsHomePage() {
   await ensureDefaultCsAgent();
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
+  if (isTransfersRole(viewer.role) || session.user.csIsTransfers) {
+    redirect("/cs/transfers");
+  }
+
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
 
   const rows = await listCsConfirmationsForViewer({
