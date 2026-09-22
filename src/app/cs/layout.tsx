@@ -4,16 +4,21 @@ import type { ReactNode } from "react";
 import { CsShell } from "./cs-shell";
 
 export const metadata: Metadata = {
-  title: "Tooliano CS",
-  description: "متابعة وتأكيد طلبات العملاء",
+  title: "sokany.cs",
+  description: "تطبيق خدمة العملاء — تأكيد وتوزيع الطلبات",
+  applicationName: "sokany.cs",
   manifest: "/cs-manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Tooliano CS",
+    title: "sokany.cs",
   },
   icons: {
-    apple: "/icon-192.png",
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

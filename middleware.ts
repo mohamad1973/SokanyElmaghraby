@@ -20,6 +20,25 @@ function isCsPath(pathname: string) {
   return pathname.startsWith("/cs") || pathname.startsWith("/api/cs");
 }
 
+function isCsAppHost(hostname: string) {
+  const host = hostname.toLowerCase().split(":")[0];
+  return host === "cs.tooliano.com" || host === "cs.localhost" || host.startsWith("cs.");
+}
+
+function isCsAllowedOnSubdomain(pathname: string) {
+  return (
+    isCsPath(pathname) ||
+    pathname.startsWith("/api/auth") ||
+    pathname === "/cs-manifest.webmanifest" ||
+    pathname === "/cs-sw.js" ||
+    pathname === "/sw.js" ||
+    pathname === "/icon-192.png" ||
+    pathname === "/icon-512.png" ||
+    pathname === "/apple-touch-icon.png" ||
+    pathname === "/sokany-logo.png"
+  );
+}
+
 function isAdminApiPath(pathname: string) {
   return pathname.startsWith("/api/admin");
 }
@@ -62,6 +81,15 @@ async function getSiteLocaleMode(req: NextRequest): Promise<SiteLocaleMode> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const hostname = req.headers.get("host") || req.nextUrl.hostname;
+
+  // Dedicated CS PWA host: always land on /cs (separate install from store PWA)
+  if (isCsAppHost(hostname) && !isCsAllowedOnSubdomain(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/cs";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
 
   if (pathname.startsWith("/api/") && !isAdminApiPath(pathname) && !pathname.startsWith("/api/driver") && !pathname.startsWith("/api/cs")) {
     return nextWithLocale(req, "ar");
