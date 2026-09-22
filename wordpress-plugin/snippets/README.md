@@ -5,25 +5,32 @@
 
 ---
 
-## 0) SOKANY Media Usage Badge v1.0 (`sokany-eg.com`) — ارتباط صور المكتبة
+## 0) SOKANY Media Usage Badge v1.1 (`sokany-eg.com`) — ارتباط صور المكتبة
 
-ملف: [`sokany-media-usage-badge-v1.0.php`](sokany-media-usage-badge-v1.0.php)
+ملف: [`sokany-media-usage-badge-v1.1.php`](sokany-media-usage-badge-v1.1.php)  
+(قديم — لا تفعّليه: [`sokany-media-usage-badge-v1.0.php`](sokany-media-usage-badge-v1.0.php))
+
+### لماذا v1.1؟
+
+v1.0 كان يفحص كل صورة تلقائياً عند فتح المكتبة (استعلامات `LIKE` ثقيلة) → تعليق طويل ثم 404 على Hostinger.  
+v1.1 يعرض الكاش فقط في المكتبة، والفحص فقط من صفحة التقارير بدفعات صغيرة (~8 صور / ~8 ثوانٍ).
 
 ### ماذا يفعل؟
 
-- عمود **الارتباط** في Media Library (عرض القائمة): مرتبطة 100% / راجعي / غير مرتبطة
-- فلتر أعلى القائمة حسب التصنيف
-- صفحة **Media → تقارير الارتباط**: جداول + تصدير CSV لكل تصنيف على حدة
-- فحص على دفعات (بدون حذف تلقائي)
+- عمود **الارتباط** في Media Library (عرض القائمة): مرتبطة 100% / راجعي / غير مرتبطة / **لم يُفحص بعد**
+- فلتر أعلى القائمة حسب التصنيف (بعد الفحص)
+- صفحة **Media → تقارير الارتباط**: دفعات فحص خفيفة + جداول + تصدير CSV
+- بدون حذف تلقائي وبدون مسح `postmeta` العام
 
-### التثبيت
+### التثبيت (استبدال v1.0)
 
-1. Snippets → Add New → Title: `SOKANY Media Usage Badge v1.0`
-2. الصق الملف **بدون** `<?php`
-3. Run: **Only run in administration area**
-4. Save & Activate
-5. Media → Library → حوّلي لـ **List view** لرؤية العمود والفلتر
-6. Media → **تقارير الارتباط** → اضغطي «فحص المكتبة» عدة مرات حتى يكتمل، ثم صدّري CSV
+1. Snippets → **عطّل أو احذف** `SOKANY Media Usage Badge v1.0` فوراً
+2. Add New → Title: `SOKANY Media Usage Badge v1.1`
+3. الصق محتوى `sokany-media-usage-badge-v1.1.php` **بدون** `<?php`
+4. Run: **Only run in administration area**
+5. Save & Activate
+6. Media → **تقارير الارتباط** → اضغطي «فحص / متابعة دفعة صغيرة» مراراً حتى يكتمل
+7. بعدها Media → Library → **List view** لرؤية الشارات والفلتر
 
 ---
 
