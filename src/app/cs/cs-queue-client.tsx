@@ -527,7 +527,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               isSupervisor ? (
                 <p className="font-bold">لا توجد طلبات — راجعي المزامنة أو وسّعي تاريخ الفلتر.</p>
               ) : (
-                <p className="font-bold">لم يُوزَّع عليكِ نطاق بعد — اطلبي من المشرفة.</p>
+                <p className="font-bold">لم يُوزَّع عليكِ أوردرات بعد — اطلبي من المشرفة التوزيع.</p>
               )
             ) : (
               <p className="font-bold">لا توجد نتائج مطابقة للبحث أو الفلتر — جرّبي مسح البحث أو «إعادة».</p>

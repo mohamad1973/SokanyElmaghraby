@@ -12,8 +12,6 @@ import {
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
 import {
-  getAssignmentRangesForAgent,
-  orderNumberInRanges,
   parseWooOrderNumber,
 } from "@/lib/cs/assignments";
 import {
@@ -341,20 +339,8 @@ export async function listCsConfirmationsForViewer(opts: {
     return sortByOrderNumberDesc(inWindow);
   }
 
-  let ranges: Array<{ from: number; to: number }> = [];
-  try {
-    ranges = await getAssignmentRangesForAgent(opts.agentId);
-  } catch (error) {
-    console.error("[cs] getAssignmentRangesForAgent failed:", error);
-  }
-
-  // If an order is explicitly assigned, only that agent sees it (no overlapping ranges).
-  const filtered = inWindow.filter((row) => {
-    if (row.assignedAgentId != null) {
-      return row.assignedAgentId === opts.agentId;
-    }
-    return orderNumberInRanges(row.wooOrderNumber, ranges);
-  });
+  // Regular agents: only orders explicitly distributed to them by a supervisor.
+  const filtered = inWindow.filter((row) => row.assignedAgentId === opts.agentId);
 
   return sortByOrderNumberDesc(filtered);
 }

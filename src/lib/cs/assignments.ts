@@ -85,7 +85,24 @@ export async function createAssignment(input: {
     },
   });
 
-  return { ok: true as const, assignment: row };
+  // Stamp assignedAgentId so regular agents only see what was distributed to them
+  const candidates = await prisma.csOrderConfirmation.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 800,
+  });
+  let stamped = 0;
+  for (const c of candidates) {
+    const n = parseWooOrderNumber(c.wooOrderNumber);
+    if (n >= from && n <= to) {
+      await prisma.csOrderConfirmation.update({
+        where: { id: c.id },
+        data: { assignedAgentId: input.agentId },
+      });
+      stamped += 1;
+    }
+  }
+
+  return { ok: true as const, assignment: row, stamped };
 }
 
 export async function deleteAssignment(id: number) {
