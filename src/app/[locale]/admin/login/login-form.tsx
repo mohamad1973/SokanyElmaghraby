@@ -17,7 +17,7 @@ export function LoginForm() {
 
     const formData = new FormData(event.currentTarget);
     const result = await signIn("admin-credentials", {
-      email: formData.get("email"),
+      email: formData.get("username"),
       password: formData.get("password"),
       redirect: false,
       callbackUrl: searchParams.get("callbackUrl") || "/admin",
@@ -37,13 +37,15 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="mt-8 grid gap-5">
       <label className="grid gap-2 text-sm font-bold text-zinc-700">
-        البريد الإلكتروني
+        اليوزرنيم
         <input
-          name="email"
-          type="email"
+          name="username"
+          type="text"
           required
+          autoComplete="username"
           className="rounded-xl border border-black/10 bg-white px-4 py-3 outline-none transition focus:border-brand-gold"
-          placeholder="admin@sokany-eg.com"
+          placeholder="mm"
+          dir="ltr"
         />
       </label>
 
@@ -70,4 +72,3 @@ export function LoginForm() {
     </form>
   );
 }
-

@@ -242,9 +242,11 @@ model CsAgent {
   id            Int                    @id @default(autoincrement())
   name          String
   email         String                 @unique
+  username      String?                @unique
   passwordHash  String
   isActive      Boolean                @default(true)
   isSupervisor  Boolean                @default(false)
+  role          String                 @default("agent")
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
   confirmations CsOrderConfirmation[]

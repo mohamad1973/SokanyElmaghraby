@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ensureCsTables, ensureDefaultCsAgent, listCsAgents } from "@/lib/cs/agents";
+import { ensureCsTables, ensureDefaultCsAgent, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer } from "@/lib/cs/confirmations";
 import { isWithinCairoTodayOrYesterday } from "@/lib/cs/order-window";
 import { requireCsSession } from "@/lib/session-guards";
@@ -17,7 +17,11 @@ export default async function CsAssignPage() {
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
   if (!isSupervisor) redirect("/cs");
 
-  const agents = (await listCsAgents()).map((a) => ({ id: a.id, name: a.name, email: a.email }));
+  const agents = (await listActiveCsAgents()).map((a) => ({
+    id: a.id,
+    name: a.name,
+    email: a.username || a.email,
+  }));
   const rows = await listCsConfirmationsForViewer({
     agentId: session.user.csAgentId,
     isSupervisor: true,

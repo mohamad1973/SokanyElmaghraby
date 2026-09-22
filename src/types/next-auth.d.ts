@@ -1,6 +1,7 @@
 import type { DefaultSession } from "next-auth";
 
 export type UserRole = "admin" | "driver" | "cs";
+export type CsAgentRole = "agent" | "supervisor" | "admin";
 
 declare module "next-auth" {
   interface Session {
@@ -10,6 +11,8 @@ declare module "next-auth" {
       driverId?: number;
       csAgentId?: number;
       csIsSupervisor?: boolean;
+      csRole?: CsAgentRole;
+      csIsAdmin?: boolean;
     };
   }
 
@@ -18,6 +21,8 @@ declare module "next-auth" {
     driverId?: number;
     csAgentId?: number;
     csIsSupervisor?: boolean;
+    csRole?: CsAgentRole;
+    csIsAdmin?: boolean;
   }
 }
 
@@ -27,5 +32,7 @@ declare module "next-auth/jwt" {
     driverId?: number;
     csAgentId?: number;
     csIsSupervisor?: boolean;
+    csRole?: CsAgentRole;
+    csIsAdmin?: boolean;
   }
 }

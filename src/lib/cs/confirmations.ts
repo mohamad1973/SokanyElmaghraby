@@ -699,11 +699,17 @@ export async function isOrderCsConfirmed(wooOrderId: number) {
 }
 
 export async function resolveCsViewer(agentId: number) {
-  const prisma = getPrismaClient();
-  if (!prisma) return { isSupervisor: false };
+  const { getCsAgentById, isElevatedCsRole, isCsAdminRole } = await import("@/lib/cs/agents");
   await ensureCsTables();
-  const agent = await prisma.csAgent.findUnique({ where: { id: agentId } });
-  if (!agent) return { isSupervisor: false };
-  const { isSupervisorAgent } = await import("@/lib/cs/agents");
-  return { isSupervisor: isSupervisorAgent(agent), agent };
+  const agent = await getCsAgentById(agentId);
+  if (!agent) {
+    return { isSupervisor: false, isAdmin: false, role: "agent" as const, agent: null };
+  }
+  const role = ((agent as { role?: string }).role || "agent") as "agent" | "supervisor" | "admin";
+  return {
+    isSupervisor: isElevatedCsRole(role),
+    isAdmin: isCsAdminRole(role),
+    role,
+    agent,
+  };
 }

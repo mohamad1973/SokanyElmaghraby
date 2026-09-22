@@ -87,17 +87,28 @@ function locMatch(haystack: string | null | undefined, needle: string) {
   return h === n || h.includes(n) || n.includes(h);
 }
 
+function phoneDigits(value: string | null | undefined) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 function searchableText(item: CsQueueItem) {
   const snap = item.customerSnapshot;
   const products = (snap?.items || []).map((i) => i.name).join(" ");
+  const phone = snap?.phone || "";
+  const digits = phoneDigits(phone);
+  const last10 = digits.length >= 10 ? digits.slice(-10) : digits;
   return [
     item.wooOrderNumber,
+    String(item.wooOrderId),
     item.status,
     item.shippingCompany,
     item.assignedAgent?.name,
     snap?.customerName,
-    snap?.phone,
+    phone,
+    digits,
+    last10,
     snap?.address,
+    snap?.addressFull,
     snap?.area,
     snap?.governorate,
     snap?.total,
@@ -110,11 +121,23 @@ function searchableText(item: CsQueueItem) {
     .toLowerCase();
 }
 
+function matchesSearchQuery(item: CsQueueItem, rawQuery: string) {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  const hay = searchableText(item);
+  if (hay.includes(q)) return true;
+  const qDigits = phoneDigits(q);
+  if (qDigits.length >= 4) {
+    const phone = phoneDigits(item.customerSnapshot?.phone);
+    if (phone.includes(qDigits) || phone.slice(-10).includes(qDigits.slice(-10))) return true;
+    if (String(item.wooOrderNumber).includes(qDigits) || String(item.wooOrderId).includes(qDigits)) return true;
+  }
+  return false;
+}
+
 function applyFilters(items: CsQueueItem[], f: DraftFilters) {
-  const q = f.query.trim().toLowerCase();
   return items
     .filter((item) => {
-      if (q && !searchableText(item).includes(q)) return false;
       if (f.status !== "all" && item.status !== f.status) return false;
       if (f.status === "CONFIRMED" && f.followUp !== "all") {
         if (f.followUp === "handed" && !item.handedToCarrier) return false;
@@ -128,8 +151,12 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters) {
       if (f.payment === "cod" && item.customerSnapshot?.paidOnlineHighlight) return false;
       if (f.shipping !== "all" && (item.shippingCompany || "") !== f.shipping) return false;
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
-      if (f.governorate && !locMatch(item.customerSnapshot?.governorate, f.governorate)) return false;
-      if (f.area && !locMatch(item.customerSnapshot?.area, f.area)) return false;
+      if (f.governorate && !locMatch(item.customerSnapshot?.governorate || item.customerSnapshot?.addressFull, f.governorate)) {
+        return false;
+      }
+      if (f.area && !locMatch(item.customerSnapshot?.area || item.customerSnapshot?.addressFull, f.area)) {
+        return false;
+      }
       if (f.dateFrom && f.dateTo) {
         if (!isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo)) return false;
       }
@@ -217,7 +244,16 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     return mergeAreaOptions(gov, fromOrders);
   }, [draft.governorate, items]);
 
-  const filtered = useMemo(() => applyFilters(items, applied), [items, applied]);
+  // Search is live and independent of other filters: when query is set, match all loaded items.
+  const filtered = useMemo(() => {
+    const q = draft.query.trim();
+    if (q) {
+      return items
+        .filter((item) => matchesSearchQuery(item, q))
+        .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+    }
+    return applyFilters(items, applied);
+  }, [items, draft.query, applied]);
 
   const printRows = useMemo(() => {
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
@@ -494,7 +530,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                 <p className="font-bold">لم يُوزَّع عليكِ نطاق بعد — اطلبي من المشرفة.</p>
               )
             ) : (
-              <p className="font-bold">لا توجد نتائج مطابقة — اضغطي «فلتر» بعد التعديل أو أعيدي الضبط.</p>
+              <p className="font-bold">لا توجد نتائج مطابقة للبحث أو الفلتر — جرّبي مسح البحث أو «إعادة».</p>
             )}
           </div>
         ) : (

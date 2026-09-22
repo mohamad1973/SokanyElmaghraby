@@ -147,6 +147,26 @@ function CsHeader() {
               توزيع
             </Link>
           ) : null}
+          {session?.user?.csIsSupervisor ? (
+            <Link
+              href="/cs/reports"
+              className={`rounded-full px-3 py-1.5 ${
+                pathname.startsWith("/cs/reports") ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
+              }`}
+            >
+              تقارير
+            </Link>
+          ) : null}
+          {session?.user?.csIsAdmin ? (
+            <Link
+              href="/cs/users"
+              className={`rounded-full px-3 py-1.5 ${
+                pathname.startsWith("/cs/users") ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
+              }`}
+            >
+              المستخدمون
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/cs/login" })}
@@ -193,8 +213,9 @@ export function CsLoginForm() {
     setError("");
 
     const formData = new FormData(event.currentTarget);
+    const username = String(formData.get("username") || "").trim();
     const result = await signIn("cs-credentials", {
-      email: formData.get("email"),
+      email: username,
       password: formData.get("password"),
       redirect: false,
       callbackUrl: "/cs",
@@ -218,7 +239,7 @@ export function CsLoginForm() {
 
     const formData = new FormData(event.currentTarget);
     const name = String(formData.get("name") || "").trim();
-    const email = String(formData.get("email") || "").trim();
+    const username = String(formData.get("username") || "").trim();
     const password = String(formData.get("password") || "");
     const confirm = String(formData.get("confirm") || "");
 
@@ -231,7 +252,7 @@ export function CsLoginForm() {
     const res = await fetch("/api/cs/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, username, password }),
     });
     const data = (await res.json()) as { message?: string };
 
@@ -242,7 +263,7 @@ export function CsLoginForm() {
     }
 
     const result = await signIn("cs-credentials", {
-      email,
+      email: username,
       password,
       redirect: false,
       callbackUrl: "/cs",
@@ -300,11 +321,11 @@ export function CsLoginForm() {
           <div>
             <p className="text-sm font-bold text-[var(--cs-gold)]">Tooliano CS</p>
             <h1 className="mt-1 text-3xl font-extrabold">دخول خدمة العملاء</h1>
-            <p className="mt-2 text-sm text-white/70">ادخلي بإيميلك وكلمة المرور.</p>
+            <p className="mt-2 text-sm text-white/70">اليوزرنيم وكلمة المرور فقط.</p>
           </div>
           <label className="grid gap-2 text-sm font-bold">
-            البريد الإلكتروني (اليوزر)
-            <input name="email" type="email" required className={inputClass} dir="ltr" />
+            اليوزرنيم
+            <input name="username" type="text" required autoComplete="username" className={inputClass} dir="ltr" />
           </label>
           <label className="grid gap-2 text-sm font-bold">
             كلمة المرور
@@ -327,15 +348,24 @@ export function CsLoginForm() {
           <div>
             <p className="text-sm font-bold text-[var(--cs-gold)]">Tooliano CS</p>
             <h1 className="mt-1 text-3xl font-extrabold">إنشاء حساب جديد</h1>
-            <p className="mt-2 text-sm text-white/70">كل مسؤول يعمل حسابه باسمه الظاهر فوق الداشبورد.</p>
+            <p className="mt-2 text-sm text-white/70">اسم ظاهر + يوزرنيم + باسورد (بدون إيميل).</p>
           </div>
           <label className="grid gap-2 text-sm font-bold">
             الاسم الظاهر
             <input name="name" type="text" required minLength={2} className={inputClass} placeholder="مثال: سارة" />
           </label>
           <label className="grid gap-2 text-sm font-bold">
-            البريد الإلكتروني (اليوزر)
-            <input name="email" type="email" required className={inputClass} dir="ltr" placeholder="name@example.com" />
+            اليوزرنيم
+            <input
+              name="username"
+              type="text"
+              required
+              minLength={2}
+              autoComplete="username"
+              className={inputClass}
+              dir="ltr"
+              placeholder="sara"
+            />
           </label>
           <label className="grid gap-2 text-sm font-bold">
             كلمة المرور

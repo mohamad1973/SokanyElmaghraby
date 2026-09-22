@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ensureCsTables, ensureDefaultCsAgent, listCsAgents } from "@/lib/cs/agents";
+import { ensureCsTables, ensureDefaultCsAgent, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -22,7 +22,7 @@ export default async function CsHomePage() {
   });
   const initialItems = rows.map(serializeCsQueueItem);
   const agents = isSupervisor
-    ? (await listCsAgents()).map((a) => ({ id: a.id, name: a.name }))
+    ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
 
   return <CsQueueClient initialItems={initialItems} isSupervisor={isSupervisor} agents={agents} />;
