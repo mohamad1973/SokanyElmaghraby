@@ -58,7 +58,7 @@ export default async function CsReportsPage() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+      <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
         <table className="min-w-full text-sm">
           <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
             <tr>

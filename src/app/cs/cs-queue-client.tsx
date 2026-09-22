@@ -320,38 +320,41 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
 
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="no-print flex flex-wrap items-end justify-between gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/15">
-        <div>
-          <h1 className="text-2xl font-extrabold text-[#14213D]">قائمة تأكيد الطلبات</h1>
+      <div className="no-print flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:p-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">قائمة تأكيد الطلبات</h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
             عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span> من
             أصل {items.length}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
           {isSupervisor ? (
-            <Link href="/cs/assign" className="rounded-xl bg-[#14213D] px-4 py-2.5 text-sm font-extrabold text-white">
-              توزيع الأوردرات
+            <Link
+              href="/cs/assign"
+              className="shrink-0 rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white sm:px-4 sm:py-2.5 sm:text-sm"
+            >
+              توزيع
             </Link>
           ) : null}
           <button
             type="button"
             onClick={() => setPrintMode("bosta")}
-            className="rounded-xl bg-black px-3 py-2.5 text-sm font-extrabold text-white"
+            className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
           >
             طباعة بوسطة
           </button>
           <button
             type="button"
             onClick={() => setPrintMode("sayed_temima")}
-            className="rounded-xl bg-black px-3 py-2.5 text-sm font-extrabold text-white"
+            className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
           >
-            طباعة سيد تميمة
+            طباعة تميمة
           </button>
           <button
             type="button"
             onClick={() => setPrintMode("all")}
-            className="rounded-xl bg-[#E5E5E5] px-3 py-2.5 text-sm font-extrabold text-[#14213D]"
+            className="shrink-0 rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D] sm:py-2.5 sm:text-sm"
           >
             طباعة الكل
           </button>
@@ -359,9 +362,9 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             type="button"
             disabled={loading}
             onClick={() => void syncOrders()}
-            className="rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black disabled:opacity-60"
+            className="shrink-0 rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
           >
-            {loading ? "جاري المزامنة..." : "مزامنة"}
+            {loading ? "مزامنة..." : "مزامنة"}
           </button>
         </div>
       </div>

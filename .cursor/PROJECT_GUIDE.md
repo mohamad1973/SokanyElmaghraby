@@ -425,6 +425,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS موبايل + PWA | داشبورد CS مناسب للموبايل؛ manifest `/cs`؛ نافذة تثبيت أول فتح على الشاشة الرئيسية | `cs-manifest.webmanifest`, `cs-pwa-install-prompt.tsx`, `cs/layout.tsx`, `cs-shell.tsx` |
 | CS يوزرنيم + أدوار + بحث فوري | بحث مستقل عن الفلتر؛ تسجيل يوزرنيم/باسورد؛ أدوار agent/supervisor/admin؛ أدمن mm/123456 لـ /cs و/admin؛ صفحة /cs/users و/cs/reports | `agents.ts`, `auth.ts`, `cs-queue-client.tsx`, `cs/users`, `cs/reports` |
 | CS موقع + تقسيم نطاقات | إخفاء محافظة/منطقة عند أكواد (25/EG)؛ تقسيم عادل بنطاقات متتالية غير متداخلة؛ تصغير تشك بوكس الشحن | `resolve-location.ts`, `assignments.ts`, `cs-queue-client.tsx`, `assign-client.tsx` |
 | يوزرات CS متعددة + اسم في الهيدر | تسجيل ذاتي من `/cs/login`؛ عرض اسم الوكيلة فوق الداشبورد | `api/cs/register`, `cs-shell.tsx`, `middleware.ts` |

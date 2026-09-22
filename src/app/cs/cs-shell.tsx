@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
 
+import { CsPwaInstallPrompt } from "@/components/cs-pwa-install-prompt";
+
 type NotifPayload = {
   handedToCarrier: Array<{ id: number; wooOrderNumber: string }>;
   confirmDelivery: Array<{ id: number; wooOrderNumber: string }>;
@@ -120,57 +122,45 @@ function CsHeader() {
   const { data: session } = useSession();
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
 
+  const navClass = (active: boolean) =>
+    `shrink-0 rounded-full px-3 py-1.5 whitespace-nowrap ${
+      active ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
+    }`;
+
   return (
-    <header className="sticky top-0 z-20 border-b border-black/20 px-4 py-3 shadow-md" style={{ background: "var(--cs-navy)" }}>
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 text-white">
-        <div>
-          <p className="text-lg font-extrabold tracking-tight">مرحباً، {agentName}</p>
-          <p className="text-xs text-white/70">خدمة العملاء · تأكيد الطلبات بالمكالمة</p>
+    <header
+      className="sticky top-0 z-20 border-b border-black/20 px-3 py-2.5 shadow-md sm:px-4 sm:py-3"
+      style={{ background: "var(--cs-navy)" }}
+    >
+      <div className="mx-auto flex max-w-7xl flex-col gap-2 text-white sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">مرحباً، {agentName}</p>
+          <p className="text-[11px] text-white/70 sm:text-xs">خدمة العملاء · تأكيد الطلبات بالمكالمة</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm font-bold">
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CsNotificationsBell />
-          <Link
-            href="/cs"
-            className={`rounded-full px-3 py-1.5 ${
-              pathname === "/cs" ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
-            }`}
-          >
-            قائمة الانتظار
+          <Link href="/cs" className={navClass(pathname === "/cs")}>
+            القائمة
           </Link>
           {session?.user?.csIsSupervisor ? (
-            <Link
-              href="/cs/assign"
-              className={`rounded-full px-3 py-1.5 ${
-                pathname.startsWith("/cs/assign") ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
-              }`}
-            >
+            <Link href="/cs/assign" className={navClass(pathname.startsWith("/cs/assign"))}>
               توزيع
             </Link>
           ) : null}
           {session?.user?.csIsSupervisor ? (
-            <Link
-              href="/cs/reports"
-              className={`rounded-full px-3 py-1.5 ${
-                pathname.startsWith("/cs/reports") ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
-              }`}
-            >
+            <Link href="/cs/reports" className={navClass(pathname.startsWith("/cs/reports"))}>
               تقارير
             </Link>
           ) : null}
           {session?.user?.csIsAdmin ? (
-            <Link
-              href="/cs/users"
-              className={`rounded-full px-3 py-1.5 ${
-                pathname.startsWith("/cs/users") ? "bg-[var(--cs-gold)] text-black" : "bg-white/10 hover:bg-white/20"
-              }`}
-            >
+            <Link href="/cs/users" className={navClass(pathname.startsWith("/cs/users"))}>
               المستخدمون
             </Link>
           ) : null}
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/cs/login" })}
-            className="rounded-full bg-black/50 px-3 py-1.5 hover:bg-black/70"
+            className="shrink-0 rounded-full bg-black/50 px-3 py-1.5 hover:bg-black/70"
           >
             خروج
           </button>
@@ -185,8 +175,12 @@ export function CsShell({ children }: { children: ReactNode }) {
 
   if (pathname === "/cs/login") {
     return (
-      <div className="min-h-screen text-white" style={{ ...CS_VARS, background: "linear-gradient(160deg, #000000 0%, #14213D 55%, #000000 120%)" }}>
+      <div
+        className="min-h-screen text-white"
+        style={{ ...CS_VARS, background: "linear-gradient(160deg, #000000 0%, #14213D 55%, #000000 120%)" }}
+      >
         {children}
+        <CsPwaInstallPrompt />
       </div>
     );
   }
@@ -195,7 +189,8 @@ export function CsShell({ children }: { children: ReactNode }) {
     <SessionProvider>
       <div className="min-h-screen text-[var(--cs-navy)]" dir="rtl" style={{ ...CS_VARS, background: "var(--cs-gray)" }}>
         <CsHeader />
-        <main className="mx-auto max-w-7xl p-4 sm:p-6">{children}</main>
+        <main className="mx-auto max-w-7xl p-3 sm:p-6">{children}</main>
+        <CsPwaInstallPrompt />
       </div>
     </SessionProvider>
   );
