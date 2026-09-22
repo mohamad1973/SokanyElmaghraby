@@ -117,7 +117,7 @@
 | تثبيت نظيف OTP + lost-password | انظر قسم «تثبيت نظيف من هوستنجر» تحت بلجنات ووردبريس |
 | تنسيق Cart/Checkout في Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php` |
 | مقارنة منتجات Woo فقط | Code Snippets ← `wordpress-plugin/snippets/sokany-product-compare-v1.1.3.php` |
-| ارتباط صور المكتبة (فلتر/CSV) | Code Snippets ← `wordpress-plugin/snippets/sokany-media-usage-badge-v1.1.php` (عطّل v1.0) |
+| ارتباط صور المكتبة (فلتر/CSV) | Code Snippets ← `wordpress-plugin/snippets/sokany-media-usage-badge-v1.2.php` (عطّل v1.1/v1.0) |
 | عملاء / أرقام موبايل | **Users** → حقول `billing_phone`, `phone`, `mobile` |
 | JWT Authentication | بلجن JWT في ووردبريس |
 
@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| Media Usage Badge v1.2 | فحص صورة واحدة/المحدد من قائمة المكتبة (AJAX) + ملاحظات تحت الشارة بدون فتح روابط؛ يبقى الفلتر والتقارير | `wordpress-plugin/snippets/sokany-media-usage-badge-v1.2.php`, `snippets/README.md` |
 | Media Usage Badge v1.1 | عمود كاش فقط + «لم يُفحص»؛ فحص دفعات ~8/~8ث من التقارير؛ بدون postmeta LIKE (يصلح تعليق/404 Hostinger من v1.0) | `wordpress-plugin/snippets/sokany-media-usage-badge-v1.1.php`, `snippets/README.md` |
 | CS صلاحية التحويلات + تنبيهات مخزون | دور `transfers`؛ `/cs/transfers` مخزون/موديل/حد طلب؛ جرس + واتساب + كرون hourly | `agents.ts`, `stock-alerts.ts`, `cs/transfers`, `api/cron/check-stock-alerts` |
 | CS تحويلات تحليلات + أدمن إضافي | دوران/راكد/تسليم/مرتجع يدوي+بوسطة؛ توصيات طلب/إعلان؛ إنشاء أدمن CS من /cs/users | `transfers-analytics.ts`, `transfers-client`, `CsReturnEvent`, `api/cs/transfers/*` |

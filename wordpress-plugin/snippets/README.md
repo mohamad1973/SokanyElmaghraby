@@ -5,33 +5,33 @@
 
 ---
 
-## 0) SOKANY Media Usage Badge v1.1 (`sokany-eg.com`) — ارتباط صور المكتبة
+## 0) SOKANY Media Usage Badge v1.2 (`sokany-eg.com`) — ارتباط صور المكتبة
 
-ملف: [`sokany-media-usage-badge-v1.1.php`](sokany-media-usage-badge-v1.1.php)  
-(قديم — لا تفعّليه: [`sokany-media-usage-badge-v1.0.php`](sokany-media-usage-badge-v1.0.php))
+ملف: [`sokany-media-usage-badge-v1.2.php`](sokany-media-usage-badge-v1.2.php)  
+(قديم — لا تفعّلي: v1.1 / v1.0)
 
-### لماذا v1.1؟
+### الطريقة الأسهل يومياً (بدون فتح روابط)
 
-v1.0 كان يفحص كل صورة تلقائياً عند فتح المكتبة (استعلامات `LIKE` ثقيلة) → تعليق طويل ثم 404 على Hostinger.  
-v1.1 يعرض الكاش فقط في المكتبة، والفحص فقط من صفحة التقارير بدفعات صغيرة (~8 صور / ~8 ثوانٍ).
+1. Media → Library → **List view**
+2. بجانب أي صورة: اضغطي **فحص** → تظهر الشارة + اسم المنتج تحتها فوراً
+3. أو حدّدي عدة صور → **فحص المحدد** (حد 5 لكل ضغطة)
 
 ### ماذا يفعل؟
 
-- عمود **الارتباط** في Media Library (عرض القائمة): مرتبطة 100% / راجعي / غير مرتبطة / **لم يُفحص بعد**
-- فلتر أعلى القائمة حسب التصنيف (بعد الفحص)
-- صفحة **Media → تقارير الارتباط**: دفعات فحص خفيفة + جداول + تصدير CSV
-- بدون حذف تلقائي وبدون مسح `postmeta` العام
+- عمود **الارتباط** + ملاحظات ظاهرة تحت الشارة (بدون hover وبدون فتح المرفق)
+- فحص AJAX لصورة واحدة أو للمحدد
+- فلتر: مرتبطة / راجعي / غير مرتبطة
+- صفحة **تقارير الارتباط** + CSV للدفعات الجماعية
+- بدون حذف تلقائي وبدون فحص ثقيل عند فتح المكتبة
 
-### التثبيت (استبدال v1.0)
+### التثبيت (استبدال v1.1 / v1.0)
 
-1. Snippets → **عطّل أو احذف** `SOKANY Media Usage Badge v1.0` فوراً
-2. Add New → Title: `SOKANY Media Usage Badge v1.1`
-3. الصق محتوى `sokany-media-usage-badge-v1.1.php` **بدون** `<?php`
+1. Snippets → **عطّل أو احذف** أي `SOKANY Media Usage Badge` أقدم
+2. Add New → Title: `SOKANY Media Usage Badge v1.2`
+3. الصق محتوى `sokany-media-usage-badge-v1.2.php` **بدون** `<?php`
 4. Run: **Only run in administration area**
 5. Save & Activate
-6. Media → **تقارير الارتباط** → اضغطي «فحص / متابعة دفعة صغيرة» مراراً حتى يكتمل
-7. بعدها Media → Library → **List view** لرؤية الشارات والفلتر
-
+6. Media → Library → **List view** → فحص / فحص المحدد
 ---
 
 ## 1) SOKANY Contact Form v1.1.3 (`sokany-eg.com`)
