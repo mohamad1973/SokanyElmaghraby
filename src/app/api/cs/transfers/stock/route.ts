@@ -9,6 +9,8 @@ import {
 } from "@/lib/reorder-report";
 import { requireCsSession } from "@/lib/session-guards";
 
+export const maxDuration = 60;
+
 async function requireTransfersAccess() {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) return null;
@@ -42,11 +44,12 @@ export async function GET(request: Request) {
           ? categoryId
           : undefined,
       stockStatus,
+      bypassCache: searchParams.get("refresh") === "1",
     });
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر جلب تقرير المخزون.";
-    return NextResponse.json({ message }, { status: 502 });
+    return NextResponse.json({ message, products: [], categories: [] }, { status: 502 });
   }
 }
 

@@ -135,12 +135,25 @@ export function CsTransfersClient() {
     if (categoryId) qs.set("categoryId", categoryId);
     try {
       const res = await fetch(`/api/cs/transfers/stock?${qs.toString()}`);
-      const data = (await res.json()) as {
+      const text = await res.text();
+      if (!text.trim()) {
+        setMessage("تعذر جلب المنتجات من الموقع (رد فارغ). جرّب تحديث الصفحة بعد قليل.");
+        setLoading(false);
+        return;
+      }
+      let data: {
         products?: StockProduct[];
         categories?: StockCategory[];
         fetchedAt?: string;
         message?: string;
       };
+      try {
+        data = JSON.parse(text) as typeof data;
+      } catch {
+        setMessage("تعذر جلب المنتجات من الموقع. الرد غير صالح — غالباً مهلة السيرفر.");
+        setLoading(false);
+        return;
+      }
       if (!res.ok) {
         setMessage(data.message || "تعذر التحميل.");
         setLoading(false);
@@ -152,6 +165,9 @@ export function CsTransfersClient() {
       const drafts: Record<number, string> = {};
       for (const p of data.products || []) drafts[p.id] = String(p.threshold);
       setDraftThresholds(drafts);
+      if (!(data.products || []).length) {
+        setMessage("لا توجد منتجات منشورة من Woo حالياً.");
+      }
     } catch {
       setMessage("تعذر الاتصال بالخادم.");
     }
@@ -162,7 +178,20 @@ export function CsTransfersClient() {
     setAnalyticsLoading(true);
     try {
       const res = await fetch(`/api/cs/transfers/analytics${refresh ? "?refresh=1" : ""}`);
-      const data = (await res.json()) as AnalyticsPayload;
+      const text = await res.text();
+      if (!text.trim()) {
+        setMessage("تعذر جلب التحليلات (رد فارغ).");
+        setAnalyticsLoading(false);
+        return;
+      }
+      let data: AnalyticsPayload;
+      try {
+        data = JSON.parse(text) as AnalyticsPayload;
+      } catch {
+        setMessage("تعذر جلب التحليلات — رد غير صالح.");
+        setAnalyticsLoading(false);
+        return;
+      }
       if (!res.ok) {
         setMessage(data.message || "تعذر جلب التحليلات.");
       } else {

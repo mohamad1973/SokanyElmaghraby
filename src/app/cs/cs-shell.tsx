@@ -150,8 +150,18 @@ function CsHeader() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
-  const isTransfersOnly = Boolean(session?.user?.csIsTransfers);
-  const canTransfers = Boolean(session?.user?.csCanAccessTransfers || session?.user?.csIsTransfers);
+  const role = session?.user?.csRole || "";
+  const isTransfersOnly = Boolean(session?.user?.csIsTransfers) && !session?.user?.csIsAdmin && !session?.user?.csIsSupervisor;
+  const canTransfers = Boolean(
+    session?.user?.csIsAdmin ||
+      session?.user?.csIsSupervisor ||
+      session?.user?.csIsTransfers ||
+      session?.user?.csCanAccessTransfers ||
+      role === "admin" ||
+      role === "supervisor" ||
+      role === "transfers",
+  );
+  const showOrdersQueue = !isTransfersOnly;
 
   const navClass = (active: boolean) =>
     `shrink-0 rounded-full px-3 py-1.5 whitespace-nowrap ${
@@ -167,14 +177,16 @@ function CsHeader() {
         <div className="min-w-0">
           <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">مرحباً، {agentName}</p>
           <p className="text-[11px] text-white/70 sm:text-xs">
-            {isTransfersOnly ? "التحويلات · مخزون الموقع وحد الطلب" : "خدمة العملاء · تأكيد الطلبات بالمكالمة"}
+            {isTransfersOnly
+              ? "التحويلات · مخزون الموقع وحد الطلب"
+              : "خدمة العملاء · الأوردرات والتحويلات"}
           </p>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CsNotificationsBell />
-          {!isTransfersOnly ? (
+          {showOrdersQueue ? (
             <Link href="/cs" className={navClass(pathname === "/cs")}>
-              القائمة
+              الأوردرات
             </Link>
           ) : null}
           {canTransfers ? (

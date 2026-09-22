@@ -6,6 +6,10 @@ const siteUrl = process.env.WOOCOMMERCE_STORE_URL || "https://sokany-eg.com";
 const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY;
 const consumerSecret = process.env.WOOCOMMERCE_CONSUMER_SECRET;
 
+const PRODUCT_FIELDS =
+  "id,name,sku,manage_stock,stock_quantity,low_stock_amount,stock_status,categories";
+const CATEGORY_FIELDS = "id,name,parent,count";
+
 export type ReorderProduct = {
   id: number;
   name: string;
@@ -56,12 +60,33 @@ type WooCategoryRow = {
   count?: number;
 };
 
+type CatalogCache = {
+  at: number;
+  products: ReorderProduct[];
+  categories: ReorderCategory[];
+};
+
+const CACHE_MS = 5 * 60 * 1000;
+let catalogCache: CatalogCache | null = null;
+
 function hasWooCredentials() {
   return Boolean(siteUrl && consumerKey && consumerSecret);
 }
 
 function authHeader() {
   return `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
+}
+
+async function readJsonBody<T>(response: Response, label: string): Promise<T> {
+  const text = await response.text().catch(() => "");
+  if (!text.trim()) {
+    throw new Error(`WooCommerce ${response.status}: رد فارغ عند جلب ${label}.`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`WooCommerce ${response.status}: رد غير صالح عند جلب ${label}.`);
+  }
 }
 
 async function wooGetPage(page: number): Promise<WooStockProduct[]> {
@@ -75,6 +100,7 @@ async function wooGetPage(page: number): Promise<WooStockProduct[]> {
   url.searchParams.set("status", "publish");
   url.searchParams.set("orderby", "title");
   url.searchParams.set("order", "asc");
+  url.searchParams.set("_fields", PRODUCT_FIELDS);
 
   const response = await fetch(url, {
     headers: { Authorization: authHeader() },
@@ -82,10 +108,13 @@ async function wooGetPage(page: number): Promise<WooStockProduct[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`WooCommerce ${response.status}: تعذر جلب المنتجات للمخزون.`);
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      `WooCommerce ${response.status}: تعذر جلب المنتجات للمخزون. ${body.slice(0, 120)}`,
+    );
   }
 
-  return (await response.json()) as WooStockProduct[];
+  return readJsonBody<WooStockProduct[]>(response, "المنتجات");
 }
 
 async function wooGetCategories(): Promise<ReorderCategory[]> {
@@ -103,6 +132,7 @@ async function wooGetCategories(): Promise<ReorderCategory[]> {
     url.searchParams.set("hide_empty", "false");
     url.searchParams.set("orderby", "name");
     url.searchParams.set("order", "asc");
+    url.searchParams.set("_fields", CATEGORY_FIELDS);
 
     const response = await fetch(url, {
       headers: { Authorization: authHeader() },
@@ -113,7 +143,7 @@ async function wooGetCategories(): Promise<ReorderCategory[]> {
       throw new Error(`WooCommerce ${response.status}: تعذر جلب التصنيفات.`);
     }
 
-    const batch = (await response.json()) as WooCategoryRow[];
+    const batch = await readJsonBody<WooCategoryRow[]>(response, "التصنيفات");
     if (!batch.length) {
       break;
     }
@@ -137,11 +167,8 @@ async function wooGetCategories(): Promise<ReorderCategory[]> {
   return all.sort((a, b) => a.name.localeCompare(b.name, "ar"));
 }
 
-function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
-  if (!product.manage_stock) {
-    return null;
-  }
-
+function mapReorderProduct(product: WooStockProduct): ReorderProduct {
+  const manageStock = Boolean(product.manage_stock);
   const stockQuantity = Number(product.stock_quantity ?? 0);
   const thresholdRaw = product.low_stock_amount;
   const threshold =
@@ -164,8 +191,8 @@ function mapReorderProduct(product: WooStockProduct): ReorderProduct | null {
     model,
     stockQuantity: qty,
     threshold: thresholdSafe,
-    stockStatus: product.stock_status || "instock",
-    manageStock: true,
+    stockStatus: product.stock_status || (qty > 0 ? "instock" : "outofstock"),
+    manageStock,
     isAtOrBelowThreshold,
     suggestedTransferQty,
     categoryIds: categories.map((category) => category.id),
@@ -181,16 +208,9 @@ function matchesStockStatus(stockStatus: string, filter: StockStatusFilter) {
   return stockStatus === "outofstock" || stockStatus === "onbackorder";
 }
 
-export async function getReorderProducts(options?: {
-  lowOnly?: boolean;
-  search?: string;
-  categoryId?: number;
-  stockStatus?: StockStatusFilter;
-}): Promise<{ products: ReorderProduct[]; categories: ReorderCategory[]; fetchedAt: string }> {
-  if (!hasWooCredentials()) {
-    throw new Error(
-      "مفاتيح WooCommerce غير موجودة. أضف WOOCOMMERCE_STORE_URL و Consumer Key/Secret ثم أعد النشر.",
-    );
+async function loadFullCatalog(): Promise<{ products: ReorderProduct[]; categories: ReorderCategory[] }> {
+  if (catalogCache && Date.now() - catalogCache.at < CACHE_MS) {
+    return { products: catalogCache.products, categories: catalogCache.categories };
   }
 
   const [categories, allProducts] = await Promise.all([
@@ -206,10 +226,8 @@ export async function getReorderProducts(options?: {
         }
 
         for (const product of batch) {
-          const mapped = mapReorderProduct(product);
-          if (mapped) {
-            all.push(mapped);
-          }
+          if (!product?.id) continue;
+          all.push(mapReorderProduct(product));
         }
 
         if (batch.length < 100) {
@@ -223,7 +241,34 @@ export async function getReorderProducts(options?: {
     })(),
   ]);
 
-  let products = allProducts;
+  catalogCache = { at: Date.now(), products: allProducts, categories };
+  return { products: allProducts, categories };
+}
+
+export function invalidateReorderCatalogCache() {
+  catalogCache = null;
+}
+
+export async function getReorderProducts(options?: {
+  lowOnly?: boolean;
+  search?: string;
+  categoryId?: number;
+  stockStatus?: StockStatusFilter;
+  bypassCache?: boolean;
+}): Promise<{ products: ReorderProduct[]; categories: ReorderCategory[]; fetchedAt: string }> {
+  if (!hasWooCredentials()) {
+    throw new Error(
+      "مفاتيح WooCommerce غير موجودة. أضف WOOCOMMERCE_STORE_URL و Consumer Key/Secret ثم أعد النشر.",
+    );
+  }
+
+  if (options?.bypassCache) {
+    catalogCache = null;
+  }
+
+  const { products: catalogProducts, categories } = await loadFullCatalog();
+
+  let products = catalogProducts;
   const search = options?.search?.trim().toLowerCase();
   const categoryId = options?.categoryId;
   const stockStatus = options?.stockStatus;
@@ -249,7 +294,7 @@ export async function getReorderProducts(options?: {
     products = products.filter((item) => item.isAtOrBelowThreshold);
   }
 
-  products.sort((a, b) => {
+  products = [...products].sort((a, b) => {
     if (a.isAtOrBelowThreshold !== b.isAtOrBelowThreshold) {
       return a.isAtOrBelowThreshold ? -1 : 1;
     }
@@ -274,6 +319,7 @@ export async function updateProductReorderThreshold(
 
   const safeThreshold = Math.max(0, Math.floor(threshold));
   const url = new URL(`/wp-json/wc/v3/products/${productId}`, siteUrl);
+  url.searchParams.set("_fields", PRODUCT_FIELDS);
 
   try {
     const response = await fetch(url, {
@@ -295,13 +341,19 @@ export async function updateProductReorderThreshold(
       return { ok: false, message: `WooCommerce ${response.status}: ${body.slice(0, 220)}` };
     }
 
-    const updated = JSON.parse(body) as WooStockProduct;
-    const mapped = mapReorderProduct({ ...updated, manage_stock: true });
-
-    if (!mapped) {
-      return { ok: false, message: "تم الحفظ لكن تعذر قراءة المنتج بعد التحديث." };
+    if (!body.trim()) {
+      return { ok: false, message: "تم الحفظ لكن رد WooCommerce فارغ." };
     }
 
+    let updated: WooStockProduct;
+    try {
+      updated = JSON.parse(body) as WooStockProduct;
+    } catch {
+      return { ok: false, message: "تم الحفظ لكن تعذر قراءة رد WooCommerce." };
+    }
+
+    const mapped = mapReorderProduct({ ...updated, manage_stock: true });
+    invalidateReorderCatalogCache();
     return { ok: true, product: mapped };
   } catch {
     return { ok: false, message: "تعذر الاتصال بـ WooCommerce." };
