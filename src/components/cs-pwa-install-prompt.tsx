@@ -116,7 +116,7 @@ export function CsPwaInstallPrompt() {
     >
       <div className="flex items-start gap-3">
         <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-black ring-1 ring-white/10">
-          <Image src="/icon-192.png" alt="Tooliano CS" fill className="object-cover" sizes="48px" />
+          <Image src="/icon-192.png" alt="sokany.cs" fill className="object-cover" sizes="48px" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-extrabold text-[#FCA311]">ثبّت sokany.cs</p>

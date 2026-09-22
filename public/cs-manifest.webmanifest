@@ -1,8 +1,8 @@
 {
   "id": "https://cs.tooliano.com/cs",
-  "name": "Tooliano خدمة العملاء",
-  "short_name": "CS توليانو",
-  "description": "داشبورد تأكيد وتوزيع طلبات العملاء — Tooliano CS (منفصل عن المتجر)",
+  "name": "sokany.cs",
+  "short_name": "sokany.cs",
+  "description": "داشبورد تأكيد وتوزيع طلبات العملاء — sokany.cs (منفصل عن المتجر)",
   "start_url": "/cs?source=pwa",
   "scope": "/cs",
   "display": "standalone",
