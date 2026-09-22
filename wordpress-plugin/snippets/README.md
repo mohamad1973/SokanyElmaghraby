@@ -5,7 +5,29 @@
 
 ---
 
-## 0) SOKANY Contact Form v1.1.3 (`sokany-eg.com`) — الحالي
+## 0) SOKANY Media Usage Badge v1.0 (`sokany-eg.com`) — ارتباط صور المكتبة
+
+ملف: [`sokany-media-usage-badge-v1.0.php`](sokany-media-usage-badge-v1.0.php)
+
+### ماذا يفعل؟
+
+- عمود **الارتباط** في Media Library (عرض القائمة): مرتبطة 100% / راجعي / غير مرتبطة
+- فلتر أعلى القائمة حسب التصنيف
+- صفحة **Media → تقارير الارتباط**: جداول + تصدير CSV لكل تصنيف على حدة
+- فحص على دفعات (بدون حذف تلقائي)
+
+### التثبيت
+
+1. Snippets → Add New → Title: `SOKANY Media Usage Badge v1.0`
+2. الصق الملف **بدون** `<?php`
+3. Run: **Only run in administration area**
+4. Save & Activate
+5. Media → Library → حوّلي لـ **List view** لرؤية العمود والفلتر
+6. Media → **تقارير الارتباط** → اضغطي «فحص المكتبة» عدة مرات حتى يكتمل، ثم صدّري CSV
+
+---
+
+## 1) SOKANY Contact Form v1.1.3 (`sokany-eg.com`)
 
 ملف: [`sokany-contact-form-v1.1.3.php`](sokany-contact-form-v1.1.3.php)
 
@@ -27,7 +49,7 @@
 
 ---
 
-## 1) CMaster Mobile Overflow Fix v1.0 (`cmaster-eg.com`)
+## 2) CMaster Mobile Overflow Fix v1.0 (`cmaster-eg.com`)
 
 ### لو تستخدم HFCM (Header Footer Code Manager) — الموصى به عندك
 
