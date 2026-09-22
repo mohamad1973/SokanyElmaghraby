@@ -160,6 +160,29 @@ async function runEnsureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsReturnEvent\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`wooOrderId\` INT NULL,
+      \`wooOrderNumber\` VARCHAR(191) NOT NULL DEFAULT '',
+      \`productId\` INT NOT NULL,
+      \`productName\` VARCHAR(191) NOT NULL,
+      \`sku\` VARCHAR(191) NOT NULL DEFAULT '',
+      \`quantity\` INT NOT NULL DEFAULT 1,
+      \`reason\` VARCHAR(191) NOT NULL,
+      \`reasonNote\` TEXT NULL,
+      \`isManufacturingDefect\` BOOLEAN NOT NULL DEFAULT false,
+      \`source\` VARCHAR(32) NOT NULL DEFAULT 'manual',
+      \`createdByAgentId\` INT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL,
+      INDEX \`CsReturnEvent_productId_idx\`(\`productId\`),
+      INDEX \`CsReturnEvent_createdAt_idx\`(\`createdAt\`),
+      INDEX \`CsReturnEvent_isManufacturingDefect_idx\`(\`isManufacturingDefect\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",

@@ -428,6 +428,7 @@
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
 | CS صلاحية التحويلات + تنبيهات مخزون | دور `transfers`؛ `/cs/transfers` مخزون/موديل/حد طلب؛ جرس + واتساب + كرون hourly | `agents.ts`, `stock-alerts.ts`, `cs/transfers`, `api/cron/check-stock-alerts` |
+| CS تحويلات تحليلات + أدمن إضافي | دوران/راكد/تسليم/مرتجع يدوي+بوسطة؛ توصيات طلب/إعلان؛ إنشاء أدمن CS من /cs/users | `transfers-analytics.ts`, `transfers-client`, `CsReturnEvent`, `api/cs/transfers/*` |
 | CS حالة دفع حقيقية + فلتر 30 يوم | شارات مدفوع/تحت الدفع/عند الاستلام حسب Woo status و date_paid؛ فلتر تاريخ افتراضي يومين وحد أقصى 30 يوماً | `order-window.ts`, `orders.ts`, `confirmations.ts`, `cs-queue-client.tsx`, `assignments.ts` |
 | CS تطبيق منفصل cs.tooliano.com | PWA مستقل عن متجر Tooliano؛ توجيه host؛ بطاقة تثبيت v2؛ cs-sw + cs-manifest | `middleware.ts`, `cs-manifest.webmanifest`, `cs-sw.js`, `cs-pwa-install-prompt.tsx` |
 | CS موبايل + PWA | داشبورد CS مناسب للموبايل؛ manifest `/cs`؛ نافذة تثبيت أول فتح على الشاشة الرئيسية | `cs-manifest.webmanifest`, `cs-pwa-install-prompt.tsx`, `cs/layout.tsx`, `cs-shell.tsx` |

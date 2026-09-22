@@ -327,3 +327,24 @@ model CsStockAlert {
   @@index([productId])
   @@index([resolvedAt])
 }
+
+model CsReturnEvent {
+  id                      Int      @id @default(autoincrement())
+  wooOrderId              Int?
+  wooOrderNumber          String   @default("")
+  productId               Int
+  productName             String
+  sku                     String   @default("")
+  quantity                Int      @default(1)
+  reason                  String
+  reasonNote              String?  @db.Text
+  isManufacturingDefect   Boolean  @default(false)
+  source                  String   @default("manual")
+  createdByAgentId        Int?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([productId])
+  @@index([createdAt])
+  @@index([isManufacturingDefect])
+}

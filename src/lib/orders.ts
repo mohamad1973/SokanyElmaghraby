@@ -41,6 +41,7 @@ export type WooOrder = {
     total: string;
     price: number;
     sku?: string;
+    product_id?: number;
   }>;
 };
 

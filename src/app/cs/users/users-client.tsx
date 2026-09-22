@@ -104,7 +104,7 @@ export function CsUsersClient() {
       <div className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
         <h1 className="text-2xl font-extrabold text-[#14213D]">إدارة مستخدمي خدمة العملاء</h1>
         <p className="mt-1 text-sm font-bold text-[#14213D]/70">
-          أنت وحدك كأدمن تستطيع تغيير الصلاحيات. دور التحويلات يحتاج رقم واتساب للتنبيهات.
+          يمكنك إنشاء أدمن CS إضافي (مثل mm). دور التحويلات يحتاج رقم واتساب للتنبيهات. حساب mm محمي.
         </p>
       </div>
 
@@ -158,6 +158,7 @@ export function CsUsersClient() {
             <option value="agent">خدمة عملاء عادي</option>
             <option value="supervisor">مشرف توزيع</option>
             <option value="transfers">التحويلات</option>
+            <option value="admin">أدمن</option>
           </select>
         </label>
         <label className="grid gap-1 text-sm font-bold">
@@ -211,7 +212,7 @@ export function CsUsersClient() {
                       <option value="agent">خدمة عملاء عادي</option>
                       <option value="supervisor">مشرف توزيع</option>
                       <option value="transfers">التحويلات</option>
-                      {a.role === "admin" ? <option value="admin">أدمن</option> : null}
+                      <option value="admin">أدمن</option>
                     </select>
                   )}
                 </td>

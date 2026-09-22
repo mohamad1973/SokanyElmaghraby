@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   const role = (body.role || "agent") as CsRole;
-  if (!CS_ROLES.includes(role) || role === "admin") {
+  if (!CS_ROLES.includes(role)) {
     return NextResponse.json({ message: "دور غير صالح." }, { status: 400 });
   }
 
