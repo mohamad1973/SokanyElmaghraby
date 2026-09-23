@@ -107,7 +107,7 @@
 دخول CS: يوزرنيم + باسورد (بدون إيميل). أدمن ثابت: `mm` / `123456` (دور admin — وحده يغيّر الصلاحيات من `/cs/users`).
 أدوار: `agent` (مكالمات فقط) · `supervisor` (توزيع + شحن + تقارير) · `admin`.
 تسجيل ذاتي من `/cs/login` ينشئ `agent` فقط. أدمن المتجر `/admin` أيضاً: `mm` / `123456`.
-داشبورد CS بثيم Black & Gold، فلاتر هرمية (زر فلتر)، محافظة/منطقة من Woo meta، إشعارات متابعة، وتوزيع عادل/قواعد. شركة الشحن يحددها المشرف من القائمة؛ طباعة شيت بوسطة وشيت سيد تميمة للمخزن.
+داشبورد CS بثيم Black & Gold، فلاتر مدمجة (بحث/حالة/دفع/شحن/تاريخ)، إشعارات متابعة، وتوزيع عادل/قواعد. شركة الشحن يحددها المشرف من القائمة؛ طباعة شيت بوسطة وشيت سيد تميمة للمخزن.
 
 ### ووردبريس (خارج Next.js)
 
@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS تنظيم فلتر القائمة | إزالة محافظات/مناطق وخيارات لاغى/لم يرد من الفلتر؛ شبكة موحّدة ودروب بوكس أصغر | `cs-queue-client.tsx` |
 | إشعار ديبوزت جذري للأدمن | /api/cs/upload؛ جدول AdminNotification؛ جرس يقرأ الصندوق + صوت على unread؛ بيانات دفع كاملة | `upload/route.ts`, `admin-notifications.ts`, `deposit-approvals.ts`, `order-notification-bar.tsx`, `middleware.ts` |
 | جرس إشعارات جذري أدمن+CS | إخراج الجرس من overflow-x-auto؛ شارة inline؛ لوحة fixed+backdrop عبر portal؛ أيقونة SVG واضحة | `cs-shell.tsx`, `order-notification-bar.tsx`, `admin-shell.tsx` |
 | جرس أدمن Portal + هيدر أطول | قائمة fixed عبر Portal؛ إصلاح عداد 2 العالق؛ min-h-20؛ صفحة /admin/deposit-approvals | `order-notification-bar.tsx`, `admin-shell.tsx`, `deposit-approvals/page.tsx` |

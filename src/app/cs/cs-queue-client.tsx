@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
-import { listCsGovernorates, mergeAreaOptions } from "@/lib/cs/egypt-areas";
 import {
   cairoDaysAgoYmd,
   cairoTodayYmd,
@@ -164,8 +163,6 @@ type DraftFilters = {
   payment: string;
   shipping: string;
   agentId: string;
-  governorate: string;
-  area: string;
   dateFrom: string;
   dateTo: string;
   duplicates: "all" | "only";
@@ -175,6 +172,9 @@ type DraftFilters = {
 
 type DupMeta = { key: string; count: number; colorClass: string };
 
+const FILTER_CONTROL =
+  "h-9 w-full rounded-lg border border-[#E5E5E5] bg-white px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
+
 function defaultDraft(): DraftFilters {
   return {
     query: "",
@@ -183,8 +183,6 @@ function defaultDraft(): DraftFilters {
     payment: "all",
     shipping: "all",
     agentId: "all",
-    governorate: "",
-    area: "",
     dateFrom: cairoYesterdayYmd(),
     dateTo: cairoTodayYmd(),
     duplicates: "all",
@@ -202,14 +200,6 @@ function norm(value: string | null | undefined) {
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
-}
-
-function locMatch(haystack: string | null | undefined, needle: string) {
-  if (!needle) return true;
-  const h = norm(haystack);
-  const n = norm(needle);
-  if (!h || !n) return false;
-  return h === n || h.includes(n) || n.includes(h);
 }
 
 function phoneDigits(value: string | null | undefined) {
@@ -331,15 +321,25 @@ function matchesSearchQuery(item: CsQueueItem, rawQuery: string) {
   return false;
 }
 
+function normalizeFilterStatus(status: string) {
+  if (
+    status === "FAILED_CONTACT" ||
+    status === "CANCELLED" ||
+    status === "cancelled_or_no_answer"
+  ) {
+    return "all";
+  }
+  return status;
+}
+
 function applyFilters(items: CsQueueItem[], f: DraftFilters) {
+  const status = normalizeFilterStatus(f.status);
   return items
     .filter((item) => {
-      if (f.status === "cancelled_or_no_answer") {
-        if (item.status !== "CANCELLED" && item.status !== "FAILED_CONTACT") return false;
-      } else if (f.status !== "all" && item.status !== f.status) {
+      if (status !== "all" && item.status !== status) {
         return false;
       }
-      if (f.status === "CONFIRMED" && f.followUp !== "all") {
+      if (status === "CONFIRMED" && f.followUp !== "all") {
         if (f.followUp === "handed" && !item.handedToCarrier) return false;
         if (f.followUp === "delivered" && !item.deliveredToCustomer) return false;
         if (f.followUp === "followup" && !item.customerFollowUp) return false;
@@ -358,12 +358,6 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters) {
       }
       if (f.shipping !== "all" && (item.shippingCompany || "") !== f.shipping) return false;
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
-      if (f.governorate && !locMatch(item.customerSnapshot?.governorate || item.customerSnapshot?.addressFull, f.governorate)) {
-        return false;
-      }
-      if (f.area && !locMatch(item.customerSnapshot?.area || item.customerSnapshot?.addressFull, f.area)) {
-        return false;
-      }
       if (f.dateFrom && f.dateTo) {
         if (!isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo)) return false;
       }
@@ -437,21 +431,6 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const governorates = useMemo(() => {
-    const fromOrders = items.map((i) => i.customerSnapshot?.governorate || "").filter(Boolean);
-    return [...new Set([...listCsGovernorates(), ...fromOrders])].sort((a, b) => a.localeCompare(b, "ar"));
-  }, [items]);
-
-  const areaOptions = useMemo(() => {
-    const gov = draft.governorate;
-    if (!gov) return [] as string[];
-    const fromOrders = items
-      .filter((i) => locMatch(i.customerSnapshot?.governorate, gov))
-      .map((i) => i.customerSnapshot?.area || "")
-      .filter(Boolean);
-    return mergeAreaOptions(gov, fromOrders);
-  }, [draft.governorate, items]);
 
   // Search is live and independent of other filters: when query is set, match all loaded items.
   const baseFiltered = useMemo(() => {
@@ -535,7 +514,10 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   }
 
   function runFilter() {
-    const { filters, warning } = clampDateFilters(draft);
+    const { filters, warning } = clampDateFilters({
+      ...draft,
+      status: normalizeFilterStatus(draft.status),
+    });
     setDraft(filters);
     setApplied(filters);
     if (warning) setMessage(warning);
@@ -599,32 +581,29 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         </div>
       </div>
 
-      <div className="no-print space-y-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="no-print space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8">
           <input
             value={draft.query}
             onChange={(e) => patchDraft({ query: e.target.value })}
             placeholder="بحث: موبايل، اسم، عنوان، منتج..."
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold lg:col-span-2"
+            className={`${FILTER_CONTROL} col-span-2 sm:col-span-3 lg:col-span-2 xl:col-span-2`}
           />
           <select
-            value={draft.status}
+            value={normalizeFilterStatus(draft.status)}
             onChange={(e) => patchDraft({ status: e.target.value, followUp: "all" })}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+            className={FILTER_CONTROL}
           >
             <option value="all">كل الحالات</option>
             <option value="PENDING">بانتظار</option>
             <option value="IN_PROGRESS">جاري</option>
             <option value="CONFIRMED">تم الحفظ</option>
-            <option value="FAILED_CONTACT">لم يرد</option>
-            <option value="CANCELLED">لاغى</option>
-            <option value="cancelled_or_no_answer">لاغى / لم يرد</option>
           </select>
           {draft.status === "CONFIRMED" ? (
             <select
               value={draft.followUp}
               onChange={(e) => patchDraft({ followUp: e.target.value })}
-              className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              className={FILTER_CONTROL}
             >
               <option value="all">كل المتابعة</option>
               <option value="handed">تم التسليم لشركة الشحن</option>
@@ -638,7 +617,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             <select
               value={draft.payment}
               onChange={(e) => patchDraft({ payment: e.target.value })}
-              className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              className={FILTER_CONTROL}
             >
               <option value="all">كل الدفع</option>
               <option value="paid">مدفوع</option>
@@ -646,14 +625,11 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               <option value="cod">عند الاستلام</option>
             </select>
           )}
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {draft.status === "CONFIRMED" ? (
             <select
               value={draft.payment}
               onChange={(e) => patchDraft({ payment: e.target.value })}
-              className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              className={FILTER_CONTROL}
             >
               <option value="all">كل الدفع</option>
               <option value="paid">مدفوع</option>
@@ -664,13 +640,13 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
           <select
             value={draft.shipping}
             onChange={(e) => patchDraft({ shipping: e.target.value })}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+            className={FILTER_CONTROL}
           >
             <option value="all">كل شركات الشحن</option>
             <option value="bosta">بوسطة</option>
             <option value="sayed_temima">سيد تميمة</option>
           </select>
-          <label className="grid gap-1 text-xs font-bold text-[#14213D]">
+          <label className="grid gap-0.5 text-[10px] font-bold text-[#14213D]/70">
             من يوم
             <input
               type="date"
@@ -678,10 +654,10 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               max={dateMaxYmd()}
               value={draft.dateFrom}
               onChange={(e) => patchDraft({ dateFrom: e.target.value })}
-              className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              className={FILTER_CONTROL}
             />
           </label>
-          <label className="grid gap-1 text-xs font-bold text-[#14213D]">
+          <label className="grid gap-0.5 text-[10px] font-bold text-[#14213D]/70">
             إلى يوم
             <input
               type="date"
@@ -689,7 +665,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               max={dateMaxYmd()}
               value={draft.dateTo}
               onChange={(e) => patchDraft({ dateTo: e.target.value })}
-              className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              className={FILTER_CONTROL}
             />
           </label>
           <select
@@ -697,7 +673,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             onChange={(e) =>
               patchDraft({ trackingFilter: e.target.value === "missing" ? "missing" : "all" })
             }
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+            className={FILTER_CONTROL}
           >
             <option value="all">كل أرقام التراك</option>
             <option value="missing">بدون رقم تراك</option>
@@ -707,44 +683,16 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             onChange={(e) =>
               patchDraft({ waybillFilter: e.target.value === "not_printed" ? "not_printed" : "all" })
             }
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+            className={FILTER_CONTROL}
           >
             <option value="all">كل البوليصات</option>
             <option value="not_printed">لم تُطبع البوليصة</option>
-          </select>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <select
-            value={draft.governorate}
-            onChange={(e) => patchDraft({ governorate: e.target.value, area: "" })}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
-          >
-            <option value="">كل المحافظات</option>
-            {governorates.map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-          <select
-            value={draft.area}
-            onChange={(e) => patchDraft({ area: e.target.value })}
-            disabled={!draft.governorate}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold disabled:opacity-50"
-          >
-            <option value="">كل المناطق</option>
-            {areaOptions.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
           </select>
           {isSupervisor ? (
             <select
               value={draft.agentId}
               onChange={(e) => patchDraft({ agentId: e.target.value })}
-              className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              className={FILTER_CONTROL}
             >
               <option value="all">أسماء مسئولى خدمة العملاء</option>
               {agents.map((a) => (
@@ -754,28 +702,28 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               ))}
             </select>
           ) : null}
-          <div className="flex flex-wrap items-stretch gap-2 sm:col-span-1 lg:col-span-1">
-            {isSupervisor ? (
-              <select
-                value={draft.duplicates}
-                onChange={(e) => patchDraft({ duplicates: e.target.value === "only" ? "only" : "all" })}
-                className="min-w-[8rem] flex-1 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
-              >
-                <option value="all">كل الأوردرات</option>
-                <option value="only">المكررة فقط</option>
-              </select>
-            ) : null}
+          {isSupervisor ? (
+            <select
+              value={draft.duplicates}
+              onChange={(e) => patchDraft({ duplicates: e.target.value === "only" ? "only" : "all" })}
+              className={FILTER_CONTROL}
+            >
+              <option value="all">كل الأوردرات</option>
+              <option value="only">المكررة فقط</option>
+            </select>
+          ) : null}
+          <div className="col-span-2 flex flex-wrap items-stretch gap-2 sm:col-span-1">
             <button
               type="button"
               onClick={runFilter}
-              className="rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black"
+              className="h-9 flex-1 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black"
             >
               فلتر
             </button>
             <button
               type="button"
               onClick={resetFilters}
-              className="rounded-xl bg-[#E5E5E5] px-3 py-2.5 text-sm font-bold text-[#14213D]"
+              className="h-9 rounded-lg bg-[#E5E5E5] px-3 text-xs font-bold text-[#14213D]"
             >
               إعادة
             </button>
