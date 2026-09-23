@@ -312,7 +312,7 @@ export function CsCallSheet({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20">
           <p className="text-sm font-extrabold text-[#14213D]">رقم التراك (بوليصة الشحن)</p>
-          <p className="mt-1 text-[11px] text-[#14213D]/60">أدخلي رقم التتبع من البوليصة ثم احفظي</p>
+          <p className="mt-1 text-[11px] text-[#14213D]/60">اختياري — ليس شرطاً لحفظ الأوردر</p>
           <input
             dir="ltr"
             value={trackingNumber}
@@ -323,7 +323,7 @@ export function CsCallSheet({
         </div>
         <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20">
           <p className="text-sm font-extrabold text-[#14213D]">تم طباعة البوليصة؟</p>
-          <p className="mt-1 text-[11px] text-[#14213D]/60">نعم أو لا — يُحفظ مع الأوردر</p>
+          <p className="mt-1 text-[11px] text-[#14213D]/60">اختياري — للفلترة والتقرير فقط</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"

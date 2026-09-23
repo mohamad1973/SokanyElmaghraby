@@ -855,14 +855,10 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                       <span className="w-fit rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] text-white" dir="ltr">
                         تراك: {itemTrackingNumber(item)}
                       </span>
-                    ) : (
-                      <span className="w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">بدون تراك</span>
-                    )}
+                    ) : null}
                     {item.waybillPrinted ? (
                       <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">بوليصة طُبعت</span>
-                    ) : (
-                      <span className="w-fit rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900">بوليصة لم تُطبع</span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex flex-col gap-0.5 sm:col-span-1">
                     <span className="text-xs leading-snug text-[#14213D]/80">
