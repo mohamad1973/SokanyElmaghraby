@@ -48,6 +48,8 @@ type Props = {
     customerFollowUp: boolean;
   };
   shippingCompany?: string | null;
+  trackingNumber?: string | null;
+  waybillPrinted?: boolean;
 };
 
 function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | null): Record<string, AnswerState> {
@@ -85,6 +87,8 @@ export function CsCallSheet({
   initialAnswers,
   followUp,
   shippingCompany,
+  trackingNumber: initialTracking,
+  waybillPrinted: initialWaybillPrinted,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const lockedShipping =
@@ -103,6 +107,10 @@ export function CsCallSheet({
     deliveredToCustomer: Boolean(followUp?.deliveredToCustomer),
     customerFollowUp: Boolean(followUp?.customerFollowUp),
   });
+  const [trackingNumber, setTrackingNumber] = useState(
+    () => String(initialTracking || snapshot?.trackingNumber || "").trim(),
+  );
+  const [waybillPrinted, setWaybillPrinted] = useState(Boolean(initialWaybillPrinted));
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -165,6 +173,8 @@ export function CsCallSheet({
         failContact,
         cancelOrder,
         failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
+        trackingNumber,
+        waybillPrinted,
         followUp: confirmed ? fu : undefined,
       }),
     });
@@ -298,6 +308,44 @@ export function CsCallSheet({
           {message}
         </p>
       ) : null}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20">
+          <p className="text-sm font-extrabold text-[#14213D]">رقم التراك (بوليصة الشحن)</p>
+          <p className="mt-1 text-[11px] text-[#14213D]/60">أدخلي رقم التتبع من البوليصة ثم احفظي</p>
+          <input
+            dir="ltr"
+            value={trackingNumber}
+            onChange={(e) => setTrackingNumber(e.target.value)}
+            placeholder="Tracking number"
+            className="mt-3 w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]"
+          />
+        </div>
+        <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20">
+          <p className="text-sm font-extrabold text-[#14213D]">تم طباعة البوليصة؟</p>
+          <p className="mt-1 text-[11px] text-[#14213D]/60">نعم أو لا — يُحفظ مع الأوردر</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setWaybillPrinted(true)}
+              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
+                waybillPrinted ? "bg-[#FCA311] text-black" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              نعم
+            </button>
+            <button
+              type="button"
+              onClick={() => setWaybillPrinted(false)}
+              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
+                !waybillPrinted ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              لا
+            </button>
+          </div>
+        </div>
+      </div>
 
       {!confirmed ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">

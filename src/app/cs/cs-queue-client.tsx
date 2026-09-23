@@ -24,6 +24,8 @@ export type CsQueueItem = {
   wooOrderNumber: string;
   status: string;
   shippingCompany?: string | null;
+  trackingNumber?: string | null;
+  waybillPrinted?: boolean;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
@@ -164,6 +166,8 @@ type DraftFilters = {
   dateFrom: string;
   dateTo: string;
   duplicates: "all" | "only";
+  trackingFilter: "all" | "missing";
+  waybillFilter: "all" | "not_printed";
 };
 
 type DupMeta = { key: string; count: number; colorClass: string };
@@ -181,7 +185,13 @@ function defaultDraft(): DraftFilters {
     dateFrom: cairoYesterdayYmd(),
     dateTo: cairoTodayYmd(),
     duplicates: "all",
+    trackingFilter: "all",
+    waybillFilter: "all",
   };
+}
+
+function itemTrackingNumber(item: CsQueueItem) {
+  return String(item.trackingNumber || item.customerSnapshot?.trackingNumber || "").trim();
 }
 
 function norm(value: string | null | undefined) {
@@ -354,6 +364,8 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters) {
       if (f.dateFrom && f.dateTo) {
         if (!isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo)) return false;
       }
+      if (f.trackingFilter === "missing" && itemTrackingNumber(item)) return false;
+      if (f.waybillFilter === "not_printed" && item.waybillPrinted) return false;
       return true;
     })
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
@@ -677,6 +689,26 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
             />
           </label>
+          <select
+            value={draft.trackingFilter}
+            onChange={(e) =>
+              patchDraft({ trackingFilter: e.target.value === "missing" ? "missing" : "all" })
+            }
+            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+          >
+            <option value="all">كل أرقام التراك</option>
+            <option value="missing">بدون رقم تراك</option>
+          </select>
+          <select
+            value={draft.waybillFilter}
+            onChange={(e) =>
+              patchDraft({ waybillFilter: e.target.value === "not_printed" ? "not_printed" : "all" })
+            }
+            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+          >
+            <option value="all">كل البوليصات</option>
+            <option value="not_printed">لم تُطبع البوليصة</option>
+          </select>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -819,6 +851,18 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     {isAwaiting ? (
                       <span className="w-fit rounded bg-amber-500 px-1.5 py-0.5 text-[10px] text-black">تحت الدفع</span>
                     ) : null}
+                    {itemTrackingNumber(item) ? (
+                      <span className="w-fit rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] text-white" dir="ltr">
+                        تراك: {itemTrackingNumber(item)}
+                      </span>
+                    ) : (
+                      <span className="w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">بدون تراك</span>
+                    )}
+                    {item.waybillPrinted ? (
+                      <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">بوليصة طُبعت</span>
+                    ) : (
+                      <span className="w-fit rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900">بوليصة لم تُطبع</span>
+                    )}
                   </div>
                   <div className="flex flex-col gap-0.5 sm:col-span-1">
                     <span className="text-xs leading-snug text-[#14213D]/80">

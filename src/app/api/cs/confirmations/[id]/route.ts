@@ -12,6 +12,8 @@ type Body = {
   failContact?: boolean;
   cancelOrder?: boolean;
   failReason?: string;
+  trackingNumber?: string | null;
+  waybillPrinted?: boolean;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   followUp?: {
     handedToCarrier?: boolean;
@@ -46,6 +48,8 @@ export async function PUT(request: Request, context: Context) {
     !body.finalize &&
     !body.failContact &&
     !body.cancelOrder &&
+    body.trackingNumber === undefined &&
+    body.waybillPrinted === undefined &&
     !body.followUp
   ) {
     const viewer = await resolveCsViewer(session.user.csAgentId);
@@ -75,6 +79,8 @@ export async function PUT(request: Request, context: Context) {
     failContact: Boolean(body.failContact),
     cancelOrder: Boolean(body.cancelOrder),
     failReason: body.failReason,
+    trackingNumber: body.trackingNumber,
+    waybillPrinted: body.waybillPrinted,
     followUp: body.followUp,
   });
 

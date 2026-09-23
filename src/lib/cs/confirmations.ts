@@ -329,6 +329,8 @@ export async function listCsConfirmationsForViewer(opts: {
       rows = legacy.map((r) => ({
         ...r,
         shippingCompany: null,
+        trackingNumber: null,
+        waybillPrinted: false,
         handedToCarrier: false,
         deliveredToCustomer: false,
         customerFollowUp: false,
@@ -381,6 +383,8 @@ export function serializeCsQueueItem(row: {
   wooOrderNumber: string;
   status: string;
   shippingCompany?: string | null;
+  trackingNumber?: string | null;
+  waybillPrinted?: boolean | null;
   handedToCarrier?: boolean | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
@@ -402,6 +406,10 @@ export function serializeCsQueueItem(row: {
 
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
   const shippingCompany = row.shippingCompany || shippingFromAnswer || "bosta";
+  const trackingNumber =
+    (row.trackingNumber && String(row.trackingNumber).trim()) ||
+    (raw?.trackingNumber && String(raw.trackingNumber).trim()) ||
+    null;
 
   const loc = resolveSnapshotLocation({
     governorate: raw?.governorate,
@@ -418,6 +426,8 @@ export function serializeCsQueueItem(row: {
     wooOrderNumber: row.wooOrderNumber,
     status: row.status,
     shippingCompany,
+    trackingNumber,
+    waybillPrinted: Boolean(row.waybillPrinted),
     handedToCarrier: Boolean(row.handedToCarrier),
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
@@ -443,7 +453,7 @@ export function serializeCsQueueItem(row: {
           datePaid: raw.datePaid || null,
           paidOnlineHighlight,
           wooStatus: raw.wooStatus || raw.status,
-          trackingNumber: raw.trackingNumber || null,
+          trackingNumber,
           items: raw.items || [],
         }
       : null,
@@ -510,6 +520,8 @@ export async function saveCsConfirmation(input: {
   failContact?: boolean;
   cancelOrder?: boolean;
   failReason?: string;
+  trackingNumber?: string | null;
+  waybillPrinted?: boolean;
   followUp?: {
     handedToCarrier?: boolean;
     deliveredToCustomer?: boolean;
@@ -526,21 +538,65 @@ export async function saveCsConfirmation(input: {
   });
   if (!row) return { ok: false as const, message: "الطلب غير موجود.", missing: [] };
 
-  // Post-confirmation follow-up update
-  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && input.followUp) {
+  const snap = ((row.customerSnapshot as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+  const nextTracking =
+    input.trackingNumber !== undefined
+      ? String(input.trackingNumber || "").trim() || null
+      : ((row as { trackingNumber?: string | null }).trackingNumber ?? null);
+  const nextWaybill =
+    input.waybillPrinted !== undefined
+      ? Boolean(input.waybillPrinted)
+      : Boolean((row as { waybillPrinted?: boolean | null }).waybillPrinted);
+  const shippingMetaPatch: {
+    trackingNumber?: string | null;
+    waybillPrinted?: boolean;
+    customerSnapshot?: Record<string, unknown>;
+  } = {};
+  if (input.trackingNumber !== undefined) {
+    shippingMetaPatch.trackingNumber = nextTracking;
+    shippingMetaPatch.customerSnapshot = { ...snap, trackingNumber: nextTracking };
+  }
+  if (input.waybillPrinted !== undefined) {
+    shippingMetaPatch.waybillPrinted = nextWaybill;
+  }
+
+  // Post-confirmation follow-up update (includes tracking / waybill)
+  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && (input.followUp || input.trackingNumber !== undefined || input.waybillPrinted !== undefined)) {
     const now = new Date();
+    const data: Record<string, unknown> = { ...shippingMetaPatch };
+    if (input.followUp) {
+      data.handedToCarrier = Boolean(input.followUp.handedToCarrier);
+      data.deliveredToCustomer = Boolean(input.followUp.deliveredToCustomer);
+      data.customerFollowUp = Boolean(input.followUp.customerFollowUp);
+      data.handedToCarrierAt = input.followUp.handedToCarrier ? now : null;
+      data.deliveredToCustomerAt = input.followUp.deliveredToCustomer ? now : null;
+      data.customerFollowUpAt = input.followUp.customerFollowUp ? now : null;
+    }
+    await prisma.csOrderConfirmation.update({
+      where: { id: input.id },
+      data: data as never,
+    });
+    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+  }
+
+  // Allow saving tracking / waybill alone (no checklist payload)
+  if (
+    !input.finalize &&
+    !input.failContact &&
+    !input.cancelOrder &&
+    !input.followUp &&
+    (!input.answers || input.answers.length === 0) &&
+    (input.trackingNumber !== undefined || input.waybillPrinted !== undefined) &&
+    Object.keys(shippingMetaPatch).length > 0
+  ) {
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
-        handedToCarrier: Boolean(input.followUp.handedToCarrier),
-        deliveredToCustomer: Boolean(input.followUp.deliveredToCustomer),
-        customerFollowUp: Boolean(input.followUp.customerFollowUp),
-        handedToCarrierAt: input.followUp.handedToCarrier ? now : null,
-        deliveredToCustomerAt: input.followUp.deliveredToCustomer ? now : null,
-        customerFollowUpAt: input.followUp.customerFollowUp ? now : null,
-      },
+        ...shippingMetaPatch,
+        assignedAgentId: input.agentId,
+      } as never,
     });
-    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+    return { ok: true as const, status: row.status, missing: [] as string[] };
   }
 
   if (input.failContact) {
@@ -608,7 +664,8 @@ export async function saveCsConfirmation(input: {
       data: {
         status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
         assignedAgentId: input.agentId,
-      },
+        ...shippingMetaPatch,
+      } as never,
     });
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
   }
@@ -653,7 +710,8 @@ export async function saveCsConfirmation(input: {
       assignedAgentId: input.agentId,
       shippingCompany,
       failReason: null,
-    },
+      ...shippingMetaPatch,
+    } as never,
   });
 
   return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };

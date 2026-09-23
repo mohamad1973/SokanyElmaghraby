@@ -265,6 +265,8 @@ model CsOrderConfirmation {
   customerSnapshot     Json?
   failReason           String?             @db.Text
   shippingCompany      String?
+  trackingNumber       String?
+  waybillPrinted       Boolean             @default(false)
   handedToCarrier      Boolean             @default(false)
   deliveredToCustomer  Boolean             @default(false)
   customerFollowUp     Boolean             @default(false)
@@ -281,6 +283,8 @@ model CsOrderConfirmation {
   @@index([assignedAgentId])
   @@index([createdAt])
   @@index([shippingCompany])
+  @@index([trackingNumber])
+  @@index([waybillPrinted])
 }
 
 model CsChecklistAnswer {

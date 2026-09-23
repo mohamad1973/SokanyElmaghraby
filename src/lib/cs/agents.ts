@@ -195,6 +195,8 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `handedToCarrierAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `deliveredToCustomerAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `customerFollowUpAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `trackingNumber` VARCHAR(191) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `waybillPrinted` BOOLEAN NOT NULL DEFAULT false",
   ];
 
   for (const sql of alters) {

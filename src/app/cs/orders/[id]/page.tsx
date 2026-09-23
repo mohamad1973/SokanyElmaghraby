@@ -29,6 +29,10 @@ export default async function CsOrderPage({ params }: Props) {
   }
 
   const snapshot = (confirmation.customerSnapshot || null) as Parameters<typeof CsCallSheet>[0]["snapshot"];
+  const row = confirmation as {
+    trackingNumber?: string | null;
+    waybillPrinted?: boolean | null;
+  };
 
   return (
     <CsCallSheet
@@ -36,6 +40,8 @@ export default async function CsOrderPage({ params }: Props) {
       status={confirmation.status}
       snapshot={snapshot}
       shippingCompany={confirmation.shippingCompany}
+      trackingNumber={row.trackingNumber || snapshot?.trackingNumber || null}
+      waybillPrinted={Boolean(row.waybillPrinted)}
       followUp={{
         handedToCarrier: Boolean(confirmation.handedToCarrier),
         deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),
