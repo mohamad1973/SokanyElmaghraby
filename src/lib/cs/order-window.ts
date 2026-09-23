@@ -72,6 +72,41 @@ export function isWithinCairoDateRange(
   return t >= start && t < endExclusive;
 }
 
+/** UTC Date bounds for a Cairo calendar YMD (start inclusive, end exclusive). */
+export function cairoYmdBounds(ymd: string): { start: Date; endExclusive: Date } | null {
+  const parts = ymd.split("-");
+  if (parts.length !== 3) return null;
+  const [y, m, d] = parts;
+  const startMs = cairoDayStartMs(y, m, d);
+  if (Number.isNaN(startMs)) return null;
+  return {
+    start: new Date(startMs),
+    endExclusive: new Date(startMs + 24 * 60 * 60 * 1000),
+  };
+}
+
+/** Inclusive list of Cairo YMD strings from fromYmd to toYmd. */
+export function eachCairoYmdInclusive(fromYmd: string, toYmd: string): string[] {
+  const from = cairoYmdBounds(fromYmd);
+  const to = cairoYmdBounds(toYmd);
+  if (!from || !to || from.start.getTime() > to.start.getTime()) return [];
+  const days: string[] = [];
+  for (let t = from.start.getTime(); t <= to.start.getTime(); t += 24 * 60 * 60 * 1000) {
+    const p = cairoYmdParts(new Date(t));
+    days.push(`${p.y}-${p.m}-${p.d}`);
+  }
+  return days;
+}
+
+/** Cairo YMD for an ISO timestamp. */
+export function cairoYmdFromIso(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const { y, m, d } = cairoYmdParts(date);
+  return `${y}-${m}-${d}`;
+}
+
 /** Keep recent rows in memory for CS filters (last N Cairo calendar days). */
 export function isWithinCairoLastDays(iso: string | null | undefined, daysBack = 30) {
   if (!iso) return false;

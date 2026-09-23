@@ -5,12 +5,13 @@ import {
   deleteAssignment,
   fairSplitAssign,
   listAssignmentsDetailed,
+  listPendingAfterLastDistribution,
   ruleBasedAssign,
 } from "@/lib/cs/assignments";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
@@ -19,7 +20,21 @@ export async function GET() {
   if (!viewer.isSupervisor && !session.user.csIsSupervisor) {
     return NextResponse.json({ message: "للمشرفة فقط." }, { status: 403 });
   }
-  const assignments = await listAssignmentsDetailed();
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("pendingAfterLast") === "1") {
+    const result = await listPendingAfterLastDistribution();
+    return NextResponse.json({
+      ok: true,
+      lastTo: result.lastTo,
+      pending: result.pending,
+      confirmationIds: result.pending.map((p) => p.id),
+    });
+  }
+
+  const from = url.searchParams.get("from") || undefined;
+  const to = url.searchParams.get("to") || undefined;
+  const assignments = await listAssignmentsDetailed({ fromYmd: from, toYmd: to });
   return NextResponse.json({ ok: true, assignments });
 }
 
@@ -78,14 +93,12 @@ export async function POST(request: Request) {
   }
 
   if (mode === "rules") {
-    if (!body.ruleMode) {
-      return NextResponse.json({ message: "نوع القاعدة مطلوب." }, { status: 400 });
+    if (!body.ruleMode || (body.ruleMode !== "shipping" && body.ruleMode !== "paid")) {
+      return NextResponse.json({ message: "نوع القاعدة مطلوب (شحن أو دفع)." }, { status: 400 });
     }
     const result = await ruleBasedAssign({
       mode: body.ruleMode,
       rules: body.rules || [],
-      governorate: body.governorate || undefined,
-      area: body.area || undefined,
       createdById: session.user.csAgentId,
     });
     if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });

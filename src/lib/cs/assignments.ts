@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
+import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { getPrismaClient } from "@/lib/db";
 
 export function parseWooOrderNumber(value: string | number | null | undefined) {
@@ -8,12 +9,26 @@ export function parseWooOrderNumber(value: string | number | null | undefined) {
   return Number(digits) || 0;
 }
 
-export async function listAssignmentsDetailed() {
+export async function listAssignmentsDetailed(opts?: { fromYmd?: string; toYmd?: string }) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
   await ensureCsTables();
 
-  const rows = await prisma.csOrderAssignment.findMany({ orderBy: { createdAt: "desc" } });
+  const fromYmd = opts?.fromYmd?.trim() || "";
+  const toYmd = opts?.toYmd?.trim() || "";
+  let where: { createdAt?: { gte: Date; lt: Date } } | undefined;
+  if (fromYmd && toYmd) {
+    const from = cairoYmdBounds(fromYmd);
+    const to = cairoYmdBounds(toYmd);
+    if (from && to) {
+      where = { createdAt: { gte: from.start, lt: to.endExclusive } };
+    }
+  }
+
+  const rows = await prisma.csOrderAssignment.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+  });
   const agents = await prisma.csAgent.findMany();
   const byId = new Map(agents.map((a) => [a.id, a]));
 
@@ -25,7 +40,48 @@ export async function listAssignmentsDetailed() {
     createdById: row.createdById,
     createdAt: row.createdAt.toISOString(),
     agentName: byId.get(row.agentId)?.name || `مسؤول #${row.agentId}`,
+    countEstimate: Math.max(0, Math.abs(row.wooOrderNumberTo - row.wooOrderNumberFrom) + 1),
   }));
+}
+
+/** Unassigned confirmations with order number after last pre-today distribution max. */
+export async function listPendingAfterLastDistribution(limit = 500) {
+  const prisma = getPrismaClient();
+  if (!prisma) {
+    return { lastTo: 0, pending: [] as Array<{ id: number; wooOrderNumber: string; orderNum: number }> };
+  }
+  await ensureCsTables();
+
+  const today = cairoYmdBounds(cairoTodayYmd());
+  let lastTo = 0;
+  if (today) {
+    const prior = await prisma.csOrderAssignment.findMany({
+      where: { createdAt: { lt: today.start } },
+      select: { wooOrderNumberFrom: true, wooOrderNumberTo: true },
+    });
+    for (const row of prior) {
+      lastTo = Math.max(lastTo, row.wooOrderNumberFrom, row.wooOrderNumberTo);
+    }
+  }
+
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: { assignedAgentId: null },
+    orderBy: { createdAt: "desc" },
+    take: Math.max(limit * 2, 800),
+    select: { id: true, wooOrderNumber: true },
+  });
+
+  const pending = rows
+    .map((row) => ({
+      id: row.id,
+      wooOrderNumber: row.wooOrderNumber,
+      orderNum: parseWooOrderNumber(row.wooOrderNumber),
+    }))
+    .filter((row) => row.orderNum > lastTo)
+    .sort((a, b) => a.orderNum - b.orderNum)
+    .slice(0, limit);
+
+  return { lastTo, pending };
 }
 
 export async function getAssignmentRangesForAgent(agentId: number) {

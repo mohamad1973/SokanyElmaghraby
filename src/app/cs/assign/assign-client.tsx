@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { listCsGovernorates, mergeAreaOptions } from "@/lib/cs/egypt-areas";
+import {
+  cairoTodayYmd,
+  cairoYmdFromIso,
+  eachCairoYmdInclusive,
+  formatCairoOrderDate,
+} from "@/lib/cs/order-window";
 
 type Agent = { id: number; name: string; email?: string };
 type Assignment = {
@@ -13,9 +18,15 @@ type Assignment = {
   wooOrderNumberFrom: number;
   wooOrderNumberTo: number;
   createdAt: string;
+  countEstimate?: number;
 };
 
+type PendingOrder = { id: number; wooOrderNumber: string; orderNum: number };
+
 type Tab = "range" | "fair" | "rules";
+
+const FILTER_CONTROL =
+  "h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
 
 export function CsAssignClient({
   agents,
@@ -24,38 +35,98 @@ export function CsAssignClient({
   agents: Agent[];
   visibleOrderIds?: number[];
 }) {
+  const today = cairoTodayYmd();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("range");
   const [fairIds, setFairIds] = useState<number[]>([]);
-  const [governorate, setGovernorate] = useState("");
-  const [area, setArea] = useState("");
-  const [ruleMode, setRuleMode] = useState<"shipping" | "paid" | "region_agent" | "region_shipping">(
-    "shipping",
-  );
+  const [ruleMode, setRuleMode] = useState<"shipping" | "paid">("shipping");
   const [shipBostaAgent, setShipBostaAgent] = useState("");
   const [shipTemimaAgent, setShipTemimaAgent] = useState("");
   const [paidAgent, setPaidAgent] = useState("");
   const [unpaidAgent, setUnpaidAgent] = useState("");
-  const [regionAgentId, setRegionAgentId] = useState("");
-  const [regionShipping, setRegionShipping] = useState<"bosta" | "sayed_temima">("sayed_temima");
 
-  const areas = useMemo(() => mergeAreaOptions(governorate, []), [governorate]);
+  const [draftFrom, setDraftFrom] = useState(today);
+  const [draftTo, setDraftTo] = useState(today);
+  const [appliedFrom, setAppliedFrom] = useState(today);
+  const [appliedTo, setAppliedTo] = useState(today);
 
-  async function load() {
-    const res = await fetch("/api/cs/assignments");
+  const [showPendingAfterLast, setShowPendingAfterLast] = useState(false);
+  const [pendingLastTo, setPendingLastTo] = useState(0);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+
+  const loadAssignments = useCallback(async (fromYmd: string, toYmd: string) => {
+    const qs = new URLSearchParams({ from: fromYmd, to: toYmd });
+    const res = await fetch(`/api/cs/assignments?${qs}`);
     const data = (await res.json()) as { assignments?: Assignment[]; message?: string };
     if (res.ok) setAssignments(data.assignments || []);
     else setMessage(data.message || "تعذر التحميل.");
-  }
+  }, []);
+
+  const loadPending = useCallback(async () => {
+    setPendingLoading(true);
+    const res = await fetch("/api/cs/assignments?pendingAfterLast=1");
+    const data = (await res.json()) as {
+      lastTo?: number;
+      pending?: PendingOrder[];
+      message?: string;
+    };
+    setPendingLoading(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تحميل الأوردرات بعد آخر توزيع.");
+      return;
+    }
+    setPendingLastTo(data.lastTo ?? 0);
+    setPendingOrders(data.pending || []);
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, []);
+    void loadAssignments(appliedFrom, appliedTo);
+  }, [appliedFrom, appliedTo, loadAssignments]);
+
+  useEffect(() => {
+    if (showPendingAfterLast) void loadPending();
+    else {
+      setPendingOrders([]);
+      setPendingLastTo(0);
+    }
+  }, [showPendingAfterLast, loadPending]);
+
+  const dayGroups = useMemo(() => {
+    const days = eachCairoYmdInclusive(appliedFrom, appliedTo);
+    const byDay = new Map<string, Assignment[]>();
+    for (const day of days) byDay.set(day, []);
+    for (const row of assignments) {
+      const day = cairoYmdFromIso(row.createdAt);
+      if (!byDay.has(day)) continue;
+      byDay.get(day)!.push(row);
+    }
+    return days.map((day) => ({
+      day,
+      rows: (byDay.get(day) || []).slice().sort((a, b) => a.agentName.localeCompare(b.agentName, "ar")),
+    }));
+  }, [assignments, appliedFrom, appliedTo]);
+
+  const fairConfirmationIds = showPendingAfterLast
+    ? pendingOrders.map((p) => p.id)
+    : visibleOrderIds;
 
   function toggleFair(id: number) {
     setFairIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function applyDateFilter() {
+    const from = draftFrom || today;
+    const to = draftTo || today;
+    if (from > to) {
+      setMessage("تاريخ «من» يجب أن يكون قبل أو يساوي «إلى».");
+      return;
+    }
+    setAppliedFrom(from);
+    setAppliedTo(to);
+    setMessage("");
   }
 
   async function onRangeSubmit(event: FormEvent<HTMLFormElement>) {
@@ -81,15 +152,20 @@ export function CsAssignClient({
     }
     setMessage("تم حفظ توزيع النطاق.");
     event.currentTarget.reset();
-    await load();
+    await loadAssignments(appliedFrom, appliedTo);
+    if (showPendingAfterLast) await loadPending();
   }
 
   async function runFair() {
     setLoading(true);
     setMessage("");
-    if (visibleOrderIds.length === 0) {
+    if (fairConfirmationIds.length === 0) {
       setLoading(false);
-      setMessage("لا توجد أوردرات ظاهرة في القائمة (اليوم/أمس). زامني من قائمة الانتظار أولاً.");
+      setMessage(
+        showPendingAfterLast
+          ? "لا توجد أوردرات بعد آخر توزيع للتوزيع العادل."
+          : "لا توجد أوردرات ظاهرة في القائمة (اليوم/أمس). زامني من قائمة الانتظار أولاً أو فعّلي تشيك بعد آخر توزيع.",
+      );
       return;
     }
     const res = await fetch("/api/cs/assignments", {
@@ -98,7 +174,7 @@ export function CsAssignClient({
       body: JSON.stringify({
         mode: "fair",
         agentIds: fairIds,
-        confirmationIds: visibleOrderIds,
+        confirmationIds: fairConfirmationIds,
       }),
     });
     const data = (await res.json()) as {
@@ -118,52 +194,37 @@ export function CsAssignClient({
     setMessage(
       `تم التوزيع بنطاقات متتالية على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر. ${rangeText}`,
     );
-    await load();
+    setAppliedFrom(today);
+    setAppliedTo(today);
+    setDraftFrom(today);
+    setDraftTo(today);
+    await loadAssignments(today, today);
+    if (showPendingAfterLast) await loadPending();
   }
 
   async function runRules() {
     setLoading(true);
     setMessage("");
-    let rules: Array<{
+    const rules: Array<{
       agentId?: number;
       shippingCompany?: "bosta" | "sayed_temima";
       paidOnline?: boolean;
-      governorate?: string;
-      area?: string;
     }> = [];
 
     if (ruleMode === "shipping") {
       if (shipBostaAgent) rules.push({ agentId: Number(shipBostaAgent), shippingCompany: "bosta" });
-      if (shipTemimaAgent) rules.push({ agentId: Number(shipTemimaAgent), shippingCompany: "sayed_temima" });
-    } else if (ruleMode === "paid") {
+      if (shipTemimaAgent) {
+        rules.push({ agentId: Number(shipTemimaAgent), shippingCompany: "sayed_temima" });
+      }
+    } else {
       if (paidAgent) rules.push({ agentId: Number(paidAgent), paidOnline: true });
       if (unpaidAgent) rules.push({ agentId: Number(unpaidAgent), paidOnline: false });
-    } else if (ruleMode === "region_agent") {
-      if (!governorate || !regionAgentId) {
-        setLoading(false);
-        setMessage("اختاري محافظة ومسؤول المنطقة.");
-        return;
-      }
-      rules = [{ agentId: Number(regionAgentId), governorate, area: area || undefined }];
-    } else {
-      if (!governorate) {
-        setLoading(false);
-        setMessage("اختاري محافظة/منطقة لتعيين شركة الشحن.");
-        return;
-      }
-      rules = [{ shippingCompany: regionShipping, governorate, area: area || undefined }];
     }
 
     const res = await fetch("/api/cs/assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "rules",
-        ruleMode,
-        rules,
-        governorate: governorate || undefined,
-        area: area || undefined,
-      }),
+      body: JSON.stringify({ mode: "rules", ruleMode, rules }),
     });
     const data = (await res.json()) as { message?: string; updated?: number };
     setLoading(false);
@@ -181,7 +242,8 @@ export function CsAssignClient({
       setMessage(data.message || "تعذر الحذف.");
       return;
     }
-    await load();
+    await loadAssignments(appliedFrom, appliedTo);
+    if (showPendingAfterLast) await loadPending();
   }
 
   const tabBtn = (id: Tab, label: string) => (
@@ -196,6 +258,10 @@ export function CsAssignClient({
     </button>
   );
 
+  const pendingPreview = pendingOrders.slice(0, 12);
+  const pendingMin = pendingOrders[0]?.orderNum;
+  const pendingMax = pendingOrders[pendingOrders.length - 1]?.orderNum;
+
   return (
     <div className="space-y-5" dir="rtl">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -204,51 +270,79 @@ export function CsAssignClient({
             رجوع للقائمة
           </Link>
           <h1 className="mt-2 text-2xl font-extrabold text-[#14213D]">توزيع الأوردرات على مسئولى خدمة العملاء</h1>
-          <p className="text-sm text-[#14213D]/70">نطاق أرقام · تقسيم عادل · قواعد شحن/دفع/منطقة</p>
+          <p className="text-sm text-[#14213D]/70">نطاق أرقام · تقسيم عادل · قواعد شحن/دفع · مراجعة يوم التوزيع</p>
         </div>
       </div>
+
+      <div className="space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
+            <span className="shrink-0 text-[#14213D]/60">من</span>
+            <input
+              type="date"
+              value={draftFrom}
+              onChange={(e) => setDraftFrom(e.target.value)}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+            />
+          </div>
+          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
+            <span className="shrink-0 text-[#14213D]/60">إلى</span>
+            <input
+              type="date"
+              value={draftTo}
+              onChange={(e) => setDraftTo(e.target.value)}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={applyDateFilter}
+            className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black sm:col-span-2"
+          >
+            فلتر أيام التوزيع
+          </button>
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-[#14213D]">
+          <input
+            type="checkbox"
+            className="size-4 accent-[#FCA311]"
+            checked={showPendingAfterLast}
+            onChange={(e) => setShowPendingAfterLast(e.target.checked)}
+          />
+          إظهار الأوردرات المطلوب توزيعها بعد آخر توزيع
+        </label>
+      </div>
+
+      {showPendingAfterLast ? (
+        <div className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+          <p className="text-sm font-extrabold text-[#14213D]">
+            أوردرات بعد آخر توزيع
+            {pendingLoading ? " — جاري التحميل..." : ` — ${pendingOrders.length} أوردر`}
+          </p>
+          <p className="mt-1 text-xs font-bold text-[#14213D]/70">
+            حد آخر توزيع سابق: {pendingLastTo || "لا يوجد"} · يظهر فقط غير الموزّع برقم أكبر من الحد
+            {pendingMin != null && pendingMax != null ? (
+              <>
+                {" "}
+                · النطاق الظاهر: <span dir="ltr">{pendingMin}→{pendingMax}</span>
+              </>
+            ) : null}
+          </p>
+          {pendingOrders.length === 0 && !pendingLoading ? (
+            <p className="mt-3 text-sm font-bold text-[#14213D]/60">لا توجد أوردرات بانتظار التوزيع بعد آخر توزيع.</p>
+          ) : (
+            <p className="mt-3 text-xs font-bold text-[#14213D]/80" dir="ltr">
+              {pendingPreview.map((p) => p.wooOrderNumber).join(" · ")}
+              {pendingOrders.length > pendingPreview.length ? " · …" : ""}
+            </p>
+          )}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {tabBtn("range", "نطاق أرقام")}
         {tabBtn("fair", "تقسيم عادل")}
         {tabBtn("rules", "قواعد")}
-      </div>
-
-      <div className="grid gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm font-bold text-[#14213D]">
-          محافظة (اختياري للتقسيم/القواعد)
-          <select
-            value={governorate}
-            onChange={(e) => {
-              setGovernorate(e.target.value);
-              setArea("");
-            }}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-          >
-            <option value="">كل المحافظات</option>
-            {listCsGovernorates().map((g) => (
-              <option key={g} value={g}>
-                {g}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm font-bold text-[#14213D]">
-          منطقة
-          <select
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            disabled={!governorate}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 disabled:opacity-50"
-          >
-            <option value="">كل المناطق</option>
-            {areas.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
       {tab === "range" ? (
@@ -258,7 +352,7 @@ export function CsAssignClient({
         >
           <label className="grid gap-1 text-sm font-bold">
             مسؤول خدمة العملاء
-            <select name="agentId" required className="rounded-xl border border-[#E5E5E5] px-3 py-2">
+            <select name="agentId" required className={FILTER_CONTROL}>
               <option value="">اختاري...</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -269,16 +363,16 @@ export function CsAssignClient({
           </label>
           <label className="grid gap-1 text-sm font-bold">
             من رقم أوردر
-            <input name="from" type="number" required className="rounded-xl border border-[#E5E5E5] px-3 py-2" dir="ltr" />
+            <input name="from" type="number" required className={FILTER_CONTROL} dir="ltr" />
           </label>
           <label className="grid gap-1 text-sm font-bold">
             إلى رقم أوردر
-            <input name="to" type="number" required className="rounded-xl border border-[#E5E5E5] px-3 py-2" dir="ltr" />
+            <input name="to" type="number" required className={FILTER_CONTROL} dir="ltr" />
           </label>
           <button
             type="submit"
             disabled={loading}
-            className="self-end rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black disabled:opacity-60"
+            className="self-end h-9 rounded-lg bg-[#FCA311] px-4 text-sm font-extrabold text-black disabled:opacity-60"
           >
             {loading ? "جاري الحفظ..." : "حفظ التوزيع"}
           </button>
@@ -288,9 +382,9 @@ export function CsAssignClient({
       {tab === "fair" ? (
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
           <p className="text-sm font-bold text-[#14213D]">
-            اختاري 2–4 مسؤولين. التوزيع يقسم أرقام الأوردر الظاهرة إلى نطاقات متتالية غير متداخلة (مثلاً
-            1150–1200 ثم 1201–1250)، وكل مسؤول يرى فقط نطاقه في قائمته. حالياً: {visibleOrderIds.length} أوردر
-            (اليوم/أمس).
+            اختاري 2–4 مسؤولين. التوزيع يقسم أرقام الأوردر إلى نطاقات متتالية غير متداخلة. حالياً:{" "}
+            {fairConfirmationIds.length} أوردر
+            {showPendingAfterLast ? " (بعد آخر توزيع)" : " (اليوم/أمس من القائمة)"}.
           </p>
           <div className="flex flex-wrap gap-2">
             {agents.map((a) => (
@@ -325,13 +419,11 @@ export function CsAssignClient({
         <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
           <select
             value={ruleMode}
-            onChange={(e) => setRuleMode(e.target.value as typeof ruleMode)}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+            onChange={(e) => setRuleMode(e.target.value as "shipping" | "paid")}
+            className={FILTER_CONTROL}
           >
             <option value="shipping">حسب شركة الشحن → مسؤول</option>
             <option value="paid">حسب مدفوع أونلاين → مسؤول</option>
-            <option value="region_agent">منطقة → مسؤول</option>
-            <option value="region_shipping">منطقة → شركة شحن (بوسطة / سيد تميمة)</option>
           </select>
 
           {ruleMode === "shipping" ? (
@@ -341,7 +433,7 @@ export function CsAssignClient({
                 <select
                   value={shipBostaAgent}
                   onChange={(e) => setShipBostaAgent(e.target.value)}
-                  className="rounded-xl border border-[#E5E5E5] px-3 py-2"
+                  className={FILTER_CONTROL}
                 >
                   <option value="">—</option>
                   {agents.map((a) => (
@@ -356,7 +448,7 @@ export function CsAssignClient({
                 <select
                   value={shipTemimaAgent}
                   onChange={(e) => setShipTemimaAgent(e.target.value)}
-                  className="rounded-xl border border-[#E5E5E5] px-3 py-2"
+                  className={FILTER_CONTROL}
                 >
                   <option value="">—</option>
                   {agents.map((a) => (
@@ -367,17 +459,11 @@ export function CsAssignClient({
                 </select>
               </label>
             </div>
-          ) : null}
-
-          {ruleMode === "paid" ? (
+          ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="grid gap-1 text-sm font-bold">
                 مدفوع أونلاين →
-                <select
-                  value={paidAgent}
-                  onChange={(e) => setPaidAgent(e.target.value)}
-                  className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-                >
+                <select value={paidAgent} onChange={(e) => setPaidAgent(e.target.value)} className={FILTER_CONTROL}>
                   <option value="">—</option>
                   {agents.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -391,7 +477,7 @@ export function CsAssignClient({
                 <select
                   value={unpaidAgent}
                   onChange={(e) => setUnpaidAgent(e.target.value)}
-                  className="rounded-xl border border-[#E5E5E5] px-3 py-2"
+                  className={FILTER_CONTROL}
                 >
                   <option value="">—</option>
                   {agents.map((a) => (
@@ -402,39 +488,7 @@ export function CsAssignClient({
                 </select>
               </label>
             </div>
-          ) : null}
-
-          {ruleMode === "region_agent" ? (
-            <label className="grid gap-1 text-sm font-bold">
-              مسؤول المنطقة المحددة أعلاه
-              <select
-                value={regionAgentId}
-                onChange={(e) => setRegionAgentId(e.target.value)}
-                className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-              >
-                <option value="">اختاري...</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-
-          {ruleMode === "region_shipping" ? (
-            <label className="grid gap-1 text-sm font-bold">
-              شركة الشحن للمنطقة المحددة
-              <select
-                value={regionShipping}
-                onChange={(e) => setRegionShipping(e.target.value as "bosta" | "sayed_temima")}
-                className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-              >
-                <option value="sayed_temima">سيد تميمة</option>
-                <option value="bosta">بوسطة</option>
-              </select>
-            </label>
-          ) : null}
+          )}
 
           <button
             type="button"
@@ -451,51 +505,75 @@ export function CsAssignClient({
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
-        <table className="min-w-full text-sm">
-          <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
-            <tr>
-              <th className="px-3 py-2">مسؤول خدمة العملاء</th>
-              <th className="px-3 py-2">من</th>
-              <th className="px-3 py-2">إلى</th>
-              <th className="px-3 py-2">التاريخ</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {assignments.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-[#14213D]/60">
-                  لا توجد توزيعات نطاق بعد.
-                </td>
-              </tr>
+      <div className="space-y-3">
+        <h2 className="text-lg font-extrabold text-[#14213D]">
+          توزيعات حسب اليوم
+          {appliedFrom === appliedTo ? (
+            <span className="mr-2 text-sm font-bold text-[#14213D]/60">({formatCairoOrderDate(`${appliedFrom}T12:00:00+02:00`)})</span>
+          ) : (
+            <span className="mr-2 text-sm font-bold text-[#14213D]/60" dir="ltr">
+              ({appliedFrom} → {appliedTo})
+            </span>
+          )}
+        </h2>
+
+        {dayGroups.map(({ day, rows }) => (
+          <div key={day} className="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+            <div className="flex items-center justify-between gap-2 bg-[#E5E5E5] px-3 py-2">
+              <p className="text-sm font-extrabold text-[#14213D]">{formatCairoOrderDate(`${day}T12:00:00+02:00`)}</p>
+              <p className="text-xs font-bold text-[#14213D]/70">{rows.length} توزيعة</p>
+            </div>
+            {rows.length === 0 ? (
+              <p className="px-3 py-6 text-center text-sm font-bold text-[#14213D]/60">
+                لا توجد أوردرات موزّعة في هذا اليوم.
+              </p>
             ) : (
-              assignments.map((row) => (
-                <tr key={row.id} className="border-t border-[#E5E5E5]">
-                  <td className="px-3 py-2 font-bold">{row.agentName}</td>
-                  <td className="px-3 py-2" dir="ltr">
-                    {row.wooOrderNumberFrom}
-                  </td>
-                  <td className="px-3 py-2" dir="ltr">
-                    {row.wooOrderNumberTo}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-[#14213D]/60">
-                    {new Date(row.createdAt).toLocaleString("ar-EG")}
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => void remove(row.id)}
-                      className="rounded-lg bg-black px-2 py-1 text-xs font-bold text-white"
-                    >
-                      حذف
-                    </button>
-                  </td>
-                </tr>
-              ))
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white text-right text-[#14213D]/70">
+                    <tr>
+                      <th className="px-3 py-2 font-bold">موظف خدمة العملاء</th>
+                      <th className="px-3 py-2 font-bold">من</th>
+                      <th className="px-3 py-2 font-bold">إلى</th>
+                      <th className="px-3 py-2 font-bold">تقريبي</th>
+                      <th className="px-3 py-2 font-bold">وقت التوزيع</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.id} className="border-t border-[#E5E5E5]">
+                        <td className="px-3 py-2 font-extrabold">{row.agentName}</td>
+                        <td className="px-3 py-2" dir="ltr">
+                          {row.wooOrderNumberFrom}
+                        </td>
+                        <td className="px-3 py-2" dir="ltr">
+                          {row.wooOrderNumberTo}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {row.countEstimate ??
+                            Math.max(0, Math.abs(row.wooOrderNumberTo - row.wooOrderNumberFrom) + 1)}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-[#14213D]/60">
+                          {new Date(row.createdAt).toLocaleString("ar-EG", { timeZone: "Africa/Cairo" })}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => void remove(row.id)}
+                            className="rounded-lg bg-black px-2 py-1 text-xs font-bold text-white"
+                          >
+                            حذف
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        ))}
       </div>
     </div>
   );
