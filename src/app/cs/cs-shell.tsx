@@ -23,6 +23,21 @@ function BellIcon({ className }: { className?: string }) {
   );
 }
 
+type PendingDeposit = {
+  id: number;
+  wooOrderNumber: string;
+  wooOrderId: number;
+  customerName: string;
+  phone: string;
+  depositAmount: number | null;
+  depositPayMethod?: string | null;
+  depositFromNumber?: string | null;
+  depositToPhone?: string | null;
+  depositToMethod?: string | null;
+  depositPaidAt?: string | null;
+  assignedAgent?: { id: number; name: string } | null;
+};
+
 type NotifPayload = {
   handedToCarrier: Array<{ id: number; wooOrderNumber: string }>;
   confirmDelivery: Array<{ id: number; wooOrderNumber: string }>;
@@ -33,6 +48,7 @@ type NotifPayload = {
     decision: "approved" | "rejected";
     depositAmount?: number | null;
   }>;
+  pendingDeposits?: PendingDeposit[];
   stockAlerts?: Array<{
     id: number;
     productId: number;
@@ -46,9 +62,15 @@ type NotifPayload = {
     confirmDelivery: number;
     followUpDue: number;
     depositDecisions?: number;
+    pendingDeposits?: number;
     stockAlerts?: number;
     all: number;
   };
+};
+
+const METHOD_LABEL: Record<string, string> = {
+  wallet: "محفظة",
+  instapay: "انستا",
 };
 
 const CS_VARS = {
@@ -59,24 +81,64 @@ const CS_VARS = {
   ["--cs-black" as string]: "#000000",
 } as Record<string, string>;
 
+const pendingDepositIdsKey = "sokany:cs-admin-pending-deposit-ids";
+
 function CsNotificationsBell() {
+  const { data: session } = useSession();
+  const isCsAdmin = Boolean(session?.user?.csIsAdmin) || session?.user?.csRole === "admin";
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<NotifPayload | null>(null);
+  const [selectedDeposit, setSelectedDeposit] = useState<PendingDeposit | null>(null);
+  const [decideBusy, setDecideBusy] = useState(false);
+  const [decideMessage, setDecideMessage] = useState("");
   const seenDepositIdsRef = useRef<Set<number>>(new Set());
+  const knownPendingRef = useRef<Set<number>>(new Set());
+  const pendingInitializedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/cs/notifications");
       if (!res.ok) return;
       const json = (await res.json()) as NotifPayload;
+
+      // Agent: sound on deposit decisions
       const decisions = json.depositDecisions || [];
-      const fresh = decisions.filter((d) => !seenDepositIdsRef.current.has(d.id));
-      if (fresh.length > 0) {
+      const freshDecisions = decisions.filter((d) => !seenDepositIdsRef.current.has(d.id));
+      if (freshDecisions.length > 0) {
         playLoudDepositAlert();
-        for (const d of fresh) seenDepositIdsRef.current.add(d.id);
+        for (const d of freshDecisions) seenDepositIdsRef.current.add(d.id);
       }
+
+      // CS admin: sound on new pending deposit approval requests
+      const pending = json.pendingDeposits || [];
+      const pendingIds = new Set(pending.map((d) => d.id));
+      if (!pendingInitializedRef.current) {
+        knownPendingRef.current = pendingIds;
+        pendingInitializedRef.current = true;
+        try {
+          window.localStorage.setItem(pendingDepositIdsKey, JSON.stringify([...pendingIds]));
+        } catch {
+          // ignore
+        }
+      } else {
+        const freshPending = [...pendingIds].filter((id) => !knownPendingRef.current.has(id));
+        if (freshPending.length > 0) {
+          playLoudDepositAlert();
+        }
+        knownPendingRef.current = pendingIds;
+        try {
+          window.localStorage.setItem(pendingDepositIdsKey, JSON.stringify([...pendingIds]));
+        } catch {
+          // ignore
+        }
+      }
+
       setData(json);
+      setSelectedDeposit((prev) => {
+        if (!prev) return null;
+        return pending.find((d) => d.id === prev.id) || null;
+      });
     } catch {
       // ignore
     }
@@ -84,19 +146,35 @@ function CsNotificationsBell() {
 
   useEffect(() => {
     setMounted(true);
+    try {
+      const raw = window.localStorage.getItem(pendingDepositIdsKey);
+      if (raw) {
+        const arr = JSON.parse(raw) as number[];
+        if (Array.isArray(arr)) knownPendingRef.current = new Set(arr.filter((n) => Number.isInteger(n)));
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   useEffect(() => {
     ensureDepositAlertUnlockedOnGesture();
     void load();
-    const id = window.setInterval(() => void load(), 20000);
+    const id = window.setInterval(() => void load(), 10000);
     return () => window.clearInterval(id);
   }, [load]);
 
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        if (selectedDeposit) {
+          setSelectedDeposit(null);
+          setDecideMessage("");
+        } else {
+          setOpen(false);
+        }
+      }
     }
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -105,10 +183,14 @@ function CsNotificationsBell() {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [open]);
+  }, [open, selectedDeposit]);
 
   const total = data?.totals.all || 0;
   const depositDecisions = data?.depositDecisions || [];
+  const pendingDeposits = data?.pendingDeposits || [];
+  const alertActive = isCsAdmin
+    ? pendingDeposits.length > 0
+    : depositDecisions.length > 0 || total > 0;
 
   async function markDepositSeen() {
     if (!depositDecisions.length) return;
@@ -139,7 +221,49 @@ function CsNotificationsBell() {
 
   function openPanel() {
     setOpen(true);
-    void markDepositSeen();
+    if (!isCsAdmin) void markDepositSeen();
+  }
+
+  async function decideDeposit(decision: "approved" | "rejected") {
+    if (!selectedDeposit) return;
+    setDecideBusy(true);
+    setDecideMessage("");
+    try {
+      const res = await fetch(`/api/cs/deposit-approvals/${selectedDeposit.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const body = (await res.json()) as { message?: string };
+      if (!res.ok) {
+        setDecideMessage(body.message || "تعذر حفظ القرار.");
+        setDecideBusy(false);
+        return;
+      }
+      setData((prev) => {
+        if (!prev) return prev;
+        const nextPending = (prev.pendingDeposits || []).filter((d) => d.id !== selectedDeposit.id);
+        return {
+          ...prev,
+          pendingDeposits: nextPending,
+          totals: {
+            ...prev.totals,
+            pendingDeposits: nextPending.length,
+            all: nextPending.length + (prev.stockAlerts?.length || 0),
+          },
+        };
+      });
+      knownPendingRef.current.delete(selectedDeposit.id);
+      setDecideMessage(decision === "approved" ? "تمت الموافقة." : "تم الرفض.");
+      setDecideBusy(false);
+      window.setTimeout(() => {
+        setSelectedDeposit(null);
+        setDecideMessage("");
+      }, 700);
+    } catch {
+      setDecideMessage("تعذر حفظ القرار.");
+      setDecideBusy(false);
+    }
   }
 
   const panel =
@@ -149,27 +273,165 @@ function CsNotificationsBell() {
           type="button"
           className="absolute inset-0 bg-black/50"
           aria-label="إغلاق الإشعارات"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setSelectedDeposit(null);
+            setOpen(false);
+          }}
         />
         <div
           role="dialog"
           aria-modal="true"
           aria-label="قائمة الإشعارات"
-          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--cs-navy)]/15 bg-white text-[var(--cs-navy)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[min(32rem,80vh)] sm:w-[22rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
+          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--cs-navy)]/15 bg-white text-[var(--cs-navy)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[min(36rem,85vh)] sm:w-[26rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
-            <p className="text-sm font-extrabold">تنبيهات المتابعة</p>
+            <p className="text-sm font-extrabold">
+              {selectedDeposit
+                ? `طلب تأكيد ديبوزت #${selectedDeposit.wooOrderNumber}`
+                : isCsAdmin
+                  ? "إشعارات الأدمن"
+                  : "تنبيهات المتابعة"}
+            </p>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                if (selectedDeposit) {
+                  setSelectedDeposit(null);
+                  setDecideMessage("");
+                } else {
+                  setOpen(false);
+                }
+              }}
               className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-zinc-200"
             >
-              إغلاق
+              {selectedDeposit ? "رجوع" : "إغلاق"}
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4 text-xs">
-            {!data || total === 0 ? (
+            {selectedDeposit ? (
+              <div className="space-y-3">
+                <dl className="grid gap-2 rounded-xl bg-emerald-50 p-3 sm:grid-cols-2">
+                  <div>
+                    <dt className="font-bold text-zinc-500">العميل</dt>
+                    <dd className="font-extrabold">{selectedDeposit.customerName || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-zinc-500">الهاتف</dt>
+                    <dd dir="ltr" className="font-extrabold">
+                      {selectedDeposit.phone || "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-zinc-500">قيمة المقدم</dt>
+                    <dd className="font-extrabold text-emerald-700">{selectedDeposit.depositAmount ?? "—"} ج.م</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-zinc-500">الوكيلة</dt>
+                    <dd className="font-extrabold">{selectedDeposit.assignedAgent?.name || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-zinc-500">وقت الدفع</dt>
+                    <dd className="font-extrabold">
+                      {selectedDeposit.depositPaidAt
+                        ? new Date(selectedDeposit.depositPaidAt).toLocaleString("ar-EG", {
+                            day: "numeric",
+                            month: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-bold text-zinc-500">الدفع من</dt>
+                    <dd className="font-extrabold">
+                      {METHOD_LABEL[selectedDeposit.depositPayMethod || ""] ||
+                        selectedDeposit.depositPayMethod ||
+                        "—"}{" "}
+                      · <span dir="ltr">{selectedDeposit.depositFromNumber || "—"}</span>
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="font-bold text-zinc-500">الدفع إلى</dt>
+                    <dd className="font-extrabold">
+                      <span dir="ltr">{selectedDeposit.depositToPhone || "—"}</span> ·{" "}
+                      {METHOD_LABEL[selectedDeposit.depositToMethod || ""] ||
+                        selectedDeposit.depositToMethod ||
+                        "—"}
+                    </dd>
+                  </div>
+                </dl>
+                {decideMessage ? (
+                  <p className="rounded-lg bg-[var(--cs-gold)]/20 px-2 py-1.5 text-[11px] font-bold">{decideMessage}</p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={decideBusy}
+                    onClick={() => void decideDeposit("approved")}
+                    className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+                  >
+                    موافقة — العميل دفع
+                  </button>
+                  <button
+                    type="button"
+                    disabled={decideBusy}
+                    onClick={() => void decideDeposit("rejected")}
+                    className="flex-1 rounded-xl bg-red-700 px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+                  >
+                    رفض — لم يدفع
+                  </button>
+                </div>
+              </div>
+            ) : !data || total === 0 ? (
               <p className="text-slate-500">لا توجد تنبيهات حالياً.</p>
+            ) : isCsAdmin ? (
+              <div className="space-y-4">
+                {pendingDeposits.length ? (
+                  <div>
+                    <p className="font-extrabold text-emerald-700">طلب تأكيد ديبوزت ({pendingDeposits.length})</p>
+                    <ul className="mt-1 space-y-1.5">
+                      {pendingDeposits.map((o) => (
+                        <li key={`pd-${o.id}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDeposit(o);
+                              setDecideMessage("");
+                            }}
+                            className="block w-full rounded-lg bg-emerald-50 px-3 py-2.5 text-right font-bold hover:bg-emerald-100"
+                          >
+                            <span className="block">طلب تأكيد ديبوزت #{o.wooOrderNumber}</span>
+                            <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                              {o.customerName || "عميل"} · {o.depositAmount ?? "?"} ج.م
+                              {o.assignedAgent?.name ? ` · ${o.assignedAgent.name}` : ""}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.stockAlerts && data.stockAlerts.length ? (
+                  <div>
+                    <p className="font-bold text-amber-600">حد الأدنى للمخزون ({data.totals.stockAlerts || 0})</p>
+                    <ul className="mt-1 space-y-1">
+                      {data.stockAlerts.slice(0, 12).map((o) => (
+                        <li key={`s-${o.id}`}>
+                          <Link
+                            href="/cs/transfers?low=1"
+                            className="block rounded-lg bg-amber-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            {o.productName}
+                            {o.model ? ` · ${o.model}` : ""} ({o.stockQuantity}/{o.threshold})
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <div className="space-y-3">
                 {depositDecisions.length ? (
@@ -266,22 +528,24 @@ function CsNotificationsBell() {
               </div>
             )}
           </div>
-          <div className="flex shrink-0 gap-2 border-t border-black/10 px-4 py-3">
-            <Link
-              href="/cs"
-              className="flex-1 rounded-full bg-[var(--cs-navy)] px-3 py-2 text-center text-xs font-extrabold text-white"
-              onClick={() => setOpen(false)}
-            >
-              الأوردرات
-            </Link>
-            <Link
-              href="/cs/transfers"
-              className="flex-1 rounded-full bg-[var(--cs-gold)] px-3 py-2 text-center text-xs font-extrabold text-black"
-              onClick={() => setOpen(false)}
-            >
-              التحويلات
-            </Link>
-          </div>
+          {!selectedDeposit ? (
+            <div className="flex shrink-0 gap-2 border-t border-black/10 px-4 py-3">
+              <Link
+                href="/cs"
+                className="flex-1 rounded-full bg-[var(--cs-navy)] px-3 py-2 text-center text-xs font-extrabold text-white"
+                onClick={() => setOpen(false)}
+              >
+                الأوردرات
+              </Link>
+              <Link
+                href="/cs/transfers"
+                className="flex-1 rounded-full bg-[var(--cs-gold)] px-3 py-2 text-center text-xs font-extrabold text-black"
+                onClick={() => setOpen(false)}
+              >
+                التحويلات
+              </Link>
+            </div>
+          ) : null}
         </div>
       </div>
     ) : null;
@@ -291,11 +555,15 @@ function CsNotificationsBell() {
       <button
         type="button"
         onClick={() => {
-          if (open) setOpen(false);
-          else openPanel();
+          if (open) {
+            setSelectedDeposit(null);
+            setOpen(false);
+          } else {
+            openPanel();
+          }
         }}
         className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2.5 text-sm font-extrabold ${
-          depositDecisions.length
+          alertActive
             ? "animate-pulse bg-[var(--cs-gold)] text-black"
             : "bg-white/15 text-white hover:bg-white/25"
         }`}
