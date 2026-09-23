@@ -21,7 +21,7 @@ export default async function CsOrderPage({ params }: Props) {
   let confirmation = await getCsConfirmation(numericId);
   if (!confirmation) notFound();
 
-  if (confirmation.status !== "CONFIRMED" && confirmation.status !== "FAILED_CONTACT") {
+  if (confirmation.status !== "CONFIRMED" && confirmation.status !== "FAILED_CONTACT" && confirmation.status !== "CANCELLED") {
     const started = await startCsConfirmation(numericId, session.user.csAgentId);
     if (started.ok) {
       confirmation = started.confirmation;

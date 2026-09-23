@@ -10,6 +10,7 @@ type Body = {
   answers?: CsChecklistAnswerInput[];
   finalize?: boolean;
   failContact?: boolean;
+  cancelOrder?: boolean;
   failReason?: string;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   followUp?: {
@@ -44,6 +45,7 @@ export async function PUT(request: Request, context: Context) {
     !body.answers &&
     !body.finalize &&
     !body.failContact &&
+    !body.cancelOrder &&
     !body.followUp
   ) {
     const viewer = await resolveCsViewer(session.user.csAgentId);
@@ -71,6 +73,7 @@ export async function PUT(request: Request, context: Context) {
     answers: body.answers || [],
     finalize: Boolean(body.finalize),
     failContact: Boolean(body.failContact),
+    cancelOrder: Boolean(body.cancelOrder),
     failReason: body.failReason,
     followUp: body.followUp,
   });

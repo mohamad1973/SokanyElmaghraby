@@ -508,6 +508,7 @@ export async function saveCsConfirmation(input: {
   answers: CsChecklistAnswerInput[];
   finalize: boolean;
   failContact?: boolean;
+  cancelOrder?: boolean;
   failReason?: string;
   followUp?: {
     handedToCarrier?: boolean;
@@ -552,6 +553,18 @@ export async function saveCsConfirmation(input: {
       },
     });
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
+  }
+
+  if (input.cancelOrder) {
+    await prisma.csOrderConfirmation.update({
+      where: { id: input.id },
+      data: {
+        status: CS_CONFIRMATION_STATUS.CANCELLED,
+        failReason: input.failReason?.trim() || "لاغى",
+        assignedAgentId: input.agentId,
+      },
+    });
+    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
   }
 
   const allKeys = new Set([

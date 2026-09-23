@@ -137,10 +137,10 @@ export function CsCallSheet({
     setAnswers((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
-  async function save(finalize: boolean, failContact = false) {
+  async function save(finalize: boolean, failContact = false, cancelOrder = false) {
     setSaving(true);
     setMessage("");
-    if (finalize && !failContact && !confirmed) {
+    if (finalize && !failContact && !cancelOrder && !confirmed) {
       if (!lockedShipping) {
         setSaving(false);
         setMessage("يجب أن تحدد المشرفة شركة الشحن أولاً من قائمة الأوردرات.");
@@ -163,7 +163,8 @@ export function CsCallSheet({
         answers: payloadAnswers,
         finalize: confirmed ? false : finalize,
         failContact,
-        failReason: failContact ? "لم يرد" : undefined,
+        cancelOrder,
+        failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
         followUp: confirmed ? fu : undefined,
       }),
     });
@@ -181,7 +182,15 @@ export function CsCallSheet({
       return;
     }
 
-    setMessage(finalize ? (failContact ? "تم تسجيل: لم يرد." : "تم تأكيد الطلب.") : "تم حفظ المسودة.");
+    setMessage(
+      finalize
+        ? failContact
+          ? "تم تسجيل: لم يرد."
+          : cancelOrder
+            ? "تم تسجيل: لاغى."
+            : "تم تأكيد الطلب."
+        : "تم حفظ المسودة.",
+    );
     if (finalize) window.location.href = "/cs";
   }
 
@@ -228,6 +237,14 @@ export function CsCallSheet({
                 className="rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
               >
                 لم يرد
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void save(true, false, true)}
+                className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+              >
+                لاغى
               </button>
             </>
           ) : (

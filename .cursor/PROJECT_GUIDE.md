@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS لاغى + فلتر مكررة للمشرف | حالة CANCELLED «لاغى» + زر في ورقة الاتصال؛ فلتر لاغى/لم يرد/مجمّع؛ فلتر المكررة للمشرف فقط | `checklist.ts`, `confirmations.ts`, `call-sheet.tsx`, `cs-queue-client.tsx` |
 | شيت طباعة سيد تميمة | مسلسل + عمود المنتجات (SKU) + شحن ثابت 75ج + إجماليات الأوردرات والشحن أسفل الشيت | `cs-queue-client.tsx` |
 | CS مكررات + لم يرد | فلتر المكررة (موبايل/اسم+موبايل) مع تلوين المجموعات؛ تسمية FAILED_CONTACT → «لم يرد» | `cs-queue-client.tsx`, `call-sheet.tsx`, `confirmations.ts` |
 | Media Usage Badge v1.2 | فحص صورة واحدة/المحدد من قائمة المكتبة (AJAX) + ملاحظات تحت الشارة بدون فتح روابط؛ يبقى الفلتر والتقارير | `wordpress-plugin/snippets/sokany-media-usage-badge-v1.2.php`, `snippets/README.md` |

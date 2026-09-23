@@ -3,6 +3,7 @@ export const CS_CONFIRMATION_STATUS = {
   IN_PROGRESS: "IN_PROGRESS",
   CONFIRMED: "CONFIRMED",
   FAILED_CONTACT: "FAILED_CONTACT",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export type CsConfirmationStatus =

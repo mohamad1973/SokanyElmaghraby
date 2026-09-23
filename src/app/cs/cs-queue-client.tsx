@@ -115,6 +115,7 @@ const statusMeta: Record<string, { label: string; className: string }> = {
   IN_PROGRESS: { label: "جاري", className: "bg-[#14213D] text-white" },
   CONFIRMED: { label: "تم الحفظ", className: "bg-[#FCA311] text-black" },
   FAILED_CONTACT: { label: "لم يرد", className: "bg-black text-white" },
+  CANCELLED: { label: "لاغى", className: "bg-red-700 text-white" },
 };
 
 const DUP_COLOR_CLASSES = [
@@ -295,7 +296,11 @@ function matchesSearchQuery(item: CsQueueItem, rawQuery: string) {
 function applyFilters(items: CsQueueItem[], f: DraftFilters) {
   return items
     .filter((item) => {
-      if (f.status !== "all" && item.status !== f.status) return false;
+      if (f.status === "cancelled_or_no_answer") {
+        if (item.status !== "CANCELLED" && item.status !== "FAILED_CONTACT") return false;
+      } else if (f.status !== "all" && item.status !== f.status) {
+        return false;
+      }
       if (f.status === "CONFIRMED" && f.followUp !== "all") {
         if (f.followUp === "handed" && !item.handedToCarrier) return false;
         if (f.followUp === "delivered" && !item.deliveredToCustomer) return false;
@@ -422,7 +427,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
 
   const filtered = useMemo(() => {
-    const wantDupOnly = draft.duplicates === "only";
+    const wantDupOnly = Boolean(isSupervisor) && draft.duplicates === "only";
     let list = baseFiltered;
     if (wantDupOnly) {
       list = baseFiltered.filter((item) => dupMeta.has(item.id));
@@ -434,7 +439,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
       });
     }
     return list;
-  }, [baseFiltered, dupMeta, draft.duplicates]);
+  }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor]);
 
   const printRows = useMemo(() => {
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
@@ -572,6 +577,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             <option value="IN_PROGRESS">جاري</option>
             <option value="CONFIRMED">تم الحفظ</option>
             <option value="FAILED_CONTACT">لم يرد</option>
+            <option value="CANCELLED">لاغى</option>
+            <option value="cancelled_or_no_answer">لاغى / لم يرد</option>
           </select>
           {draft.status === "CONFIRMED" ? (
             <select
@@ -688,14 +695,16 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             </select>
           ) : null}
           <div className="flex flex-wrap items-stretch gap-2 sm:col-span-1 lg:col-span-1">
-            <select
-              value={draft.duplicates}
-              onChange={(e) => patchDraft({ duplicates: e.target.value === "only" ? "only" : "all" })}
-              className="min-w-[8rem] flex-1 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
-            >
-              <option value="all">كل الأوردرات</option>
-              <option value="only">المكررة فقط</option>
-            </select>
+            {isSupervisor ? (
+              <select
+                value={draft.duplicates}
+                onChange={(e) => patchDraft({ duplicates: e.target.value === "only" ? "only" : "all" })}
+                className="min-w-[8rem] flex-1 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+              >
+                <option value="all">كل الأوردرات</option>
+                <option value="only">المكررة فقط</option>
+              </select>
+            ) : null}
             <button
               type="button"
               onClick={runFilter}
