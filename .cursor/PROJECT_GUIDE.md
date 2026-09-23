@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS تاريخ من/إلى + عمود موظف | تسمية من/إلى داخل حقول التاريخ؛ خلفية off-white لمدخلات CS؛ عمود اسم الموظف بين الشحن والسعر للمشرف/أدمن | `cs-queue-client.tsx`, `cs-shell.tsx`, `globals.css` |
 | CS تنظيم فلتر القائمة | إزالة محافظات/مناطق وخيارات لاغى/لم يرد من الفلتر؛ شبكة موحّدة ودروب بوكس أصغر | `cs-queue-client.tsx` |
 | إشعار ديبوزت جذري للأدمن | /api/cs/upload؛ جدول AdminNotification؛ جرس يقرأ الصندوق + صوت على unread؛ بيانات دفع كاملة | `upload/route.ts`, `admin-notifications.ts`, `deposit-approvals.ts`, `order-notification-bar.tsx`, `middleware.ts` |
 | جرس إشعارات جذري أدمن+CS | إخراج الجرس من overflow-x-auto؛ شارة inline؛ لوحة fixed+backdrop عبر portal؛ أيقونة SVG واضحة | `cs-shell.tsx`, `order-notification-bar.tsx`, `admin-shell.tsx` |

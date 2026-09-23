@@ -406,3 +406,10 @@ html {
   background: var(--widget-btn-bg-hover);
   transform: translateX(4px);
 }
+
+/* CS app: off-white fields so selects/inputs read as controls */
+.cs-app select,
+.cs-app input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.cs-app textarea {
+  background-color: #f5f5f0;
+}

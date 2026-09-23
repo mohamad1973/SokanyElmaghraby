@@ -173,7 +173,7 @@ type DraftFilters = {
 type DupMeta = { key: string; count: number; colorClass: string };
 
 const FILTER_CONTROL =
-  "h-9 w-full rounded-lg border border-[#E5E5E5] bg-white px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
+  "h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
 
 function defaultDraft(): DraftFilters {
   return {
@@ -646,28 +646,28 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             <option value="bosta">بوسطة</option>
             <option value="sayed_temima">سيد تميمة</option>
           </select>
-          <label className="grid gap-0.5 text-[10px] font-bold text-[#14213D]/70">
-            من يوم
+          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
+            <span className="shrink-0 text-[#14213D]/60">من</span>
             <input
               type="date"
               min={dateMinYmd()}
               max={dateMaxYmd()}
               value={draft.dateFrom}
               onChange={(e) => patchDraft({ dateFrom: e.target.value })}
-              className={FILTER_CONTROL}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
-          </label>
-          <label className="grid gap-0.5 text-[10px] font-bold text-[#14213D]/70">
-            إلى يوم
+          </div>
+          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
+            <span className="shrink-0 text-[#14213D]/60">إلى</span>
             <input
               type="date"
               min={dateMinYmd()}
               max={dateMaxYmd()}
               value={draft.dateTo}
               onChange={(e) => patchDraft({ dateTo: e.target.value })}
-              className={FILTER_CONTROL}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
-          </label>
+          </div>
           <select
             value={draft.trackingFilter}
             onChange={(e) =>
@@ -778,7 +778,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               >
                 <div
                   className={`grid gap-x-2 gap-y-2 text-sm font-bold text-[#14213D] ${
-                    isSupervisor ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
+                    isSupervisor ? "grid-cols-2 sm:grid-cols-6" : "grid-cols-2 sm:grid-cols-4"
                   }`}
                 >
                   <div className="flex flex-col gap-0.5">
@@ -838,7 +838,6 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                         {item.customerSnapshot.governorate} · {item.customerSnapshot.area}
                       </span>
                     ) : null}
-                    <span className="text-xs">{item.assignedAgent?.name || "—"}</span>
                     {!isSupervisor ? (
                       <span className="text-xs text-[#14213D]/70">
                         شحن: {SHIPPING_COMPANY_LABEL[ship] || ship}
@@ -867,6 +866,12 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                         />
                         تميمة
                       </label>
+                    </div>
+                  ) : null}
+                  {isSupervisor ? (
+                    <div className="flex flex-col items-center justify-center gap-0.5 self-center text-center">
+                      <span className="text-[10px] font-bold text-[#14213D]/55">موظف خدمة العملاء</span>
+                      <span className="text-xs font-extrabold">{item.assignedAgent?.name || "—"}</span>
                     </div>
                   ) : null}
                   <div className="flex flex-col items-start gap-1.5 sm:items-end">

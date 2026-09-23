@@ -680,7 +680,11 @@ export function CsShell({ children }: { children: ReactNode }) {
 
   return (
     <SessionProvider>
-      <div className="min-h-screen text-[var(--cs-navy)]" dir="rtl" style={{ ...CS_VARS, background: "var(--cs-gray)" }}>
+      <div
+        className="cs-app min-h-screen text-[var(--cs-navy)]"
+        dir="rtl"
+        style={{ ...CS_VARS, background: "var(--cs-gray)" }}
+      >
         <CsHeader />
         <main className="mx-auto max-w-7xl p-3 sm:p-6">{children}</main>
         <CsPwaInstallPrompt />
