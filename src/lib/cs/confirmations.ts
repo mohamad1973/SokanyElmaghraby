@@ -96,8 +96,12 @@ function sortByOrderNumberDesc<T extends { wooOrderNumber: string }>(rows: T[]) 
   );
 }
 
-/** Order total above this (EGP) shows the optional deposit card on the call sheet. */
+/** Order total at/above this (EGP) shows the optional deposit card on the call sheet. */
 export const CS_DEPOSIT_THRESHOLD = 5000;
+
+export const CS_DEPOSIT_COMPANY_PHONES = ["01000260262", "01037333490"] as const;
+
+export type CsDepositPayMethod = "wallet" | "instapay";
 
 export function parseDepositAmount(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -112,6 +116,23 @@ export function parseDepositAmount(value: unknown): number | null {
 
 export function serializeDepositAmount(value: unknown): number | null {
   return parseDepositAmount(value);
+}
+
+export function normalizeDepositPayMethod(value: unknown): CsDepositPayMethod | null {
+  const s = String(value || "").trim().toLowerCase();
+  if (s === "wallet" || s === "instapay") return s;
+  return null;
+}
+
+export function normalizeDepositFromNumber(value: unknown): string | null {
+  const s = String(value || "").trim();
+  return s || null;
+}
+
+export function normalizeDepositToPhone(value: unknown): string | null {
+  const s = String(value || "").trim();
+  if ((CS_DEPOSIT_COMPANY_PHONES as readonly string[]).includes(s)) return s;
+  return null;
 }
 
 export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
@@ -351,6 +372,10 @@ export async function listCsConfirmationsForViewer(opts: {
         waybillPrinted: false,
         depositAmount: null,
         depositPaid: false,
+        depositPayMethod: null,
+        depositFromNumber: null,
+        depositToPhone: null,
+        depositToMethod: null,
         handedToCarrier: false,
         deliveredToCustomer: false,
         customerFollowUp: false,
@@ -407,6 +432,10 @@ export function serializeCsQueueItem(row: {
   waybillPrinted?: boolean | null;
   depositAmount?: unknown;
   depositPaid?: boolean | null;
+  depositPayMethod?: string | null;
+  depositFromNumber?: string | null;
+  depositToPhone?: string | null;
+  depositToMethod?: string | null;
   handedToCarrier?: boolean | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
@@ -452,6 +481,10 @@ export function serializeCsQueueItem(row: {
     waybillPrinted: Boolean(row.waybillPrinted),
     depositAmount: serializeDepositAmount(row.depositAmount),
     depositPaid: Boolean(row.depositPaid),
+    depositPayMethod: normalizeDepositPayMethod(row.depositPayMethod),
+    depositFromNumber: normalizeDepositFromNumber(row.depositFromNumber),
+    depositToPhone: normalizeDepositToPhone(row.depositToPhone) || (row.depositToPhone ? String(row.depositToPhone).trim() || null : null),
+    depositToMethod: normalizeDepositPayMethod(row.depositToMethod),
     handedToCarrier: Boolean(row.handedToCarrier),
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
@@ -548,6 +581,10 @@ export async function saveCsConfirmation(input: {
   waybillPrinted?: boolean;
   depositAmount?: number | string | null;
   depositPaid?: boolean;
+  depositPayMethod?: string | null;
+  depositFromNumber?: string | null;
+  depositToPhone?: string | null;
+  depositToMethod?: string | null;
   followUp?: {
     handedToCarrier?: boolean;
     deliveredToCustomer?: boolean;
@@ -565,27 +602,54 @@ export async function saveCsConfirmation(input: {
   if (!row) return { ok: false as const, message: "الطلب غير موجود.", missing: [] };
 
   const snap = ((row.customerSnapshot as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+  const typed = row as {
+    trackingNumber?: string | null;
+    waybillPrinted?: boolean | null;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
+    depositPayMethod?: string | null;
+    depositFromNumber?: string | null;
+    depositToPhone?: string | null;
+    depositToMethod?: string | null;
+  };
   const nextTracking =
     input.trackingNumber !== undefined
       ? String(input.trackingNumber || "").trim() || null
-      : ((row as { trackingNumber?: string | null }).trackingNumber ?? null);
+      : (typed.trackingNumber ?? null);
   const nextWaybill =
-    input.waybillPrinted !== undefined
-      ? Boolean(input.waybillPrinted)
-      : Boolean((row as { waybillPrinted?: boolean | null }).waybillPrinted);
+    input.waybillPrinted !== undefined ? Boolean(input.waybillPrinted) : Boolean(typed.waybillPrinted);
   const nextDepositAmount =
     input.depositAmount !== undefined
       ? parseDepositAmount(input.depositAmount)
-      : parseDepositAmount((row as { depositAmount?: unknown }).depositAmount);
+      : parseDepositAmount(typed.depositAmount);
   const nextDepositPaid =
-    input.depositPaid !== undefined
-      ? Boolean(input.depositPaid)
-      : Boolean((row as { depositPaid?: boolean | null }).depositPaid);
+    input.depositPaid !== undefined ? Boolean(input.depositPaid) : Boolean(typed.depositPaid);
+  const nextDepositPayMethod =
+    input.depositPayMethod !== undefined
+      ? normalizeDepositPayMethod(input.depositPayMethod)
+      : normalizeDepositPayMethod(typed.depositPayMethod);
+  const nextDepositFromNumber =
+    input.depositFromNumber !== undefined
+      ? normalizeDepositFromNumber(input.depositFromNumber)
+      : normalizeDepositFromNumber(typed.depositFromNumber);
+  const nextDepositToPhone =
+    input.depositToPhone !== undefined
+      ? normalizeDepositToPhone(input.depositToPhone)
+      : normalizeDepositToPhone(typed.depositToPhone);
+  const nextDepositToMethod =
+    input.depositToMethod !== undefined
+      ? normalizeDepositPayMethod(input.depositToMethod)
+      : normalizeDepositPayMethod(typed.depositToMethod);
+
   const shippingMetaPatch: {
     trackingNumber?: string | null;
     waybillPrinted?: boolean;
     depositAmount?: number | null;
     depositPaid?: boolean;
+    depositPayMethod?: string | null;
+    depositFromNumber?: string | null;
+    depositToPhone?: string | null;
+    depositToMethod?: string | null;
     customerSnapshot?: Record<string, unknown>;
   } = {};
   if (input.trackingNumber !== undefined) {
@@ -601,12 +665,28 @@ export async function saveCsConfirmation(input: {
   if (input.depositPaid !== undefined) {
     shippingMetaPatch.depositPaid = nextDepositPaid;
   }
+  if (input.depositPayMethod !== undefined) {
+    shippingMetaPatch.depositPayMethod = nextDepositPayMethod;
+  }
+  if (input.depositFromNumber !== undefined) {
+    shippingMetaPatch.depositFromNumber = nextDepositFromNumber;
+  }
+  if (input.depositToPhone !== undefined) {
+    shippingMetaPatch.depositToPhone = nextDepositToPhone;
+  }
+  if (input.depositToMethod !== undefined) {
+    shippingMetaPatch.depositToMethod = nextDepositToMethod;
+  }
 
   const hasShippingMetaUpdate =
     input.trackingNumber !== undefined ||
     input.waybillPrinted !== undefined ||
     input.depositAmount !== undefined ||
-    input.depositPaid !== undefined;
+    input.depositPaid !== undefined ||
+    input.depositPayMethod !== undefined ||
+    input.depositFromNumber !== undefined ||
+    input.depositToPhone !== undefined ||
+    input.depositToMethod !== undefined;
 
   // Post-confirmation follow-up update (includes tracking / waybill / deposit)
   if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && (input.followUp || hasShippingMetaUpdate)) {

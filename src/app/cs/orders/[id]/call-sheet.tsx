@@ -12,8 +12,17 @@ import {
 } from "@/lib/cs/checklist";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
-/** Order total above this (EGP) shows the optional deposit card. */
+/** Order total at/above this (EGP) shows the optional deposit card. */
 const CS_DEPOSIT_THRESHOLD = 5000;
+
+const DEPOSIT_TO_OPTIONS = [
+  { phone: "01000260262", method: "wallet" as const, label: "01000260262 — محفظة" },
+  { phone: "01000260262", method: "instapay" as const, label: "01000260262 — انستا" },
+  { phone: "01037333490", method: "wallet" as const, label: "01037333490 — محفظة" },
+  { phone: "01037333490", method: "instapay" as const, label: "01037333490 — انستا" },
+];
+
+type DepositMethod = "wallet" | "instapay" | "";
 
 type Snapshot = {
   customerName?: string;
@@ -55,7 +64,21 @@ type Props = {
   waybillPrinted?: boolean;
   depositAmount?: number | null;
   depositPaid?: boolean;
+  depositPayMethod?: string | null;
+  depositFromNumber?: string | null;
+  depositToPhone?: string | null;
+  depositToMethod?: string | null;
 };
+
+function makeDepositToKey(phone: string, method: string) {
+  return `${phone}:${method}`;
+}
+
+function parseDepositToKey(key: string): { phone: string; method: DepositMethod } {
+  const [phone = "", method = ""] = key.split(":");
+  if (method === "wallet" || method === "instapay") return { phone, method };
+  return { phone: "", method: "" };
+}
 
 function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | null): Record<string, AnswerState> {
   const map: Record<string, AnswerState> = {};
@@ -96,6 +119,10 @@ export function CsCallSheet({
   waybillPrinted: initialWaybillPrinted,
   depositAmount: initialDepositAmount,
   depositPaid: initialDepositPaid,
+  depositPayMethod: initialDepositPayMethod,
+  depositFromNumber: initialDepositFromNumber,
+  depositToPhone: initialDepositToPhone,
+  depositToMethod: initialDepositToMethod,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const lockedShipping =
@@ -123,13 +150,26 @@ export function CsCallSheet({
     return String(initialDepositAmount);
   });
   const [depositPaid, setDepositPaid] = useState(Boolean(initialDepositPaid));
+  const [depositPayMethod, setDepositPayMethod] = useState<DepositMethod>(() => {
+    const m = String(initialDepositPayMethod || "").trim();
+    return m === "wallet" || m === "instapay" ? m : "";
+  });
+  const [depositFromNumber, setDepositFromNumber] = useState(
+    () => String(initialDepositFromNumber || "").trim(),
+  );
+  const [depositToKey, setDepositToKey] = useState(() => {
+    const phone = String(initialDepositToPhone || "").trim();
+    const method = String(initialDepositToMethod || "").trim();
+    if (phone && (method === "wallet" || method === "instapay")) return makeDepositToKey(phone, method);
+    return "";
+  });
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const orderTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
-  const showDepositCard = Number.isFinite(orderTotal) && orderTotal > CS_DEPOSIT_THRESHOLD;
+  const showDepositCard = Number.isFinite(orderTotal) && orderTotal >= CS_DEPOSIT_THRESHOLD;
 
   const payloadAnswers: CsChecklistAnswerInput[] = useMemo(
     () =>
@@ -178,6 +218,8 @@ export function CsCallSheet({
       }
     }
 
+    const to = parseDepositToKey(depositToKey);
+
     const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -191,6 +233,10 @@ export function CsCallSheet({
         waybillPrinted,
         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
         depositPaid,
+        depositPayMethod: depositPayMethod || null,
+        depositFromNumber: depositFromNumber.trim() || null,
+        depositToPhone: to.phone || null,
+        depositToMethod: to.method || null,
         followUp: confirmed ? fu : undefined,
       }),
     });
@@ -221,7 +267,8 @@ export function CsCallSheet({
   }
 
   const inputCls =
-    "w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
+    "w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold text-[#14213D]";
+  const compactBtn = "rounded-lg px-2.5 py-1 text-[11px] font-extrabold";
 
   const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
@@ -323,83 +370,6 @@ export function CsCallSheet({
         >
           {message}
         </p>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20">
-          <p className="text-sm font-extrabold text-[#14213D]">رقم التراك (بوليصة الشحن)</p>
-          <p className="mt-1 text-[11px] text-[#14213D]/60">اختياري — ليس شرطاً لحفظ الأوردر</p>
-          <input
-            dir="ltr"
-            value={trackingNumber}
-            onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="Tracking number"
-            className="mt-3 w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]"
-          />
-        </div>
-        <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20">
-          <p className="text-sm font-extrabold text-[#14213D]">تم طباعة البوليصة؟</p>
-          <p className="mt-1 text-[11px] text-[#14213D]/60">اختياري — للفلترة والتقرير فقط</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setWaybillPrinted(true)}
-              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
-                waybillPrinted ? "bg-[#FCA311] text-black" : "bg-[#E5E5E5] text-[#14213D]"
-              }`}
-            >
-              نعم
-            </button>
-            <button
-              type="button"
-              onClick={() => setWaybillPrinted(false)}
-              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
-                !waybillPrinted ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-              }`}
-            >
-              لا
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {showDepositCard ? (
-        <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20 sm:max-w-xl">
-          <p className="text-sm font-extrabold text-[#14213D]">طلب مقدم من العميل</p>
-          <p className="mt-1 text-[11px] text-[#14213D]/60">
-            اختياري — للأوردرات أكبر من {CS_DEPOSIT_THRESHOLD.toLocaleString("en-EG")} ج.م — ليس شرطاً لحفظ الأوردر
-          </p>
-          <label className="mt-3 block text-xs font-bold text-[#14213D]/70">قيمة المقدم (ج.م)</label>
-          <input
-            dir="ltr"
-            inputMode="decimal"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-            placeholder="0"
-            className="mt-1 w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]"
-          />
-          <p className="mt-3 text-xs font-extrabold text-[#14213D]">دفع مؤكد للمقدم؟</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setDepositPaid(true)}
-              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
-                depositPaid ? "bg-[#FCA311] text-black" : "bg-[#E5E5E5] text-[#14213D]"
-              }`}
-            >
-              نعم
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepositPaid(false)}
-              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
-                !depositPaid ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-              }`}
-            >
-              لا
-            </button>
-          </div>
-        </div>
       ) : null}
 
       {!confirmed ? (
@@ -517,18 +487,6 @@ export function CsCallSheet({
               </div>
             );
           })}
-
-          <div
-            className={`flex min-h-[9rem] flex-col rounded-2xl p-3 shadow-sm ring-2 ${
-              missing.includes("shipping_company") ? "ring-red-500 bg-white" : "ring-[#FCA311] bg-[#FCA311]/15"
-            }`}
-          >
-            <p className="text-sm font-extrabold text-[#14213D]">شركة الشحن</p>
-            <p className="mt-1 text-[11px] text-[#14213D]/60">تحددها المشرفة من القائمة الرئيسية</p>
-            <p className="mt-3 text-lg font-extrabold text-[#14213D]">
-              {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
-            </p>
-          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -562,6 +520,155 @@ export function CsCallSheet({
           </label>
         </div>
       )}
+
+      {/* Bottom row: shipping + deposit + tracking + waybill */}
+      <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div
+          className={`flex min-h-[7.5rem] flex-col rounded-xl p-2.5 shadow-sm ring-2 ${
+            missing.includes("shipping_company")
+              ? "ring-red-500 bg-white"
+              : "ring-[#FCA311] bg-[#FCA311]/20"
+          }`}
+        >
+          <p className="text-xs font-extrabold text-[#14213D]">شركة الشحن</p>
+          <p className="mt-0.5 text-[10px] text-[#14213D]/60">تحددها المشرفة من القائمة</p>
+          <p className="mt-2 text-sm font-extrabold text-[#14213D]">
+            {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
+          </p>
+        </div>
+
+        {showDepositCard ? (
+          <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#0D9488]/15 p-2.5 shadow-sm ring-2 ring-[#0D9488]">
+            <p className="text-xs font-extrabold text-[#14213D]">طلب ديبوزت</p>
+            <p className="mt-0.5 text-[10px] text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
+            <div className="mt-1.5 space-y-1.5">
+              <div>
+                <p className="text-[10px] font-bold text-[#14213D]/70">الدفع من</p>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDepositPayMethod("wallet")}
+                    className={`${compactBtn} ${
+                      depositPayMethod === "wallet" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    محفظة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDepositPayMethod("instapay")}
+                    className={`${compactBtn} ${
+                      depositPayMethod === "instapay" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    انستا
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#14213D]/70">من رقم</label>
+                <input
+                  dir="ltr"
+                  value={depositFromNumber}
+                  onChange={(e) => setDepositFromNumber(e.target.value)}
+                  placeholder="رقم العميل"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#14213D]/70">الدفع إلى</label>
+                <select
+                  value={depositToKey}
+                  onChange={(e) => setDepositToKey(e.target.value)}
+                  className={inputCls}
+                  dir="ltr"
+                >
+                  <option value="">اختر...</option>
+                  {DEPOSIT_TO_OPTIONS.map((opt) => (
+                    <option
+                      key={makeDepositToKey(opt.phone, opt.method)}
+                      value={makeDepositToKey(opt.phone, opt.method)}
+                    >
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#14213D]/70">قيمة المقدم</label>
+                <input
+                  dir="ltr"
+                  inputMode="decimal"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="0"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[#14213D]/70">الدفع تم؟</p>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDepositPaid(true)}
+                    className={`${compactBtn} ${
+                      depositPaid ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    نعم
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDepositPaid(false)}
+                    className={`${compactBtn} ${
+                      !depositPaid ? "bg-[#14213D] text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    لا
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#14213D]/10 p-2.5 shadow-sm ring-2 ring-[#14213D]">
+          <p className="text-xs font-extrabold text-[#14213D]">رقم التراك</p>
+          <p className="mt-0.5 text-[10px] text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
+          <input
+            dir="ltr"
+            value={trackingNumber}
+            onChange={(e) => setTrackingNumber(e.target.value)}
+            placeholder="Tracking"
+            className={`mt-2 ${inputCls}`}
+          />
+        </div>
+
+        <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#059669]/15 p-2.5 shadow-sm ring-2 ring-[#059669]">
+          <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
+          <p className="mt-0.5 text-[10px] text-[#14213D]/60">اختياري — للفلترة فقط</p>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setWaybillPrinted(true)}
+              className={`${compactBtn} ${
+                waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
+              }`}
+            >
+              نعم
+            </button>
+            <button
+              type="button"
+              onClick={() => setWaybillPrinted(false)}
+              className={`${compactBtn} ${
+                !waybillPrinted ? "bg-[#14213D] text-white" : "bg-white text-[#14213D]"
+              }`}
+            >
+              لا
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

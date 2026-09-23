@@ -16,6 +16,10 @@ type Body = {
   waybillPrinted?: boolean;
   depositAmount?: number | string | null;
   depositPaid?: boolean;
+  depositPayMethod?: string | null;
+  depositFromNumber?: string | null;
+  depositToPhone?: string | null;
+  depositToMethod?: string | null;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   followUp?: {
     handedToCarrier?: boolean;
@@ -54,6 +58,10 @@ export async function PUT(request: Request, context: Context) {
     body.waybillPrinted === undefined &&
     body.depositAmount === undefined &&
     body.depositPaid === undefined &&
+    body.depositPayMethod === undefined &&
+    body.depositFromNumber === undefined &&
+    body.depositToPhone === undefined &&
+    body.depositToMethod === undefined &&
     !body.followUp
   ) {
     const viewer = await resolveCsViewer(session.user.csAgentId);
@@ -87,6 +95,10 @@ export async function PUT(request: Request, context: Context) {
     waybillPrinted: body.waybillPrinted,
     depositAmount: body.depositAmount,
     depositPaid: body.depositPaid,
+    depositPayMethod: body.depositPayMethod,
+    depositFromNumber: body.depositFromNumber,
+    depositToPhone: body.depositToPhone,
+    depositToMethod: body.depositToMethod,
     followUp: body.followUp,
   });
 

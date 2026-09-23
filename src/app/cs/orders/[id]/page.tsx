@@ -34,6 +34,10 @@ export default async function CsOrderPage({ params }: Props) {
     waybillPrinted?: boolean | null;
     depositAmount?: unknown;
     depositPaid?: boolean | null;
+    depositPayMethod?: string | null;
+    depositFromNumber?: string | null;
+    depositToPhone?: string | null;
+    depositToMethod?: string | null;
   };
 
   return (
@@ -46,6 +50,10 @@ export default async function CsOrderPage({ params }: Props) {
       waybillPrinted={Boolean(row.waybillPrinted)}
       depositAmount={serializeDepositAmount(row.depositAmount)}
       depositPaid={Boolean(row.depositPaid)}
+      depositPayMethod={row.depositPayMethod || null}
+      depositFromNumber={row.depositFromNumber || null}
+      depositToPhone={row.depositToPhone || null}
+      depositToMethod={row.depositToMethod || null}
       followUp={{
         handedToCarrier: Boolean(confirmation.handedToCarrier),
         deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),

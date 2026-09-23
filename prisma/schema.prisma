@@ -269,6 +269,10 @@ model CsOrderConfirmation {
   waybillPrinted       Boolean             @default(false)
   depositAmount        Decimal?            @db.Decimal(12, 2)
   depositPaid          Boolean             @default(false)
+  depositPayMethod     String?
+  depositFromNumber    String?             @db.VarChar(32)
+  depositToPhone       String?             @db.VarChar(32)
+  depositToMethod      String?
   handedToCarrier      Boolean             @default(false)
   deliveredToCustomer  Boolean             @default(false)
   customerFollowUp     Boolean             @default(false)
