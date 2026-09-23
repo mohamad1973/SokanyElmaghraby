@@ -95,12 +95,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="lg:pl-56">
-        <header className="sticky top-0 z-40 flex min-h-16 items-center justify-between overflow-visible border-b border-black/10 bg-white px-4 py-2 shadow-sm">
+        <header className="sticky top-0 z-40 flex min-h-20 items-center justify-between overflow-visible border-b border-black/10 bg-white px-4 py-3 shadow-sm">
           <div>
             <p className="text-sm font-bold">{t("headerTitle")}</p>
             <p className="text-xs text-zinc-500">{t("headerSub")}</p>
           </div>
-          <div className="flex items-center gap-2 overflow-visible">
+          <div className="flex items-center gap-3 overflow-visible">
             <AdminNotificationsBell />
             <LanguageSwitcher />
             <button

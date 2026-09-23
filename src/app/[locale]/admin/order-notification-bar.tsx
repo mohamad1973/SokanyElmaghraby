@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 
 import { Link } from "@/i18n/navigation";
 import { ensureDepositAlertUnlockedOnGesture, playLoudDepositAlert } from "@/lib/deposit-alert-sound";
@@ -52,15 +53,22 @@ function writeKnownDepositIds(ids: Set<number>) {
   window.localStorage.setItem(lastSeenDepositIdsKey, JSON.stringify([...ids]));
 }
 
-/** Bell for admin header: deposit approvals + new orders. */
+/** Bell for admin header: deposit approvals + new orders (portal dropdown). */
 export function AdminNotificationsBell() {
   const [open, setOpen] = useState(false);
   const [newOrders, setNewOrders] = useState<NonNullable<LatestOrderResponse["orders"]>>([]);
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [error, setError] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const knownDepositIds = useRef<Set<number>>(new Set());
   const initialized = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     ensureDepositAlertUnlockedOnGesture();
@@ -89,9 +97,14 @@ export function AdminNotificationsBell() {
               if (isMounted) setNewOrders([]);
             } else {
               const previousOrderIndex = todayOrders.findIndex((order) => String(order.id) === previousOrderId);
-              const fresh =
-                previousOrderIndex === -1 ? todayOrders : todayOrders.slice(0, previousOrderIndex);
-              if (isMounted) setNewOrders(fresh);
+              if (previousOrderIndex === -1) {
+                // Stale last-seen: do not treat all today's orders as unread
+                window.localStorage.setItem(lastSeenOrderKey, String(latestOrder.id));
+                if (isMounted) setNewOrders([]);
+              } else {
+                const fresh = todayOrders.slice(0, previousOrderIndex);
+                if (isMounted) setNewOrders(fresh);
+              }
             }
           } else if (isMounted) {
             setNewOrders([]);
@@ -107,7 +120,6 @@ export function AdminNotificationsBell() {
           const payload = (await depositRes.json().catch(() => null)) as { items?: DepositItem[] } | null;
           const items = payload?.items || [];
           if (!initialized.current) {
-            // First load: show all pending, seed known ids, no sound spam
             for (const i of items) knownDepositIds.current.add(i.id);
             writeKnownDepositIds(knownDepositIds.current);
             initialized.current = true;
@@ -118,7 +130,6 @@ export function AdminNotificationsBell() {
               for (const i of fresh) knownDepositIds.current.add(i.id);
               writeKnownDepositIds(knownDepositIds.current);
             }
-            // Drop IDs that are no longer pending so re-requests can alert again
             const pendingSet = new Set(items.map((i) => i.id));
             for (const id of [...knownDepositIds.current]) {
               if (!pendingSet.has(id)) knownDepositIds.current.delete(id);
@@ -143,38 +154,169 @@ export function AdminNotificationsBell() {
     };
   }, []);
 
-  useEffect(() => {
+  function updatePanelPosition() {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const width = Math.min(22 * 16, window.innerWidth - 16);
+    let left = rect.right - width;
+    if (left < 8) left = 8;
+    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
+    setPanelStyle({
+      position: "fixed",
+      top: rect.bottom + 8,
+      left,
+      width,
+      zIndex: 9999,
+    });
+  }
+
+  useLayoutEffect(() => {
     if (!open) return;
-    function onDocPointer(e: MouseEvent | PointerEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    updatePanelPosition();
+    function onResize() {
+      updatePanelPosition();
     }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", onDocPointer);
-    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
     return () => {
-      document.removeEventListener("pointerdown", onDocPointer);
-      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
     };
   }, [open]);
 
-  const total = newOrders.length + deposits.length;
+  useEffect(() => {
+    if (!open) return;
+    let removeListeners: (() => void) | undefined;
+    const timer = window.setTimeout(() => {
+      function onDocPointer(e: PointerEvent) {
+        const t = e.target as Node;
+        if (buttonRef.current?.contains(t)) return;
+        if (panelRef.current?.contains(t)) return;
+        setOpen(false);
+      }
+      function onKey(e: KeyboardEvent) {
+        if (e.key === "Escape") setOpen(false);
+      }
+      document.addEventListener("pointerdown", onDocPointer);
+      document.addEventListener("keydown", onKey);
+      removeListeners = () => {
+        document.removeEventListener("pointerdown", onDocPointer);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      removeListeners?.();
+    };
+  }, [open]);
 
   function markOrdersRead() {
     if (newOrders[0]) {
       window.localStorage.setItem(lastSeenOrderKey, String(newOrders[0].id));
+    } else {
+      // still clear any stale badge by anchoring to "now"
+      const latestFromStorage = window.localStorage.getItem(lastSeenOrderKey);
+      if (!latestFromStorage) {
+        window.localStorage.setItem(lastSeenOrderKey, "0");
+      }
     }
     setNewOrders([]);
   }
 
+  const total = newOrders.length + deposits.length;
+  const hasDeposits = deposits.length > 0;
+
+  const panel = open && mounted ? (
+    <div
+      ref={panelRef}
+      style={panelStyle}
+      className="max-h-[min(24rem,70vh)] overflow-y-auto rounded-2xl border border-black/15 bg-white p-3 text-[#14213D] shadow-2xl"
+      dir="rtl"
+      role="dialog"
+      aria-label="قائمة الإشعارات"
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-extrabold">قائمة الإشعارات</p>
+        <Link
+          href="/admin/deposit-approvals"
+          className="text-[10px] font-bold text-[#0D9488] underline"
+          onClick={() => setOpen(false)}
+        >
+          كل طلبات الديبوزت
+        </Link>
+      </div>
+      {error ? <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-bold text-red-700">{error}</p> : null}
+      {total === 0 && !error ? (
+        <p className="text-xs text-zinc-500">لا توجد إشعارات حالياً.</p>
+      ) : (
+        <div className="space-y-4 text-xs">
+          {deposits.length ? (
+            <div>
+              <p className="font-extrabold text-[#0D9488]">موافقات ديبوزت ({deposits.length})</p>
+              <ul className="mt-1 space-y-1.5">
+                {deposits.map((d) => (
+                  <li key={`dep-${d.id}`}>
+                    <Link
+                      href={`/admin/deposit-approvals/${d.id}`}
+                      className="block rounded-lg bg-[#0D9488]/10 px-2 py-1.5 font-bold text-[#14213D] hover:bg-[#0D9488]/20"
+                      onClick={() => setOpen(false)}
+                    >
+                      طلب تأكيد ديبوزت #{d.wooOrderNumber}
+                      <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                        {d.customerName || "عميل"} · {d.depositAmount ?? "?"} ج.م
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {newOrders.length ? (
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-extrabold text-[#FCA311]">طلبات جديدة اليوم ({newOrders.length})</p>
+                <button type="button" onClick={markOrdersRead} className="text-[10px] font-bold underline">
+                  تصفير طلبات اليوم
+                </button>
+              </div>
+              <ul className="mt-1 space-y-1.5">
+                {newOrders.slice(0, 12).map((o) => (
+                  <li key={`ord-${o.id}`}>
+                    <Link
+                      href={`/admin/orders/${o.id}`}
+                      className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
+                      onClick={() => {
+                        markOrdersRead();
+                        setOpen(false);
+                      }}
+                    >
+                      #{o.number} — {o.customerName} — {o.total} {o.currency}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div className="relative z-[60]" ref={rootRef} dir="rtl">
+    <>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`relative inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-extrabold ${
-          deposits.length > 0
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className={`relative inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-extrabold ${
+          hasDeposits
             ? "animate-pulse bg-[#FCA311] text-black"
             : "border border-black/10 bg-zinc-50 text-[#14213D] hover:bg-zinc-100"
         }`}
@@ -183,73 +325,24 @@ export function AdminNotificationsBell() {
       >
         <span aria-hidden>🔔</span>
         <span>إشعارات</span>
-        {total > 0 ? (
-          <span className="ms-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-extrabold text-white">
+        {hasDeposits ? (
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#0D9488] px-1.5 text-[11px] font-extrabold text-white">
+            ديبوزت {deposits.length}
+          </span>
+        ) : null}
+        {!hasDeposits && total > 0 ? (
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-extrabold text-white">
             {total}
           </span>
         ) : null}
+        {hasDeposits && newOrders.length > 0 ? (
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-extrabold text-white">
+            +{newOrders.length}
+          </span>
+        ) : null}
       </button>
-
-      {open ? (
-        <div className="absolute end-0 top-[calc(100%+0.5rem)] z-[70] w-[min(22rem,calc(100vw-2rem))] max-h-[min(24rem,70vh)] overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 text-[#14213D] shadow-2xl">
-          <p className="mb-2 text-sm font-extrabold">قائمة الإشعارات</p>
-          {error ? <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-bold text-red-700">{error}</p> : null}
-          {total === 0 && !error ? (
-            <p className="text-xs text-zinc-500">لا توجد إشعارات حالياً.</p>
-          ) : (
-            <div className="space-y-4 text-xs">
-              {deposits.length ? (
-                <div>
-                  <p className="font-extrabold text-[#0D9488]">موافقات ديبوزت ({deposits.length})</p>
-                  <ul className="mt-1 space-y-1.5">
-                    {deposits.map((d) => (
-                      <li key={`dep-${d.id}`}>
-                        <Link
-                          href={`/admin/deposit-approvals/${d.id}`}
-                          className="block rounded-lg bg-[#0D9488]/10 px-2 py-1.5 font-bold text-[#14213D] hover:bg-[#0D9488]/20"
-                          onClick={() => setOpen(false)}
-                        >
-                          طلب تأكيد ديبوزت #{d.wooOrderNumber}
-                          <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
-                            {d.customerName || "عميل"} · {d.depositAmount ?? "?"} ج.م
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {newOrders.length ? (
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-extrabold text-[#FCA311]">طلبات جديدة اليوم ({newOrders.length})</p>
-                    <button type="button" onClick={markOrdersRead} className="text-[10px] font-bold underline">
-                      تمت القراءة
-                    </button>
-                  </div>
-                  <ul className="mt-1 space-y-1.5">
-                    {newOrders.slice(0, 12).map((o) => (
-                      <li key={`ord-${o.id}`}>
-                        <Link
-                          href={`/admin/orders/${o.id}`}
-                          className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
-                          onClick={() => {
-                            markOrdersRead();
-                            setOpen(false);
-                          }}
-                        >
-                          #{o.number} — {o.customerName} — {o.total} {o.currency}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
+      {mounted ? createPortal(panel, document.body) : null}
+    </>
   );
 }
 
