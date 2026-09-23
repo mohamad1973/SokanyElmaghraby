@@ -547,7 +547,7 @@ export async function saveCsConfirmation(input: {
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.FAILED_CONTACT,
-        failReason: input.failReason?.trim() || "تعذر التواصل",
+        failReason: input.failReason?.trim() || "لم يرد",
         assignedAgentId: input.agentId,
       },
     });

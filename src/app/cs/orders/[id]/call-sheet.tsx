@@ -163,7 +163,7 @@ export function CsCallSheet({
         answers: payloadAnswers,
         finalize: confirmed ? false : finalize,
         failContact,
-        failReason: failContact ? "تعذر التواصل مع العميل" : undefined,
+        failReason: failContact ? "لم يرد" : undefined,
         followUp: confirmed ? fu : undefined,
       }),
     });
@@ -181,7 +181,7 @@ export function CsCallSheet({
       return;
     }
 
-    setMessage(finalize ? (failContact ? "تم تسجيل تعذر التواصل." : "تم تأكيد الطلب.") : "تم حفظ المسودة.");
+    setMessage(finalize ? (failContact ? "تم تسجيل: لم يرد." : "تم تأكيد الطلب.") : "تم حفظ المسودة.");
     if (finalize) window.location.href = "/cs";
   }
 
@@ -227,7 +227,7 @@ export function CsCallSheet({
                 onClick={() => void save(true, true)}
                 className="rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
               >
-                تعذر
+                لم يرد
               </button>
             </>
           ) : (

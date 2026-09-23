@@ -95,8 +95,17 @@ const statusMeta: Record<string, { label: string; className: string }> = {
   PENDING: { label: "بانتظار", className: "bg-[#E5E5E5] text-[#14213D]" },
   IN_PROGRESS: { label: "جاري", className: "bg-[#14213D] text-white" },
   CONFIRMED: { label: "تم الحفظ", className: "bg-[#FCA311] text-black" },
-  FAILED_CONTACT: { label: "تعذر الوصول", className: "bg-black text-white" },
+  FAILED_CONTACT: { label: "لم يرد", className: "bg-black text-white" },
 };
+
+const DUP_COLOR_CLASSES = [
+  "bg-rose-100",
+  "bg-sky-100",
+  "bg-violet-100",
+  "bg-amber-100",
+  "bg-emerald-100",
+  "bg-orange-100",
+] as const;
 
 type DraftFilters = {
   query: string;
@@ -109,7 +118,10 @@ type DraftFilters = {
   area: string;
   dateFrom: string;
   dateTo: string;
+  duplicates: "all" | "only";
 };
+
+type DupMeta = { key: string; count: number; colorClass: string };
 
 function defaultDraft(): DraftFilters {
   return {
@@ -123,6 +135,7 @@ function defaultDraft(): DraftFilters {
     area: "",
     dateFrom: cairoYesterdayYmd(),
     dateTo: cairoTodayYmd(),
+    duplicates: "all",
   };
 }
 
@@ -143,6 +156,77 @@ function locMatch(haystack: string | null | undefined, needle: string) {
 
 function phoneDigits(value: string | null | undefined) {
   return String(value || "").replace(/\D/g, "");
+}
+
+function phoneKey(item: CsQueueItem) {
+  const digits = phoneDigits(item.customerSnapshot?.phone);
+  if (digits.length >= 10) return `p:${digits.slice(-10)}`;
+  if (digits.length >= 7) return `p:${digits}`;
+  return "";
+}
+
+function nameKey(item: CsQueueItem) {
+  const name = norm(item.customerSnapshot?.customerName);
+  return name.length >= 2 ? `n:${name}` : "";
+}
+
+function colorForDupKey(key: string) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return DUP_COLOR_CLASSES[h % DUP_COLOR_CLASSES.length];
+}
+
+/** Duplicate groups by phone, or by matching name+phone (within the given list). */
+function buildDuplicateMeta(items: CsQueueItem[]): Map<number, DupMeta> {
+  const byPhone = new Map<string, number[]>();
+  const byNamePhone = new Map<string, number[]>();
+  const byNameOnly = new Map<string, number[]>();
+
+  for (const item of items) {
+    const pk = phoneKey(item);
+    const nk = nameKey(item);
+    if (pk) {
+      const list = byPhone.get(pk) || [];
+      list.push(item.id);
+      byPhone.set(pk, list);
+    }
+    if (nk && pk) {
+      const key = `${nk}|${pk}`;
+      const list = byNamePhone.get(key) || [];
+      list.push(item.id);
+      byNamePhone.set(key, list);
+    }
+    if (nk && !pk) {
+      const list = byNameOnly.get(nk) || [];
+      list.push(item.id);
+      byNameOnly.set(nk, list);
+    }
+  }
+
+  const meta = new Map<number, DupMeta>();
+  for (const item of items) {
+    const pk = phoneKey(item);
+    const nk = nameKey(item);
+    let key = "";
+    let count = 0;
+    if (pk && (byPhone.get(pk)?.length || 0) >= 2) {
+      key = pk;
+      count = byPhone.get(pk)!.length;
+    } else if (nk && pk) {
+      const np = `${nk}|${pk}`;
+      if ((byNamePhone.get(np)?.length || 0) >= 2) {
+        key = np;
+        count = byNamePhone.get(np)!.length;
+      }
+    } else if (nk && (byNameOnly.get(nk)?.length || 0) >= 2) {
+      key = nk;
+      count = byNameOnly.get(nk)!.length;
+    }
+    if (key && count >= 2) {
+      meta.set(item.id, { key, count, colorClass: colorForDupKey(key) });
+    }
+  }
+  return meta;
 }
 
 function searchableText(item: CsQueueItem) {
@@ -306,7 +390,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   }, [draft.governorate, items]);
 
   // Search is live and independent of other filters: when query is set, match all loaded items.
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     const q = draft.query.trim();
     if (q) {
       return items
@@ -315,6 +399,23 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
     }
     return applyFilters(items, applied);
   }, [items, draft.query, applied]);
+
+  const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
+
+  const filtered = useMemo(() => {
+    const wantDupOnly = draft.duplicates === "only";
+    let list = baseFiltered;
+    if (wantDupOnly) {
+      list = baseFiltered.filter((item) => dupMeta.has(item.id));
+      list = [...list].sort((a, b) => {
+        const ka = dupMeta.get(a.id)?.key || "";
+        const kb = dupMeta.get(b.id)?.key || "";
+        if (ka !== kb) return ka.localeCompare(kb);
+        return parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber);
+      });
+    }
+    return list;
+  }, [baseFiltered, dupMeta, draft.duplicates]);
 
   const printRows = useMemo(() => {
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
@@ -451,7 +552,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             <option value="PENDING">بانتظار</option>
             <option value="IN_PROGRESS">جاري</option>
             <option value="CONFIRMED">تم الحفظ</option>
-            <option value="FAILED_CONTACT">تعذر الوصول</option>
+            <option value="FAILED_CONTACT">لم يرد</option>
           </select>
           {draft.status === "CONFIRMED" ? (
             <select
@@ -566,14 +667,20 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                 </option>
               ))}
             </select>
-          ) : (
-            <div />
-          )}
-          <div className="flex flex-wrap gap-2">
+          ) : null}
+          <div className="flex flex-wrap items-stretch gap-2 sm:col-span-1 lg:col-span-1">
+            <select
+              value={draft.duplicates}
+              onChange={(e) => patchDraft({ duplicates: e.target.value === "only" ? "only" : "all" })}
+              className="min-w-[8rem] flex-1 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold"
+            >
+              <option value="all">كل الأوردرات</option>
+              <option value="only">المكررة فقط</option>
+            </select>
             <button
               type="button"
               onClick={runFilter}
-              className="flex-1 rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black"
+              className="rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black"
             >
               فلتر
             </button>
@@ -616,11 +723,14 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
             const ship = item.shippingCompany === "sayed_temima" ? "sayed_temima" : "bosta";
+            const dup = dupMeta.get(item.id);
 
             return (
               <div
                 key={item.id}
-                className={`rounded-xl bg-white px-3 py-2.5 shadow-sm ring-1 ${
+                className={`rounded-xl px-3 py-2.5 shadow-sm ring-1 ${
+                  dup ? dup.colorClass : "bg-white"
+                } ${
                   isConfirmed
                     ? "ring-[#FCA311]"
                     : isPaid
@@ -642,8 +752,13 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span>{item.customerSnapshot?.customerName || "—"}</span>
-                    <span className="text-xs" dir="ltr">
+                    <span className="flex flex-wrap items-center gap-1 text-xs" dir="ltr">
                       {item.customerSnapshot?.phone || ""}
+                      {dup ? (
+                        <span className="rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] font-extrabold text-[#FCA311]" dir="rtl">
+                          ×{dup.count} مكرر
+                        </span>
+                      ) : null}
                     </span>
                     {isPaid ? (
                       <span className="w-fit rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
@@ -747,12 +862,15 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             </tr>
           </thead>
           <tbody>
-            {printRows.map((item) => (
-              <tr key={item.id}>
+            {printRows.map((item) => {
+              const dup = dupMeta.get(item.id);
+              return (
+              <tr key={item.id} className={dup ? dup.colorClass : undefined}>
                 <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
                 <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
                 <td className="border border-black px-1 py-1" dir="ltr">
                   {item.customerSnapshot?.phone}
+                  {dup ? ` (×${dup.count})` : ""}
                 </td>
                 <td className="border border-black px-1 py-1">
                   {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
@@ -765,7 +883,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                 </td>
                 <td className="border border-black px-1 py-1">{item.assignedAgent?.name || ""}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

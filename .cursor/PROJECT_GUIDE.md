@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS مكررات + لم يرد | فلتر المكررة (موبايل/اسم+موبايل) مع تلوين المجموعات؛ تسمية FAILED_CONTACT → «لم يرد» | `cs-queue-client.tsx`, `call-sheet.tsx`, `confirmations.ts` |
 | Media Usage Badge v1.2 | فحص صورة واحدة/المحدد من قائمة المكتبة (AJAX) + ملاحظات تحت الشارة بدون فتح روابط؛ يبقى الفلتر والتقارير | `wordpress-plugin/snippets/sokany-media-usage-badge-v1.2.php`, `snippets/README.md` |
 | Media Usage Badge v1.1 | عمود كاش فقط + «لم يُفحص»؛ فحص دفعات ~8/~8ث من التقارير؛ بدون postmeta LIKE (يصلح تعليق/404 Hostinger من v1.0) | `wordpress-plugin/snippets/sokany-media-usage-badge-v1.1.php`, `snippets/README.md` |
 | CS صلاحية التحويلات + تنبيهات مخزون | دور `transfers`؛ `/cs/transfers` مخزون/موديل/حد طلب؛ جرس + واتساب + كرون hourly | `agents.ts`, `stock-alerts.ts`, `cs/transfers`, `api/cron/check-stock-alerts` |
