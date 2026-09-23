@@ -2,6 +2,7 @@ import "server-only";
 
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
 import { listCsConfirmationsForViewer } from "@/lib/cs/confirmations";
+import { listUnseenDepositDecisionsForAgent } from "@/lib/cs/deposit-approvals";
 import { getPrismaClient } from "@/lib/db";
 import { ensureCsTables } from "@/lib/cs/agents";
 
@@ -73,15 +74,19 @@ export async function getCsNotificationsForAgent(opts: {
     }
   }
 
+  const depositDecisions = await listUnseenDepositDecisionsForAgent(opts);
+
   return {
     handedToCarrier,
     confirmDelivery,
     followUpDue,
+    depositDecisions,
     totals: {
       handedToCarrier: handedToCarrier.length,
       confirmDelivery: confirmDelivery.length,
       followUpDue: followUpDue.length,
-      all: handedToCarrier.length + confirmDelivery.length + followUpDue.length,
+      depositDecisions: depositDecisions.length,
+      all: handedToCarrier.length + confirmDelivery.length + followUpDue.length + depositDecisions.length,
     },
   };
 }

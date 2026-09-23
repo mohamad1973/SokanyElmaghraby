@@ -376,6 +376,12 @@ export async function listCsConfirmationsForViewer(opts: {
         depositFromNumber: null,
         depositToPhone: null,
         depositToMethod: null,
+        depositPaidAt: null,
+        depositProofUrl: null,
+        depositApprovalStatus: "none",
+        depositApprovalRequestedAt: null,
+        depositApprovalDecidedAt: null,
+        depositAgentDecisionSeenAt: null,
         handedToCarrier: false,
         deliveredToCustomer: false,
         customerFollowUp: false,
@@ -436,6 +442,9 @@ export function serializeCsQueueItem(row: {
   depositFromNumber?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
+  depositPaidAt?: Date | string | null;
+  depositProofUrl?: string | null;
+  depositApprovalStatus?: string | null;
   handedToCarrier?: boolean | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
@@ -485,6 +494,17 @@ export function serializeCsQueueItem(row: {
     depositFromNumber: normalizeDepositFromNumber(row.depositFromNumber),
     depositToPhone: normalizeDepositToPhone(row.depositToPhone) || (row.depositToPhone ? String(row.depositToPhone).trim() || null : null),
     depositToMethod: normalizeDepositPayMethod(row.depositToMethod),
+    depositPaidAt: row.depositPaidAt
+      ? typeof row.depositPaidAt === "string"
+        ? row.depositPaidAt
+        : row.depositPaidAt.toISOString()
+      : null,
+    depositProofUrl: row.depositProofUrl ? String(row.depositProofUrl) : null,
+    depositApprovalStatus: (() => {
+      const s = String(row.depositApprovalStatus || "").trim().toLowerCase();
+      if (s === "pending" || s === "approved" || s === "rejected") return s;
+      return "none";
+    })(),
     handedToCarrier: Boolean(row.handedToCarrier),
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),

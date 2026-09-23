@@ -273,6 +273,12 @@ model CsOrderConfirmation {
   depositFromNumber    String?             @db.VarChar(32)
   depositToPhone       String?             @db.VarChar(32)
   depositToMethod      String?
+  depositPaidAt        DateTime?
+  depositProofUrl      String?             @db.VarChar(512)
+  depositApprovalStatus String             @default("none") @db.VarChar(32)
+  depositApprovalRequestedAt DateTime?
+  depositApprovalDecidedAt DateTime?
+  depositAgentDecisionSeenAt DateTime?
   handedToCarrier      Boolean             @default(false)
   deliveredToCustomer  Boolean             @default(false)
   customerFollowUp     Boolean             @default(false)
@@ -291,6 +297,7 @@ model CsOrderConfirmation {
   @@index([shippingCompany])
   @@index([trackingNumber])
   @@index([waybillPrinted])
+  @@index([depositApprovalStatus])
 }
 
 model CsChecklistAnswer {

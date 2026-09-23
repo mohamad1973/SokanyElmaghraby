@@ -68,6 +68,9 @@ type Props = {
   depositFromNumber?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
+  depositPaidAt?: string | null;
+  depositProofUrl?: string | null;
+  depositApprovalStatus?: string | null;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -78,6 +81,14 @@ function parseDepositToKey(key: string): { phone: string; method: DepositMethod 
   const [phone = "", method = ""] = key.split(":");
   if (method === "wallet" || method === "instapay") return { phone, method };
   return { phone: "", method: "" };
+}
+
+function toDatetimeLocalValue(iso: string | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | null): Record<string, AnswerState> {
@@ -123,6 +134,9 @@ export function CsCallSheet({
   depositFromNumber: initialDepositFromNumber,
   depositToPhone: initialDepositToPhone,
   depositToMethod: initialDepositToMethod,
+  depositPaidAt: initialDepositPaidAt,
+  depositProofUrl: initialDepositProofUrl,
+  depositApprovalStatus: initialDepositApprovalStatus,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const lockedShipping =
@@ -149,7 +163,11 @@ export function CsCallSheet({
     if (initialDepositAmount === null || initialDepositAmount === undefined) return "";
     return String(initialDepositAmount);
   });
-  const [depositPaid, setDepositPaid] = useState(Boolean(initialDepositPaid));
+  const [depositApprovalStatus, setDepositApprovalStatus] = useState(() => {
+    const s = String(initialDepositApprovalStatus || "").trim().toLowerCase();
+    if (s === "pending" || s === "approved" || s === "rejected") return s;
+    return initialDepositPaid ? "approved" : "none";
+  });
   const [depositPayMethod, setDepositPayMethod] = useState<DepositMethod>(() => {
     const m = String(initialDepositPayMethod || "").trim();
     return m === "wallet" || m === "instapay" ? m : "";
@@ -163,6 +181,10 @@ export function CsCallSheet({
     if (phone && (method === "wallet" || method === "instapay")) return makeDepositToKey(phone, method);
     return "";
   });
+  const [depositPaidAt, setDepositPaidAt] = useState(() => toDatetimeLocalValue(initialDepositPaidAt));
+  const [depositProofUrl, setDepositProofUrl] = useState(() => String(initialDepositProofUrl || "").trim());
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [requestingApproval, setRequestingApproval] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -232,7 +254,6 @@ export function CsCallSheet({
         trackingNumber,
         waybillPrinted,
         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
-        depositPaid,
         depositPayMethod: depositPayMethod || null,
         depositFromNumber: depositFromNumber.trim() || null,
         depositToPhone: to.phone || null,
@@ -606,28 +627,96 @@ export function CsCallSheet({
                 />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-[#14213D]/70">الدفع تم؟</p>
-                <div className="mt-0.5 flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setDepositPaid(true)}
-                    className={`${compactBtn} ${
-                      depositPaid ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    نعم
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDepositPaid(false)}
-                    className={`${compactBtn} ${
-                      !depositPaid ? "bg-[#14213D] text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    لا
-                  </button>
-                </div>
+                <label className="text-[10px] font-bold text-[#14213D]/70">وقت الدفع</label>
+                <input
+                  type="datetime-local"
+                  value={depositPaidAt}
+                  onChange={(e) => setDepositPaidAt(e.target.value)}
+                  className={inputCls}
+                />
               </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#14213D]/70">صورة التحويل</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="mt-0.5 block w-full text-[10px]"
+                  disabled={uploadingProof || depositApprovalStatus === "pending"}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void (async () => {
+                      setUploadingProof(true);
+                      setMessage("");
+                      try {
+                        const fd = new FormData();
+                        fd.set("file", file);
+                        fd.set("purpose", "deposit-proof");
+                        const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+                        const data = (await res.json()) as { url?: string; message?: string };
+                        if (!res.ok || !data.url) {
+                          setMessage(data.message || "تعذر رفع الصورة.");
+                          return;
+                        }
+                        setDepositProofUrl(data.url);
+                      } catch {
+                        setMessage("تعذر رفع الصورة.");
+                      } finally {
+                        setUploadingProof(false);
+                      }
+                    })();
+                  }}
+                />
+                {depositProofUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={depositProofUrl} alt="إثبات التحويل" className="mt-1 max-h-20 rounded-lg border border-[#E5E5E5] object-contain" />
+                ) : null}
+              </div>
+              <div className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
+                {depositApprovalStatus === "pending"
+                  ? "بانتظار موافقة الأدمن"
+                  : depositApprovalStatus === "approved"
+                    ? "معتمد — العميل دفع"
+                    : depositApprovalStatus === "rejected"
+                      ? "مرفوض — العميل لم يدفع"
+                      : "لم يُطلب موافقة بعد"}
+              </div>
+              <button
+                type="button"
+                disabled={requestingApproval || uploadingProof || depositApprovalStatus === "pending"}
+                onClick={() => {
+                  void (async () => {
+                    setRequestingApproval(true);
+                    setMessage("");
+                    const to = parseDepositToKey(depositToKey);
+                    const paidAtIso = depositPaidAt ? new Date(depositPaidAt).toISOString() : null;
+                    const res = await fetch(`/api/cs/confirmations/${confirmationId}/deposit-approval`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
+                        depositPayMethod: depositPayMethod || null,
+                        depositFromNumber: depositFromNumber.trim() || null,
+                        depositToPhone: to.phone || null,
+                        depositToMethod: to.method || null,
+                        depositPaidAt: paidAtIso,
+                        depositProofUrl: depositProofUrl || null,
+                      }),
+                    });
+                    const data = (await res.json()) as { message?: string };
+                    setRequestingApproval(false);
+                    if (!res.ok) {
+                      setMessage(data.message || "تعذر إرسال طلب الموافقة.");
+                      return;
+                    }
+                    setDepositApprovalStatus("pending");
+                    setMessage("تم إرسال طلب الموافقة للأدمن.");
+                  })();
+                }}
+                className="w-full rounded-lg bg-[#0D9488] px-2 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50"
+              >
+                {depositApprovalStatus === "pending" ? "بانتظار الرد…" : "طلب موافقه"}
+              </button>
             </div>
           </div>
         ) : null}

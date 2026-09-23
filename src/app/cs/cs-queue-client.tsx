@@ -28,6 +28,7 @@ export type CsQueueItem = {
   waybillPrinted?: boolean;
   depositAmount?: number | null;
   depositPaid?: boolean;
+  depositApprovalStatus?: string | null;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
@@ -861,13 +862,21 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     {item.waybillPrinted ? (
                       <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">بوليصة طُبعت</span>
                     ) : null}
+                    {item.depositApprovalStatus === "pending" ? (
+                      <span className="w-fit rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900">
+                        بانتظار ديبوزت
+                      </span>
+                    ) : null}
                     {item.depositAmount != null && item.depositAmount > 0 ? (
                       <span className="w-fit rounded bg-[#14213D]/10 px-1.5 py-0.5 text-[10px] text-[#14213D]" dir="ltr">
                         مقدم: {item.depositAmount}
                       </span>
                     ) : null}
-                    {item.depositPaid ? (
+                    {item.depositPaid || item.depositApprovalStatus === "approved" ? (
                       <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">مقدم مؤكد</span>
+                    ) : null}
+                    {item.depositApprovalStatus === "rejected" ? (
+                      <span className="w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">ديبوزت مرفوض</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col gap-0.5 sm:col-span-1">

@@ -38,6 +38,9 @@ export default async function CsOrderPage({ params }: Props) {
     depositFromNumber?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
+    depositPaidAt?: Date | null;
+    depositProofUrl?: string | null;
+    depositApprovalStatus?: string | null;
   };
 
   return (
@@ -54,6 +57,9 @@ export default async function CsOrderPage({ params }: Props) {
       depositFromNumber={row.depositFromNumber || null}
       depositToPhone={row.depositToPhone || null}
       depositToMethod={row.depositToMethod || null}
+      depositPaidAt={row.depositPaidAt ? row.depositPaidAt.toISOString() : null}
+      depositProofUrl={row.depositProofUrl || null}
+      depositApprovalStatus={row.depositApprovalStatus || null}
       followUp={{
         handedToCarrier: Boolean(confirmation.handedToCarrier),
         deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),

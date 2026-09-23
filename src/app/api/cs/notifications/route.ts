@@ -25,6 +25,7 @@ export async function GET() {
       handedToCarrier: [],
       confirmDelivery: [],
       followUpDue: [],
+      depositDecisions: [],
       stockAlerts: stockAlerts.map((a) => ({
         id: a.id,
         productId: a.productId,
@@ -37,6 +38,7 @@ export async function GET() {
         handedToCarrier: 0,
         confirmDelivery: 0,
         followUpDue: 0,
+        depositDecisions: 0,
         stockAlerts: stockAlerts.length,
         all: stockAlerts.length,
       },

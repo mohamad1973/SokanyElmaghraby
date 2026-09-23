@@ -3,14 +3,21 @@
 import { SessionProvider, signIn, signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { CsPwaInstallPrompt } from "@/components/cs-pwa-install-prompt";
+import { ensureDepositAlertUnlockedOnGesture, playLoudDepositAlert } from "@/lib/deposit-alert-sound";
 
 type NotifPayload = {
   handedToCarrier: Array<{ id: number; wooOrderNumber: string }>;
   confirmDelivery: Array<{ id: number; wooOrderNumber: string }>;
   followUpDue: Array<{ id: number; wooOrderNumber: string }>;
+  depositDecisions?: Array<{
+    id: number;
+    wooOrderNumber: string;
+    decision: "approved" | "rejected";
+    depositAmount?: number | null;
+  }>;
   stockAlerts?: Array<{
     id: number;
     productId: number;
@@ -23,6 +30,7 @@ type NotifPayload = {
     handedToCarrier: number;
     confirmDelivery: number;
     followUpDue: number;
+    depositDecisions?: number;
     stockAlerts?: number;
     all: number;
   };
@@ -39,12 +47,19 @@ const CS_VARS = {
 function CsNotificationsBell() {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<NotifPayload | null>(null);
+  const seenDepositIdsRef = useRef<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/cs/notifications");
       if (!res.ok) return;
       const json = (await res.json()) as NotifPayload;
+      const decisions = json.depositDecisions || [];
+      const fresh = decisions.filter((d) => !seenDepositIdsRef.current.has(d.id));
+      if (fresh.length > 0) {
+        playLoudDepositAlert();
+        for (const d of fresh) seenDepositIdsRef.current.add(d.id);
+      }
       setData(json);
     } catch {
       // ignore
@@ -52,22 +67,58 @@ function CsNotificationsBell() {
   }, []);
 
   useEffect(() => {
+    ensureDepositAlertUnlockedOnGesture();
     void load();
-    const id = window.setInterval(() => void load(), 60000);
+    const id = window.setInterval(() => void load(), 20000);
     return () => window.clearInterval(id);
   }, [load]);
 
   const total = data?.totals.all || 0;
+  const depositDecisions = data?.depositDecisions || [];
+
+  async function markDepositSeen() {
+    if (!depositDecisions.length) return;
+    const ids = depositDecisions.map((d) => d.id);
+    try {
+      await fetch("/api/cs/notifications/deposit-seen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              depositDecisions: [],
+              totals: {
+                ...prev.totals,
+                depositDecisions: 0,
+                all: Math.max(0, (prev.totals.all || 0) - ids.length),
+              },
+            }
+          : prev,
+      );
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="relative rounded-full bg-white/10 px-3 py-1.5 text-sm font-bold hover:bg-white/20"
+        onClick={() => {
+          setOpen((v) => !v);
+          if (!open) void markDepositSeen();
+        }}
+        className={`relative rounded-full px-3 py-1.5 text-sm font-bold ${
+          depositDecisions.length
+            ? "animate-pulse bg-[var(--cs-gold)] text-black"
+            : "bg-white/10 hover:bg-white/20"
+        }`}
         aria-label="الإشعارات"
       >
-        إشعارات
+        🔔 إشعارات
         {total > 0 ? (
           <span className="absolute -top-1 -left-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--cs-gold)] px-1 text-[10px] font-extrabold text-black">
             {total}
@@ -81,6 +132,20 @@ function CsNotificationsBell() {
             <p className="text-xs text-slate-500">لا توجد تنبيهات حالياً.</p>
           ) : (
             <div className="max-h-72 space-y-3 overflow-y-auto text-xs">
+              {depositDecisions.length ? (
+                <div>
+                  <p className="font-bold text-emerald-700">قرارات الديبوزت ({depositDecisions.length})</p>
+                  <ul className="mt-1 space-y-1">
+                    {depositDecisions.slice(0, 8).map((o) => (
+                      <li key={`dep-${o.id}`}>
+                        <Link href={`/cs/orders/${o.id}`} className="underline" onClick={() => setOpen(false)}>
+                          {o.decision === "approved" ? "تمت الموافقة" : "تم الرفض"} على ديبوزت #{o.wooOrderNumber}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {data.stockAlerts && data.stockAlerts.length ? (
                 <div>
                   <p className="font-bold text-amber-600">مخزون تحت الحد ({data.totals.stockAlerts || 0})</p>
