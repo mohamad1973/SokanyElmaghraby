@@ -83,12 +83,37 @@ function parseDepositToKey(key: string): { phone: string; method: DepositMethod 
   return { phone: "", method: "" };
 }
 
-function toDatetimeLocalValue(iso: string | null | undefined) {
-  if (!iso) return "";
+function parseDepositPaidParts(iso: string | null | undefined): { day: string; time: string } {
+  if (!iso) return { day: "", time: "" };
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  if (Number.isNaN(d.getTime())) return { day: "", time: "" };
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return { day: String(d.getDate()), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+}
+
+/** Build ISO from day-of-month + HH:mm using current year/month (Cairo-friendly local Date). */
+function buildPaidAtIsoFromDayTime(dayStr: string, timeStr: string): { ok: true; iso: string } | { ok: false; message: string } {
+  const day = Number(dayStr);
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(timeStr || "").trim());
+  if (!Number.isInteger(day) || day < 1 || day > 31) {
+    return { ok: false, message: "أدخل يوم الدفع (1–31)." };
+  }
+  if (!match) {
+    return { ok: false, message: "أدخل ساعة ودقيقة الدفع." };
+  }
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return { ok: false, message: "وقت الدفع غير صالح." };
+  }
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const candidate = new Date(year, month, day, hour, minute, 0, 0);
+  if (candidate.getMonth() !== month || candidate.getDate() !== day) {
+    return { ok: false, message: "اليوم غير موجود في الشهر الحالي." };
+  }
+  return { ok: true, iso: candidate.toISOString() };
 }
 
 function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | null): Record<string, AnswerState> {
@@ -135,7 +160,6 @@ export function CsCallSheet({
   depositToPhone: initialDepositToPhone,
   depositToMethod: initialDepositToMethod,
   depositPaidAt: initialDepositPaidAt,
-  depositProofUrl: initialDepositProofUrl,
   depositApprovalStatus: initialDepositApprovalStatus,
 }: Props) {
   const confirmed = status === "CONFIRMED";
@@ -181,9 +205,8 @@ export function CsCallSheet({
     if (phone && (method === "wallet" || method === "instapay")) return makeDepositToKey(phone, method);
     return "";
   });
-  const [depositPaidAt, setDepositPaidAt] = useState(() => toDatetimeLocalValue(initialDepositPaidAt));
-  const [depositProofUrl, setDepositProofUrl] = useState(() => String(initialDepositProofUrl || "").trim());
-  const [uploadingProof, setUploadingProof] = useState(false);
+  const [depositPaidDay, setDepositPaidDay] = useState(() => parseDepositPaidParts(initialDepositPaidAt).day);
+  const [depositPaidTime, setDepositPaidTime] = useState(() => parseDepositPaidParts(initialDepositPaidAt).time);
   const [requestingApproval, setRequestingApproval] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -627,50 +650,26 @@ export function CsCallSheet({
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">وقت الدفع</label>
+                <label className="text-[10px] font-bold text-[#14213D]/70">يوم الدفع (1–31)</label>
                 <input
-                  type="datetime-local"
-                  value={depositPaidAt}
-                  onChange={(e) => setDepositPaidAt(e.target.value)}
+                  dir="ltr"
+                  inputMode="numeric"
+                  min={1}
+                  max={31}
+                  value={depositPaidDay}
+                  onChange={(e) => setDepositPaidDay(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+                  placeholder="اليوم"
                   className={inputCls}
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">صورة التحويل</label>
+                <label className="text-[10px] font-bold text-[#14213D]/70">ساعة ودقيقة الدفع</label>
                 <input
-                  type="file"
-                  accept="image/*"
-                  className="mt-0.5 block w-full text-[10px]"
-                  disabled={uploadingProof || depositApprovalStatus === "pending"}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    void (async () => {
-                      setUploadingProof(true);
-                      setMessage("");
-                      try {
-                        const fd = new FormData();
-                        fd.set("file", file);
-                        fd.set("purpose", "deposit-proof");
-                        const res = await fetch("/api/cs/upload", { method: "POST", body: fd });
-                        const data = (await res.json()) as { url?: string; message?: string };
-                        if (!res.ok || !data.url) {
-                          setMessage(data.message || "تعذر رفع الصورة.");
-                          return;
-                        }
-                        setDepositProofUrl(data.url);
-                      } catch {
-                        setMessage("تعذر رفع الصورة.");
-                      } finally {
-                        setUploadingProof(false);
-                      }
-                    })();
-                  }}
+                  type="time"
+                  value={depositPaidTime}
+                  onChange={(e) => setDepositPaidTime(e.target.value)}
+                  className={inputCls}
                 />
-                {depositProofUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={depositProofUrl} alt="إثبات التحويل" className="mt-1 max-h-20 rounded-lg border border-[#E5E5E5] object-contain" />
-                ) : null}
               </div>
               <div className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
                 {depositApprovalStatus === "pending"
@@ -683,13 +682,18 @@ export function CsCallSheet({
               </div>
               <button
                 type="button"
-                disabled={requestingApproval || uploadingProof || depositApprovalStatus === "pending"}
+                disabled={requestingApproval || depositApprovalStatus === "pending"}
                 onClick={() => {
                   void (async () => {
                     setRequestingApproval(true);
                     setMessage("");
                     const to = parseDepositToKey(depositToKey);
-                    const paidAtIso = depositPaidAt ? new Date(depositPaidAt).toISOString() : null;
+                    const paidAt = buildPaidAtIsoFromDayTime(depositPaidDay, depositPaidTime);
+                    if (!paidAt.ok) {
+                      setMessage(paidAt.message);
+                      setRequestingApproval(false);
+                      return;
+                    }
                     const res = await fetch(`/api/cs/confirmations/${confirmationId}/deposit-approval`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -699,8 +703,8 @@ export function CsCallSheet({
                         depositFromNumber: depositFromNumber.trim() || null,
                         depositToPhone: to.phone || null,
                         depositToMethod: to.method || null,
-                        depositPaidAt: paidAtIso,
-                        depositProofUrl: depositProofUrl || null,
+                        depositPaidAt: paidAt.iso,
+                        depositProofUrl: null,
                       }),
                     });
                     const data = (await res.json()) as { message?: string };

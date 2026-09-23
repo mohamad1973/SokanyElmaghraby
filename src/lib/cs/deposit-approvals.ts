@@ -52,18 +52,15 @@ export async function requestDepositApproval(input: {
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
   const amount = parseDepositAmount(input.depositAmount);
-  const proofUrl = String(input.depositProofUrl || "").trim();
+  const proofUrl = String(input.depositProofUrl || "").trim() || null;
   const paidAtRaw = String(input.depositPaidAt || "").trim();
   const paidAt = paidAtRaw ? new Date(paidAtRaw) : null;
 
   if (!amount || amount <= 0) {
     return { ok: false as const, message: "أدخل قيمة المقدم." };
   }
-  if (!proofUrl) {
-    return { ok: false as const, message: "أرفق صورة التحويل." };
-  }
   if (!paidAt || Number.isNaN(paidAt.getTime())) {
-    return { ok: false as const, message: "أدخل تاريخ ووقت الدفع." };
+    return { ok: false as const, message: "أدخل يوم ووقت الدفع." };
   }
 
   const payMethod = normalizeDepositPayMethod(input.depositPayMethod);
@@ -81,7 +78,7 @@ export async function requestDepositApproval(input: {
       depositToPhone: toPhone,
       depositToMethod: toMethod,
       depositPaidAt: paidAt,
-      depositProofUrl: proofUrl.slice(0, 512),
+      depositProofUrl: proofUrl ? proofUrl.slice(0, 512) : null,
       depositApprovalStatus: "pending",
       depositApprovalRequestedAt: now,
       depositApprovalDecidedAt: null,
@@ -113,7 +110,7 @@ export async function requestDepositApproval(input: {
         depositToPhone: toPhone,
         depositToMethod: toMethod,
         depositPaidAt: paidAt.toISOString(),
-        depositProofUrl: proofUrl.slice(0, 512),
+        depositProofUrl: proofUrl,
         agentName,
       },
     });
