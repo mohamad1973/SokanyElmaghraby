@@ -1,52 +1,65 @@
-/** Loud multi-beep alert for deposit bells (admin + CS). */
+/** Soft mobile-like notification chime for deposit bells (admin + CS). */
 
 let audioUnlocked = false;
+let sharedCtx: AudioContext | null = null;
+
+function getAudioContextCtor(): typeof AudioContext | null {
+  if (typeof window === "undefined") return null;
+  return (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ||
+    null
+  );
+}
+
+function getSharedContext(): AudioContext | null {
+  const Ctx = getAudioContextCtor();
+  if (!Ctx) return null;
+  if (!sharedCtx || sharedCtx.state === "closed") {
+    sharedCtx = new Ctx();
+  }
+  return sharedCtx;
+}
 
 export function unlockDepositAlertAudio() {
   if (typeof window === "undefined") return;
   audioUnlocked = true;
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
+    const ctx = getSharedContext();
+    if (!ctx) return;
     void ctx.resume();
-    void ctx.close();
   } catch {
     // ignore
   }
 }
 
+/** Two-tone sine chime similar to a phone notification. */
 export function playLoudDepositAlert() {
   if (typeof window === "undefined") return;
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
+    const ctx = getSharedContext();
+    if (!ctx) return;
     void ctx.resume();
 
-    const playBeep = (startAt: number, freq: number, duration: number) => {
+    const playTone = (startAt: number, freq: number, duration: number, peak = 0.35) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = "square";
+      osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, startAt);
-      gain.gain.exponentialRampToValueAtTime(0.55, startAt + 0.02);
+      gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.025);
       gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(startAt);
-      osc.stop(startAt + duration + 0.02);
+      osc.stop(startAt + duration + 0.05);
     };
 
     const t0 = ctx.currentTime;
-    // Three loud ascending beeps
-    playBeep(t0, 880, 0.22);
-    playBeep(t0 + 0.28, 1100, 0.22);
-    playBeep(t0 + 0.56, 1320, 0.28);
-
-    window.setTimeout(() => {
-      void ctx.close();
-    }, 1200);
+    // Soft ascending chime (mobile-notification style)
+    playTone(t0, 880, 0.18, 0.32);
+    playTone(t0 + 0.16, 1174.7, 0.28, 0.38);
+    playTone(t0 + 0.42, 1318.5, 0.22, 0.22);
   } catch {
     // ignore autoplay blocks until unlock
   }
