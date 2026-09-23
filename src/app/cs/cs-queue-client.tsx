@@ -43,10 +43,29 @@ export type CsQueueItem = {
     datePaid?: string | null;
     wooStatus?: string;
     trackingNumber?: string | null;
-    items?: Array<{ name: string; quantity?: number }>;
+    items?: Array<{ name: string; quantity?: number; sku?: string }>;
   } | null;
   createdAt: string;
 };
+
+const SAYED_TEMIMA_SHIPPING_EGP = 75;
+
+function formatOrderSkus(item: CsQueueItem) {
+  const lines = item.customerSnapshot?.items || [];
+  if (!lines.length) return "—";
+  return lines
+    .map((line) => {
+      const sku = String(line.sku || "").trim() || String(line.name || "").trim() || "—";
+      const qty = typeof line.quantity === "number" && line.quantity > 1 ? `×${line.quantity}` : "";
+      return qty ? `${sku} ${qty}` : sku;
+    })
+    .join("، ");
+}
+
+function parseOrderTotal(value: string | null | undefined) {
+  const n = Number(String(value || "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
 
 const DATE_FILTER_MAX_DAYS = 30;
 const dateMinYmd = () => cairoDaysAgoYmd(DATE_FILTER_MAX_DAYS);
@@ -849,44 +868,105 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         <p className="mb-2 text-center text-xs">
           {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
         </p>
-        <table className="w-full border-collapse text-[10px]">
-          <thead>
-            <tr>
-              {["الرقم", "الاسم", "موبايل", "العنوان", "الإجمالي", "الشحن", "المسؤول"].map(
-                (h) => (
+        {printMode === "sayed_temima" ? (
+          <>
+            <table className="w-full border-collapse text-[10px]">
+              <thead>
+                <tr>
+                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "الإجمالي", "الشحن", "المسؤول"].map(
+                    (h) => (
+                      <th key={h} className="border border-black px-1 py-1 text-right">
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {printRows.map((item, index) => {
+                  const dup = dupMeta.get(item.id);
+                  return (
+                    <tr key={item.id} className={dup ? dup.colorClass : undefined}>
+                      <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
+                      <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
+                      <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
+                      <td className="border border-black px-1 py-1" dir="ltr">
+                        {item.customerSnapshot?.phone}
+                        {dup ? ` (×${dup.count})` : ""}
+                      </td>
+                      <td className="border border-black px-1 py-1">
+                        {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
+                      </td>
+                      <td className="border border-black px-1 py-1" dir="ltr">
+                        {formatOrderSkus(item)}
+                      </td>
+                      <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
+                      <td className="border border-black px-1 py-1">{SAYED_TEMIMA_SHIPPING_EGP} ج</td>
+                      <td className="border border-black px-1 py-1">{item.assignedAgent?.name || ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {(() => {
+              const ordersTotal = printRows.reduce(
+                (sum, row) => sum + parseOrderTotal(row.customerSnapshot?.total),
+                0,
+              );
+              const shippingTotal = printRows.length * SAYED_TEMIMA_SHIPPING_EGP;
+              return (
+                <div className="mt-3 space-y-1 text-xs font-bold">
+                  <p>
+                    جمع قيمة الأوردرات: {ordersTotal.toLocaleString("ar-EG")} ج.م · عدد الأوردرات:{" "}
+                    {printRows.length}
+                  </p>
+                  <p>
+                    إجمالي الشحن ({SAYED_TEMIMA_SHIPPING_EGP} × {printRows.length}):{" "}
+                    {shippingTotal.toLocaleString("ar-EG")} ج.م
+                  </p>
+                  <p>الإجمالي الكلي (أوردرات + شحن): {(ordersTotal + shippingTotal).toLocaleString("ar-EG")} ج.م</p>
+                </div>
+              );
+            })()}
+          </>
+        ) : (
+          <table className="w-full border-collapse text-[10px]">
+            <thead>
+              <tr>
+                {["الرقم", "الاسم", "موبايل", "العنوان", "الإجمالي", "الشحن", "المسؤول"].map((h) => (
                   <th key={h} className="border border-black px-1 py-1 text-right">
                     {h}
                   </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {printRows.map((item) => {
-              const dup = dupMeta.get(item.id);
-              return (
-              <tr key={item.id} className={dup ? dup.colorClass : undefined}>
-                <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
-                <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
-                <td className="border border-black px-1 py-1" dir="ltr">
-                  {item.customerSnapshot?.phone}
-                  {dup ? ` (×${dup.count})` : ""}
-                </td>
-                <td className="border border-black px-1 py-1">
-                  {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
-                </td>
-                <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
-                <td className="border border-black px-1 py-1">
-                  {item.shippingCompany
-                    ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany
-                    : ""}
-                </td>
-                <td className="border border-black px-1 py-1">{item.assignedAgent?.name || ""}</td>
+                ))}
               </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {printRows.map((item) => {
+                const dup = dupMeta.get(item.id);
+                return (
+                  <tr key={item.id} className={dup ? dup.colorClass : undefined}>
+                    <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
+                    <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
+                    <td className="border border-black px-1 py-1" dir="ltr">
+                      {item.customerSnapshot?.phone}
+                      {dup ? ` (×${dup.count})` : ""}
+                    </td>
+                    <td className="border border-black px-1 py-1">
+                      {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
+                    </td>
+                    <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
+                    <td className="border border-black px-1 py-1">
+                      {item.shippingCompany
+                        ? SHIPPING_COMPANY_LABEL[item.shippingCompany] || item.shippingCompany
+                        : ""}
+                    </td>
+                    <td className="border border-black px-1 py-1">{item.assignedAgent?.name || ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <style jsx global>{`
