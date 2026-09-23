@@ -16,6 +16,7 @@ import {
   type CsPaymentState,
 } from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
+import { extractModelFromTitle, extractSkFromTitle } from "@/lib/product-display-code";
 
 export type CsQueueItem = {
   id: number;
@@ -50,16 +51,40 @@ export type CsQueueItem = {
 
 const SAYED_TEMIMA_SHIPPING_EGP = 75;
 
-function formatOrderSkus(item: CsQueueItem) {
+/** Strip SK- prefix so "SK-10095" → "10095". */
+function stripSkPrefix(code: string) {
+  return code.replace(/^SK-?/i, "").trim().toUpperCase();
+}
+
+function modelNumberFromLine(name: string, sku?: string) {
+  const fromNameSk = extractSkFromTitle(name);
+  if (fromNameSk) return stripSkPrefix(fromNameSk);
+
+  const fromModelPhrase = extractModelFromTitle(name);
+  if (fromModelPhrase) {
+    const nestedSk = extractSkFromTitle(fromModelPhrase) || fromModelPhrase.match(/\bSK-?\d+[A-Z0-9]*\b/i)?.[0];
+    if (nestedSk) return stripSkPrefix(nestedSk);
+    return stripSkPrefix(fromModelPhrase) || fromModelPhrase.trim();
+  }
+
+  const fromSku = extractSkFromTitle(String(sku || "")) || String(sku || "").match(/\bSK-?\d+[A-Z0-9]*\b/i)?.[0];
+  if (fromSku) return stripSkPrefix(fromSku);
+
+  return "";
+}
+
+function formatOrderModels(item: CsQueueItem) {
   const lines = item.customerSnapshot?.items || [];
   if (!lines.length) return "—";
-  return lines
+  const parts = lines
     .map((line) => {
-      const sku = String(line.sku || "").trim() || String(line.name || "").trim() || "—";
+      const model = modelNumberFromLine(String(line.name || ""), line.sku);
+      if (!model) return "";
       const qty = typeof line.quantity === "number" && line.quantity > 1 ? `×${line.quantity}` : "";
-      return qty ? `${sku} ${qty}` : sku;
+      return qty ? `${model}${qty}` : model;
     })
-    .join("، ");
+    .filter(Boolean);
+  return parts.length ? parts.join("، ") : "—";
 }
 
 function parseOrderTotal(value: string | null | undefined) {
@@ -907,7 +932,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                         {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
                       </td>
                       <td className="border border-black px-1 py-1" dir="ltr">
-                        {formatOrderSkus(item)}
+                        {formatOrderModels(item)}
                       </td>
                       <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
                       <td className="border border-black px-1 py-1">{SAYED_TEMIMA_SHIPPING_EGP} ج</td>
