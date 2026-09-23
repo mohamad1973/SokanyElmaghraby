@@ -12,6 +12,9 @@ import {
 } from "@/lib/cs/checklist";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
+/** Order total above this (EGP) shows the optional deposit card. */
+const CS_DEPOSIT_THRESHOLD = 5000;
+
 type Snapshot = {
   customerName?: string;
   phone?: string;
@@ -50,6 +53,8 @@ type Props = {
   shippingCompany?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
+  depositAmount?: number | null;
+  depositPaid?: boolean;
 };
 
 function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | null): Record<string, AnswerState> {
@@ -89,6 +94,8 @@ export function CsCallSheet({
   shippingCompany,
   trackingNumber: initialTracking,
   waybillPrinted: initialWaybillPrinted,
+  depositAmount: initialDepositAmount,
+  depositPaid: initialDepositPaid,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const lockedShipping =
@@ -111,11 +118,18 @@ export function CsCallSheet({
     () => String(initialTracking || snapshot?.trackingNumber || "").trim(),
   );
   const [waybillPrinted, setWaybillPrinted] = useState(Boolean(initialWaybillPrinted));
+  const [depositAmount, setDepositAmount] = useState(() => {
+    if (initialDepositAmount === null || initialDepositAmount === undefined) return "";
+    return String(initialDepositAmount);
+  });
+  const [depositPaid, setDepositPaid] = useState(Boolean(initialDepositPaid));
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
+  const orderTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
+  const showDepositCard = Number.isFinite(orderTotal) && orderTotal > CS_DEPOSIT_THRESHOLD;
 
   const payloadAnswers: CsChecklistAnswerInput[] = useMemo(
     () =>
@@ -175,6 +189,8 @@ export function CsCallSheet({
         failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
         trackingNumber,
         waybillPrinted,
+        depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
+        depositPaid,
         followUp: confirmed ? fu : undefined,
       }),
     });
@@ -346,6 +362,45 @@ export function CsCallSheet({
           </div>
         </div>
       </div>
+
+      {showDepositCard ? (
+        <div className="flex min-h-[9rem] flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-[#14213D]/20 sm:max-w-xl">
+          <p className="text-sm font-extrabold text-[#14213D]">طلب مقدم من العميل</p>
+          <p className="mt-1 text-[11px] text-[#14213D]/60">
+            اختياري — للأوردرات أكبر من {CS_DEPOSIT_THRESHOLD.toLocaleString("en-EG")} ج.م — ليس شرطاً لحفظ الأوردر
+          </p>
+          <label className="mt-3 block text-xs font-bold text-[#14213D]/70">قيمة المقدم (ج.م)</label>
+          <input
+            dir="ltr"
+            inputMode="decimal"
+            value={depositAmount}
+            onChange={(e) => setDepositAmount(e.target.value)}
+            placeholder="0"
+            className="mt-1 w-full rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold text-[#14213D]"
+          />
+          <p className="mt-3 text-xs font-extrabold text-[#14213D]">دفع مؤكد للمقدم؟</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setDepositPaid(true)}
+              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
+                depositPaid ? "bg-[#FCA311] text-black" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              نعم
+            </button>
+            <button
+              type="button"
+              onClick={() => setDepositPaid(false)}
+              className={`rounded-xl px-4 py-2 text-sm font-extrabold ${
+                !depositPaid ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              لا
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!confirmed ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">

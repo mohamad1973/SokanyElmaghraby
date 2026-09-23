@@ -14,6 +14,8 @@ type Body = {
   failReason?: string;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
+  depositAmount?: number | string | null;
+  depositPaid?: boolean;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   followUp?: {
     handedToCarrier?: boolean;
@@ -50,6 +52,8 @@ export async function PUT(request: Request, context: Context) {
     !body.cancelOrder &&
     body.trackingNumber === undefined &&
     body.waybillPrinted === undefined &&
+    body.depositAmount === undefined &&
+    body.depositPaid === undefined &&
     !body.followUp
   ) {
     const viewer = await resolveCsViewer(session.user.csAgentId);
@@ -81,6 +85,8 @@ export async function PUT(request: Request, context: Context) {
     failReason: body.failReason,
     trackingNumber: body.trackingNumber,
     waybillPrinted: body.waybillPrinted,
+    depositAmount: body.depositAmount,
+    depositPaid: body.depositPaid,
     followUp: body.followUp,
   });
 

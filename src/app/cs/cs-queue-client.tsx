@@ -26,6 +26,8 @@ export type CsQueueItem = {
   shippingCompany?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
+  depositAmount?: number | null;
+  depositPaid?: boolean;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
@@ -858,6 +860,14 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     ) : null}
                     {item.waybillPrinted ? (
                       <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">بوليصة طُبعت</span>
+                    ) : null}
+                    {item.depositAmount != null && item.depositAmount > 0 ? (
+                      <span className="w-fit rounded bg-[#14213D]/10 px-1.5 py-0.5 text-[10px] text-[#14213D]" dir="ltr">
+                        مقدم: {item.depositAmount}
+                      </span>
+                    ) : null}
+                    {item.depositPaid ? (
+                      <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">مقدم مؤكد</span>
                     ) : null}
                   </div>
                   <div className="flex flex-col gap-0.5 sm:col-span-1">

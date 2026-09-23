@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS كارت مقدم الدفع | للأوردرات > 5000ج: كارت اختياري بقيمة المقدم + دفع مؤكد؛ بادجات في القائمة؛ لا يمنع الحفظ | `schema.prisma`, `confirmations.ts`, `call-sheet.tsx`, `cs-queue-client.tsx` |
 | CS تراك + طباعة بوليصة | كارتان في صفحة الأوردر لرقم التراك وطباعة البوليصة؛ فلاتر بدون تراك / لم تُطبع للوكيلة والمشرفة | `schema.prisma`, `confirmations.ts`, `call-sheet.tsx`, `cs-queue-client.tsx` |
 | شيت تميمة رقم الموديل | عمود المنتجات يستخرج رقم الموديل من اسم المنتج (مثل 10095 من SK-10095) بدل SKU الخام | `cs-queue-client.tsx`, `product-display-code.ts` |
 | CS لاغى + فلتر مكررة للمشرف | حالة CANCELLED «لاغى» + زر في ورقة الاتصال؛ فلتر لاغى/لم يرد/مجمّع؛ فلتر المكررة للمشرف فقط | `checklist.ts`, `confirmations.ts`, `call-sheet.tsx`, `cs-queue-client.tsx` |

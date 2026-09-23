@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { getCsConfirmation, startCsConfirmation } from "@/lib/cs/confirmations";
+import { getCsConfirmation, serializeDepositAmount, startCsConfirmation } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsCallSheet } from "./call-sheet";
@@ -32,6 +32,8 @@ export default async function CsOrderPage({ params }: Props) {
   const row = confirmation as {
     trackingNumber?: string | null;
     waybillPrinted?: boolean | null;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
   };
 
   return (
@@ -42,6 +44,8 @@ export default async function CsOrderPage({ params }: Props) {
       shippingCompany={confirmation.shippingCompany}
       trackingNumber={row.trackingNumber || snapshot?.trackingNumber || null}
       waybillPrinted={Boolean(row.waybillPrinted)}
+      depositAmount={serializeDepositAmount(row.depositAmount)}
+      depositPaid={Boolean(row.depositPaid)}
       followUp={{
         handedToCarrier: Boolean(confirmation.handedToCarrier),
         deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),

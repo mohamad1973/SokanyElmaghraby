@@ -96,6 +96,24 @@ function sortByOrderNumberDesc<T extends { wooOrderNumber: string }>(rows: T[]) 
   );
 }
 
+/** Order total above this (EGP) shows the optional deposit card on the call sheet. */
+export const CS_DEPOSIT_THRESHOLD = 5000;
+
+export function parseDepositAmount(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "object" && value !== null && "toNumber" in value) {
+    const n = (value as { toNumber: () => number }).toNumber();
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+  }
+  const n = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").trim());
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export function serializeDepositAmount(value: unknown): number | null {
+  return parseDepositAmount(value);
+}
+
 export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
   const prisma = getPrismaClient();
   if (!prisma) {
@@ -331,6 +349,8 @@ export async function listCsConfirmationsForViewer(opts: {
         shippingCompany: null,
         trackingNumber: null,
         waybillPrinted: false,
+        depositAmount: null,
+        depositPaid: false,
         handedToCarrier: false,
         deliveredToCustomer: false,
         customerFollowUp: false,
@@ -385,6 +405,8 @@ export function serializeCsQueueItem(row: {
   shippingCompany?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean | null;
+  depositAmount?: unknown;
+  depositPaid?: boolean | null;
   handedToCarrier?: boolean | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
@@ -428,6 +450,8 @@ export function serializeCsQueueItem(row: {
     shippingCompany,
     trackingNumber,
     waybillPrinted: Boolean(row.waybillPrinted),
+    depositAmount: serializeDepositAmount(row.depositAmount),
+    depositPaid: Boolean(row.depositPaid),
     handedToCarrier: Boolean(row.handedToCarrier),
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
@@ -522,6 +546,8 @@ export async function saveCsConfirmation(input: {
   failReason?: string;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
+  depositAmount?: number | string | null;
+  depositPaid?: boolean;
   followUp?: {
     handedToCarrier?: boolean;
     deliveredToCustomer?: boolean;
@@ -547,9 +573,19 @@ export async function saveCsConfirmation(input: {
     input.waybillPrinted !== undefined
       ? Boolean(input.waybillPrinted)
       : Boolean((row as { waybillPrinted?: boolean | null }).waybillPrinted);
+  const nextDepositAmount =
+    input.depositAmount !== undefined
+      ? parseDepositAmount(input.depositAmount)
+      : parseDepositAmount((row as { depositAmount?: unknown }).depositAmount);
+  const nextDepositPaid =
+    input.depositPaid !== undefined
+      ? Boolean(input.depositPaid)
+      : Boolean((row as { depositPaid?: boolean | null }).depositPaid);
   const shippingMetaPatch: {
     trackingNumber?: string | null;
     waybillPrinted?: boolean;
+    depositAmount?: number | null;
+    depositPaid?: boolean;
     customerSnapshot?: Record<string, unknown>;
   } = {};
   if (input.trackingNumber !== undefined) {
@@ -559,9 +595,21 @@ export async function saveCsConfirmation(input: {
   if (input.waybillPrinted !== undefined) {
     shippingMetaPatch.waybillPrinted = nextWaybill;
   }
+  if (input.depositAmount !== undefined) {
+    shippingMetaPatch.depositAmount = nextDepositAmount;
+  }
+  if (input.depositPaid !== undefined) {
+    shippingMetaPatch.depositPaid = nextDepositPaid;
+  }
 
-  // Post-confirmation follow-up update (includes tracking / waybill)
-  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && (input.followUp || input.trackingNumber !== undefined || input.waybillPrinted !== undefined)) {
+  const hasShippingMetaUpdate =
+    input.trackingNumber !== undefined ||
+    input.waybillPrinted !== undefined ||
+    input.depositAmount !== undefined ||
+    input.depositPaid !== undefined;
+
+  // Post-confirmation follow-up update (includes tracking / waybill / deposit)
+  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && (input.followUp || hasShippingMetaUpdate)) {
     const now = new Date();
     const data: Record<string, unknown> = { ...shippingMetaPatch };
     if (input.followUp) {
@@ -579,14 +627,14 @@ export async function saveCsConfirmation(input: {
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
   }
 
-  // Allow saving tracking / waybill alone (no checklist payload)
+  // Allow saving tracking / waybill / deposit alone (no checklist payload)
   if (
     !input.finalize &&
     !input.failContact &&
     !input.cancelOrder &&
     !input.followUp &&
     (!input.answers || input.answers.length === 0) &&
-    (input.trackingNumber !== undefined || input.waybillPrinted !== undefined) &&
+    hasShippingMetaUpdate &&
     Object.keys(shippingMetaPatch).length > 0
   ) {
     await prisma.csOrderConfirmation.update({
