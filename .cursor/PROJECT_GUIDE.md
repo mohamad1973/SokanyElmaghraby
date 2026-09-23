@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إصلاح جرس أدمن الديبوزت | نقل الجرس للهيدر الأطول؛ قائمة فوق الصفحة؛ عرض pending دائماً + أخطاء API ظاهرة | `admin-shell.tsx`, `order-notification-bar.tsx` |
 | CS موافقة ديبوزت + أجراس | طلب موافقه مع وقت/صورة؛ جرس أدمن بصوت عالٍ؛ موافقة/رفض؛ جرس موظفة عند الرد | `deposit-approvals.ts`, `order-notification-bar.tsx`, `call-sheet.tsx`, `cs-shell.tsx` |
 | CS صف ديبوزت + 4 كروت | طلب ديبوزت من 5000↑؛ صف أخير ملون (شحن/ديبوزت/تراك/بوليصة)؛ دفع محفظة/انستا + من/إلى رقم | `call-sheet.tsx`, `confirmations.ts`, `schema.prisma` |
 | CS كارت مقدم الدفع | للأوردرات > 5000ج: كارت اختياري بقيمة المقدم + دفع مؤكد؛ بادجات في القائمة؛ لا يمنع الحفظ | `schema.prisma`, `confirmations.ts`, `call-sheet.tsx`, `cs-queue-client.tsx` |

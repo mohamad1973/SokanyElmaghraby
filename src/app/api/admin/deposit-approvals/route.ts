@@ -9,6 +9,12 @@ export async function GET() {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
   }
 
-  const items = await listPendingDepositApprovals();
-  return NextResponse.json({ items, count: items.length });
+  try {
+    const items = await listPendingDepositApprovals();
+    return NextResponse.json({ items, count: items.length });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "تعذر تحميل طلبات الديبوزت.";
+    console.error("[admin/deposit-approvals]", message);
+    return NextResponse.json({ message: "تعذر تحميل إشعارات الديبوزت.", detail: message.slice(0, 200) }, { status: 500 });
+  }
 }
