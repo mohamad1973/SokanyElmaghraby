@@ -652,7 +652,7 @@ export function CsCallSheet({
                         const fd = new FormData();
                         fd.set("file", file);
                         fd.set("purpose", "deposit-proof");
-                        const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
+                        const res = await fetch("/api/cs/upload", { method: "POST", body: fd });
                         const data = (await res.json()) as { url?: string; message?: string };
                         if (!res.ok || !data.url) {
                           setMessage(data.message || "تعذر رفع الصورة.");

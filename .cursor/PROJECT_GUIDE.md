@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إشعار ديبوزت جذري للأدمن | /api/cs/upload؛ جدول AdminNotification؛ جرس يقرأ الصندوق + صوت على unread؛ بيانات دفع كاملة | `upload/route.ts`, `admin-notifications.ts`, `deposit-approvals.ts`, `order-notification-bar.tsx`, `middleware.ts` |
 | جرس إشعارات جذري أدمن+CS | إخراج الجرس من overflow-x-auto؛ شارة inline؛ لوحة fixed+backdrop عبر portal؛ أيقونة SVG واضحة | `cs-shell.tsx`, `order-notification-bar.tsx`, `admin-shell.tsx` |
 | جرس أدمن Portal + هيدر أطول | قائمة fixed عبر Portal؛ إصلاح عداد 2 العالق؛ min-h-20؛ صفحة /admin/deposit-approvals | `order-notification-bar.tsx`, `admin-shell.tsx`, `deposit-approvals/page.tsx` |
 | إصلاح جرس أدمن الديبوزت | نقل الجرس للهيدر الأطول؛ قائمة فوق الصفحة؛ عرض pending دائماً + أخطاء API ظاهرة | `admin-shell.tsx`, `order-notification-bar.tsx` |

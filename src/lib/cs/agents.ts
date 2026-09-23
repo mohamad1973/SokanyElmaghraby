@@ -183,6 +183,23 @@ async function runEnsureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`AdminNotification\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`type\` VARCHAR(64) NOT NULL,
+      \`refId\` INT NOT NULL,
+      \`title\` VARCHAR(255) NOT NULL,
+      \`body\` JSON NULL,
+      \`status\` VARCHAR(32) NOT NULL DEFAULT 'unread',
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      INDEX \`AdminNotification_status_idx\`(\`status\`),
+      INDEX \`AdminNotification_type_refId_idx\`(\`type\`, \`refId\`),
+      INDEX \`AdminNotification_createdAt_idx\`(\`createdAt\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",

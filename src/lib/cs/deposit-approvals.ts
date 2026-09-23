@@ -3,6 +3,10 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { ensureCsTables } from "@/lib/cs/agents";
 import {
+  createDepositApprovalNotification,
+  markDepositApprovalNotificationsDone,
+} from "@/lib/admin-notifications";
+import {
   normalizeDepositFromNumber,
   normalizeDepositPayMethod,
   normalizeDepositToPhone,
@@ -85,6 +89,37 @@ export async function requestDepositApproval(input: {
       depositPaid: false,
     } as never,
   });
+
+  const updated = await prisma.csOrderConfirmation.findUnique({
+    where: { id: input.id },
+    include: { assignedAgent: { select: { id: true, name: true } } },
+  });
+  const customer = updated ? snapCustomer(updated) : snapCustomer(row);
+  const agentName = updated?.assignedAgent?.name || null;
+
+  try {
+    await createDepositApprovalNotification({
+      confirmationId: input.id,
+      title: `طلب تأكيد ديبوزت #${customer.wooOrderNumber}`,
+      body: {
+        confirmationId: input.id,
+        wooOrderId: customer.wooOrderId,
+        wooOrderNumber: customer.wooOrderNumber,
+        customerName: customer.customerName,
+        phone: customer.phone,
+        depositAmount: amount,
+        depositPayMethod: payMethod,
+        depositFromNumber: normalizeDepositFromNumber(input.depositFromNumber),
+        depositToPhone: toPhone,
+        depositToMethod: toMethod,
+        depositPaidAt: paidAt.toISOString(),
+        depositProofUrl: proofUrl.slice(0, 512),
+        agentName,
+      },
+    });
+  } catch (error) {
+    console.error("[deposit-approvals] notification create failed", error);
+  }
 
   return { ok: true as const, status: "pending" as const };
 }
@@ -202,6 +237,12 @@ export async function decideDepositApproval(input: {
       depositAgentDecisionSeenAt: null,
     } as never,
   });
+
+  try {
+    await markDepositApprovalNotificationsDone(input.id);
+  } catch (error) {
+    console.error("[deposit-approvals] notification done failed", error);
+  }
 
   return { ok: true as const, status: approved ? ("approved" as const) : ("rejected" as const) };
 }

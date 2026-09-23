@@ -29,6 +29,7 @@ function isCsAllowedOnSubdomain(pathname: string) {
   return (
     isCsPath(pathname) ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/media/") ||
     pathname === "/cs-manifest.webmanifest" ||
     pathname === "/cs-sw.js" ||
     pathname === "/sw.js" ||
