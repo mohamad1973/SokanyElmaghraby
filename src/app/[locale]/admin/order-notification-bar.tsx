@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Link } from "@/i18n/navigation";
@@ -53,16 +53,27 @@ function writeKnownDepositIds(ids: Set<number>) {
   window.localStorage.setItem(lastSeenDepositIdsKey, JSON.stringify([...ids]));
 }
 
-/** Bell for admin header: deposit approvals + new orders (portal dropdown). */
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path
+        d="M12 3a5 5 0 0 0-5 5v2.3c0 .7-.2 1.4-.6 2L5.2 14.5A1.5 1.5 0 0 0 6.5 17h11a1.5 1.5 0 0 0 1.3-2.5L17.6 12.3c-.4-.6-.6-1.3-.6-2V8a5 5 0 0 0-5-5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M10 17a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Bell for admin header: deposit approvals + new orders (fixed portal panel). */
 export function AdminNotificationsBell() {
   const [open, setOpen] = useState(false);
   const [newOrders, setNewOrders] = useState<NonNullable<LatestOrderResponse["orders"]>>([]);
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
-  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const knownDepositIds = useRef<Set<number>>(new Set());
   const initialized = useRef(false);
 
@@ -98,7 +109,6 @@ export function AdminNotificationsBell() {
             } else {
               const previousOrderIndex = todayOrders.findIndex((order) => String(order.id) === previousOrderId);
               if (previousOrderIndex === -1) {
-                // Stale last-seen: do not treat all today's orders as unread
                 window.localStorage.setItem(lastSeenOrderKey, String(latestOrder.id));
                 if (isMounted) setNewOrders([]);
               } else {
@@ -154,61 +164,17 @@ export function AdminNotificationsBell() {
     };
   }, []);
 
-  function updatePanelPosition() {
-    const btn = buttonRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    const width = Math.min(22 * 16, window.innerWidth - 16);
-    let left = rect.right - width;
-    if (left < 8) left = 8;
-    if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
-    setPanelStyle({
-      position: "fixed",
-      top: rect.bottom + 8,
-      left,
-      width,
-      zIndex: 9999,
-    });
-  }
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    updatePanelPosition();
-    function onResize() {
-      updatePanelPosition();
-    }
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onResize, true);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onResize, true);
-    };
-  }, [open]);
-
   useEffect(() => {
     if (!open) return;
-    let removeListeners: (() => void) | undefined;
-    const timer = window.setTimeout(() => {
-      function onDocPointer(e: PointerEvent) {
-        const t = e.target as Node;
-        if (buttonRef.current?.contains(t)) return;
-        if (panelRef.current?.contains(t)) return;
-        setOpen(false);
-      }
-      function onKey(e: KeyboardEvent) {
-        if (e.key === "Escape") setOpen(false);
-      }
-      document.addEventListener("pointerdown", onDocPointer);
-      document.addEventListener("keydown", onKey);
-      removeListeners = () => {
-        document.removeEventListener("pointerdown", onDocPointer);
-        document.removeEventListener("keydown", onKey);
-      };
-    }, 0);
-
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      window.clearTimeout(timer);
-      removeListeners?.();
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
     };
   }, [open]);
 
@@ -216,7 +182,6 @@ export function AdminNotificationsBell() {
     if (newOrders[0]) {
       window.localStorage.setItem(lastSeenOrderKey, String(newOrders[0].id));
     } else {
-      // still clear any stale badge by anchoring to "now"
       const latestFromStorage = window.localStorage.getItem(lastSeenOrderKey);
       if (!latestFromStorage) {
         window.localStorage.setItem(lastSeenOrderKey, "0");
@@ -228,94 +193,115 @@ export function AdminNotificationsBell() {
   const total = newOrders.length + deposits.length;
   const hasDeposits = deposits.length > 0;
 
-  const panel = open && mounted ? (
-    <div
-      ref={panelRef}
-      style={panelStyle}
-      className="max-h-[min(24rem,70vh)] overflow-y-auto rounded-2xl border border-black/15 bg-white p-3 text-[#14213D] shadow-2xl"
-      dir="rtl"
-      role="dialog"
-      aria-label="قائمة الإشعارات"
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-extrabold">قائمة الإشعارات</p>
-        <Link
-          href="/admin/deposit-approvals"
-          className="text-[10px] font-bold text-[#0D9488] underline"
+  const panel =
+    open && mounted ? (
+      <div className="fixed inset-0 z-[9999]" dir="rtl">
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/45"
+          aria-label="إغلاق الإشعارات"
           onClick={() => setOpen(false)}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="قائمة الإشعارات"
+          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-2xl border border-black/15 bg-white text-[#14213D] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[min(32rem,80vh)] sm:w-[24rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
         >
-          كل طلبات الديبوزت
-        </Link>
-      </div>
-      {error ? <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-bold text-red-700">{error}</p> : null}
-      {total === 0 && !error ? (
-        <p className="text-xs text-zinc-500">لا توجد إشعارات حالياً.</p>
-      ) : (
-        <div className="space-y-4 text-xs">
-          {deposits.length ? (
-            <div>
-              <p className="font-extrabold text-[#0D9488]">موافقات ديبوزت ({deposits.length})</p>
-              <ul className="mt-1 space-y-1.5">
-                {deposits.map((d) => (
-                  <li key={`dep-${d.id}`}>
-                    <Link
-                      href={`/admin/deposit-approvals/${d.id}`}
-                      className="block rounded-lg bg-[#0D9488]/10 px-2 py-1.5 font-bold text-[#14213D] hover:bg-[#0D9488]/20"
-                      onClick={() => setOpen(false)}
-                    >
-                      طلب تأكيد ديبوزت #{d.wooOrderNumber}
-                      <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
-                        {d.customerName || "عميل"} · {d.depositAmount ?? "?"} ج.م
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {newOrders.length ? (
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-extrabold text-[#FCA311]">طلبات جديدة اليوم ({newOrders.length})</p>
-                <button type="button" onClick={markOrdersRead} className="text-[10px] font-bold underline">
-                  تصفير طلبات اليوم
-                </button>
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
+            <p className="text-sm font-extrabold">قائمة الإشعارات</p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-zinc-200"
+            >
+              إغلاق
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 text-xs">
+            {error ? (
+              <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-bold text-red-700">{error}</p>
+            ) : null}
+            {total === 0 && !error ? (
+              <p className="text-zinc-500">لا توجد إشعارات حالياً.</p>
+            ) : (
+              <div className="space-y-4">
+                {deposits.length ? (
+                  <div>
+                    <p className="font-extrabold text-[#0D9488]">موافقات ديبوزت ({deposits.length})</p>
+                    <ul className="mt-1 space-y-1.5">
+                      {deposits.map((d) => (
+                        <li key={`dep-${d.id}`}>
+                          <Link
+                            href={`/admin/deposit-approvals/${d.id}`}
+                            className="block rounded-lg bg-[#0D9488]/10 px-2 py-1.5 font-bold text-[#14213D] hover:bg-[#0D9488]/20"
+                            onClick={() => setOpen(false)}
+                          >
+                            طلب تأكيد ديبوزت #{d.wooOrderNumber}
+                            <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                              {d.customerName || "عميل"} · {d.depositAmount ?? "?"} ج.م
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {newOrders.length ? (
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-extrabold text-[#FCA311]">طلبات جديدة اليوم ({newOrders.length})</p>
+                      <button type="button" onClick={markOrdersRead} className="text-[10px] font-bold underline">
+                        تصفير طلبات اليوم
+                      </button>
+                    </div>
+                    <ul className="mt-1 space-y-1.5">
+                      {newOrders.slice(0, 12).map((o) => (
+                        <li key={`ord-${o.id}`}>
+                          <Link
+                            href={`/admin/orders/${o.id}`}
+                            className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
+                            onClick={() => {
+                              markOrdersRead();
+                              setOpen(false);
+                            }}
+                          >
+                            #{o.number} — {o.customerName} — {o.total} {o.currency}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
-              <ul className="mt-1 space-y-1.5">
-                {newOrders.slice(0, 12).map((o) => (
-                  <li key={`ord-${o.id}`}>
-                    <Link
-                      href={`/admin/orders/${o.id}`}
-                      className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
-                      onClick={() => {
-                        markOrdersRead();
-                        setOpen(false);
-                      }}
-                    >
-                      #{o.number} — {o.customerName} — {o.total} {o.currency}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+            )}
+          </div>
+          <div className="flex shrink-0 gap-2 border-t border-black/10 px-4 py-3">
+            <Link
+              href="/admin/deposit-approvals"
+              className="flex-1 rounded-full bg-[#0D9488] px-3 py-2.5 text-center text-xs font-extrabold text-white"
+              onClick={() => setOpen(false)}
+            >
+              كل طلبات الديبوزت
+            </Link>
+            <Link
+              href="/admin/orders"
+              className="flex-1 rounded-full bg-[#14213D] px-3 py-2.5 text-center text-xs font-extrabold text-white"
+              onClick={() => setOpen(false)}
+            >
+              الطلبات
+            </Link>
+          </div>
         </div>
-      )}
-    </div>
-  ) : null;
+      </div>
+    ) : null;
 
   return (
     <>
       <button
-        ref={buttonRef}
         type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        className={`relative inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-extrabold ${
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-extrabold ${
           hasDeposits
             ? "animate-pulse bg-[#FCA311] text-black"
             : "border border-black/10 bg-zinc-50 text-[#14213D] hover:bg-zinc-100"
@@ -323,7 +309,7 @@ export function AdminNotificationsBell() {
         aria-label="جرس الإشعارات"
         aria-expanded={open}
       >
-        <span aria-hidden>🔔</span>
+        <BellIcon className="h-5 w-5 shrink-0" />
         <span>إشعارات</span>
         {hasDeposits ? (
           <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#0D9488] px-1.5 text-[11px] font-extrabold text-white">

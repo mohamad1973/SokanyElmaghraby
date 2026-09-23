@@ -4,9 +4,24 @@ import { SessionProvider, signIn, signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { CsPwaInstallPrompt } from "@/components/cs-pwa-install-prompt";
 import { ensureDepositAlertUnlockedOnGesture, playLoudDepositAlert } from "@/lib/deposit-alert-sound";
+
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+      <path
+        d="M12 3a5 5 0 0 0-5 5v2.3c0 .7-.2 1.4-.6 2L5.2 14.5A1.5 1.5 0 0 0 6.5 17h11a1.5 1.5 0 0 0 1.3-2.5L17.6 12.3c-.4-.6-.6-1.3-.6-2V8a5 5 0 0 0-5-5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path d="M10 17a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 type NotifPayload = {
   handedToCarrier: Array<{ id: number; wooOrderNumber: string }>;
@@ -46,6 +61,7 @@ const CS_VARS = {
 
 function CsNotificationsBell() {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<NotifPayload | null>(null);
   const seenDepositIdsRef = useRef<Set<number>>(new Set());
 
@@ -67,11 +83,29 @@ function CsNotificationsBell() {
   }, []);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     ensureDepositAlertUnlockedOnGesture();
     void load();
     const id = window.setInterval(() => void load(), 20000);
     return () => window.clearInterval(id);
   }, [load]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   const total = data?.totals.all || 0;
   const depositDecisions = data?.depositDecisions || [];
@@ -103,111 +137,181 @@ function CsNotificationsBell() {
     }
   }
 
+  function openPanel() {
+    setOpen(true);
+    void markDepositSeen();
+  }
+
+  const panel =
+    open && mounted ? (
+      <div className="fixed inset-0 z-[9999]" dir="rtl">
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/50"
+          aria-label="إغلاق الإشعارات"
+          onClick={() => setOpen(false)}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="قائمة الإشعارات"
+          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-2xl border border-[var(--cs-navy)]/15 bg-white text-[var(--cs-navy)] shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[min(32rem,80vh)] sm:w-[22rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl"
+        >
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
+            <p className="text-sm font-extrabold">تنبيهات المتابعة</p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-bold text-zinc-700 hover:bg-zinc-200"
+            >
+              إغلاق
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 text-xs">
+            {!data || total === 0 ? (
+              <p className="text-slate-500">لا توجد تنبيهات حالياً.</p>
+            ) : (
+              <div className="space-y-3">
+                {depositDecisions.length ? (
+                  <div>
+                    <p className="font-bold text-emerald-700">قرارات الديبوزت ({depositDecisions.length})</p>
+                    <ul className="mt-1 space-y-1">
+                      {depositDecisions.slice(0, 8).map((o) => (
+                        <li key={`dep-${o.id}`}>
+                          <Link
+                            href={`/cs/orders/${o.id}`}
+                            className="block rounded-lg bg-emerald-50 px-2 py-1.5 font-bold underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            {o.decision === "approved" ? "تمت الموافقة" : "تم الرفض"} على ديبوزت #{o.wooOrderNumber}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.stockAlerts && data.stockAlerts.length ? (
+                  <div>
+                    <p className="font-bold text-amber-600">مخزون تحت الحد ({data.totals.stockAlerts || 0})</p>
+                    <ul className="mt-1 space-y-1">
+                      {data.stockAlerts.slice(0, 8).map((o) => (
+                        <li key={`s-${o.id}`}>
+                          <Link
+                            href="/cs/transfers?low=1"
+                            className="block rounded-lg bg-amber-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            {o.productName}
+                            {o.model ? ` · ${o.model}` : ""} ({o.stockQuantity}/{o.threshold})
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.handedToCarrier.length ? (
+                  <div>
+                    <p className="font-bold text-[var(--cs-gold)]">تسليم لشركة الشحن ({data.totals.handedToCarrier})</p>
+                    <ul className="mt-1 space-y-1">
+                      {data.handedToCarrier.slice(0, 8).map((o) => (
+                        <li key={`h-${o.id}`}>
+                          <Link
+                            href={`/cs/orders/${o.id}`}
+                            className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            #{o.wooOrderNumber}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.confirmDelivery.length ? (
+                  <div>
+                    <p className="font-bold text-[var(--cs-navy)]">تأكيد التسليم للعميل ({data.totals.confirmDelivery})</p>
+                    <ul className="mt-1 space-y-1">
+                      {data.confirmDelivery.slice(0, 8).map((o) => (
+                        <li key={`d-${o.id}`}>
+                          <Link
+                            href={`/cs/orders/${o.id}`}
+                            className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            #{o.wooOrderNumber}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.followUpDue.length ? (
+                  <div>
+                    <p className="font-bold text-[var(--cs-black)]">متابعة بعد 5 أيام ({data.totals.followUpDue})</p>
+                    <ul className="mt-1 space-y-1">
+                      {data.followUpDue.slice(0, 8).map((o) => (
+                        <li key={`f-${o.id}`}>
+                          <Link
+                            href={`/cs/orders/${o.id}`}
+                            className="block rounded-lg bg-zinc-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            #{o.wooOrderNumber}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-2 border-t border-black/10 px-4 py-3">
+            <Link
+              href="/cs"
+              className="flex-1 rounded-full bg-[var(--cs-navy)] px-3 py-2 text-center text-xs font-extrabold text-white"
+              onClick={() => setOpen(false)}
+            >
+              الأوردرات
+            </Link>
+            <Link
+              href="/cs/transfers"
+              className="flex-1 rounded-full bg-[var(--cs-gold)] px-3 py-2 text-center text-xs font-extrabold text-black"
+              onClick={() => setOpen(false)}
+            >
+              التحويلات
+            </Link>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   return (
-    <div className="relative">
+    <>
       <button
         type="button"
         onClick={() => {
-          setOpen((v) => !v);
-          if (!open) void markDepositSeen();
+          if (open) setOpen(false);
+          else openPanel();
         }}
-        className={`relative rounded-full px-3 py-1.5 text-sm font-bold ${
+        className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2.5 text-sm font-extrabold ${
           depositDecisions.length
             ? "animate-pulse bg-[var(--cs-gold)] text-black"
-            : "bg-white/10 hover:bg-white/20"
+            : "bg-white/15 text-white hover:bg-white/25"
         }`}
-        aria-label="الإشعارات"
+        aria-label="جرس الإشعارات"
+        aria-expanded={open}
       >
-        🔔 إشعارات
+        <BellIcon className="h-5 w-5 shrink-0" />
+        <span>إشعارات</span>
         {total > 0 ? (
-          <span className="absolute -top-1 -left-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--cs-gold)] px-1 text-[10px] font-extrabold text-black">
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--cs-gold)] px-1.5 text-[11px] font-extrabold text-black">
             {total}
           </span>
         ) : null}
       </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-40 mt-2 w-80 rounded-2xl border border-[var(--cs-navy)]/20 bg-white p-3 text-[var(--cs-navy)] shadow-xl">
-          <p className="mb-2 text-sm font-extrabold">تنبيهات المتابعة</p>
-          {!data || total === 0 ? (
-            <p className="text-xs text-slate-500">لا توجد تنبيهات حالياً.</p>
-          ) : (
-            <div className="max-h-72 space-y-3 overflow-y-auto text-xs">
-              {depositDecisions.length ? (
-                <div>
-                  <p className="font-bold text-emerald-700">قرارات الديبوزت ({depositDecisions.length})</p>
-                  <ul className="mt-1 space-y-1">
-                    {depositDecisions.slice(0, 8).map((o) => (
-                      <li key={`dep-${o.id}`}>
-                        <Link href={`/cs/orders/${o.id}`} className="underline" onClick={() => setOpen(false)}>
-                          {o.decision === "approved" ? "تمت الموافقة" : "تم الرفض"} على ديبوزت #{o.wooOrderNumber}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {data.stockAlerts && data.stockAlerts.length ? (
-                <div>
-                  <p className="font-bold text-amber-600">مخزون تحت الحد ({data.totals.stockAlerts || 0})</p>
-                  <ul className="mt-1 space-y-1">
-                    {data.stockAlerts.slice(0, 8).map((o) => (
-                      <li key={`s-${o.id}`}>
-                        <Link href="/cs/transfers?low=1" className="underline" onClick={() => setOpen(false)}>
-                          {o.productName}
-                          {o.model ? ` · ${o.model}` : ""} ({o.stockQuantity}/{o.threshold})
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {data.handedToCarrier.length ? (
-                <div>
-                  <p className="font-bold text-[var(--cs-gold)]">تسليم لشركة الشحن ({data.totals.handedToCarrier})</p>
-                  <ul className="mt-1 space-y-1">
-                    {data.handedToCarrier.slice(0, 8).map((o) => (
-                      <li key={`h-${o.id}`}>
-                        <Link href={`/cs/orders/${o.id}`} className="underline" onClick={() => setOpen(false)}>
-                          #{o.wooOrderNumber}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {data.confirmDelivery.length ? (
-                <div>
-                  <p className="font-bold text-[var(--cs-navy)]">تأكيد التسليم للعميل ({data.totals.confirmDelivery})</p>
-                  <ul className="mt-1 space-y-1">
-                    {data.confirmDelivery.slice(0, 8).map((o) => (
-                      <li key={`d-${o.id}`}>
-                        <Link href={`/cs/orders/${o.id}`} className="underline" onClick={() => setOpen(false)}>
-                          #{o.wooOrderNumber}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {data.followUpDue.length ? (
-                <div>
-                  <p className="font-bold text-[var(--cs-black)]">متابعة بعد 5 أيام ({data.totals.followUpDue})</p>
-                  <ul className="mt-1 space-y-1">
-                    {data.followUpDue.slice(0, 8).map((o) => (
-                      <li key={`f-${o.id}`}>
-                        <Link href={`/cs/orders/${o.id}`} className="underline" onClick={() => setOpen(false)}>
-                          #{o.wooOrderNumber}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </div>
-      ) : null}
-    </div>
+      {mounted ? createPortal(panel, document.body) : null}
+    </>
   );
 }
 
@@ -235,20 +339,24 @@ function CsHeader() {
 
   return (
     <header
-      className="sticky top-0 z-20 border-b border-black/20 px-3 py-2.5 shadow-md sm:px-4 sm:py-3"
+      className="sticky top-0 z-50 overflow-visible border-b border-black/20 px-3 py-2.5 shadow-md sm:px-4 sm:py-3"
       style={{ background: "var(--cs-navy)" }}
     >
-      <div className="mx-auto flex max-w-7xl flex-col gap-2 text-white sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">مرحباً، {agentName}</p>
-          <p className="text-[11px] text-white/70 sm:text-xs">
-            {isTransfersOnly
-              ? "التحويلات · مخزون الموقع وحد الطلب"
-              : "خدمة العملاء · الأوردرات والتحويلات"}
-          </p>
+      <div className="mx-auto flex max-w-7xl flex-col gap-2 text-white sm:gap-3">
+        <div className="flex items-center justify-between gap-3 overflow-visible">
+          <div className="min-w-0">
+            <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">مرحباً، {agentName}</p>
+            <p className="text-[11px] text-white/70 sm:text-xs">
+              {isTransfersOnly
+                ? "التحويلات · مخزون الموقع وحد الطلب"
+                : "خدمة العملاء · الأوردرات والتحويلات"}
+            </p>
+          </div>
+          <div className="shrink-0 overflow-visible">
+            <CsNotificationsBell />
+          </div>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <CsNotificationsBell />
           {showOrdersQueue ? (
             <Link href="/cs" className={navClass(pathname === "/cs")}>
               الأوردرات

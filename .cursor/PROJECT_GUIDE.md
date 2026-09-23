@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| جرس إشعارات جذري أدمن+CS | إخراج الجرس من overflow-x-auto؛ شارة inline؛ لوحة fixed+backdrop عبر portal؛ أيقونة SVG واضحة | `cs-shell.tsx`, `order-notification-bar.tsx`, `admin-shell.tsx` |
 | جرس أدمن Portal + هيدر أطول | قائمة fixed عبر Portal؛ إصلاح عداد 2 العالق؛ min-h-20؛ صفحة /admin/deposit-approvals | `order-notification-bar.tsx`, `admin-shell.tsx`, `deposit-approvals/page.tsx` |
 | إصلاح جرس أدمن الديبوزت | نقل الجرس للهيدر الأطول؛ قائمة فوق الصفحة؛ عرض pending دائماً + أخطاء API ظاهرة | `admin-shell.tsx`, `order-notification-bar.tsx` |
 | CS موافقة ديبوزت + أجراس | طلب موافقه مع وقت/صورة؛ جرس أدمن بصوت عالٍ؛ موافقة/رفض؛ جرس موظفة عند الرد | `deposit-approvals.ts`, `order-notification-bar.tsx`, `call-sheet.tsx`, `cs-shell.tsx` |
