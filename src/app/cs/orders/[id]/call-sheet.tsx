@@ -215,8 +215,8 @@ export function CsCallSheet({
     const ac = new AbortController();
     void fetch(`/api/cs/confirmations/${confirmationId}/bosta`, { method: "POST", signal: ac.signal })
       .then(async (res) => {
-        if (!res.ok) return;
-        const data = (await res.json()) as {
+        const data = (await res.json().catch(() => ({}))) as {
+          message?: string;
           trackingNumber?: string | null;
           bostaStatus?: string | null;
           bostaShippingFee?: number | null;
@@ -225,6 +225,10 @@ export function CsCallSheet({
           cod?: number | null;
           lastEvent?: string | null;
         };
+        if (!res.ok) {
+          setBostaError(data.message || data.bostaSyncError || "تعذر جلب بوليصة بوسطة.");
+          return;
+        }
         if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
         if (data.bostaStatus) setBostaStatus(data.bostaStatus);
         if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
@@ -233,7 +237,10 @@ export function CsCallSheet({
         if (data.lastEvent) setBostaLastEvent(data.lastEvent);
         setBostaError(data.bostaSyncError || "");
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (ac.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
+        setBostaError("تعذر الاتصال لجلب بوليصة بوسطة.");
+      });
     return () => ac.abort();
   }, [confirmationId, initialTracking, lockedShipping]);
 
@@ -951,6 +958,7 @@ export function CsCallSheet({
         {lockedShipping === "bosta" ? (
           <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#14213D] p-2.5 text-white shadow-sm ring-2 ring-[#FCA311]">
             <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
+            <p dir="ltr" className="mt-1 text-sm font-extrabold">{trackingNumber || "—"}</p>
             <p className="mt-1 text-sm font-extrabold">{bostaStatus ? getBostaStatusLabelAr(bostaStatus) : "لسه مفيش بوليصة"}</p>
             <p className="mt-1 text-xs font-bold">
               قيمة الشحن: {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")} ج.م`}

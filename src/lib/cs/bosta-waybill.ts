@@ -194,9 +194,42 @@ async function linkExistingBostaDelivery(input: {
   answers: CsChecklistAnswerInput[];
 }): Promise<BostaWaybillState | null> {
   const hints = customerHints(input.snapshot, input.answers);
-  if (!hints.phone) return null;
-  const found = await findBostaDeliveryByCustomer(hints);
-  if (!found?.trackingNumber) return null;
+  if (!hints.phone) {
+    const message = "مفيش رقم موبايل للبحث عن البوليصة في بوسطة.";
+    await writeConfirmation({
+      confirmationId: input.confirmationId,
+      snapshot: input.snapshot,
+      trackingNumber: null,
+      bostaStatus: null,
+      bostaShippingFee: null,
+      bostaSyncError: message,
+    });
+    return present({
+      trackingNumber: null,
+      bostaSyncError: message,
+      message,
+      bostaSyncedAt: new Date(),
+    });
+  }
+  const lookup = await findBostaDeliveryByCustomer(hints);
+  const found = lookup.details;
+  if (!found?.trackingNumber) {
+    const message = lookup.error || "مفيش بوليصة على بوسطة بنفس موبايل العميل.";
+    await writeConfirmation({
+      confirmationId: input.confirmationId,
+      snapshot: input.snapshot,
+      trackingNumber: null,
+      bostaStatus: null,
+      bostaShippingFee: null,
+      bostaSyncError: message,
+    });
+    return present({
+      trackingNumber: null,
+      bostaSyncError: message,
+      message,
+      bostaSyncedAt: new Date(),
+    });
+  }
   const status = normalizeBostaStatus(found.status || "created");
   await writeConfirmation({
     confirmationId: input.confirmationId,

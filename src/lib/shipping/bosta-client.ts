@@ -104,26 +104,78 @@ function normalizePhone(phone: string) {
   return bostaPhoneKey(phone);
 }
 
-function deliveryRecords(raw: unknown): Record<string, unknown>[] {
-  const root = asRecord(raw);
-  if (!root) return Array.isArray(raw) ? raw.flatMap((item) => (asRecord(item) ? [asRecord(item)!] : [])) : [];
-  const buckets = [root, asRecord(root.data)].filter((item): item is Record<string, unknown> => Boolean(item));
-  for (const bucket of buckets) {
-    for (const key of ["deliveries", "list", "results", "docs"]) {
-      const list = bucket[key];
-      if (!Array.isArray(list)) continue;
-      return list.flatMap((item) => (asRecord(item) ? [asRecord(item)!] : []));
-    }
-  }
-  const one = bostaPayload(raw);
-  return one?.trackingNumber ? [one] : [];
+function rowsFrom(list: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((item) => (asRecord(item) ? [asRecord(item)!] : []));
 }
 
-function rowPhones(row: Record<string, unknown>) {
-  const receiver = asRecord(row.receiver) || {};
-  return [receiver.phone, receiver.secondPhone, row.receiverPhone, row.phone, row.mobile]
-    .map((value) => String(value || ""))
-    .filter(Boolean);
+function deliveryRecords(raw: unknown): Record<string, unknown>[] {
+  const collected: Record<string, unknown>[] = [];
+  const visit = (node: unknown, depth: number) => {
+    if (depth > 4) return;
+    if (Array.isArray(node)) {
+      const rows = rowsFrom(node);
+      if (rows.length) collected.push(...rows);
+      return;
+    }
+    const record = asRecord(node);
+    if (!record) return;
+    for (const key of ["deliveries", "list", "results", "docs", "data"]) {
+      const child = record[key];
+      if (Array.isArray(child)) {
+        const rows = rowsFrom(child);
+        if (rows.length) collected.push(...rows);
+      } else if (child && typeof child === "object") {
+        visit(child, depth + 1);
+      }
+    }
+  };
+  visit(raw, 0);
+  if (collected.length) return collected;
+  const one = bostaPayload(raw);
+  return one && rowTracking(one) ? [one] : [];
+}
+
+function rowTracking(row: Record<string, unknown>): string | null {
+  const nested = asRecord(row.delivery) || asRecord(row.shipment);
+  const candidates = [
+    row.trackingNumber,
+    row.tracking_number,
+    row.trackingNo,
+    nested?.trackingNumber,
+    nested?.tracking_number,
+  ];
+  for (const value of candidates) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+function collectText(value: unknown, out: string[], depth = 0) {
+  if (depth > 6 || out.length > 120) return;
+  if (typeof value === "string" || typeof value === "number") {
+    out.push(String(value));
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectText(item, out, depth + 1);
+    return;
+  }
+  const record = asRecord(value);
+  if (!record) return;
+  for (const item of Object.values(record)) collectText(item, out, depth + 1);
+}
+
+function rowHasPhone(row: Record<string, unknown>, phoneKey: string) {
+  const tail = phoneKey.slice(-10);
+  const texts: string[] = [];
+  collectText(row, texts);
+  return texts.some((value) => {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length < 10 || digits.length > 15) return false;
+    return bostaPhoneKey(value) === phoneKey || digits.endsWith(tail);
+  });
 }
 
 function rowName(row: Record<string, unknown>) {
@@ -140,42 +192,89 @@ function nameOverlap(left: string, right: string) {
   return words.filter((word) => other.has(word)).length;
 }
 
+export type BostaCustomerLookup = {
+  details: BostaLiveDetails | null;
+  error: string | null;
+};
+
 export async function findBostaDeliveryByCustomer(input: {
   phone: string;
   name?: string | null;
   cod?: number | null;
-}) {
+}): Promise<BostaCustomerLookup> {
   const phoneKey = bostaPhoneKey(input.phone);
-  if (phoneKey.length < 10) return null;
+  if (phoneKey.length < 10) {
+    return { details: null, error: "رقم الموبايل غير مكتمل للبحث في بوسطة." };
+  }
   const variants = [`0${phoneKey}`, phoneKey, `20${phoneKey}`, `+20${phoneKey}`];
   const found: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const errors: string[] = [];
+  const remember = (rows: Record<string, unknown>[]) => {
+    let added = 0;
+    for (const row of rows) {
+      const key = rowTracking(row) || JSON.stringify(row).slice(0, 120);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push(row);
+      added += 1;
+    }
+    return added;
+  };
+  const phoneHit = () => found.some((row) => rowHasPhone(row, phoneKey));
 
   const searched = await bostaFetch("/deliveries/search", {
     method: "POST",
     body: JSON.stringify({
       mobilePhones: variants,
       phones: variants,
+      phone: variants[0],
+      mobilePhone: variants[0],
       receiverPhone: variants[0],
       pageNumber: 0,
       pageLimit: 50,
       limit: 50,
     }),
   });
-  if (searched.ok) found.push(...deliveryRecords(searched.data));
+  if (searched.ok) remember(deliveryRecords(searched.data));
+  else errors.push(searched.message);
 
-  const phoneHit = () => found.some((row) => rowPhones(row).some((phone) => bostaPhoneKey(phone) === phoneKey));
   if (!phoneHit()) {
-    for (let page = 0; page < 3; page += 1) {
-      const listed = await bostaFetch(`/deliveries?pageNumber=${page}&pageLimit=50`);
-      if (!listed.ok) break;
+    const query = new URLSearchParams({
+      pageNumber: "0",
+      pageLimit: "50",
+      limit: "50",
+      phone: variants[0],
+      mobilePhone: variants[0],
+      receiverPhone: variants[0],
+    });
+    const filtered = await bostaFetch(`/deliveries?${query.toString()}`);
+    if (filtered.ok) remember(deliveryRecords(filtered.data));
+    else errors.push(filtered.message);
+  }
+
+  if (!phoneHit()) {
+    for (let page = 0; page < 8; page += 1) {
+      const listed = await bostaFetch(`/deliveries?pageNumber=${page}&pageLimit=50&limit=50`);
+      if (!listed.ok) {
+        errors.push(listed.message);
+        break;
+      }
       const pageRows = deliveryRecords(listed.data);
-      found.push(...pageRows);
-      if (pageRows.length < 50 || phoneHit()) break;
+      if (!pageRows.length) break;
+      const added = remember(pageRows);
+      if (phoneHit()) break;
+      if (!added && page > 0) break;
     }
   }
 
-  const matched = found.filter((row) => rowPhones(row).some((phone) => bostaPhoneKey(phone) === phoneKey));
-  if (!matched.length) return null;
+  const matched = found.filter((row) => rowHasPhone(row, phoneKey));
+  if (!matched.length) {
+    return {
+      details: null,
+      error: errors[0] || "مفيش بوليصة على بوسطة بنفس موبايل العميل.",
+    };
+  }
 
   const finished = (row: Record<string, unknown>) =>
     /delivered|returned|cancel|terminated|^45$|^46$|^48$|^49$/.test(
@@ -190,14 +289,32 @@ export async function findBostaDeliveryByCustomer(input: {
   const ranked = pool
     .map((row) => {
       const details = readBostaLiveDetails(row);
+      const trackingNumber = details.trackingNumber || rowTracking(row);
       const codScore = expectedCod != null && details.cod != null && Math.abs(details.cod - expectedCod) < 1 ? 100 : 0;
       const sameName = input.name ? nameOverlap(input.name, rowName(row)) * 20 : 0;
       const created = Date.parse(String(row.createdAt || row.updatedAt || "")) || 0;
-      return { row, details, score: codScore + sameName, created };
+      return { details: { ...details, trackingNumber }, score: codScore + sameName, created };
     })
     .sort((a, b) => b.score - a.score || b.created - a.created);
 
-  return ranked[0]?.details.trackingNumber ? ranked[0].details : null;
+  const picked = ranked[0];
+  const tracking = picked?.details.trackingNumber;
+  if (!tracking) {
+    return { details: null, error: "بوسطة رجّعت شحنة من غير رقم تتبع." };
+  }
+  const live = await fetchCsBostaDelivery(tracking);
+  const full = live.ok ? readBostaLiveDetails(live.data) : picked.details;
+  return {
+    details: {
+      trackingNumber: full.trackingNumber || tracking,
+      deliveryId: full.deliveryId || picked.details.deliveryId,
+      status: full.status || picked.details.status,
+      shippingFee: full.shippingFee ?? picked.details.shippingFee,
+      cod: full.cod ?? picked.details.cod,
+      lastEvent: full.lastEvent || picked.details.lastEvent,
+    },
+    error: null,
+  };
 }
 
 export const DEFAULT_BOSTA_WEBHOOK_SECRET = "sokany-bosta-webhook-secret";
@@ -546,7 +663,13 @@ export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
   const list = Array.isArray(events) ? events : [];
   const last = list.length ? eventLine(list[list.length - 1]) : null;
   return {
-    trackingNumber: root?.trackingNumber ? String(root.trackingNumber) : null,
+    trackingNumber: root?.trackingNumber
+      ? String(root.trackingNumber)
+      : root?.tracking_number
+        ? String(root.tracking_number)
+        : root?.trackingNo
+          ? String(root.trackingNo)
+          : null,
     deliveryId: root?._id ? String(root._id) : null,
     status: readBostaStatus(raw),
     shippingFee: readBostaShippingFee(raw),
