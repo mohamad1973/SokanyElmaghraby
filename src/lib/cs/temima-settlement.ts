@@ -20,6 +20,7 @@ export type TemimaSheetRow = {
   confirmationId: number;
   wooOrderNumber: string;
   customerName: string;
+  productNames: string;
   cashAmount: number;
   disposition: TemimaDisposition;
   isLarge: boolean;
@@ -102,6 +103,20 @@ function customerNameOf(snapshot: unknown) {
   return snap?.customerName || "—";
 }
 
+function productNamesOf(snapshot: unknown) {
+  const snap = snapshot as { items?: Array<{ name?: string; quantity?: number }> } | null;
+  const items = snap?.items || [];
+  const names = items
+    .map((line) => {
+      const name = String(line.name || "").trim();
+      if (!name) return "";
+      const qty = typeof line.quantity === "number" && line.quantity > 1 ? ` × ${line.quantity}` : "";
+      return `${name}${qty}`;
+    })
+    .filter(Boolean);
+  return names.length ? names.join(" · ") : "—";
+}
+
 async function loadWeeks() {
   const prisma = getPrismaClient();
   if (!prisma) return [];
@@ -159,10 +174,19 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
   }
 
   if (week?.status === "closed") {
+    const ids = week.lines.map((line) => line.confirmationId);
+    const snaps = ids.length
+      ? await prisma.csOrderConfirmation.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, customerSnapshot: true },
+        })
+      : [];
+    const snapById = new Map(snaps.map((row) => [row.id, row.customerSnapshot]));
     const rows: TemimaSheetRow[] = week.lines.map((line) => ({
       confirmationId: line.confirmationId,
       wooOrderNumber: line.wooOrderNumber,
-      customerName: "—",
+      customerName: customerNameOf(snapById.get(line.confirmationId)),
+      productNames: productNamesOf(snapById.get(line.confirmationId)),
       cashAmount: Number(line.cashAmount),
       disposition: line.disposition as TemimaDisposition,
       isLarge: line.isLarge,
@@ -209,6 +233,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
       confirmationId: order.id,
       wooOrderNumber: order.wooOrderNumber,
       customerName: customerNameOf(order.customerSnapshot),
+      productNames: productNamesOf(order.customerSnapshot),
       cashAmount: cashAmountOf(order),
       disposition: (saved?.disposition as TemimaDisposition) || "collect",
       isLarge: saved?.isLarge || false,
@@ -224,6 +249,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
       confirmationId: carried.confirmationId,
       wooOrderNumber: carried.wooOrderNumber,
       customerName: order ? customerNameOf(order.customerSnapshot) : "—",
+      productNames: order ? productNamesOf(order.customerSnapshot) : "—",
       cashAmount: carried.cashAmount,
       disposition: (saved?.disposition as TemimaDisposition) || "postpone",
       isLarge: saved?.isLarge ?? carried.isLarge,

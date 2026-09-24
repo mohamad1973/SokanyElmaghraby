@@ -10,7 +10,7 @@ import {
   type CsChecklistAnswerInput,
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
-import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
+import { formatCairoOrderDateTime, resolvePaymentState } from "@/lib/cs/order-window";
 
 /** Order total at/above this (EGP) shows the optional deposit card. */
 const CS_DEPOSIT_THRESHOLD = 5000;
@@ -31,6 +31,9 @@ type Snapshot = {
   governorate?: string;
   area?: string;
   paymentMethod?: string;
+  paymentMethodId?: string | null;
+  paymentState?: "awaiting_payment" | "paid" | "cod";
+  datePaid?: string | null;
   total?: string;
   currency?: string;
   number?: string;
@@ -71,6 +74,13 @@ type Props = {
   depositPaidAt?: string | null;
   depositProofUrl?: string | null;
   depositApprovalStatus?: string | null;
+  salesOrderNumber?: string | null;
+  postCancel?: {
+    invoice: "before" | "after" | "";
+    systemNo: string | null;
+    refundPaid: boolean;
+    at: string | null;
+  };
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -161,8 +171,11 @@ export function CsCallSheet({
   depositToMethod: initialDepositToMethod,
   depositPaidAt: initialDepositPaidAt,
   depositApprovalStatus: initialDepositApprovalStatus,
+  salesOrderNumber: initialSalesOrderNumber,
+  postCancel,
 }: Props) {
   const confirmed = status === "CONFIRMED";
+  const showFollowUp = confirmed || Boolean(postCancel?.at);
   const lockedShipping =
     shippingCompany === "bosta" || shippingCompany === "sayed_temima" ? shippingCompany : null;
 
@@ -208,6 +221,12 @@ export function CsCallSheet({
   const [depositPaidDay, setDepositPaidDay] = useState(() => parseDepositPaidParts(initialDepositPaidAt).day);
   const [depositPaidTime, setDepositPaidTime] = useState(() => parseDepositPaidParts(initialDepositPaidAt).time);
   const [requestingApproval, setRequestingApproval] = useState(false);
+  const [salesOrderNumber, setSalesOrderNumber] = useState(() => String(initialSalesOrderNumber || "").trim());
+  const [postInvoice, setPostInvoice] = useState<"before" | "after" | "">(
+    () => postCancel?.invoice || "",
+  );
+  const [postSystemNo, setPostSystemNo] = useState(() => String(postCancel?.systemNo || "").trim());
+  const [postRefundPaid, setPostRefundPaid] = useState(Boolean(postCancel?.refundPaid));
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -215,6 +234,17 @@ export function CsCallSheet({
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const orderTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
   const showDepositCard = Number.isFinite(orderTotal) && orderTotal >= CS_DEPOSIT_THRESHOLD;
+  const paymentState =
+    snapshot?.paymentState ||
+    resolvePaymentState({
+      paymentMethod: snapshot?.paymentMethod,
+      paymentMethodId: snapshot?.paymentMethodId,
+      wooStatus: snapshot?.wooStatus,
+      datePaid: snapshot?.datePaid,
+    });
+  const fawryPaid =
+    paymentState === "paid" && /fawry|فورى|فوري/i.test(`${snapshot?.paymentMethod || ""} ${snapshot?.paymentMethodId || ""}`);
+  const showCancelCard = showFollowUp && (!fu.handedToCarrier || postRefundPaid);
 
   const payloadAnswers: CsChecklistAnswerInput[] = useMemo(
     () =>
@@ -265,12 +295,30 @@ export function CsCallSheet({
 
     const to = parseDepositToKey(depositToKey);
 
+    if (showFollowUp && postRefundPaid) {
+      if (fu.handedToCarrier) {
+        setSaving(false);
+        setMessage("لا يمكن الإلغاء بعد التسليم لشركة الشحن.");
+        return;
+      }
+      if (postInvoice !== "before" && postInvoice !== "after") {
+        setSaving(false);
+        setMessage("حدّد الإلغاء قبل الفاتورة أو بعد الفاتورة.");
+        return;
+      }
+      if (postInvoice === "after" && !postSystemNo.trim()) {
+        setSaving(false);
+        setMessage("اكتب رقم الإلغاء على السيستم.");
+        return;
+      }
+    }
+
     const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         answers: payloadAnswers,
-        finalize: confirmed ? false : finalize,
+        finalize: showFollowUp ? false : finalize,
         failContact,
         cancelOrder,
         failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
@@ -281,7 +329,12 @@ export function CsCallSheet({
         depositFromNumber: depositFromNumber.trim() || null,
         depositToPhone: to.phone || null,
         depositToMethod: to.method || null,
-        followUp: confirmed ? fu : undefined,
+        salesOrderNumber,
+        postCancel:
+          showFollowUp && postRefundPaid
+            ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
+            : undefined,
+        followUp: showFollowUp ? fu : undefined,
       }),
     });
     const data = (await res.json()) as { message?: string; missing?: string[] };
@@ -293,8 +346,8 @@ export function CsCallSheet({
       return;
     }
 
-    if (confirmed) {
-      setMessage("تم حفظ المتابعة.");
+    if (showFollowUp) {
+      setMessage(postRefundPaid ? "تم تسجيل الإلغاء." : "تم حفظ المتابعة.");
       return;
     }
 
@@ -329,7 +382,7 @@ export function CsCallSheet({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!confirmed ? (
+          {!showFollowUp ? (
             <>
               <button
                 type="button"
@@ -416,7 +469,7 @@ export function CsCallSheet({
         </p>
       ) : null}
 
-      {!confirmed ? (
+      {!showFollowUp ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
           {checklistVisible.map((item) => {
             const state = answers[item.key];
@@ -533,7 +586,55 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={`grid grid-cols-1 gap-3 ${showCancelCard ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3"}`}>
+          {showCancelCard ? (
+            <div className="flex min-h-[10rem] flex-col justify-between rounded-2xl bg-red-50 p-5 shadow ring-2 ring-red-700">
+              <div>
+                <p className="text-lg font-extrabold text-red-800">إلغاء بعد التأكيد</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPostInvoice("before")}
+                    className={`rounded-lg px-2 py-1 text-xs font-extrabold ${
+                      postInvoice === "before" ? "bg-red-700 text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    قبل الفاتورة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPostInvoice("after")}
+                    className={`rounded-lg px-2 py-1 text-xs font-extrabold ${
+                      postInvoice === "after" ? "bg-red-700 text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    بعد الفاتورة
+                  </button>
+                </div>
+                {postInvoice === "after" ? (
+                  <input
+                    value={postSystemNo}
+                    onChange={(e) => setPostSystemNo(e.target.value)}
+                    placeholder="رقم الإلغاء على السيستم"
+                    className="mt-2 w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold"
+                  />
+                ) : null}
+                {fawryPaid ? <p className="mt-2 text-xs font-extrabold text-red-800">طلب استرداد المبلغ</p> : null}
+                {depositApprovalStatus === "approved" || initialDepositPaid ? (
+                  <p className="mt-1 text-xs font-extrabold text-red-800">طلب استرداد الديبوزت</p>
+                ) : null}
+              </div>
+              <label className="mt-3 flex items-center gap-2 text-sm font-extrabold text-[#14213D]">
+                <input
+                  type="checkbox"
+                  className="size-5 accent-red-700"
+                  checked={postRefundPaid}
+                  onChange={(e) => setPostRefundPaid(e.target.checked)}
+                />
+                تم الدفع للعميل
+              </label>
+            </div>
+          ) : null}
           <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
             <span className="text-lg font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
             <input
@@ -566,7 +667,7 @@ export function CsCallSheet({
       )}
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
-      <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-5">
         <div
           className={`flex min-h-[7.5rem] flex-col rounded-xl p-2.5 shadow-sm ring-2 ${
             missing.includes("shipping_company")
@@ -733,6 +834,18 @@ export function CsCallSheet({
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
             placeholder="Tracking"
+            className={`mt-2 ${inputCls}`}
+          />
+        </div>
+
+        <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#7C3AED]/15 p-2.5 shadow-sm ring-2 ring-[#7C3AED]">
+          <p className="text-xs font-extrabold text-[#14213D]">رقم أمر البيع</p>
+          <p className="mt-0.5 text-[10px] text-[#14213D]/60">يُكتب يدوياً ويظهر في شيت تميمة</p>
+          <input
+            dir="ltr"
+            value={salesOrderNumber}
+            onChange={(e) => setSalesOrderNumber(e.target.value)}
+            placeholder="رقم أمر البيع"
             className={`mt-2 ${inputCls}`}
           />
         </div>

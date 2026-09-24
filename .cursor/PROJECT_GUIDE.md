@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS إلغاء بعد التأكيد + أمر البيع + شيت تميمة | حالة الأوردر تضم جديد/لاغى/لم يرد؛ كارت إلغاء قبل التسليم للشحن مع استرداد فوري أو ديبوزت؛ رقم أمر البيع؛ طباعة تميمة مؤكد أو الكل بأسماء المنتجات وديبوزت وخصم الشحن؛ اسم المنتج في التصفية | `call-sheet.tsx`, `cs-queue-client.tsx`, `temima-settlement.ts`, `confirmations.ts` |
 | CS تصفية سيد تميمة | دور shipping يسجّل الأسبوع والشهر؛ المشرفة متابعة؛ شحن 75/100 | `temima-settlement.ts`, `cs/settlement`, `agents.ts` |
 | CS فلتر حالة موزع | خيار «موزع» يطابق من/إلى بيوم CsOrderAssignment وليس تاريخ الأوردر | `cs-queue-client.tsx`, `confirmations.ts` |
 | CS فلتر تاريخ شغل الموظفة | الموظفة العادية تفلتّر من/إلى بتاريخ startedAt/confirmedAt/updatedAt؛ المشرف يبقى على تاريخ الأوردر | `cs-queue-client.tsx`, `confirmations.ts` |

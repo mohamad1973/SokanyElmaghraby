@@ -15,7 +15,6 @@ import {
   type CsPaymentState,
 } from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
-import { extractModelFromTitle, extractSkFromTitle } from "@/lib/product-display-code";
 
 export type CsQueueItem = {
   id: number;
@@ -28,6 +27,7 @@ export type CsQueueItem = {
   depositAmount?: number | null;
   depositPaid?: boolean;
   depositApprovalStatus?: string | null;
+  salesOrderNumber?: string | null;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
@@ -59,40 +59,31 @@ export type CsQueueItem = {
 
 const SAYED_TEMIMA_SHIPPING_EGP = 75;
 
-/** Strip SK- prefix so "SK-10095" → "10095". */
-function stripSkPrefix(code: string) {
-  return code.replace(/^SK-?/i, "").trim().toUpperCase();
-}
-
-function modelNumberFromLine(name: string, sku?: string) {
-  const fromNameSk = extractSkFromTitle(name);
-  if (fromNameSk) return stripSkPrefix(fromNameSk);
-
-  const fromModelPhrase = extractModelFromTitle(name);
-  if (fromModelPhrase) {
-    const nestedSk = extractSkFromTitle(fromModelPhrase) || fromModelPhrase.match(/\bSK-?\d+[A-Z0-9]*\b/i)?.[0];
-    if (nestedSk) return stripSkPrefix(nestedSk);
-    return stripSkPrefix(fromModelPhrase) || fromModelPhrase.trim();
-  }
-
-  const fromSku = extractSkFromTitle(String(sku || "")) || String(sku || "").match(/\bSK-?\d+[A-Z0-9]*\b/i)?.[0];
-  if (fromSku) return stripSkPrefix(fromSku);
-
-  return "";
-}
-
-function formatOrderModels(item: CsQueueItem) {
+function formatOrderNames(item: CsQueueItem) {
   const lines = item.customerSnapshot?.items || [];
   if (!lines.length) return "—";
-  const parts = lines
+  return lines
     .map((line) => {
-      const model = modelNumberFromLine(String(line.name || ""), line.sku);
-      if (!model) return "";
-      const qty = typeof line.quantity === "number" && line.quantity > 1 ? `×${line.quantity}` : "";
-      return qty ? `${model}${qty}` : model;
+      const name = String(line.name || "").trim();
+      if (!name) return "";
+      const qty = typeof line.quantity === "number" && line.quantity > 1 ? ` × ${line.quantity}` : "";
+      return `${name}${qty}`;
     })
-    .filter(Boolean);
-  return parts.length ? parts.join("، ") : "—";
+    .filter(Boolean)
+    .join("\n");
+}
+
+function temimaMoney(item: CsQueueItem) {
+  const total = parseOrderTotal(item.customerSnapshot?.total);
+  const deposit =
+    item.depositPaid && item.depositAmount && item.depositAmount > 0 ? Number(item.depositAmount) : 0;
+  if (deposit > 0) {
+    return { paid: deposit, remainder: Math.max(0, total - deposit) };
+  }
+  if (itemPaymentState(item) === "paid") {
+    return { paid: total, remainder: 0 };
+  }
+  return { paid: 0, remainder: total };
 }
 
 function parseOrderTotal(value: string | null | undefined) {
@@ -144,7 +135,7 @@ function clampDateFilters(f: DraftFilters): { filters: DraftFilters; warning: st
 }
 
 const statusMeta: Record<string, { label: string; className: string }> = {
-  PENDING: { label: "بانتظار", className: "bg-[#E5E5E5] text-[#14213D]" },
+  PENDING: { label: "جديد", className: "bg-[#E5E5E5] text-[#14213D]" },
   IN_PROGRESS: { label: "جاري", className: "bg-[#14213D] text-white" },
   CONFIRMED: { label: "تم الحفظ", className: "bg-[#FCA311] text-black" },
   FAILED_CONTACT: { label: "لم يرد", className: "bg-black text-white" },
@@ -326,13 +317,7 @@ function matchesSearchQuery(item: CsQueueItem, rawQuery: string) {
 }
 
 function normalizeFilterStatus(status: string) {
-  if (
-    status === "FAILED_CONTACT" ||
-    status === "CANCELLED" ||
-    status === "cancelled_or_no_answer"
-  ) {
-    return "all";
-  }
+  if (status === "cancelled_or_no_answer") return "all";
   return status;
 }
 
@@ -402,6 +387,7 @@ type Props = {
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
+type TemimaPrintScope = "confirmed" | "all";
 
 export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props) {
   const router = useRouter();
@@ -411,6 +397,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
   const [draft, setDraft] = useState<DraftFilters>(defaultDraft);
   const [applied, setApplied] = useState<DraftFilters>(defaultDraft);
   const [printMode, setPrintMode] = useState<PrintMode>("none");
+  const [temimaAsk, setTemimaAsk] = useState(false);
+  const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
   const syncingRef = useRef(false);
@@ -489,9 +477,20 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
 
   const printRows = useMemo(() => {
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
-    if (printMode === "sayed_temima") return filtered.filter((i) => i.shippingCompany === "sayed_temima");
+    if (printMode === "sayed_temima") {
+      if (temimaScope === "confirmed") {
+        const q = draft.query.trim();
+        const source = q
+          ? items.filter((item) => matchesSearchQuery(item, q))
+          : applyFilters(items, { ...applied, status: "CONFIRMED", shipping: "sayed_temima" }, {
+              isSupervisor: Boolean(isSupervisor),
+            });
+        return source.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
+      }
+      return filtered.filter((i) => i.shippingCompany === "sayed_temima");
+    }
     return filtered;
-  }, [filtered, printMode]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -585,7 +584,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
           </button>
           <button
             type="button"
-            onClick={() => setPrintMode("sayed_temima")}
+            onClick={() => setTemimaAsk(true)}
             className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
           >
             طباعة تميمة
@@ -608,6 +607,41 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         </div>
       </div>
 
+      {temimaAsk ? (
+        <div className="no-print flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+          <p className="text-sm font-extrabold text-[#14213D]">طباعة تميمة:</p>
+          <button
+            type="button"
+            onClick={() => {
+              setTemimaScope("confirmed");
+              setTemimaAsk(false);
+              setPrintMode("sayed_temima");
+            }}
+            className="rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black"
+          >
+            المؤكد
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTemimaScope("all");
+              setTemimaAsk(false);
+              setPrintMode("sayed_temima");
+            }}
+            className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white"
+          >
+            الكل
+          </button>
+          <button
+            type="button"
+            onClick={() => setTemimaAsk(false)}
+            className="rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D]"
+          >
+            إلغاء
+          </button>
+        </div>
+      ) : null}
+
       <div className="no-print space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8">
           <input
@@ -621,10 +655,12 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             onChange={(e) => patchDraft({ status: e.target.value, followUp: "all" })}
             className={FILTER_CONTROL}
           >
-            <option value="all">كل الحالات</option>
-            <option value="PENDING">بانتظار</option>
+            <option value="all">حالة الأوردر</option>
+            <option value="PENDING">جديد</option>
             <option value="IN_PROGRESS">جاري</option>
             <option value="CONFIRMED">تم الحفظ</option>
+            <option value="FAILED_CONTACT">لم يرد</option>
+            <option value="CANCELLED">لاغى</option>
             <option value="DISTRIBUTED">موزع</option>
           </select>
           {draft.status === "CONFIRMED" ? (
@@ -947,7 +983,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr>
-                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "الإجمالي", "الشحن", "المسؤول"].map(
+                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "أمر البيع", "ديبوزت", "الإجمالي"].map(
                     (h) => (
                       <th key={h} className="border border-black px-1 py-1 text-right">
                         {h}
@@ -959,6 +995,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               <tbody>
                 {printRows.map((item, index) => {
                   const dup = dupMeta.get(item.id);
+                  const money = temimaMoney(item);
                   return (
                     <tr key={item.id} className={dup ? dup.colorClass : undefined}>
                       <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
@@ -971,16 +1008,29 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                       <td className="border border-black px-1 py-1">
                         {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
                       </td>
+                      <td className="border border-black px-1 py-1 whitespace-pre-line">{formatOrderNames(item)}</td>
                       <td className="border border-black px-1 py-1" dir="ltr">
-                        {formatOrderModels(item)}
+                        {item.salesOrderNumber || ""}
                       </td>
-                      <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
-                      <td className="border border-black px-1 py-1">{SAYED_TEMIMA_SHIPPING_EGP} ج</td>
-                      <td className="border border-black px-1 py-1">{item.assignedAgent?.name || ""}</td>
+                      <td className="border border-black px-1 py-1">{money.paid ? money.paid : ""}</td>
+                      <td className="border border-black px-1 py-1">{money.remainder}</td>
                     </tr>
                   );
                 })}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td className="border border-black px-1 py-1 font-bold" colSpan={7}>
+                    المجموع
+                  </td>
+                  <td className="border border-black px-1 py-1 font-bold">
+                    {printRows.reduce((sum, row) => sum + temimaMoney(row).paid, 0).toLocaleString("ar-EG")}
+                  </td>
+                  <td className="border border-black px-1 py-1 font-bold">
+                    {printRows.reduce((sum, row) => sum + temimaMoney(row).remainder, 0).toLocaleString("ar-EG")}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
             {(() => {
               const ordersTotal = printRows.reduce(
@@ -998,7 +1048,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     إجمالي الشحن ({SAYED_TEMIMA_SHIPPING_EGP} × {printRows.length}):{" "}
                     {shippingTotal.toLocaleString("ar-EG")} ج.م
                   </p>
-                  <p>الإجمالي الكلي (أوردرات + شحن): {(ordersTotal + shippingTotal).toLocaleString("ar-EG")} ج.م</p>
+                  <p>الإجمالي الكلي (أوردرات − شحن): {(ordersTotal - shippingTotal).toLocaleString("ar-EG")} ج.م</p>
                 </div>
               );
             })()}

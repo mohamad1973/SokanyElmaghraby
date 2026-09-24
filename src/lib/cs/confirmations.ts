@@ -458,6 +458,7 @@ export function serializeCsQueueItem(row: {
   handedToCarrier?: boolean | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
+  salesOrderNumber?: string | null;
   customerSnapshot?: unknown;
   startedAt?: Date | string | null;
   confirmedAt?: Date | string | null;
@@ -522,6 +523,7 @@ export function serializeCsQueueItem(row: {
     handedToCarrier: Boolean(row.handedToCarrier),
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
+    salesOrderNumber: row.salesOrderNumber ? String(row.salesOrderNumber) : null,
     assignedAgent: row.assignedAgent
       ? { id: row.assignedAgent.id, name: row.assignedAgent.name }
       : null,
@@ -680,6 +682,12 @@ export async function saveCsConfirmation(input: {
   depositFromNumber?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
+  salesOrderNumber?: string | null;
+  postCancel?: {
+    invoice?: "before" | "after" | "";
+    systemNo?: string | null;
+    refundPaid?: boolean;
+  };
   followUp?: {
     handedToCarrier?: boolean;
     deliveredToCustomer?: boolean;
@@ -706,6 +714,8 @@ export async function saveCsConfirmation(input: {
     depositFromNumber?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
+    postCancelAt?: Date | null;
+    handedToCarrier?: boolean | null;
   };
   const nextTracking =
     input.trackingNumber !== undefined
@@ -773,6 +783,11 @@ export async function saveCsConfirmation(input: {
     shippingMetaPatch.depositToMethod = nextDepositToMethod;
   }
 
+  const salesOrderPatch =
+    input.salesOrderNumber !== undefined
+      ? { salesOrderNumber: String(input.salesOrderNumber || "").trim() || null }
+      : {};
+
   const hasShippingMetaUpdate =
     input.trackingNumber !== undefined ||
     input.waybillPrinted !== undefined ||
@@ -783,8 +798,14 @@ export async function saveCsConfirmation(input: {
     input.depositToPhone !== undefined ||
     input.depositToMethod !== undefined;
 
-  // Post-confirmation follow-up update (includes tracking / waybill / deposit)
-  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED && (input.followUp || hasShippingMetaUpdate)) {
+  const followUpEditable =
+    row.status === CS_CONFIRMATION_STATUS.CONFIRMED || Boolean(typed.postCancelAt);
+
+  // Post-confirmation follow-up update (includes tracking / waybill / deposit / cancel / sales order)
+  if (
+    followUpEditable &&
+    (input.followUp || hasShippingMetaUpdate || input.salesOrderNumber !== undefined || input.postCancel)
+  ) {
     const now = new Date();
     const data: Record<string, unknown> = { ...shippingMetaPatch };
     if (input.followUp) {
@@ -795,11 +816,39 @@ export async function saveCsConfirmation(input: {
       data.deliveredToCustomerAt = input.followUp.deliveredToCustomer ? now : null;
       data.customerFollowUpAt = input.followUp.customerFollowUp ? now : null;
     }
+    Object.assign(data, salesOrderPatch);
+    const post = input.postCancel;
+    if (post?.refundPaid) {
+      const invoice = post.invoice === "after" ? "after" : post.invoice === "before" ? "before" : "";
+      if (!invoice) {
+        return { ok: false as const, message: "حدّد الإلغاء قبل الفاتورة أو بعد الفاتورة.", missing: [] as string[] };
+      }
+      const systemNo = String(post.systemNo || "").trim();
+      if (invoice === "after" && !systemNo) {
+        return { ok: false as const, message: "اكتب رقم الإلغاء على السيستم.", missing: [] as string[] };
+      }
+      const handingOver = input.followUp
+        ? Boolean(input.followUp.handedToCarrier)
+        : Boolean(typed.handedToCarrier);
+      if (handingOver) {
+        return { ok: false as const, message: "لا يمكن الإلغاء بعد التسليم لشركة الشحن.", missing: [] as string[] };
+      }
+      data.status = CS_CONFIRMATION_STATUS.CANCELLED;
+      data.postCancelInvoice = invoice;
+      data.postCancelSystemNo = invoice === "after" ? systemNo : null;
+      data.postCancelRefundPaid = true;
+      data.postCancelAt = now;
+      data.failReason = "الغاء بعد التأكيد";
+    }
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: data as never,
     });
-    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+    return {
+      ok: true as const,
+      status: post?.refundPaid ? CS_CONFIRMATION_STATUS.CANCELLED : CS_CONFIRMATION_STATUS.CONFIRMED,
+      missing: [] as string[],
+    };
   }
 
   // Allow saving tracking / waybill / deposit alone (no checklist payload)
@@ -816,6 +865,7 @@ export async function saveCsConfirmation(input: {
       where: { id: input.id },
       data: {
         ...shippingMetaPatch,
+        ...salesOrderPatch,
         assignedAgentId: input.agentId,
       } as never,
     });
@@ -888,6 +938,7 @@ export async function saveCsConfirmation(input: {
         status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
         assignedAgentId: input.agentId,
         ...shippingMetaPatch,
+        ...salesOrderPatch,
       } as never,
     });
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
@@ -934,6 +985,7 @@ export async function saveCsConfirmation(input: {
       shippingCompany,
       failReason: null,
       ...shippingMetaPatch,
+      ...salesOrderPatch,
     } as never,
   });
 

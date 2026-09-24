@@ -10,6 +10,7 @@ type SheetRow = {
   confirmationId: number;
   wooOrderNumber: string;
   customerName: string;
+  productNames: string;
   cashAmount: number;
   disposition: Disposition;
   isLarge: boolean;
@@ -143,6 +144,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
             <tr>
               <th className="px-2 py-2">أوردر</th>
               <th className="px-2 py-2">العميل</th>
+              <th className="px-2 py-2">المنتج</th>
               <th className="px-2 py-2">النقد</th>
               <th className="px-2 py-2">الحالة</th>
               <th className="px-2 py-2">كبير</th>
@@ -151,7 +153,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                <td colSpan={6} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
                   لا توجد أوردرات لهذا الأسبوع.
                 </td>
               </tr>
@@ -163,6 +165,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
                     {row.carried ? <span className="mr-1 text-[10px] text-amber-700">مؤجل سابق</span> : null}
                   </td>
                   <td className="px-2 py-2">{row.customerName}</td>
+                  <td className="px-2 py-2">{row.productNames || "—"}</td>
                   <td className="px-2 py-2">{money(row.cashAmount)}</td>
                   <td className="px-2 py-2">
                     <select

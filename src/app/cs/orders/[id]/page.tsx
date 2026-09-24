@@ -41,6 +41,11 @@ export default async function CsOrderPage({ params }: Props) {
     depositPaidAt?: Date | null;
     depositProofUrl?: string | null;
     depositApprovalStatus?: string | null;
+    salesOrderNumber?: string | null;
+    postCancelInvoice?: string | null;
+    postCancelSystemNo?: string | null;
+    postCancelRefundPaid?: boolean | null;
+    postCancelAt?: Date | null;
   };
 
   return (
@@ -60,6 +65,13 @@ export default async function CsOrderPage({ params }: Props) {
       depositPaidAt={row.depositPaidAt ? row.depositPaidAt.toISOString() : null}
       depositProofUrl={row.depositProofUrl || null}
       depositApprovalStatus={row.depositApprovalStatus || null}
+      salesOrderNumber={row.salesOrderNumber || null}
+      postCancel={{
+        invoice: row.postCancelInvoice === "after" ? "after" : row.postCancelInvoice === "before" ? "before" : "",
+        systemNo: row.postCancelSystemNo || null,
+        refundPaid: Boolean(row.postCancelRefundPaid),
+        at: row.postCancelAt ? row.postCancelAt.toISOString() : null,
+      }}
       followUp={{
         handedToCarrier: Boolean(confirmation.handedToCarrier),
         deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),

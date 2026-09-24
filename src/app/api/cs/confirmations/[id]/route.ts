@@ -21,6 +21,12 @@ type Body = {
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
+  salesOrderNumber?: string | null;
+  postCancel?: {
+    invoice?: "before" | "after" | "";
+    systemNo?: string | null;
+    refundPaid?: boolean;
+  };
   followUp?: {
     handedToCarrier?: boolean;
     deliveredToCustomer?: boolean;
@@ -62,6 +68,8 @@ export async function PUT(request: Request, context: Context) {
     body.depositFromNumber === undefined &&
     body.depositToPhone === undefined &&
     body.depositToMethod === undefined &&
+    body.salesOrderNumber === undefined &&
+    !body.postCancel &&
     !body.followUp
   ) {
     const viewer = await resolveCsViewer(session.user.csAgentId);
@@ -99,6 +107,8 @@ export async function PUT(request: Request, context: Context) {
     depositFromNumber: body.depositFromNumber,
     depositToPhone: body.depositToPhone,
     depositToMethod: body.depositToMethod,
+    salesOrderNumber: body.salesOrderNumber,
+    postCancel: body.postCancel,
     followUp: body.followUp,
   });
 
