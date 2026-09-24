@@ -1002,17 +1002,15 @@ export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: str
 
   const { isAccountingRole } = await import("@/lib/cs/agents");
   const viewer = await resolveCsViewer(input.agentId);
-  if (!viewer.isAccounting && !isAccountingRole(viewer.role)) {
-    return { ok: false as const, message: "لموظف الحسابات فقط." };
+  const allowed = viewer.isSupervisor || viewer.isAdmin || viewer.isAccounting || isAccountingRole(viewer.role);
+  if (!allowed) {
+    return { ok: false as const, message: "غير مصرح بإدخال رقم الفاتورة." };
   }
 
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
-  if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
-    return { ok: false as const, message: "رقم الفاتورة للأوردرات المحفوظة فقط." };
-  }
 
-  const invoiceNumber = String(input.invoiceNumber || "").trim() || null;
+  const invoiceNumber = String(input.invoiceNumber || "").replace(/\D/g, "").slice(0, 10) || null;
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: { invoiceNumber } as never,

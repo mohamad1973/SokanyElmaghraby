@@ -426,8 +426,10 @@ function InvoiceBox({
         value={text}
         dir="ltr"
         placeholder="رقم الفاتورة"
+        inputMode="numeric"
+        maxLength={10}
         onChange={(e) => {
-          const next = e.target.value;
+          const next = e.target.value.replace(/\D/g, "").slice(0, 10);
           setText(next);
           setHint("");
           if (timer.current) window.clearTimeout(timer.current);
@@ -909,9 +911,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                 <div
                   className={`grid gap-x-2 gap-y-2 text-sm font-bold text-[#14213D] ${
                     isSupervisor
-                      ? "grid-cols-2 sm:grid-cols-6"
-                      : isAccounting && applied.status === "CONFIRMED"
-                        ? "grid-cols-2 sm:grid-cols-5"
+                      ? "grid-cols-2 sm:grid-cols-7"
+                      : isAccounting
+                        ? "grid-cols-2 sm:grid-cols-6"
                         : "grid-cols-2 sm:grid-cols-4"
                   }`}
                 >
@@ -1002,17 +1004,13 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                       </label>
                     </div>
                   ) : null}
-                  {isSupervisor ? (
-                    <div className="flex flex-col items-center justify-center gap-0.5 self-center text-center">
-                      <span className="text-[10px] font-bold text-[#14213D]/55">موظف خدمة العملاء</span>
+                  {isSupervisor || isAccounting ? (
+                    <div className="flex items-center justify-center self-center text-center">
                       <span className="text-xs font-extrabold">{item.assignedAgent?.name || "—"}</span>
                     </div>
                   ) : null}
-                  {isAccounting && applied.status === "CONFIRMED" ? (
-                    <div className="flex flex-col items-stretch justify-center gap-1 self-center">
-                      <span className="text-[10px] font-bold text-[#14213D]/55">
-                        {item.assignedAgent?.name || "بدون موظف"}
-                      </span>
+                  {isSupervisor || isAccounting ? (
+                    <div className="flex items-center self-center">
                       <InvoiceBox
                         confirmationId={item.id}
                         value={item.invoiceNumber || ""}
@@ -1069,7 +1067,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr>
-                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "ديبوزت", "الإجمالي"].map(
+                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "رقم الفاتورة", "ديبوزت", "الإجمالي"].map(
                     (h) => (
                       <th key={h} className="border border-black px-1 py-1 text-right">
                         {h}
@@ -1095,6 +1093,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                         {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
                       </td>
                       <td className="border border-black px-1 py-1 whitespace-pre-line">{formatOrderNames(item)}</td>
+                      <td className="border border-black px-1 py-1" dir="ltr">
+                        {item.invoiceNumber || ""}
+                      </td>
                       <td className="border border-black px-1 py-1">{money.paid ? money.paid : ""}</td>
                       <td className="border border-black px-1 py-1">{money.remainder}</td>
                     </tr>
@@ -1103,7 +1104,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
               </tbody>
               <tfoot>
                 <tr>
-                  <td className="border border-black px-1 py-1 font-bold" colSpan={6}>
+                  <td className="border border-black px-1 py-1 font-bold" colSpan={7}>
                     المجموع
                   </td>
                   <td className="border border-black px-1 py-1 font-bold">
@@ -1140,7 +1141,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
           <table className="w-full border-collapse text-[10px]">
             <thead>
               <tr>
-                {["الرقم", "الاسم", "موبايل", "العنوان", "الإجمالي", "الشحن", "المسؤول"].map((h) => (
+                {["الرقم", "الاسم", "موبايل", "العنوان", "رقم الفاتورة", "الإجمالي", "الشحن", "المسؤول"].map((h) => (
                   <th key={h} className="border border-black px-1 py-1 text-right">
                     {h}
                   </th>
@@ -1160,6 +1161,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                     </td>
                     <td className="border border-black px-1 py-1">
                       {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
+                    </td>
+                    <td className="border border-black px-1 py-1" dir="ltr">
+                      {item.invoiceNumber || ""}
                     </td>
                     <td className="border border-black px-1 py-1">{item.customerSnapshot?.total}</td>
                     <td className="border border-black px-1 py-1">
