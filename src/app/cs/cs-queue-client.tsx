@@ -27,7 +27,6 @@ export type CsQueueItem = {
   depositAmount?: number | null;
   depositPaid?: boolean;
   depositApprovalStatus?: string | null;
-  salesOrderNumber?: string | null;
   invoiceNumber?: string | null;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
@@ -1070,7 +1069,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr>
-                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "أمر البيع", "ديبوزت", "الإجمالي"].map(
+                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "ديبوزت", "الإجمالي"].map(
                     (h) => (
                       <th key={h} className="border border-black px-1 py-1 text-right">
                         {h}
@@ -1096,9 +1095,6 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                         {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
                       </td>
                       <td className="border border-black px-1 py-1 whitespace-pre-line">{formatOrderNames(item)}</td>
-                      <td className="border border-black px-1 py-1" dir="ltr">
-                        {item.salesOrderNumber || ""}
-                      </td>
                       <td className="border border-black px-1 py-1">{money.paid ? money.paid : ""}</td>
                       <td className="border border-black px-1 py-1">{money.remainder}</td>
                     </tr>
@@ -1107,7 +1103,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
               </tbody>
               <tfoot>
                 <tr>
-                  <td className="border border-black px-1 py-1 font-bold" colSpan={7}>
+                  <td className="border border-black px-1 py-1 font-bold" colSpan={6}>
                     المجموع
                   </td>
                   <td className="border border-black px-1 py-1 font-bold">

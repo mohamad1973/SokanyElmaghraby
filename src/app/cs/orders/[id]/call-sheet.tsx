@@ -74,7 +74,6 @@ type Props = {
   depositPaidAt?: string | null;
   depositProofUrl?: string | null;
   depositApprovalStatus?: string | null;
-  salesOrderNumber?: string | null;
   postCancel?: {
     invoice: "before" | "after" | "";
     systemNo: string | null;
@@ -171,7 +170,6 @@ export function CsCallSheet({
   depositToMethod: initialDepositToMethod,
   depositPaidAt: initialDepositPaidAt,
   depositApprovalStatus: initialDepositApprovalStatus,
-  salesOrderNumber: initialSalesOrderNumber,
   postCancel,
 }: Props) {
   const confirmed = status === "CONFIRMED";
@@ -221,7 +219,6 @@ export function CsCallSheet({
   const [depositPaidDay, setDepositPaidDay] = useState(() => parseDepositPaidParts(initialDepositPaidAt).day);
   const [depositPaidTime, setDepositPaidTime] = useState(() => parseDepositPaidParts(initialDepositPaidAt).time);
   const [requestingApproval, setRequestingApproval] = useState(false);
-  const [salesOrderNumber, setSalesOrderNumber] = useState(() => String(initialSalesOrderNumber || "").trim());
   const [postInvoice, setPostInvoice] = useState<"before" | "after" | "">(
     () => postCancel?.invoice || "",
   );
@@ -329,7 +326,6 @@ export function CsCallSheet({
         depositFromNumber: depositFromNumber.trim() || null,
         depositToPhone: to.phone || null,
         depositToMethod: to.method || null,
-        salesOrderNumber,
         postCancel:
           showFollowUp && postRefundPaid
             ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
@@ -667,7 +663,7 @@ export function CsCallSheet({
       )}
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
-      <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div
           className={`flex min-h-[7.5rem] flex-col rounded-xl p-2.5 shadow-sm ring-2 ${
             missing.includes("shipping_company")
@@ -834,18 +830,6 @@ export function CsCallSheet({
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
             placeholder="Tracking"
-            className={`mt-2 ${inputCls}`}
-          />
-        </div>
-
-        <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#7C3AED]/15 p-2.5 shadow-sm ring-2 ring-[#7C3AED]">
-          <p className="text-xs font-extrabold text-[#14213D]">رقم أمر البيع</p>
-          <p className="mt-0.5 text-[10px] text-[#14213D]/60">يُكتب يدوياً ويظهر في شيت تميمة</p>
-          <input
-            dir="ltr"
-            value={salesOrderNumber}
-            onChange={(e) => setSalesOrderNumber(e.target.value)}
-            placeholder="رقم أمر البيع"
             className={`mt-2 ${inputCls}`}
           />
         </div>
