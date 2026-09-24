@@ -3,9 +3,9 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/security";
 
-export type CsRole = "agent" | "supervisor" | "admin" | "transfers";
+export type CsRole = "agent" | "supervisor" | "admin" | "transfers" | "shipping";
 
-export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin", "transfers"];
+export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin", "transfers", "shipping"];
 
 export function normalizeCsUsername(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
@@ -25,6 +25,10 @@ export function isCsAdminRole(role: string | null | undefined) {
 
 export function isTransfersRole(role: string | null | undefined) {
   return role === "transfers";
+}
+
+export function isShippingRole(role: string | null | undefined) {
+  return role === "shipping";
 }
 
 export function canAccessTransfers(role: string | null | undefined) {
@@ -200,6 +204,58 @@ async function runEnsureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsCarrierWeek\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`carrierCompany\` VARCHAR(32) NOT NULL DEFAULT 'sayed_temima',
+      \`weekStart\` DATETIME(3) NOT NULL,
+      \`weekEnd\` DATETIME(3) NOT NULL,
+      \`status\` VARCHAR(16) NOT NULL DEFAULT 'open',
+      \`cashDue\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`cashPaid\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`closedById\` INT NULL,
+      \`closedAt\` DATETIME(3) NULL,
+      \`monthId\` INT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsCarrierWeek_company_week_key\`(\`carrierCompany\`, \`weekStart\`),
+      INDEX \`CsCarrierWeek_monthId_idx\`(\`monthId\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsCarrierWeekLine\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`weekId\` INT NOT NULL,
+      \`confirmationId\` INT NOT NULL,
+      \`wooOrderNumber\` VARCHAR(64) NOT NULL,
+      \`disposition\` VARCHAR(24) NOT NULL,
+      \`cashAmount\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`isLarge\` BOOLEAN NOT NULL DEFAULT false,
+      \`resolvesLineId\` INT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`CsCarrierWeekLine_weekId_idx\`(\`weekId\`),
+      INDEX \`CsCarrierWeekLine_confirmationId_idx\`(\`confirmationId\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsCarrierMonth\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`carrierCompany\` VARCHAR(32) NOT NULL DEFAULT 'sayed_temima',
+      \`closeDate\` DATETIME(3) NOT NULL,
+      \`shippingTotal\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`shippingPaid\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`closedById\` INT NULL,
+      \`closedAt\` DATETIME(3) NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsCarrierMonth_company_close_key\`(\`carrierCompany\`, \`closeDate\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",
@@ -226,6 +282,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `depositApprovalRequestedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `depositApprovalDecidedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `depositAgentDecisionSeenAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingAssignedAt` DATETIME(3) NULL",
   ];
 
   for (const sql of alters) {

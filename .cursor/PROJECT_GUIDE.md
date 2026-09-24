@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS تصفية سيد تميمة | دور shipping يسجّل الأسبوع والشهر؛ المشرفة متابعة؛ شحن 75/100 | `temima-settlement.ts`, `cs/settlement`, `agents.ts` |
 | CS فلتر حالة موزع | خيار «موزع» يطابق من/إلى بيوم CsOrderAssignment وليس تاريخ الأوردر | `cs-queue-client.tsx`, `confirmations.ts` |
 | CS فلتر تاريخ شغل الموظفة | الموظفة العادية تفلتّر من/إلى بتاريخ startedAt/confirmedAt/updatedAt؛ المشرف يبقى على تاريخ الأوردر | `cs-queue-client.tsx`, `confirmations.ts` |
 | CS توزيع يومي + بعد آخر توزيع | فلتر من/إلى بتاريخ التوزيع؛ تجميع يومي؛ تشك بوكس أوردرات بعد آخر توزيع + تقسيم عادل؛ إزالة محافظة/منطقة | `assign-client.tsx`, `assignments.ts`, `assignments/route.ts`, `order-window.ts` |

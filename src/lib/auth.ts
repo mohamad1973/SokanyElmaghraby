@@ -51,7 +51,8 @@ export const authOptions: NextAuthOptions = {
         session.user.csAgentId = token.csAgentId as number | undefined;
         session.user.csIsSupervisor = Boolean(token.csIsSupervisor);
         session.user.csRole =
-          (token.csRole as "agent" | "supervisor" | "admin" | "transfers" | undefined) || undefined;
+          (token.csRole as "agent" | "supervisor" | "admin" | "transfers" | "shipping" | undefined) ||
+          undefined;
         session.user.csIsAdmin = Boolean(token.csIsAdmin);
         session.user.csIsTransfers = Boolean(token.csIsTransfers);
         session.user.csCanAccessTransfers = Boolean(token.csCanAccessTransfers);

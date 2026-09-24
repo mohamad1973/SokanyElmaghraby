@@ -959,7 +959,12 @@ export async function setCsShippingCompany(input: {
 
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
-    data: { shippingCompany: input.shippingCompany },
+    data: {
+      shippingCompany: input.shippingCompany,
+      ...(row.shippingCompany !== input.shippingCompany
+        ? { shippingAssignedAt: input.shippingCompany ? new Date() : null }
+        : {}),
+    },
   });
 
   if (input.shippingCompany) {
@@ -999,7 +1004,7 @@ export async function isOrderCsConfirmed(wooOrderId: number) {
 }
 
 export async function resolveCsViewer(agentId: number) {
-  const { getCsAgentById, isElevatedCsRole, isCsAdminRole, canAccessTransfers, isTransfersRole } =
+  const { getCsAgentById, isElevatedCsRole, isCsAdminRole, canAccessTransfers, isTransfersRole, isShippingRole } =
     await import("@/lib/cs/agents");
   await ensureCsTables();
   const agent = await getCsAgentById(agentId);
@@ -1008,6 +1013,7 @@ export async function resolveCsViewer(agentId: number) {
       isSupervisor: false,
       isAdmin: false,
       isTransfers: false,
+      isShipping: false,
       canAccessTransfers: false,
       role: "agent" as const,
       agent: null,
@@ -1017,11 +1023,13 @@ export async function resolveCsViewer(agentId: number) {
     | "agent"
     | "supervisor"
     | "admin"
-    | "transfers";
+    | "transfers"
+    | "shipping";
   return {
     isSupervisor: isElevatedCsRole(role),
     isAdmin: isCsAdminRole(role),
     isTransfers: isTransfersRole(role),
+    isShipping: isShippingRole(role),
     canAccessTransfers: canAccessTransfers(role),
     role,
     agent,

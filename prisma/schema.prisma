@@ -283,6 +283,7 @@ model CsOrderConfirmation {
   deliveredToCustomer  Boolean             @default(false)
   customerFollowUp     Boolean             @default(false)
   handedToCarrierAt    DateTime?
+  shippingAssignedAt   DateTime?
   deliveredToCustomerAt DateTime?
   customerFollowUpAt   DateTime?
   startedAt            DateTime?
@@ -379,4 +380,54 @@ model AdminNotification {
   @@index([status])
   @@index([type, refId])
   @@index([createdAt])
+}
+
+model CsCarrierWeek {
+  id             Int                 @id @default(autoincrement())
+  carrierCompany String              @default("sayed_temima") @db.VarChar(32)
+  weekStart      DateTime
+  weekEnd        DateTime
+  status         String              @default("open") @db.VarChar(16)
+  cashDue        Decimal             @default(0) @db.Decimal(12, 2)
+  cashPaid       Decimal             @default(0) @db.Decimal(12, 2)
+  closedById     Int?
+  closedAt       DateTime?
+  monthId        Int?
+  month          CsCarrierMonth?     @relation(fields: [monthId], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  lines          CsCarrierWeekLine[]
+
+  @@unique([carrierCompany, weekStart])
+  @@index([monthId])
+}
+
+model CsCarrierWeekLine {
+  id              Int           @id @default(autoincrement())
+  weekId          Int
+  week            CsCarrierWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  confirmationId  Int
+  wooOrderNumber  String        @db.VarChar(64)
+  disposition     String        @db.VarChar(24)
+  cashAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  isLarge         Boolean       @default(false)
+  resolvesLineId  Int?
+  createdAt       DateTime      @default(now())
+
+  @@index([weekId])
+  @@index([confirmationId])
+}
+
+model CsCarrierMonth {
+  id             Int             @id @default(autoincrement())
+  carrierCompany String          @default("sayed_temima") @db.VarChar(32)
+  closeDate      DateTime
+  shippingTotal  Decimal         @default(0) @db.Decimal(12, 2)
+  shippingPaid   Decimal         @default(0) @db.Decimal(12, 2)
+  closedById     Int?
+  closedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  weeks          CsCarrierWeek[]
+
+  @@unique([carrierCompany, closeDate])
 }

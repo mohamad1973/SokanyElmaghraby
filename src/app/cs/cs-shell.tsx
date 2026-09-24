@@ -589,6 +589,8 @@ function CsHeader() {
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
   const role = session?.user?.csRole || "";
   const isTransfersOnly = Boolean(session?.user?.csIsTransfers) && !session?.user?.csIsAdmin && !session?.user?.csIsSupervisor;
+  const isShipping = role === "shipping";
+  const canSettlement = isShipping || Boolean(session?.user?.csIsSupervisor) || Boolean(session?.user?.csIsAdmin);
   const canTransfers = Boolean(
     session?.user?.csIsAdmin ||
       session?.user?.csIsSupervisor ||
@@ -617,7 +619,9 @@ function CsHeader() {
             <p className="text-[11px] text-white/70 sm:text-xs">
               {isTransfersOnly
                 ? "التحويلات · مخزون الموقع وحد الطلب"
-                : "خدمة العملاء · الأوردرات والتحويلات"}
+                : isShipping
+                  ? "حساب شحن · تصفية سيد تميمة"
+                  : "خدمة العملاء · الأوردرات والتحويلات"}
             </p>
           </div>
           <div className="shrink-0 overflow-visible">
@@ -625,9 +629,14 @@ function CsHeader() {
           </div>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {showOrdersQueue ? (
+          {showOrdersQueue && !isShipping ? (
             <Link href="/cs" className={navClass(pathname === "/cs")}>
               الأوردرات
+            </Link>
+          ) : null}
+          {canSettlement ? (
+            <Link href="/cs/settlement" className={navClass(pathname.startsWith("/cs/settlement"))}>
+              تصفية تميمة
             </Link>
           ) : null}
           {canTransfers ? (
