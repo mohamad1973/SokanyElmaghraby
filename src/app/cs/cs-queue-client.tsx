@@ -53,6 +53,7 @@ export type CsQueueItem = {
   startedAt?: string | null;
   confirmedAt?: string | null;
   updatedAt?: string | null;
+  distributedAt?: string | null;
   createdAt: string;
 };
 
@@ -351,10 +352,20 @@ function itemMatchesDateFilter(item: CsQueueItem, f: DraftFilters, forAgentWorkD
 
 function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervisor?: boolean }) {
   const status = normalizeFilterStatus(f.status);
+  const distributedOnly = status === "DISTRIBUTED";
   const forAgentWorkDate = !opts?.isSupervisor;
   return items
     .filter((item) => {
-      if (status !== "all" && item.status !== status) {
+      if (distributedOnly) {
+        if (!item.assignedAgent?.id || !item.distributedAt) return false;
+        if (
+          f.dateFrom &&
+          f.dateTo &&
+          !isWithinCairoDateRange(item.distributedAt, f.dateFrom, f.dateTo)
+        ) {
+          return false;
+        }
+      } else if (status !== "all" && item.status !== status) {
         return false;
       }
       if (status === "CONFIRMED" && f.followUp !== "all") {
@@ -376,7 +387,7 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
       }
       if (f.shipping !== "all" && (item.shippingCompany || "") !== f.shipping) return false;
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
-      if (!itemMatchesDateFilter(item, f, forAgentWorkDate)) return false;
+      if (!distributedOnly && !itemMatchesDateFilter(item, f, forAgentWorkDate)) return false;
       if (f.trackingFilter === "missing" && itemTrackingNumber(item)) return false;
       if (f.waybillFilter === "not_printed" && item.waybillPrinted) return false;
       return true;
@@ -614,6 +625,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
             <option value="PENDING">بانتظار</option>
             <option value="IN_PROGRESS">جاري</option>
             <option value="CONFIRMED">تم الحفظ</option>
+            <option value="DISTRIBUTED">موزع</option>
           </select>
           {draft.status === "CONFIRMED" ? (
             <select

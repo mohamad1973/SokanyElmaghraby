@@ -394,7 +394,11 @@ export async function listCsConfirmationsForViewer(opts: {
     }
   }
 
+  await attachDistributedAt(rows);
+
   const inWindow = rows.filter((row) => {
+    const distributedAt = (row as { distributedAt?: string | null }).distributedAt;
+    if (distributedAt && isWithinCairoLastDays(distributedAt, 30)) return true;
     const snap = row.customerSnapshot as { dateCreated?: string } | null;
     if (isWithinCairoLastDays(snap?.dateCreated, 30)) return true;
     const workIso = [
@@ -458,6 +462,7 @@ export function serializeCsQueueItem(row: {
   startedAt?: Date | string | null;
   confirmedAt?: Date | string | null;
   updatedAt?: Date | string | null;
+  distributedAt?: Date | string | null;
   createdAt: Date;
   assignedAgent?: { id: number; name: string } | null;
   answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
@@ -558,8 +563,54 @@ export function serializeCsQueueItem(row: {
         ? row.updatedAt
         : row.updatedAt.toISOString()
       : null,
+    distributedAt: row.distributedAt
+      ? typeof row.distributedAt === "string"
+        ? row.distributedAt
+        : row.distributedAt.toISOString()
+      : null,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** Latest assignment createdAt whose range covers this order for its assigned agent. */
+async function attachDistributedAt(
+  rows: Array<{
+    wooOrderNumber: string;
+    assignedAgentId?: number | null;
+    assignedAgent?: { id: number; name: string } | null;
+    distributedAt?: string | null;
+  }>,
+) {
+  const prisma = getPrismaClient();
+  if (!prisma || rows.length === 0) return;
+  const ranges = await prisma.csOrderAssignment.findMany({
+    select: {
+      agentId: true,
+      wooOrderNumberFrom: true,
+      wooOrderNumberTo: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  for (const row of rows) {
+    const agentId = row.assignedAgentId || row.assignedAgent?.id || null;
+    if (!agentId) {
+      row.distributedAt = null;
+      continue;
+    }
+    const n = parseWooOrderNumber(row.wooOrderNumber);
+    if (!n) {
+      row.distributedAt = null;
+      continue;
+    }
+    const match = ranges.find((range) => {
+      if (range.agentId !== agentId) return false;
+      const from = Math.min(range.wooOrderNumberFrom, range.wooOrderNumberTo);
+      const to = Math.max(range.wooOrderNumberFrom, range.wooOrderNumberTo);
+      return n >= from && n <= to;
+    });
+    row.distributedAt = match ? match.createdAt.toISOString() : null;
+  }
 }
 
 export async function getCsConfirmation(id: number) {

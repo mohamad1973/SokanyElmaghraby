@@ -428,6 +428,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| CS فلتر حالة موزع | خيار «موزع» يطابق من/إلى بيوم CsOrderAssignment وليس تاريخ الأوردر | `cs-queue-client.tsx`, `confirmations.ts` |
 | CS فلتر تاريخ شغل الموظفة | الموظفة العادية تفلتّر من/إلى بتاريخ startedAt/confirmedAt/updatedAt؛ المشرف يبقى على تاريخ الأوردر | `cs-queue-client.tsx`, `confirmations.ts` |
 | CS توزيع يومي + بعد آخر توزيع | فلتر من/إلى بتاريخ التوزيع؛ تجميع يومي؛ تشك بوكس أوردرات بعد آخر توزيع + تقسيم عادل؛ إزالة محافظة/منطقة | `assign-client.tsx`, `assignments.ts`, `assignments/route.ts`, `order-window.ts` |
 | CS تاريخ من/إلى + عمود موظف | تسمية من/إلى داخل حقول التاريخ؛ خلفية off-white لمدخلات CS؛ عمود اسم الموظف بين الشحن والسعر للمشرف/أدمن | `cs-queue-client.tsx`, `cs-shell.tsx`, `globals.css` |
