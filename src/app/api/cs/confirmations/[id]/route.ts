@@ -151,5 +151,15 @@ export async function PUT(request: Request, context: Context) {
     );
   }
 
-  return NextResponse.json({ ok: true, status: result.status });
+  return NextResponse.json({
+    ok: true,
+    status: result.status,
+    bostaMessage: "bostaMessage" in result ? result.bostaMessage : null,
+    trackingNumber: "trackingNumber" in result ? result.trackingNumber : undefined,
+    bostaStatus: "bostaStatus" in result ? result.bostaStatus : undefined,
+    bostaStatusLabel: "bostaStatusLabel" in result ? result.bostaStatusLabel : undefined,
+    bostaShippingFee: "bostaShippingFee" in result ? result.bostaShippingFee : undefined,
+    bostaSyncedAt: "bostaSyncedAt" in result ? result.bostaSyncedAt : undefined,
+    bostaSyncError: "bostaSyncError" in result ? result.bostaSyncError : undefined,
+  });
 }

@@ -77,35 +77,74 @@ export const BOSTA_CITY_MAP: Record<string, { code: string; nameAr: string }> = 
   luxor: { code: "EG-26", nameAr: "الأقصر" },
 };
 
-export function mapGovernorateToBostaCity(governorate: string) {
+export function findBostaCity(governorate: string): { code: string; nameAr: string } | null {
   const normalized = governorate.trim().toLowerCase();
+  if (!normalized) return null;
 
   if (BOSTA_CITY_MAP[normalized]) {
     return BOSTA_CITY_MAP[normalized];
   }
 
   for (const [key, value] of Object.entries(BOSTA_CITY_MAP)) {
-    if (normalized.includes(key) || key.includes(normalized)) {
+    if (normalized.includes(key) || (key.length >= 3 && key.includes(normalized))) {
       return value;
     }
   }
 
-  return { code: "EG-01", nameAr: governorate || "القاهرة" };
+  return null;
+}
+
+export function mapGovernorateToBostaCity(governorate: string) {
+  return findBostaCity(governorate) || { code: "EG-01", nameAr: governorate || "القاهرة" };
 }
 
 export const BOSTA_STATUS_LABELS: Record<string, string> = {
   pending: "قيد الانتظار",
-  created: "تم الإنشاء",
-  picked_up: "تم الاستلام",
+  created: "تم إنشاء البوليصة",
+  pickup_requested: "تم إنشاء البوليصة",
+  waiting_for_route: "بانتظار خط السير",
+  route_assigned: "اتحدد المندوب",
+  picked_up: "المندوب استلم الشحنة",
+  received_at_warehouse: "في مخزن بوسطة",
   in_transit: "في الطريق",
-  out_for_delivery: "خرج للتسليم",
-  delivered: "تم التسليم",
+  out_for_delivery: "خرجت للتسليم",
+  delivered: "تم التسليم للعميل",
   failed: "فشل التسليم",
-  cancelled: "ملغي",
-  returned: "مرتجع",
+  exception: "مشكلة في التسليم",
+  cancelled: "ملغية",
+  canceled: "ملغية",
+  terminated: "ملغية",
+  returned: "مرتجعة",
+  returned_to_business: "رجعت للراسل",
   assigned: "معيّن لمندوب",
+  "10": "تم إنشاء البوليصة",
+  "20": "بانتظار خط السير",
+  "21": "اتحدد المندوب",
+  "24": "المندوب استلم الشحنة",
+  "30": "في الطريق",
+  "41": "خرجت للتسليم",
+  "45": "تم التسليم للعميل",
+  "46": "رجعت للراسل",
+  "47": "مشكلة في التسليم",
+  "48": "ملغية",
+  "49": "ملغية",
 };
 
+export function normalizeBostaStatus(status: string | number | null | undefined) {
+  return String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+export function bostaStatusLocksEdits(status: string | null | undefined) {
+  const key = normalizeBostaStatus(status);
+  return /picked_up|received_at_warehouse|in_transit|out_for_delivery|delivered|returned|exception|cancel|terminated|^24$|^30$|^41$|^45$|^46$|^47$|^48$|^49$/.test(
+    key,
+  );
+}
+
 export function getBostaStatusLabelAr(status: string) {
-  return BOSTA_STATUS_LABELS[status] || status;
+  const key = normalizeBostaStatus(status);
+  return BOSTA_STATUS_LABELS[key] || BOSTA_STATUS_LABELS[status] || status;
 }

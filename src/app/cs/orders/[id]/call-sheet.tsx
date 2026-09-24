@@ -11,6 +11,7 @@ import {
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { formatCairoOrderDateTime, resolvePaymentState } from "@/lib/cs/order-window";
+import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 
 /** Order total at/above this (EGP) shows the optional deposit card. */
 const CS_DEPOSIT_THRESHOLD = 5000;
@@ -64,6 +65,10 @@ type Props = {
   };
   shippingCompany?: string | null;
   trackingNumber?: string | null;
+  bostaStatus?: string | null;
+  bostaShippingFee?: number | null;
+  bostaSyncedAt?: string | null;
+  bostaSyncError?: string | null;
   waybillPrinted?: boolean;
   depositAmount?: number | null;
   depositPaid?: boolean;
@@ -161,6 +166,10 @@ export function CsCallSheet({
   followUp,
   shippingCompany,
   trackingNumber: initialTracking,
+  bostaStatus: initialBostaStatus,
+  bostaShippingFee: initialBostaFee,
+  bostaSyncedAt: initialBostaSyncedAt,
+  bostaSyncError: initialBostaError,
   waybillPrinted: initialWaybillPrinted,
   depositAmount: initialDepositAmount,
   depositPaid: initialDepositPaid,
@@ -194,6 +203,33 @@ export function CsCallSheet({
   const [trackingNumber, setTrackingNumber] = useState(
     () => String(initialTracking || initialSnapshot?.trackingNumber || "").trim(),
   );
+  const [bostaStatus, setBostaStatus] = useState(initialBostaStatus || "");
+  const [bostaFee, setBostaFee] = useState<number | null>(initialBostaFee ?? null);
+  const [bostaSyncedAt, setBostaSyncedAt] = useState(initialBostaSyncedAt || "");
+  const [bostaError, setBostaError] = useState(initialBostaError || "");
+
+  useEffect(() => {
+    if (lockedShipping !== "bosta" || !String(initialTracking || "").trim()) return;
+    const ac = new AbortController();
+    void fetch(`/api/cs/confirmations/${confirmationId}/bosta`, { method: "POST", signal: ac.signal })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          trackingNumber?: string | null;
+          bostaStatus?: string | null;
+          bostaShippingFee?: number | null;
+          bostaSyncedAt?: string | null;
+          bostaSyncError?: string | null;
+        };
+        if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
+        if (data.bostaStatus) setBostaStatus(data.bostaStatus);
+        if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
+        if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
+        setBostaError(data.bostaSyncError || "");
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [confirmationId, initialTracking, lockedShipping]);
 
   useEffect(() => {
     if (status === "CONFIRMED" || status === "FAILED_CONTACT" || status === "CANCELLED") return;
@@ -347,7 +383,16 @@ export function CsCallSheet({
         followUp: showFollowUp ? fu : undefined,
       }),
     });
-    const data = (await res.json()) as { message?: string; missing?: string[] };
+    const data = (await res.json()) as {
+      message?: string;
+      missing?: string[];
+      bostaMessage?: string | null;
+      trackingNumber?: string | null;
+      bostaStatus?: string | null;
+      bostaShippingFee?: number | null;
+      bostaSyncedAt?: string | null;
+      bostaSyncError?: string | null;
+    };
     setSaving(false);
 
     if (!res.ok) {
@@ -356,19 +401,26 @@ export function CsCallSheet({
       return;
     }
 
+    if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
+    if (data.bostaStatus) setBostaStatus(data.bostaStatus);
+    if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
+    if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
+    if (data.bostaSyncError !== undefined) setBostaError(data.bostaSyncError || "");
+    const bostaNote = data.bostaMessage ? ` ${data.bostaMessage}` : "";
+
     if (showFollowUp) {
-      setMessage(postRefundPaid ? "تم تسجيل الإلغاء." : "تم حفظ المتابعة.");
+      setMessage((postRefundPaid ? "تم تسجيل الإلغاء." : "تم حفظ المتابعة.") + bostaNote);
       return;
     }
 
     setMessage(
-      finalize
+      (finalize
         ? failContact
           ? "تم تسجيل: لم يرد."
           : cancelOrder
             ? "تم تسجيل: لاغى."
             : "تم تأكيد الطلب."
-        : "تم حفظ المسودة.",
+        : "تم حفظ المسودة.") + bostaNote,
     );
     if (finalize) window.location.href = "/cs";
   }
@@ -676,6 +728,44 @@ export function CsCallSheet({
         </div>
       )}
 
+      {showFollowUp && lockedShipping === "bosta" ? (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+          {(
+            [
+              ["customer_name", "الاسم"],
+              ["primary_phone", "التليفون"],
+              ["governorate_confirm", "المحافظة"],
+              ["area_confirm", "المنطقة"],
+              ["address_complete", "العنوان"],
+              ["address_landmarks", "علامات مميزة"],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key} className="grid gap-1 text-xs font-bold text-[#14213D]">
+              {label}
+              <input
+                value={answers[key]?.value || ""}
+                onChange={(e) => update(key, { value: e.target.value, confirmed: true })}
+                className={inputCls}
+              />
+            </label>
+          ))}
+          <label className="grid gap-1 text-xs font-bold text-[#14213D]">
+            تليفون إضافي
+            <input
+              value={answers.alt_phone?.yesNo === "no" ? "" : answers.alt_phone?.note || ""}
+              onChange={(e) =>
+                update("alt_phone", {
+                  yesNo: e.target.value.trim() ? "yes" : "no",
+                  note: e.target.value,
+                  confirmed: true,
+                })
+              }
+              className={inputCls}
+            />
+          </label>
+        </div>
+      ) : null}
+
       {/* Bottom row: shipping + deposit + tracking + waybill */}
       <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div
@@ -847,6 +937,21 @@ export function CsCallSheet({
             className={`mt-2 ${inputCls}`}
           />
         </div>
+
+        {lockedShipping === "bosta" ? (
+          <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#14213D] p-2.5 text-white shadow-sm ring-2 ring-[#FCA311]">
+            <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
+            <p className="mt-1 text-sm font-extrabold">{bostaStatus ? getBostaStatusLabelAr(bostaStatus) : "لسه مفيش بوليصة"}</p>
+            <p className="mt-1 text-xs font-bold">
+              قيمة الشحن: {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")} ج.م`}
+            </p>
+            <p className="mt-1 text-[10px] text-white/70">
+              آخر تحديث:{" "}
+              {bostaSyncedAt ? new Date(bostaSyncedAt).toLocaleString("ar-EG") : "—"}
+            </p>
+            {bostaError ? <p className="mt-1 text-[10px] font-bold text-[#FCA311]">{bostaError}</p> : null}
+          </div>
+        ) : null}
 
         <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#059669]/15 p-2.5 shadow-sm ring-2 ring-[#059669]">
           <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>

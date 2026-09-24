@@ -336,6 +336,10 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelRefundPaid` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumber` VARCHAR(64) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaStatus` VARCHAR(64) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaShippingFee` DECIMAL(12,2) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaSyncedAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaSyncError` VARCHAR(255) NULL",
   ];
 
   for (const sql of alters) {

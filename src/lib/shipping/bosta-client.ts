@@ -2,7 +2,7 @@ import "server-only";
 
 import type { AdminOrder } from "@/lib/orders";
 
-import { mapGovernorateToBostaCity } from "./bosta-zones";
+import { findBostaCity, mapGovernorateToBostaCity } from "./bosta-zones";
 
 const bostaApiKey = process.env.BOSTA_API_KEY;
 
@@ -366,4 +366,122 @@ export async function getBostaDistrictOptions(
   }
 
   return { ok: false, message: "تعذر جلب مناطق المدينة من بوسطة." };
+}
+
+export type CsBostaParty = {
+  name: string;
+  phone: string;
+  secondPhone?: string;
+  governorate: string;
+  area: string;
+  address: string;
+  landmarks?: string;
+  cod: number;
+  reference: string;
+  notes?: string;
+};
+
+export function readBostaShippingFee(raw: unknown): number | null {
+  const root = asRecord(raw);
+  if (!root) return null;
+  const pricing = asRecord(root.pricing) || asRecord(root.shipmentPricing) || asRecord(root.price);
+  const candidates = [
+    pricing?.shippingFee,
+    pricing?.priceAfterVat,
+    pricing?.priceBeforeVat,
+    root.shipmentFees,
+    root.shippingFee,
+    root.priceAfterVat,
+  ];
+  for (const candidate of candidates) {
+    const amount = Number(String(candidate ?? "").replace(/,/g, ""));
+    if (Number.isFinite(amount) && amount >= 0 && String(candidate ?? "").trim() !== "") return amount;
+  }
+  return null;
+}
+
+export function readBostaStatus(raw: unknown): string | null {
+  const root = asRecord(raw);
+  if (!root) return null;
+  const state = root.state;
+  if (typeof state === "string" || typeof state === "number") return String(state);
+  const stateRecord = asRecord(state);
+  const value = stateRecord?.value ?? stateRecord?.code ?? root.status ?? root.currentStatus;
+  if (value === undefined || value === null || value === "") return null;
+  return String(value);
+}
+
+function deliveryPayload(party: CsBostaParty, city: { code: string; nameAr: string }) {
+  const { firstName, lastName } = splitCustomerName(party.name);
+  return {
+    type: 10,
+    cod: party.cod,
+    specs: { packageType: "Parcel", size: "SMALL" },
+    dropOffAddress: {
+      city: city.code,
+      zone: party.area || city.nameAr,
+      firstLine: party.address,
+      secondLine: party.landmarks || party.area || "",
+    },
+    receiver: {
+      firstName,
+      lastName,
+      phone: normalizePhone(party.phone),
+      ...(party.secondPhone ? { secondPhone: normalizePhone(party.secondPhone) } : {}),
+    },
+    businessReference: party.reference,
+    notes: party.notes || party.landmarks || "",
+    webhookUrl: buildBostaWebhookUrl(),
+  };
+}
+
+export async function createCsBostaDelivery(party: CsBostaParty): Promise<BostaDeliveryResult> {
+  const city = findBostaCity(party.governorate);
+  if (!city) {
+    return { ok: false, message: `المحافظة «${party.governorate || "—"}» غير معروفة عند بوسطة.` };
+  }
+  const result = await bostaFetch<{ _id?: string; trackingNumber?: string }>("/deliveries", {
+    method: "POST",
+    body: JSON.stringify(deliveryPayload(party, city)),
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  return {
+    ok: true,
+    message: "تم إنشاء بوليصة بوسطة.",
+    deliveryId: result.data._id,
+    trackingNumber: result.data.trackingNumber,
+    raw: result.data,
+  };
+}
+
+export async function updateCsBostaDelivery(trackingNumber: string, party: CsBostaParty) {
+  const city = findBostaCity(party.governorate);
+  if (!city) {
+    return { ok: false as const, locked: false, message: `المحافظة «${party.governorate || "—"}» غير معروفة عند بوسطة.` };
+  }
+  const full = deliveryPayload(party, city);
+  const result = await bostaFetch(`/deliveries/business/${encodeURIComponent(trackingNumber)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      receiver: full.receiver,
+      dropOffAddress: full.dropOffAddress,
+      notes: full.notes,
+      cod: full.cod,
+    }),
+  });
+  if (!result.ok) {
+    const locked = /picked|cannot|not allowed|already|terminated|received/i.test(result.message);
+    return {
+      ok: false as const,
+      locked,
+      message: locked ? "بوسطة قفلت تعديل البوليصة بعد استلام المندوب." : result.message,
+    };
+  }
+  return { ok: true as const, locked: false, message: "تم تحديث بوليصة بوسطة.", raw: result.data };
+}
+
+export async function fetchCsBostaDelivery(trackingNumber: string) {
+  const business = await bostaFetch(`/deliveries/business/${encodeURIComponent(trackingNumber)}`);
+  if (business.ok) return business;
+  return bostaFetch(`/deliveries/track/${encodeURIComponent(trackingNumber)}`);
 }

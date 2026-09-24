@@ -11,6 +11,7 @@ import {
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
+import { syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import {
   parseWooOrderNumber,
 } from "@/lib/cs/assignments";
@@ -680,6 +681,81 @@ function shippingCompanyFromAnswers(answers: CsChecklistAnswerInput[]) {
   return null;
 }
 
+async function persistChecklistAnswers(confirmationId: number, answers: CsChecklistAnswerInput[]) {
+  const prisma = getPrismaClient();
+  if (!prisma || !answers.length) return;
+  const allKeys = new Set([
+    ...CS_CHECKLIST_ITEMS.map((item) => item.key),
+    ...CS_FOLLOWUP_ITEMS.map((item) => item.key),
+  ]);
+  for (const answer of answers) {
+    if (!allKeys.has(answer.itemKey)) continue;
+    await prisma.csChecklistAnswer.upsert({
+      where: {
+        confirmationId_itemKey: {
+          confirmationId,
+          itemKey: answer.itemKey,
+        },
+      },
+      create: {
+        confirmationId,
+        itemKey: answer.itemKey,
+        confirmed: Boolean(answer.confirmed),
+        value: answer.value ?? (answer.yesNo ? answer.yesNo : null),
+        note: answer.note ?? null,
+      },
+      update: {
+        confirmed: Boolean(answer.confirmed),
+        value: answer.value ?? (answer.yesNo ? answer.yesNo : null),
+        note: answer.note ?? null,
+      },
+    });
+  }
+}
+
+function bostaResultFields(state: Awaited<ReturnType<typeof syncCsBostaWaybill>> | null) {
+  if (!state) return {};
+  return {
+    bostaMessage: state.message,
+    trackingNumber: state.trackingNumber,
+    bostaStatus: state.bostaStatus,
+    bostaStatusLabel: state.bostaStatusLabel,
+    bostaShippingFee: state.bostaShippingFee,
+    bostaSyncedAt: state.bostaSyncedAt,
+    bostaSyncError: state.bostaSyncError,
+  };
+}
+
+async function pushBostaIfNeeded(input: {
+  row: {
+    id: number;
+    wooOrderId: number;
+    wooOrderNumber: string;
+    customerSnapshot: unknown;
+    shippingCompany?: string | null;
+  };
+  answers: CsChecklistAnswerInput[];
+  shippingCompany: string | null;
+  trackingNumber: string | null;
+  bostaStatus: string | null;
+  bostaShippingFee: number | null;
+  allowCreate: boolean;
+}) {
+  if (input.shippingCompany !== "bosta") return null;
+  if (!input.allowCreate && !input.trackingNumber) return null;
+  return syncCsBostaWaybill({
+    confirmationId: input.row.id,
+    wooOrderId: input.row.wooOrderId,
+    wooOrderNumber: input.row.wooOrderNumber,
+    shippingCompany: input.shippingCompany,
+    trackingNumber: input.trackingNumber,
+    bostaStatus: input.bostaStatus,
+    bostaShippingFee: input.bostaShippingFee,
+    answers: input.answers,
+    snapshot: (input.row.customerSnapshot as Record<string, unknown> | null) || null,
+  });
+}
+
 export async function saveCsConfirmation(input: {
   id: number;
   agentId: number;
@@ -730,6 +806,8 @@ export async function saveCsConfirmation(input: {
     depositToMethod?: string | null;
     postCancelAt?: Date | null;
     handedToCarrier?: boolean | null;
+    bostaStatus?: string | null;
+    bostaShippingFee?: unknown;
   };
   const nextTracking =
     input.trackingNumber !== undefined
@@ -858,10 +936,26 @@ export async function saveCsConfirmation(input: {
       where: { id: input.id },
       data: data as never,
     });
+    if (input.answers?.length && !post?.refundPaid) {
+      await persistChecklistAnswers(input.id, input.answers);
+    }
+    const followFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
+    const bosta = post?.refundPaid
+      ? null
+      : await pushBostaIfNeeded({
+          row,
+          answers: input.answers?.length ? input.answers : row.answers,
+          shippingCompany: row.shippingCompany,
+          trackingNumber: nextTracking,
+          bostaStatus: typed.bostaStatus || null,
+          bostaShippingFee: Number.isFinite(followFee) ? followFee : null,
+          allowCreate: true,
+        });
     return {
       ok: true as const,
       status: post?.refundPaid ? CS_CONFIRMATION_STATUS.CANCELLED : CS_CONFIRMATION_STATUS.CONFIRMED,
       missing: [] as string[],
+      ...bostaResultFields(bosta),
     };
   }
 
@@ -910,34 +1004,7 @@ export async function saveCsConfirmation(input: {
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
   }
 
-  const allKeys = new Set([
-    ...CS_CHECKLIST_ITEMS.map((i) => i.key),
-    ...CS_FOLLOWUP_ITEMS.map((i) => i.key),
-  ]);
-
-  for (const answer of input.answers) {
-    if (!allKeys.has(answer.itemKey)) continue;
-    await prisma.csChecklistAnswer.upsert({
-      where: {
-        confirmationId_itemKey: {
-          confirmationId: input.id,
-          itemKey: answer.itemKey,
-        },
-      },
-      create: {
-        confirmationId: input.id,
-        itemKey: answer.itemKey,
-        confirmed: Boolean(answer.confirmed),
-        value: answer.value ?? (answer.yesNo ? answer.yesNo : null),
-        note: answer.note ?? null,
-      },
-      update: {
-        confirmed: Boolean(answer.confirmed),
-        value: answer.value ?? (answer.yesNo ? answer.yesNo : null),
-        note: answer.note ?? null,
-      },
-    });
-  }
+  await persistChecklistAnswers(input.id, input.answers);
 
   const shippingFromRow =
     row.shippingCompany === "bosta" || row.shippingCompany === "sayed_temima"
@@ -955,7 +1022,22 @@ export async function saveCsConfirmation(input: {
         ...salesOrderPatch,
       } as never,
     });
-    return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
+    const draftFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
+    const draftBosta = await pushBostaIfNeeded({
+      row,
+      answers: input.answers,
+      shippingCompany,
+      trackingNumber: nextTracking,
+      bostaStatus: typed.bostaStatus || null,
+      bostaShippingFee: Number.isFinite(draftFee) ? draftFee : null,
+      allowCreate: false,
+    });
+    return {
+      ok: true as const,
+      status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
+      missing: [] as string[],
+      ...bostaResultFields(draftBosta),
+    };
   }
 
   // Ensure shipping_company answer is present for validation when supervisor already set it
@@ -1003,7 +1085,23 @@ export async function saveCsConfirmation(input: {
     } as never,
   });
 
-  return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+  const savedFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
+  const bosta = await pushBostaIfNeeded({
+    row: { ...row, shippingCompany },
+    answers: input.answers,
+    shippingCompany,
+    trackingNumber: nextTracking,
+    bostaStatus: typed.bostaStatus || null,
+    bostaShippingFee: Number.isFinite(savedFee) ? savedFee : null,
+    allowCreate: true,
+  });
+
+  return {
+    ok: true as const,
+    status: CS_CONFIRMATION_STATUS.CONFIRMED,
+    missing: [] as string[],
+    ...bostaResultFields(bosta),
+  };
 }
 
 export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: string | null; agentId: number }) {

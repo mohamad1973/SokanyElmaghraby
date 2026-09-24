@@ -38,7 +38,12 @@ export default async function CsOrderPage({ params }: Props) {
     postCancelSystemNo?: string | null;
     postCancelRefundPaid?: boolean | null;
     postCancelAt?: Date | null;
+    bostaStatus?: string | null;
+    bostaShippingFee?: unknown;
+    bostaSyncedAt?: Date | null;
+    bostaSyncError?: string | null;
   };
+  const bostaFee = row.bostaShippingFee == null ? null : Number(row.bostaShippingFee);
 
   return (
     <CsCallSheet
@@ -47,6 +52,10 @@ export default async function CsOrderPage({ params }: Props) {
       snapshot={snapshot}
       shippingCompany={confirmation.shippingCompany}
       trackingNumber={row.trackingNumber || snapshot?.trackingNumber || null}
+      bostaStatus={row.bostaStatus || null}
+      bostaShippingFee={Number.isFinite(bostaFee) ? bostaFee : null}
+      bostaSyncedAt={row.bostaSyncedAt ? row.bostaSyncedAt.toISOString() : null}
+      bostaSyncError={row.bostaSyncError || null}
       waybillPrinted={Boolean(row.waybillPrinted)}
       depositAmount={serializeDepositAmount(row.depositAmount)}
       depositPaid={Boolean(row.depositPaid)}

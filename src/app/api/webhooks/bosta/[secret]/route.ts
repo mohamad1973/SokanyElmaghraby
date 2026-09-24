@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getBostaWebhookSecret } from "@/lib/shipping/bosta-client";
+import { recordBostaWebhookOnConfirmation } from "@/lib/cs/bosta-waybill";
+import { getBostaWebhookSecret, readBostaStatus } from "@/lib/shipping/bosta-client";
 import { updateShipmentFromBostaWebhook } from "@/lib/shipping/shipments";
 import { markWooOrderDelivered } from "@/lib/woocommerce-update";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request, context: RouteContext) {
   let payload: {
     _id?: string;
     trackingNumber?: string;
-    state?: { value?: string };
+    state?: { value?: string } | string | number;
     businessReference?: string;
   };
 
@@ -29,25 +30,43 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ message: "Invalid JSON." }, { status: 400 });
   }
 
-  const result = await updateShipmentFromBostaWebhook(payload);
+  const statusValue =
+    readBostaStatus(payload) || (typeof payload.state === "object" && payload.state ? payload.state.value : undefined);
+  const result = await updateShipmentFromBostaWebhook({
+    ...payload,
+    state: { value: statusValue },
+  });
+  const shipment = result.ok ? result.shipment : null;
+  const wooOrderId = shipment?.wooOrderId
+    ? shipment.wooOrderId
+    : payload.businessReference
+      ? Number.parseInt(payload.businessReference, 10)
+      : null;
 
-  if (!result.ok) {
+  await recordBostaWebhookOnConfirmation({
+    wooOrderId,
+    trackingNumber: payload.trackingNumber || shipment?.trackingNumber,
+    status: statusValue,
+    raw: payload,
+  });
+
+  if (!result.ok && !wooOrderId && !payload.trackingNumber) {
     return NextResponse.json({ message: result.message }, { status: 404 });
   }
 
-  if (payload.state?.value === "delivered" && result.shipment) {
+  if (statusValue === "delivered" && shipment) {
     await markWooOrderDelivered(
-      result.shipment.wooOrderId,
-      `تم التسليم عبر Bosta — ${result.shipment.trackingNumber || ""}`,
+      shipment.wooOrderId,
+      `تم التسليم عبر Bosta — ${shipment.trackingNumber || ""}`,
     );
   }
 
-  if (result.shipment) {
+  if (shipment) {
     const { applyBostaStatusToCsConfirmation } = await import("@/lib/cs/notifications");
     await applyBostaStatusToCsConfirmation({
-      wooOrderId: result.shipment.wooOrderId,
-      status: payload.state?.value || result.shipment.status,
-      trackingNumber: result.shipment.trackingNumber,
+      wooOrderId: shipment.wooOrderId,
+      status: statusValue || shipment.status,
+      trackingNumber: shipment.trackingNumber,
     });
   }
 

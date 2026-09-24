@@ -287,6 +287,10 @@ model CsOrderConfirmation {
   shippingAssignedAt   DateTime?
   salesOrderNumber     String?             @db.VarChar(64)
   invoiceNumber        String?             @db.VarChar(64)
+  bostaStatus          String?             @db.VarChar(64)
+  bostaShippingFee     Decimal?            @db.Decimal(12, 2)
+  bostaSyncedAt        DateTime?
+  bostaSyncError       String?             @db.VarChar(255)
   postCancelInvoice    String?             @db.VarChar(16)
   postCancelSystemNo   String?             @db.VarChar(64)
   postCancelRefundPaid Boolean             @default(false)
