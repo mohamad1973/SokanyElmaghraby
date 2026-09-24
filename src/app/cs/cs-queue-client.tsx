@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
+import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
   cairoDaysAgoYmd,
   cairoTodayYmd,
@@ -28,6 +29,8 @@ export type CsQueueItem = {
   depositPaid?: boolean;
   depositApprovalStatus?: string | null;
   invoiceNumber?: string | null;
+  bostaStatus?: string | null;
+  bostaShippingFee?: number | null;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
@@ -1033,6 +1036,12 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                     <span className="rounded-lg bg-[#14213D] px-2.5 py-1 text-base font-extrabold text-[#FCA311]">
                       {item.customerSnapshot?.total || "—"} ج.م
                     </span>
+                    {item.shippingCompany === "bosta" && item.bostaShippingFee != null ? (
+                      <span className="text-[11px] font-extrabold text-[#14213D]">
+                        شحن بوسطة: {Number(item.bostaShippingFee).toLocaleString("ar-EG")} ج.م
+                        {item.bostaStatus ? ` · ${getBostaStatusLabelAr(item.bostaStatus)}` : ""}
+                      </span>
+                    ) : null}
                     {isConfirmed ? (
                       <Link
                         href={`/cs/orders/${item.id}`}

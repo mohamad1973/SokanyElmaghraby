@@ -5,6 +5,7 @@ import { getPrismaClient } from "@/lib/db";
 import {
   createCsBostaDelivery,
   fetchCsBostaDelivery,
+  readBostaLiveDetails,
   readBostaShippingFee,
   readBostaStatus,
   updateCsBostaDelivery,
@@ -22,6 +23,8 @@ export type BostaWaybillState = {
   bostaSyncedAt: string | null;
   bostaSyncError: string | null;
   message: string | null;
+  cod: number | null;
+  lastEvent: string | null;
 };
 
 function textOf(answers: CsChecklistAnswerInput[], key: string) {
@@ -79,6 +82,8 @@ function present(input: {
   bostaSyncedAt?: Date | string | null;
   bostaSyncError?: string | null;
   message?: string | null;
+  cod?: number | null;
+  lastEvent?: string | null;
 }): BostaWaybillState {
   const status = input.bostaStatus ? normalizeBostaStatus(input.bostaStatus) : null;
   const synced =
@@ -93,6 +98,8 @@ function present(input: {
     bostaSyncedAt: synced,
     bostaSyncError: input.bostaSyncError || null,
     message: input.message || null,
+    cod: input.cod ?? null,
+    lastEvent: input.lastEvent || null,
   };
 }
 
@@ -276,8 +283,17 @@ export async function syncCsBostaWaybill(input: {
     });
   }
 
-  const fee = readBostaShippingFee(created.raw) ?? input.bostaShippingFee;
-  const status = normalizeBostaStatus(readBostaStatus(created.raw) || "created");
+  let raw = created.raw;
+  let details = readBostaLiveDetails(raw);
+  if (created.trackingNumber && details.shippingFee == null) {
+    const live = await fetchCsBostaDelivery(created.trackingNumber);
+    if (live.ok) {
+      raw = live.data;
+      details = readBostaLiveDetails(live.data);
+    }
+  }
+  const fee = details.shippingFee ?? readBostaShippingFee(raw) ?? input.bostaShippingFee;
+  const status = normalizeBostaStatus(details.status || readBostaStatus(raw) || "created");
   await writeConfirmation({
     confirmationId: input.confirmationId,
     snapshot: input.snapshot,
@@ -293,7 +309,7 @@ export async function syncCsBostaWaybill(input: {
     deliveryId: created.deliveryId,
     status,
     party: built.party,
-    raw: created.raw,
+    raw,
   });
   return present({
     trackingNumber: created.trackingNumber,
@@ -301,6 +317,8 @@ export async function syncCsBostaWaybill(input: {
     bostaShippingFee: fee,
     message: "تم إنشاء بوليصة بوسطة ونزل رقم التراك.",
     bostaSyncedAt: new Date(),
+    cod: details.cod,
+    lastEvent: details.lastEvent,
   });
 }
 
@@ -341,8 +359,9 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
     });
   }
 
-  const status = normalizeBostaStatus(readBostaStatus(live.data) || typed.bostaStatus || "");
-  const fee = readBostaShippingFee(live.data) ?? (Number.isFinite(currentFee) ? currentFee : null);
+  const details = readBostaLiveDetails(live.data);
+  const status = normalizeBostaStatus(details.status || readBostaStatus(live.data) || typed.bostaStatus || "");
+  const fee = details.shippingFee ?? readBostaShippingFee(live.data) ?? (Number.isFinite(currentFee) ? currentFee : null);
   await writeConfirmation({
     confirmationId,
     snapshot: (row.customerSnapshot as Snapshot) || null,
@@ -356,6 +375,8 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
     bostaStatus: status || typed.bostaStatus,
     bostaShippingFee: fee,
     bostaSyncedAt: new Date(),
+    cod: details.cod,
+    lastEvent: details.lastEvent,
   });
 }
 

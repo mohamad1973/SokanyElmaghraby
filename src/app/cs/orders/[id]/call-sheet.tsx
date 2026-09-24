@@ -207,6 +207,8 @@ export function CsCallSheet({
   const [bostaFee, setBostaFee] = useState<number | null>(initialBostaFee ?? null);
   const [bostaSyncedAt, setBostaSyncedAt] = useState(initialBostaSyncedAt || "");
   const [bostaError, setBostaError] = useState(initialBostaError || "");
+  const [bostaCod, setBostaCod] = useState<number | null>(null);
+  const [bostaLastEvent, setBostaLastEvent] = useState("");
 
   useEffect(() => {
     if (lockedShipping !== "bosta" || !String(initialTracking || "").trim()) return;
@@ -220,11 +222,15 @@ export function CsCallSheet({
           bostaShippingFee?: number | null;
           bostaSyncedAt?: string | null;
           bostaSyncError?: string | null;
+          cod?: number | null;
+          lastEvent?: string | null;
         };
         if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
         if (data.bostaStatus) setBostaStatus(data.bostaStatus);
         if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
         if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
+        if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
+        if (data.lastEvent) setBostaLastEvent(data.lastEvent);
         setBostaError(data.bostaSyncError || "");
       })
       .catch(() => {});
@@ -392,6 +398,8 @@ export function CsCallSheet({
       bostaShippingFee?: number | null;
       bostaSyncedAt?: string | null;
       bostaSyncError?: string | null;
+      cod?: number | null;
+      lastEvent?: string | null;
     };
     setSaving(false);
 
@@ -406,6 +414,8 @@ export function CsCallSheet({
     if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
     if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
     if (data.bostaSyncError !== undefined) setBostaError(data.bostaSyncError || "");
+    if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
+    if (data.lastEvent) setBostaLastEvent(data.lastEvent);
     const bostaNote = data.bostaMessage ? ` ${data.bostaMessage}` : "";
 
     if (showFollowUp) {
@@ -945,6 +955,10 @@ export function CsCallSheet({
             <p className="mt-1 text-xs font-bold">
               قيمة الشحن: {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")} ج.م`}
             </p>
+            <p className="mt-1 text-xs font-bold">
+              التحصيل: {bostaCod == null ? "—" : `${bostaCod.toLocaleString("ar-EG")} ج.م`}
+            </p>
+            {bostaLastEvent ? <p className="mt-1 text-[10px] font-bold text-white/90">{bostaLastEvent}</p> : null}
             <p className="mt-1 text-[10px] text-white/70">
               آخر تحديث:{" "}
               {bostaSyncedAt ? new Date(bostaSyncedAt).toLocaleString("ar-EG") : "—"}

@@ -381,8 +381,24 @@ export type CsBostaParty = {
   notes?: string;
 };
 
-export function readBostaShippingFee(raw: unknown): number | null {
+export function bostaPayload(raw: unknown): Record<string, unknown> | null {
   const root = asRecord(raw);
+  if (!root) return null;
+  const nested = asRecord(root.data);
+  if (nested && (nested.trackingNumber || nested.state || nested._id || nested.pricing || nested.shipmentFees)) {
+    return nested;
+  }
+  return root;
+}
+
+function readAmount(value: unknown): number | null {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const amount = Number(String(value).replace(/,/g, ""));
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+export function readBostaShippingFee(raw: unknown): number | null {
+  const root = bostaPayload(raw);
   if (!root) return null;
   const pricing = asRecord(root.pricing) || asRecord(root.shipmentPricing) || asRecord(root.price);
   const candidates = [
@@ -394,14 +410,14 @@ export function readBostaShippingFee(raw: unknown): number | null {
     root.priceAfterVat,
   ];
   for (const candidate of candidates) {
-    const amount = Number(String(candidate ?? "").replace(/,/g, ""));
-    if (Number.isFinite(amount) && amount >= 0 && String(candidate ?? "").trim() !== "") return amount;
+    const amount = readAmount(candidate);
+    if (amount !== null) return amount;
   }
   return null;
 }
 
 export function readBostaStatus(raw: unknown): string | null {
-  const root = asRecord(raw);
+  const root = bostaPayload(raw);
   if (!root) return null;
   const state = root.state;
   if (typeof state === "string" || typeof state === "number") return String(state);
@@ -409,6 +425,42 @@ export function readBostaStatus(raw: unknown): string | null {
   const value = stateRecord?.value ?? stateRecord?.code ?? root.status ?? root.currentStatus;
   if (value === undefined || value === null || value === "") return null;
   return String(value);
+}
+
+export type BostaLiveDetails = {
+  trackingNumber: string | null;
+  deliveryId: string | null;
+  status: string | null;
+  shippingFee: number | null;
+  cod: number | null;
+  lastEvent: string | null;
+};
+
+function eventLine(raw: unknown): string | null {
+  const event = asRecord(raw);
+  if (!event) return null;
+  const state = asRecord(event.state);
+  const label = String(state?.value || event.state || event.msg || event.message || "").trim();
+  const place = String(event.hub || event.exceptionReason || "").trim();
+  const when = String(event.timestamp || event.date || event.time || "").trim();
+  const text = [label, place].filter(Boolean).join(" — ");
+  if (!text) return null;
+  return when ? `${text} · ${when}` : text;
+}
+
+export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
+  const root = bostaPayload(raw);
+  const events = root?.TransitEvents || root?.timeline || root?.history || root?.trackingEvents;
+  const list = Array.isArray(events) ? events : [];
+  const last = list.length ? eventLine(list[list.length - 1]) : null;
+  return {
+    trackingNumber: root?.trackingNumber ? String(root.trackingNumber) : null,
+    deliveryId: root?._id ? String(root._id) : null,
+    status: readBostaStatus(raw),
+    shippingFee: readBostaShippingFee(raw),
+    cod: readAmount(root?.cod),
+    lastEvent: last,
+  };
 }
 
 function deliveryPayload(party: CsBostaParty, city: { code: string; nameAr: string }) {
@@ -445,12 +497,13 @@ export async function createCsBostaDelivery(party: CsBostaParty): Promise<BostaD
     body: JSON.stringify(deliveryPayload(party, city)),
   });
   if (!result.ok) return { ok: false, message: result.message };
+  const details = readBostaLiveDetails(result.data);
   return {
     ok: true,
     message: "تم إنشاء بوليصة بوسطة.",
-    deliveryId: result.data._id,
-    trackingNumber: result.data.trackingNumber,
-    raw: result.data,
+    deliveryId: details.deliveryId || undefined,
+    trackingNumber: details.trackingNumber || undefined,
+    raw: bostaPayload(result.data) || result.data,
   };
 }
 

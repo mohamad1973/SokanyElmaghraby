@@ -461,7 +461,9 @@ export function serializeCsQueueItem(row: {
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
   salesOrderNumber?: string | null;
-  invoiceNumber?: string | null;
+    invoiceNumber?: string | null;
+  bostaStatus?: string | null;
+  bostaShippingFee?: unknown;
   customerSnapshot?: unknown;
   startedAt?: Date | string | null;
   confirmedAt?: Date | string | null;
@@ -528,6 +530,8 @@ export function serializeCsQueueItem(row: {
     customerFollowUp: Boolean(row.customerFollowUp),
     salesOrderNumber: row.salesOrderNumber ? String(row.salesOrderNumber) : null,
     invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : null,
+    bostaStatus: row.bostaStatus ? String(row.bostaStatus) : null,
+    bostaShippingFee: row.bostaShippingFee == null ? null : Number(row.bostaShippingFee),
     assignedAgent: row.assignedAgent
       ? { id: row.assignedAgent.id, name: row.assignedAgent.name }
       : null,
@@ -723,6 +727,8 @@ function bostaResultFields(state: Awaited<ReturnType<typeof syncCsBostaWaybill>>
     bostaShippingFee: state.bostaShippingFee,
     bostaSyncedAt: state.bostaSyncedAt,
     bostaSyncError: state.bostaSyncError,
+    cod: state.cod,
+    lastEvent: state.lastEvent,
   };
 }
 

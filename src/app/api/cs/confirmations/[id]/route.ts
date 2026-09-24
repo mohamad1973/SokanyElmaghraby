@@ -161,5 +161,7 @@ export async function PUT(request: Request, context: Context) {
     bostaShippingFee: "bostaShippingFee" in result ? result.bostaShippingFee : undefined,
     bostaSyncedAt: "bostaSyncedAt" in result ? result.bostaSyncedAt : undefined,
     bostaSyncError: "bostaSyncError" in result ? result.bostaSyncError : undefined,
+    cod: "cod" in result ? result.cod : undefined,
+    lastEvent: "lastEvent" in result ? result.lastEvent : undefined,
   });
 }
