@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   CS_CHECKLIST_ITEMS,
@@ -156,7 +156,7 @@ function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | nul
 export function CsCallSheet({
   confirmationId,
   status,
-  snapshot,
+  snapshot: initialSnapshot,
   initialAnswers,
   followUp,
   shippingCompany,
@@ -177,8 +177,9 @@ export function CsCallSheet({
   const lockedShipping =
     shippingCompany === "bosta" || shippingCompany === "sayed_temima" ? shippingCompany : null;
 
+  const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [answers, setAnswers] = useState(() => {
-    const base = buildInitial(initialAnswers, snapshot);
+    const base = buildInitial(initialAnswers, initialSnapshot);
     if (lockedShipping) {
       base.shipping_company.value = lockedShipping;
       base.shipping_company.confirmed = true;
@@ -191,8 +192,21 @@ export function CsCallSheet({
     customerFollowUp: Boolean(followUp?.customerFollowUp),
   });
   const [trackingNumber, setTrackingNumber] = useState(
-    () => String(initialTracking || snapshot?.trackingNumber || "").trim(),
+    () => String(initialTracking || initialSnapshot?.trackingNumber || "").trim(),
   );
+
+  useEffect(() => {
+    if (status === "CONFIRMED" || status === "FAILED_CONTACT" || status === "CANCELLED") return;
+    const ac = new AbortController();
+    void fetch(`/api/cs/confirmations/${confirmationId}/start`, { method: "POST", signal: ac.signal })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as { confirmation?: { customerSnapshot?: Snapshot | null } };
+        if (data.confirmation?.customerSnapshot) setSnapshot(data.confirmation.customerSnapshot);
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [confirmationId, status]);
   const [waybillPrinted, setWaybillPrinted] = useState(Boolean(initialWaybillPrinted));
   const [depositAmount, setDepositAmount] = useState(() => {
     if (initialDepositAmount === null || initialDepositAmount === undefined) return "";

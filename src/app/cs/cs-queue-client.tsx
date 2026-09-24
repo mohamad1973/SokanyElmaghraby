@@ -170,6 +170,17 @@ type DupMeta = { key: string; count: number; colorClass: string };
 const FILTER_CONTROL =
   "h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
 
+function openDateField(event: React.MouseEvent<HTMLDivElement>) {
+  const input = event.currentTarget.querySelector("input[type='date']");
+  if (!(input instanceof HTMLInputElement)) return;
+  input.focus();
+  try {
+    input.showPicker();
+  } catch {
+    // Picker already open, or this browser only opens it from the calendar control.
+  }
+}
+
 function defaultDraft(): DraftFilters {
   return {
     query: "",
@@ -569,13 +580,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
     return () => window.clearTimeout(timer);
   }, [printMode]);
 
-  async function openOrder(id: number) {
-    const res = await fetch(`/api/cs/confirmations/${id}/start`, { method: "POST" });
-    if (!res.ok) {
-      const data = (await res.json()) as { message?: string };
-      setMessage(data.message || "تعذر فتح الطلب.");
-      return;
-    }
+  function openOrder(id: number) {
     router.push(`/cs/orders/${id}`);
   }
 
@@ -778,26 +783,26 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             <option value="bosta">بوسطة</option>
             <option value="sayed_temima">سيد تميمة</option>
           </select>
-          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
-            <span className="shrink-0 text-[#14213D]/60">من</span>
+          <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+            <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
             <input
               type="date"
               min={dateMinYmd()}
               max={dateMaxYmd()}
               value={draft.dateFrom}
               onChange={(e) => patchDraft({ dateFrom: e.target.value })}
-              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+              className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
           </div>
-          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
-            <span className="shrink-0 text-[#14213D]/60">إلى</span>
+          <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+            <span className="pointer-events-none shrink-0 text-[#14213D]/60">إلى</span>
             <input
               type="date"
               min={dateMinYmd()}
               max={dateMaxYmd()}
               value={draft.dateTo}
               onChange={(e) => patchDraft({ dateTo: e.target.value })}
-              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+              className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
           </div>
           <select
@@ -1005,8 +1010,10 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                     </div>
                   ) : null}
                   {isSupervisor || isAccounting ? (
-                    <div className="flex items-center justify-center self-center text-center">
-                      <span className="text-xs font-extrabold">{item.assignedAgent?.name || "—"}</span>
+                    <div className="flex min-w-[5.5rem] items-center justify-center self-center rounded-lg bg-[#F5F5F0] px-2 py-1 text-center">
+                      <span className="text-sm font-extrabold leading-tight text-[#14213D]">
+                        {item.assignedAgent?.name || "—"}
+                      </span>
                     </div>
                   ) : null}
                   {isAccounting ? (

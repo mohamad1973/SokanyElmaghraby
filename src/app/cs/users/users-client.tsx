@@ -37,10 +37,11 @@ function RoleChecks({
     onChange(next);
   }
   return (
-    <div className="grid gap-1 text-xs font-bold">
-      <label className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold">
+      <label className="flex items-center gap-1.5">
         <input
           type="checkbox"
+          className="size-3.5"
           checked={allOn}
           disabled={disabled}
           onChange={() => onChange(allOn ? [] : PERMISSIONS.map((item) => item.id))}
@@ -48,9 +49,10 @@ function RoleChecks({
         كل الصلاحيات
       </label>
       {PERMISSIONS.map((item) => (
-        <label key={item.id} className="flex items-center gap-2">
+        <label key={item.id} className="flex items-center gap-1.5">
           <input
             type="checkbox"
+            className="size-3.5"
             checked={value.includes(item.id)}
             disabled={disabled}
             onChange={() => toggle(item.id)}
@@ -161,61 +163,63 @@ export function CsUsersClient() {
 
       <form
         onSubmit={createUser}
-        className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+        className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
       >
-        <label className="grid gap-1 text-sm font-bold">
-          الاسم
-          <input
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required
-            minLength={2}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-bold">
-          اليوزرنيم
-          <input
-            value={form.username}
-            onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-            required
-            minLength={2}
-            dir="ltr"
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-bold">
-          باسورد
-          <input
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            required
-            minLength={6}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-          />
-        </label>
-        <div className="grid gap-1 text-sm font-bold">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="grid min-w-0 gap-1 text-xs font-bold">
+            الاسم
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+              minLength={2}
+              className="h-9 min-w-0 rounded-lg border border-[#E5E5E5] px-2 text-sm"
+            />
+          </label>
+          <label className="grid min-w-0 gap-1 text-xs font-bold">
+            اليوزرنيم
+            <input
+              value={form.username}
+              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              required
+              minLength={2}
+              dir="ltr"
+              className="h-9 min-w-0 rounded-lg border border-[#E5E5E5] px-2 text-sm"
+            />
+          </label>
+          <label className="grid min-w-0 gap-1 text-xs font-bold">
+            باسورد
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              required
+              minLength={6}
+              className="h-9 min-w-0 rounded-lg border border-[#E5E5E5] px-2 text-sm"
+            />
+          </label>
+          <label className="grid min-w-0 gap-1 text-xs font-bold">
+            واتساب
+            <input
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="01xxxxxxxxx"
+              dir="ltr"
+              className="h-9 min-w-0 rounded-lg border border-[#E5E5E5] px-2 text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={loading}
+            className="h-9 self-end rounded-lg bg-[#FCA311] px-3 text-sm font-extrabold text-black disabled:opacity-60"
+          >
+            إضافة
+          </button>
+        </div>
+        <div className="grid gap-1 text-xs font-bold">
           الصلاحيات
           <RoleChecks value={form.roles} onChange={(roles) => setForm((f) => ({ ...f, roles }))} />
         </div>
-        <label className="grid gap-1 text-sm font-bold">
-          واتساب
-          <input
-            value={form.phone}
-            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            placeholder="01xxxxxxxxx"
-            dir="ltr"
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={loading}
-          className="self-end rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black disabled:opacity-60"
-        >
-          إضافة
-        </button>
       </form>
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
@@ -239,7 +243,7 @@ export function CsUsersClient() {
                 </td>
                 <td className="px-3 py-2">
                   {a.username === "mm" ? (
-                    <span className="font-bold">أدمن</span>
+                    <span className="font-bold">كل الصلاحيات</span>
                   ) : (
                     <RoleChecks
                       value={a.roles?.length ? a.roles : [a.role]}

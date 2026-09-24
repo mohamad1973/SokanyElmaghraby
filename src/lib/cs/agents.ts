@@ -52,18 +52,23 @@ export function parseCsRoles(raw: {
   return [single];
 }
 
+const ADMIN_ALL_ROLES: CsRole[] = ["admin", "agent", "supervisor", "transfers", "shipping", "accounting"];
+
 export function csFlagsFromRoles(roles: CsRole[]) {
-  const list = roles.length ? roles : (["agent"] as CsRole[]);
+  const hasAdmin = roles.includes("admin");
+  const list = hasAdmin ? ADMIN_ALL_ROLES : roles.length ? roles : (["agent"] as CsRole[]);
   return {
     roles: list,
-    role: list[0],
-    isSupervisor: list.includes("supervisor") || list.includes("admin"),
-    isAdmin: list.includes("admin"),
-    isTransfers: list.includes("transfers"),
-    isShipping: list.includes("shipping"),
-    isAccounting: list.includes("accounting"),
-    canAccessTransfers: list.includes("transfers") || list.includes("supervisor") || list.includes("admin"),
-    canSeeOrders: list.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting"),
+    role: hasAdmin ? ("admin" as const) : list[0],
+    isSupervisor: hasAdmin || list.includes("supervisor"),
+    isAdmin: hasAdmin,
+    isTransfers: hasAdmin || list.includes("transfers"),
+    isShipping: hasAdmin || list.includes("shipping"),
+    isAccounting: hasAdmin || list.includes("accounting"),
+    canAccessTransfers: hasAdmin || list.includes("transfers") || list.includes("supervisor"),
+    canSeeOrders:
+      hasAdmin ||
+      list.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting"),
   };
 }
 
@@ -374,8 +379,12 @@ async function runEnsureCsTables() {
         AND LOWER(COALESCE(\`username\`, '')) <> 'mm'
     `);
     await prisma.$executeRawUnsafe(`
-      UPDATE \`CsAgent\` SET \`role\` = 'admin', \`roles\` = 'admin', \`isSupervisor\` = true
+      UPDATE \`CsAgent\` SET \`role\` = 'admin',
+        \`roles\` = 'admin,agent,supervisor,transfers,shipping,accounting',
+        \`isSupervisor\` = true
       WHERE LOWER(COALESCE(\`username\`, '')) = 'mm'
+        OR \`role\` = 'admin'
+        OR CONCAT(',', REPLACE(COALESCE(\`roles\`, ''), ' ', ''), ',') LIKE '%,admin,%'
     `);
     await prisma.$executeRawUnsafe(`
       UPDATE \`CsAgent\` SET \`roles\` = \`role\`

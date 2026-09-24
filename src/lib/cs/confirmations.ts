@@ -648,6 +648,17 @@ export async function startCsConfirmation(id: number, agentId: number) {
     ? snapshotFromOrder(live, tracking.get(row.wooOrderId))
     : row.customerSnapshot;
 
+  const fresh = await prisma.csOrderConfirmation.findUnique({ where: { id } });
+  if (!fresh) return { ok: false as const, message: "الطلب غير موجود." };
+  if (
+    fresh.status === CS_CONFIRMATION_STATUS.CONFIRMED ||
+    fresh.status === CS_CONFIRMATION_STATUS.FAILED_CONTACT ||
+    fresh.status === CS_CONFIRMATION_STATUS.CANCELLED
+  ) {
+    const confirmation = await getCsConfirmation(id);
+    return { ok: true as const, confirmation: confirmation! };
+  }
+
   const updated = await prisma.csOrderConfirmation.update({
     where: { id },
     data: {

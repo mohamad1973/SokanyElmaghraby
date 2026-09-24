@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { getCsConfirmation, serializeDepositAmount, startCsConfirmation } from "@/lib/cs/confirmations";
+import { getCsConfirmation, serializeDepositAmount } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsCallSheet } from "./call-sheet";
@@ -18,15 +18,8 @@ export default async function CsOrderPage({ params }: Props) {
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) notFound();
 
-  let confirmation = await getCsConfirmation(numericId);
+  const confirmation = await getCsConfirmation(numericId);
   if (!confirmation) notFound();
-
-  if (confirmation.status !== "CONFIRMED" && confirmation.status !== "FAILED_CONTACT" && confirmation.status !== "CANCELLED") {
-    const started = await startCsConfirmation(numericId, session.user.csAgentId);
-    if (started.ok) {
-      confirmation = started.confirmation;
-    }
-  }
 
   const snapshot = (confirmation.customerSnapshot || null) as Parameters<typeof CsCallSheet>[0]["snapshot"];
   const row = confirmation as {
