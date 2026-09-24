@@ -211,7 +211,7 @@ export function CsCallSheet({
   const [bostaLastEvent, setBostaLastEvent] = useState("");
 
   useEffect(() => {
-    if (lockedShipping !== "bosta" || !String(initialTracking || "").trim()) return;
+    if (lockedShipping !== "bosta") return;
     const ac = new AbortController();
     void fetch(`/api/cs/confirmations/${confirmationId}/bosta`, { method: "POST", signal: ac.signal })
       .then(async (res) => {

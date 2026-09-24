@@ -5,6 +5,7 @@ import { getPrismaClient } from "@/lib/db";
 import {
   createCsBostaDelivery,
   fetchCsBostaDelivery,
+  findBostaDeliveryByCustomer,
   readBostaLiveDetails,
   readBostaShippingFee,
   readBostaStatus,
@@ -174,6 +175,64 @@ async function writeConfirmation(input: {
   });
 }
 
+function customerHints(
+  snapshot: Snapshot,
+  answers: CsChecklistAnswerInput[],
+): { phone: string; name: string; cod: number | null } {
+  const snap = snapshot || {};
+  const phone = textOf(answers, "primary_phone") || String(snap.phone || "").trim();
+  const name = textOf(answers, "customer_name") || String(snap.customerName || "").trim();
+  const total = Number(String(snap.total || "").replace(/,/g, ""));
+  return { phone, name, cod: Number.isFinite(total) ? total : null };
+}
+
+async function linkExistingBostaDelivery(input: {
+  confirmationId: number;
+  wooOrderId: number;
+  wooOrderNumber: string;
+  snapshot: Snapshot;
+  answers: CsChecklistAnswerInput[];
+}): Promise<BostaWaybillState | null> {
+  const hints = customerHints(input.snapshot, input.answers);
+  if (!hints.phone) return null;
+  const found = await findBostaDeliveryByCustomer(hints);
+  if (!found?.trackingNumber) return null;
+  const status = normalizeBostaStatus(found.status || "created");
+  await writeConfirmation({
+    confirmationId: input.confirmationId,
+    snapshot: input.snapshot,
+    trackingNumber: found.trackingNumber,
+    bostaStatus: status,
+    bostaShippingFee: found.shippingFee,
+    bostaSyncError: null,
+  });
+  const built = partyFromAnswers({
+    answers: input.answers,
+    snapshot: input.snapshot,
+    wooOrderId: input.wooOrderId,
+    wooOrderNumber: input.wooOrderNumber,
+  });
+  if (built.ok) {
+    await rememberShipment({
+      wooOrderId: input.wooOrderId,
+      wooOrderNumber: input.wooOrderNumber,
+      trackingNumber: found.trackingNumber,
+      deliveryId: found.deliveryId,
+      status,
+      party: built.party,
+    });
+  }
+  return present({
+    trackingNumber: found.trackingNumber,
+    bostaStatus: status,
+    bostaShippingFee: found.shippingFee,
+    message: "تم ربط بوليصة بوسطة الموجودة.",
+    bostaSyncedAt: new Date(),
+    cod: found.cod,
+    lastEvent: found.lastEvent,
+  });
+}
+
 export async function syncCsBostaWaybill(input: {
   confirmationId: number;
   wooOrderId: number;
@@ -189,8 +248,29 @@ export async function syncCsBostaWaybill(input: {
     return present({ trackingNumber: input.trackingNumber, bostaStatus: input.bostaStatus, bostaShippingFee: input.bostaShippingFee });
   }
 
+  let trackingNumber = input.trackingNumber;
+  let bostaStatus = input.bostaStatus;
+  let bostaShippingFee = input.bostaShippingFee;
+  if (!trackingNumber) {
+    const linked = await linkExistingBostaDelivery(input);
+    if (linked?.trackingNumber) {
+      trackingNumber = linked.trackingNumber;
+      bostaStatus = linked.bostaStatus;
+      bostaShippingFee = linked.bostaShippingFee;
+    }
+  }
+
   const built = partyFromAnswers(input);
   if (!built.ok) {
+    if (trackingNumber) {
+      return present({
+        trackingNumber,
+        bostaStatus,
+        bostaShippingFee,
+        message: "تم ربط بوليصة بوسطة الموجودة.",
+        bostaSyncedAt: new Date(),
+      });
+    }
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,
@@ -209,53 +289,53 @@ export async function syncCsBostaWaybill(input: {
     });
   }
 
-  if (input.trackingNumber && bostaStatusLocksEdits(input.bostaStatus)) {
+  if (trackingNumber && bostaStatusLocksEdits(bostaStatus)) {
     const message = "تم حفظ التعديل هنا. بوسطة قفلت تعديل البوليصة بعد استلام المندوب.";
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,
-      trackingNumber: input.trackingNumber,
-      bostaStatus: input.bostaStatus,
-      bostaShippingFee: input.bostaShippingFee,
+      trackingNumber,
+      bostaStatus,
+      bostaShippingFee,
       bostaSyncError: message,
     });
     return present({
-      trackingNumber: input.trackingNumber,
-      bostaStatus: input.bostaStatus,
-      bostaShippingFee: input.bostaShippingFee,
+      trackingNumber,
+      bostaStatus,
+      bostaShippingFee,
       bostaSyncError: message,
       message,
       bostaSyncedAt: new Date(),
     });
   }
 
-  if (input.trackingNumber) {
-    const updated = await updateCsBostaDelivery(input.trackingNumber, built.party);
+  if (trackingNumber) {
+    const updated = await updateCsBostaDelivery(trackingNumber, built.party);
     const message = updated.ok
       ? "تم تحديث بوليصة بوسطة."
       : updated.message;
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,
-      trackingNumber: input.trackingNumber,
-      bostaStatus: input.bostaStatus,
-      bostaShippingFee: input.bostaShippingFee,
+      trackingNumber,
+      bostaStatus,
+      bostaShippingFee,
       bostaSyncError: updated.ok ? null : message,
     });
     if (updated.ok) {
       await rememberShipment({
         wooOrderId: input.wooOrderId,
         wooOrderNumber: input.wooOrderNumber,
-        trackingNumber: input.trackingNumber,
-        status: input.bostaStatus,
+        trackingNumber,
+        status: bostaStatus,
         party: built.party,
         raw: updated.raw,
       });
     }
     return present({
-      trackingNumber: input.trackingNumber,
-      bostaStatus: input.bostaStatus,
-      bostaShippingFee: input.bostaShippingFee,
+      trackingNumber,
+      bostaStatus,
+      bostaShippingFee,
       bostaSyncError: updated.ok ? null : message,
       message,
       bostaSyncedAt: new Date(),
@@ -325,7 +405,10 @@ export async function syncCsBostaWaybill(input: {
 export async function refreshCsBostaWaybill(confirmationId: number): Promise<BostaWaybillState | null> {
   const prisma = getPrismaClient();
   if (!prisma) return null;
-  const row = await prisma.csOrderConfirmation.findUnique({ where: { id: confirmationId } });
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    include: { answers: true },
+  });
   if (!row) return null;
   const typed = row as {
     shippingCompany?: string | null;
@@ -337,9 +420,26 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
   };
   const tracking = String(typed.trackingNumber || "").trim();
   const currentFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
-  if (typed.shippingCompany !== "bosta" || !tracking) {
+  if (typed.shippingCompany !== "bosta") {
     return present({
       trackingNumber: tracking || null,
+      bostaStatus: typed.bostaStatus,
+      bostaShippingFee: Number.isFinite(currentFee) ? currentFee : null,
+      bostaSyncedAt: typed.bostaSyncedAt,
+      bostaSyncError: typed.bostaSyncError,
+    });
+  }
+  if (!tracking) {
+    const linked = await linkExistingBostaDelivery({
+      confirmationId,
+      wooOrderId: row.wooOrderId,
+      wooOrderNumber: row.wooOrderNumber,
+      snapshot: (row.customerSnapshot as Snapshot) || null,
+      answers: row.answers,
+    });
+    if (linked) return linked;
+    return present({
+      trackingNumber: null,
       bostaStatus: typed.bostaStatus,
       bostaShippingFee: Number.isFinite(currentFee) ? currentFee : null,
       bostaSyncedAt: typed.bostaSyncedAt,
