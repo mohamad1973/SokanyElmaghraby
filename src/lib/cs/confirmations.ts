@@ -396,7 +396,13 @@ export async function listCsConfirmationsForViewer(opts: {
 
   const inWindow = rows.filter((row) => {
     const snap = row.customerSnapshot as { dateCreated?: string } | null;
-    return isWithinCairoLastDays(snap?.dateCreated, 30);
+    if (isWithinCairoLastDays(snap?.dateCreated, 30)) return true;
+    const workIso = [
+      row.confirmedAt instanceof Date ? row.confirmedAt.toISOString() : row.confirmedAt,
+      row.startedAt instanceof Date ? row.startedAt.toISOString() : row.startedAt,
+      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+    ];
+    return workIso.some((iso) => typeof iso === "string" && isWithinCairoLastDays(iso, 30));
   });
 
   if (opts.isSupervisor) {
@@ -449,6 +455,9 @@ export function serializeCsQueueItem(row: {
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
   customerSnapshot?: unknown;
+  startedAt?: Date | string | null;
+  confirmedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
   createdAt: Date;
   assignedAgent?: { id: number; name: string } | null;
   answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
@@ -533,6 +542,21 @@ export function serializeCsQueueItem(row: {
           trackingNumber,
           items: raw.items || [],
         }
+      : null,
+    startedAt: row.startedAt
+      ? typeof row.startedAt === "string"
+        ? row.startedAt
+        : row.startedAt.toISOString()
+      : null,
+    confirmedAt: row.confirmedAt
+      ? typeof row.confirmedAt === "string"
+        ? row.confirmedAt
+        : row.confirmedAt.toISOString()
+      : null,
+    updatedAt: row.updatedAt
+      ? typeof row.updatedAt === "string"
+        ? row.updatedAt
+        : row.updatedAt.toISOString()
       : null,
     createdAt: row.createdAt.toISOString(),
   };

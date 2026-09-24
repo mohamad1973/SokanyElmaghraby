@@ -50,6 +50,9 @@ export type CsQueueItem = {
     trackingNumber?: string | null;
     items?: Array<{ name: string; quantity?: number; sku?: string }>;
   } | null;
+  startedAt?: string | null;
+  confirmedAt?: string | null;
+  updatedAt?: string | null;
   createdAt: string;
 };
 
@@ -332,8 +335,23 @@ function normalizeFilterStatus(status: string) {
   return status;
 }
 
-function applyFilters(items: CsQueueItem[], f: DraftFilters) {
+function itemWorkDateIsos(item: CsQueueItem): string[] {
+  return [item.confirmedAt, item.startedAt, item.updatedAt, item.createdAt].filter(
+    (v): v is string => Boolean(v && String(v).trim()),
+  );
+}
+
+function itemMatchesDateFilter(item: CsQueueItem, f: DraftFilters, forAgentWorkDate: boolean) {
+  if (!f.dateFrom || !f.dateTo) return true;
+  if (forAgentWorkDate) {
+    return itemWorkDateIsos(item).some((iso) => isWithinCairoDateRange(iso, f.dateFrom, f.dateTo));
+  }
+  return isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo);
+}
+
+function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervisor?: boolean }) {
   const status = normalizeFilterStatus(f.status);
+  const forAgentWorkDate = !opts?.isSupervisor;
   return items
     .filter((item) => {
       if (status !== "all" && item.status !== status) {
@@ -358,9 +376,7 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters) {
       }
       if (f.shipping !== "all" && (item.shippingCompany || "") !== f.shipping) return false;
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
-      if (f.dateFrom && f.dateTo) {
-        if (!isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo)) return false;
-      }
+      if (!itemMatchesDateFilter(item, f, forAgentWorkDate)) return false;
       if (f.trackingFilter === "missing" && itemTrackingNumber(item)) return false;
       if (f.waybillFilter === "not_printed" && item.waybillPrinted) return false;
       return true;
@@ -440,8 +456,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         .filter((item) => matchesSearchQuery(item, q))
         .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
     }
-    return applyFilters(items, applied);
-  }, [items, draft.query, applied]);
+    return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor) });
+  }, [items, draft.query, applied, isSupervisor]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
 
