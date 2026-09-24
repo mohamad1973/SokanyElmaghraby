@@ -1,7 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-import { authenticateCsAgent, isElevatedCsRole, isCsAdminRole, isTransfersRole, canAccessTransfers } from "@/lib/cs/agents";
+import { authenticateCsAgent, csFlagsFromRoles, type CsRole } from "@/lib/cs/agents";
 import { authenticateDriver } from "@/lib/dispatch/drivers";
 
 const adminEmail = process.env.ADMIN_EMAIL || "admin@sokany-eg.com";
@@ -36,6 +36,7 @@ export const authOptions: NextAuthOptions = {
         token.csAgentId = user.csAgentId;
         token.csIsSupervisor = user.csIsSupervisor;
         token.csRole = user.csRole;
+        token.csRoles = user.csRoles;
         token.csIsAdmin = user.csIsAdmin;
         token.csIsTransfers = user.csIsTransfers;
         token.csCanAccessTransfers = user.csCanAccessTransfers;
@@ -53,6 +54,7 @@ export const authOptions: NextAuthOptions = {
         session.user.csRole =
           (token.csRole as "agent" | "supervisor" | "admin" | "transfers" | "shipping" | "accounting" | undefined) ||
           undefined;
+        session.user.csRoles = (token.csRoles as CsRole[] | undefined) || undefined;
         session.user.csIsAdmin = Boolean(token.csIsAdmin);
         session.user.csIsTransfers = Boolean(token.csIsTransfers);
         session.user.csCanAccessTransfers = Boolean(token.csCanAccessTransfers);
@@ -130,18 +132,19 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const csRole = agent.role;
+        const flags = csFlagsFromRoles((agent.roles as CsRole[] | undefined) || [agent.role as CsRole]);
         return {
           id: `cs-${agent.id}`,
           email: agent.email,
           name: agent.name,
           role: "cs" as const,
           csAgentId: agent.id,
-          csIsSupervisor: isElevatedCsRole(csRole),
-          csRole,
-          csIsAdmin: isCsAdminRole(csRole),
-          csIsTransfers: isTransfersRole(csRole),
-          csCanAccessTransfers: canAccessTransfers(csRole),
+          csIsSupervisor: flags.isSupervisor,
+          csRole: flags.role,
+          csRoles: flags.roles,
+          csIsAdmin: flags.isAdmin,
+          csIsTransfers: flags.isTransfers,
+          csCanAccessTransfers: flags.canAccessTransfers,
         };
       },
     }),

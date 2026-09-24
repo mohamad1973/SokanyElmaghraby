@@ -587,21 +587,21 @@ function CsHeader() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
-  const role = session?.user?.csRole || "";
-  const isTransfersOnly = Boolean(session?.user?.csIsTransfers) && !session?.user?.csIsAdmin && !session?.user?.csIsSupervisor;
-  const isShipping = role === "shipping";
-  const isAccounting = role === "accounting";
-  const canSettlement = isShipping || Boolean(session?.user?.csIsSupervisor) || Boolean(session?.user?.csIsAdmin);
-  const canTransfers = Boolean(
-    session?.user?.csIsAdmin ||
-      session?.user?.csIsSupervisor ||
-      session?.user?.csIsTransfers ||
-      session?.user?.csCanAccessTransfers ||
-      role === "admin" ||
-      role === "supervisor" ||
-      role === "transfers",
-  );
-  const showOrdersQueue = !isTransfersOnly;
+  const roles = session?.user?.csRoles?.length
+    ? session.user.csRoles
+    : session?.user?.csRole
+      ? [session.user.csRole]
+      : [];
+  const isSupervisor = roles.includes("supervisor") || roles.includes("admin") || Boolean(session?.user?.csIsSupervisor);
+  const isAdmin = roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
+  const isTransfers = roles.includes("transfers") || Boolean(session?.user?.csIsTransfers);
+  const isShipping = roles.includes("shipping");
+  const isAccounting = roles.includes("accounting");
+  const canSeeOrders = roles.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting");
+  const isTransfersOnly = isTransfers && !canSeeOrders && !isShipping;
+  const canSettlement = isShipping || isSupervisor || isAdmin;
+  const canTransfers = isTransfers || isSupervisor || isAdmin || Boolean(session?.user?.csCanAccessTransfers);
+  const showOrdersQueue = roles.length ? canSeeOrders : !isTransfersOnly && !isShipping;
 
   const navClass = (active: boolean) =>
     `shrink-0 rounded-full px-3 py-1.5 whitespace-nowrap ${
@@ -632,7 +632,7 @@ function CsHeader() {
           </div>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {showOrdersQueue && !isShipping ? (
+          {showOrdersQueue ? (
             <Link href="/cs" className={navClass(pathname === "/cs")}>
               الأوردرات
             </Link>
@@ -647,17 +647,17 @@ function CsHeader() {
               التحويلات
             </Link>
           ) : null}
-          {session?.user?.csIsSupervisor ? (
+          {isSupervisor ? (
             <Link href="/cs/assign" className={navClass(pathname.startsWith("/cs/assign"))}>
               توزيع
             </Link>
           ) : null}
-          {session?.user?.csIsSupervisor ? (
+          {isSupervisor ? (
             <Link href="/cs/reports" className={navClass(pathname.startsWith("/cs/reports"))}>
               تقارير
             </Link>
           ) : null}
-          {session?.user?.csIsAdmin ? (
+          {isAdmin ? (
             <Link href="/cs/users" className={navClass(pathname.startsWith("/cs/users"))}>
               المستخدمون
             </Link>

@@ -12,6 +12,7 @@ declare module "next-auth" {
       csAgentId?: number;
       csIsSupervisor?: boolean;
       csRole?: CsAgentRole;
+      csRoles?: CsAgentRole[];
       csIsAdmin?: boolean;
       csIsTransfers?: boolean;
       csCanAccessTransfers?: boolean;
@@ -24,6 +25,7 @@ declare module "next-auth" {
     csAgentId?: number;
     csIsSupervisor?: boolean;
     csRole?: CsAgentRole;
+    csRoles?: CsAgentRole[];
     csIsAdmin?: boolean;
     csIsTransfers?: boolean;
     csCanAccessTransfers?: boolean;
@@ -37,6 +39,7 @@ declare module "next-auth/jwt" {
     csAgentId?: number;
     csIsSupervisor?: boolean;
     csRole?: CsAgentRole;
+    csRoles?: CsAgentRole[];
     csIsAdmin?: boolean;
     csIsTransfers?: boolean;
     csCanAccessTransfers?: boolean;

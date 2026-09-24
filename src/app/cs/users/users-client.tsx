@@ -7,19 +7,60 @@ type AgentRow = {
   name: string;
   username: string;
   role: string;
+  roles?: string[];
   phone?: string | null;
   isActive: boolean;
   createdAt?: string;
 };
 
-const ROLE_LABEL: Record<string, string> = {
-  agent: "خدمة عملاء عادي",
-  supervisor: "مشرف توزيع",
-  transfers: "التحويلات",
-  shipping: "حساب شحن — سيد تميمة",
-  accounting: "موظف حسابات",
-  admin: "أدمن",
-};
+const PERMISSIONS = [
+  { id: "agent", label: "خدمة عملاء" },
+  { id: "supervisor", label: "مشرف توزيع" },
+  { id: "transfers", label: "التحويلات" },
+  { id: "shipping", label: "شحن تميمة" },
+  { id: "accounting", label: "حسابات" },
+  { id: "admin", label: "أدمن" },
+] as const;
+
+function RoleChecks({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string[];
+  disabled?: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  const allOn = PERMISSIONS.every((item) => value.includes(item.id));
+  function toggle(id: string) {
+    const next = value.includes(id) ? value.filter((role) => role !== id) : [...value, id];
+    onChange(next);
+  }
+  return (
+    <div className="grid gap-1 text-xs font-bold">
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={allOn}
+          disabled={disabled}
+          onChange={() => onChange(allOn ? [] : PERMISSIONS.map((item) => item.id))}
+        />
+        كل الصلاحيات
+      </label>
+      {PERMISSIONS.map((item) => (
+        <label key={item.id} className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={value.includes(item.id)}
+            disabled={disabled}
+            onChange={() => toggle(item.id)}
+          />
+          {item.label}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 export function CsUsersClient() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -29,7 +70,7 @@ export function CsUsersClient() {
     name: "",
     username: "",
     password: "",
-    role: "agent",
+    roles: ["agent"] as string[],
     phone: "",
   });
 
@@ -49,6 +90,10 @@ export function CsUsersClient() {
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.roles.length) {
+      setMessage("اختر صلاحية واحدة على الأقل.");
+      return;
+    }
     setLoading(true);
     setMessage("");
     const res = await fetch("/api/cs/agents", {
@@ -62,14 +107,14 @@ export function CsUsersClient() {
       setMessage(data.message || "تعذر الإنشاء.");
       return;
     }
-    setForm({ name: "", username: "", password: "", role: "agent", phone: "" });
+    setForm({ name: "", username: "", password: "", roles: ["agent"], phone: "" });
     setMessage("تم إنشاء المستخدم.");
     await load();
   }
 
   async function patch(
     id: number,
-    patchBody: Partial<{ role: string; isActive: boolean; password: string; phone: string }>,
+    patchBody: Partial<{ roles: string[]; isActive: boolean; password: string; phone: string }>,
   ) {
     setLoading(true);
     setMessage("");
@@ -84,7 +129,7 @@ export function CsUsersClient() {
       setMessage(data.message || "تعذر التحديث.");
       return;
     }
-    setMessage("تم التحديث.");
+    setMessage("تم التحديث. الموظف يحتاج تسجيل دخول من جديد.");
     await load();
   }
 
@@ -150,21 +195,10 @@ export function CsUsersClient() {
             className="rounded-xl border border-[#E5E5E5] px-3 py-2"
           />
         </label>
-        <label className="grid gap-1 text-sm font-bold">
-          الدور
-          <select
-            value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-            className="rounded-xl border border-[#E5E5E5] px-3 py-2"
-          >
-            <option value="agent">خدمة عملاء عادي</option>
-            <option value="supervisor">مشرف توزيع</option>
-            <option value="transfers">التحويلات</option>
-            <option value="shipping">حساب شحن — سيد تميمة</option>
-            <option value="accounting">موظف حسابات</option>
-            <option value="admin">أدمن</option>
-          </select>
-        </label>
+        <div className="grid gap-1 text-sm font-bold">
+          الصلاحيات
+          <RoleChecks value={form.roles} onChange={(roles) => setForm((f) => ({ ...f, roles }))} />
+        </div>
         <label className="grid gap-1 text-sm font-bold">
           واتساب
           <input
@@ -190,7 +224,7 @@ export function CsUsersClient() {
             <tr>
               <th className="px-3 py-2">الاسم</th>
               <th className="px-3 py-2">اليوزرنيم</th>
-              <th className="px-3 py-2">الدور</th>
+              <th className="px-3 py-2">الصلاحيات</th>
               <th className="px-3 py-2">واتساب</th>
               <th className="px-3 py-2">الحالة</th>
               <th className="px-3 py-2">إجراءات</th>
@@ -205,21 +239,19 @@ export function CsUsersClient() {
                 </td>
                 <td className="px-3 py-2">
                   {a.username === "mm" ? (
-                    <span className="font-bold">{ROLE_LABEL.admin}</span>
+                    <span className="font-bold">أدمن</span>
                   ) : (
-                    <select
-                      value={a.role === "admin" ? "admin" : a.role}
-                      disabled={loading || a.username === "mm"}
-                      onChange={(e) => void patch(a.id, { role: e.target.value })}
-                      className="rounded-lg border border-[#E5E5E5] px-2 py-1"
-                    >
-                      <option value="agent">خدمة عملاء عادي</option>
-                      <option value="supervisor">مشرف توزيع</option>
-                      <option value="transfers">التحويلات</option>
-                      <option value="shipping">حساب شحن — سيد تميمة</option>
-                      <option value="accounting">موظف حسابات</option>
-                      <option value="admin">أدمن</option>
-                    </select>
+                    <RoleChecks
+                      value={a.roles?.length ? a.roles : [a.role]}
+                      disabled={loading}
+                      onChange={(roles) => {
+                        if (!roles.length) {
+                          setMessage("اختر صلاحية واحدة على الأقل.");
+                          return;
+                        }
+                        void patch(a.id, { roles });
+                      }}
+                    />
                   )}
                 </td>
                 <td className="px-3 py-2" dir="ltr">

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, isTransfersRole, listActiveCsAgents } from "@/lib/cs/agents";
+import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -14,10 +14,10 @@ export default async function CsHomePage() {
   await ensureDefaultCsAgent();
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (isTransfersRole(viewer.role) || session.user.csIsTransfers) {
+  if (!viewer.canSeeOrders && (viewer.isTransfers || session.user.csIsTransfers)) {
     redirect("/cs/transfers");
   }
-  if (isShippingRole(viewer.role) || isShippingRole(session.user.csRole)) {
+  if (!viewer.canSeeOrders && (viewer.isShipping || isShippingRole(session.user.csRole))) {
     redirect("/cs/settlement");
   }
 

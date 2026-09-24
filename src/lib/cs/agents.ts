@@ -35,6 +35,43 @@ export function isAccountingRole(role: string | null | undefined) {
   return role === "accounting";
 }
 
+export function parseCsRoles(raw: {
+  role?: string | null;
+  roles?: string | string[] | null;
+  isSupervisor?: boolean;
+  username?: string | null;
+  email?: string | null;
+}): CsRole[] {
+  const listed = (Array.isArray(raw.roles) ? raw.roles.join(",") : String(raw.roles || ""))
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part): part is CsRole => CS_ROLES.includes(part as CsRole));
+  const unique = [...new Set(listed)];
+  if (unique.length) return unique;
+  const single = CS_ROLES.includes(raw.role as CsRole) ? (raw.role as CsRole) : roleFromLegacy(raw);
+  return [single];
+}
+
+export function csFlagsFromRoles(roles: CsRole[]) {
+  const list = roles.length ? roles : (["agent"] as CsRole[]);
+  return {
+    roles: list,
+    role: list[0],
+    isSupervisor: list.includes("supervisor") || list.includes("admin"),
+    isAdmin: list.includes("admin"),
+    isTransfers: list.includes("transfers"),
+    isShipping: list.includes("shipping"),
+    isAccounting: list.includes("accounting"),
+    canAccessTransfers: list.includes("transfers") || list.includes("supervisor") || list.includes("admin"),
+    canSeeOrders: list.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting"),
+  };
+}
+
+export function normalizeCsRoles(input: string[] | undefined): CsRole[] {
+  const unique = [...new Set((input || []).filter((role): role is CsRole => CS_ROLES.includes(role as CsRole)))];
+  return unique;
+}
+
 export function canAccessTransfers(role: string | null | undefined) {
   return role === "transfers" || role === "supervisor" || role === "admin";
 }
@@ -265,6 +302,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",
     "ALTER TABLE `CsAgent` ADD COLUMN `role` VARCHAR(32) NOT NULL DEFAULT 'agent'",
     "ALTER TABLE `CsAgent` ADD COLUMN `phone` VARCHAR(32) NULL",
+    "ALTER TABLE `CsAgent` ADD COLUMN `roles` VARCHAR(191) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingCompany` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `handedToCarrier` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `deliveredToCustomer` BOOLEAN NOT NULL DEFAULT false",
@@ -336,8 +374,12 @@ async function runEnsureCsTables() {
         AND LOWER(COALESCE(\`username\`, '')) <> 'mm'
     `);
     await prisma.$executeRawUnsafe(`
-      UPDATE \`CsAgent\` SET \`role\` = 'admin', \`isSupervisor\` = true
+      UPDATE \`CsAgent\` SET \`role\` = 'admin', \`roles\` = 'admin', \`isSupervisor\` = true
       WHERE LOWER(COALESCE(\`username\`, '')) = 'mm'
+    `);
+    await prisma.$executeRawUnsafe(`
+      UPDATE \`CsAgent\` SET \`roles\` = \`role\`
+      WHERE \`roles\` IS NULL OR \`roles\` = ''
     `);
   } catch {
     // ignore
@@ -364,6 +406,7 @@ type AgentRow = {
   isActive: boolean;
   isSupervisor: boolean;
   role: string;
+  roles?: string | null;
   phone?: string | null;
 };
 
@@ -376,7 +419,7 @@ async function findAgentByUsername(username: string): Promise<AgentRow | null> {
   try {
     const rows = await prisma.$queryRawUnsafe<AgentRow[]>(
       `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`,
-              COALESCE(\`role\`, 'agent') AS \`role\`, \`phone\`
+              COALESCE(\`role\`, 'agent') AS \`role\`, \`roles\`, \`phone\`
        FROM \`CsAgent\` WHERE LOWER(\`username\`) = ? LIMIT 1`,
       u,
     );
@@ -402,6 +445,7 @@ async function findAgentByUsername(username: string): Promise<AgentRow | null> {
         isActive: byEmail.isActive,
         isSupervisor: Boolean((byEmail as { isSupervisor?: boolean }).isSupervisor),
         role: (byEmail as { role?: string }).role || roleFromLegacy(byEmail as { isSupervisor?: boolean; username?: string }),
+        roles: (byEmail as { roles?: string | null }).roles || null,
       };
     }
   } catch {
@@ -422,12 +466,14 @@ export async function authenticateCsAgent(usernameOrEmail: string, password: str
   const ok = await verifyPassword(password, agent.passwordHash);
   if (!ok) return null;
 
-  const role = (CS_ROLES.includes(agent.role as CsRole) ? agent.role : roleFromLegacy(agent)) as CsRole;
+  const roles = parseCsRoles(agent);
+  const flags = csFlagsFromRoles(roles);
   return {
     ...agent,
     username: agent.username || normalizeCsUsername(usernameOrEmail),
-    role,
-    isSupervisor: isElevatedCsRole(role),
+    role: flags.role,
+    roles: flags.roles,
+    isSupervisor: flags.isSupervisor,
   };
 }
 
@@ -531,6 +577,7 @@ export async function createCsAgent(input: {
   username: string;
   password: string;
   role?: CsRole;
+  roles?: CsRole[];
   phone?: string | null;
 }) {
   const prisma = getPrismaClient();
@@ -551,22 +598,24 @@ export async function createCsAgent(input: {
   const name = input.name.trim();
   if (name.length < 2) return { ok: false as const, message: "الاسم قصير جداً." };
 
-  const role: CsRole = input.role && CS_ROLES.includes(input.role) ? input.role : "agent";
+  const roles = normalizeCsRoles(input.roles?.length ? input.roles : input.role ? [input.role] : ["agent"]);
+  if (!roles.length) return { ok: false as const, message: "اختر صلاحية واحدة على الأقل." };
+  const flags = csFlagsFromRoles(roles);
   const email = syntheticCsEmail(username);
   const passwordHash = await hashPassword(input.password);
-  const isSupervisor = isElevatedCsRole(role);
   const phone = normalizeAgentPhone(input.phone);
 
   try {
     await prisma.$executeRawUnsafe(
-      `INSERT INTO \`CsAgent\` (\`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`, \`role\`, \`phone\`, \`createdAt\`, \`updatedAt\`)
-       VALUES (?, ?, ?, ?, true, ?, ?, ?, NOW(3), NOW(3))`,
+      `INSERT INTO \`CsAgent\` (\`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`, \`role\`, \`roles\`, \`phone\`, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, true, ?, ?, ?, ?, NOW(3), NOW(3))`,
       name,
       email,
       username,
       passwordHash,
-      isSupervisor,
-      role,
+      flags.isSupervisor,
+      flags.role,
+      flags.roles.join(","),
       phone,
     );
   } catch (error) {
@@ -581,7 +630,7 @@ export async function createCsAgent(input: {
   if (!agent) return { ok: false as const, message: "تم الإنشاء لكن تعذر الجلب." };
   return {
     ok: true as const,
-    agent: { ...agent, role, isSupervisor, username, phone },
+    agent: { ...agent, role: flags.role, roles: flags.roles, isSupervisor: flags.isSupervisor, username, phone },
   };
 }
 
@@ -599,21 +648,26 @@ export async function listCsAgents() {
         isActive: boolean;
         isSupervisor: boolean;
         role: string;
+        roles: string | null;
         phone: string | null;
         createdAt: Date;
       }>
     >(
       `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`isActive\`, \`isSupervisor\`,
-              COALESCE(\`role\`, 'agent') AS \`role\`, \`phone\`, \`createdAt\`
+              COALESCE(\`role\`, 'agent') AS \`role\`, \`roles\`, \`phone\`, \`createdAt\`
        FROM \`CsAgent\` ORDER BY \`name\` ASC`,
     );
-    return rows.map((r) => ({
-      ...r,
-      username: r.username || normalizeCsUsername(r.email.split("@")[0] || ""),
-      role: (CS_ROLES.includes(r.role as CsRole) ? r.role : roleFromLegacy(r)) as CsRole,
-      isSupervisor: isElevatedCsRole(r.role) || r.isSupervisor,
-      phone: r.phone || null,
-    }));
+    return rows.map((r) => {
+      const flags = csFlagsFromRoles(parseCsRoles(r));
+      return {
+        ...r,
+        username: r.username || normalizeCsUsername(r.email.split("@")[0] || ""),
+        role: flags.role,
+        roles: flags.roles,
+        isSupervisor: flags.isSupervisor,
+        phone: r.phone || null,
+      };
+    });
   } catch {
     await ensureCsTables();
     const fallback = await prisma.csAgent.findMany({ orderBy: { name: "asc" } });
@@ -621,14 +675,20 @@ export async function listCsAgents() {
       const username =
         (r as { username?: string | null }).username ||
         normalizeCsUsername(r.email.split("@")[0] || "");
-      const role =
-        ((r as { role?: string }).role as CsRole) ||
-        roleFromLegacy({ isSupervisor: (r as { isSupervisor?: boolean }).isSupervisor, username });
+      const flags = csFlagsFromRoles(
+        parseCsRoles({
+          role: (r as { role?: string }).role,
+          roles: (r as { roles?: string | null }).roles,
+          isSupervisor: (r as { isSupervisor?: boolean }).isSupervisor,
+          username,
+        }),
+      );
       return {
         ...r,
         username,
-        role,
-        isSupervisor: isElevatedCsRole(role),
+        role: flags.role,
+        roles: flags.roles,
+        isSupervisor: flags.isSupervisor,
       };
     });
   }
@@ -646,17 +706,18 @@ export async function getCsAgentById(id: number) {
   try {
     const rows = await prisma.$queryRawUnsafe<AgentRow[]>(
       `SELECT \`id\`, \`name\`, \`email\`, \`username\`, \`passwordHash\`, \`isActive\`, \`isSupervisor\`,
-              COALESCE(\`role\`, 'agent') AS \`role\`, \`phone\`
+              COALESCE(\`role\`, 'agent') AS \`role\`, \`roles\`, \`phone\`
        FROM \`CsAgent\` WHERE \`id\` = ? LIMIT 1`,
       id,
     );
     const r = rows[0];
     if (!r) return null;
-    const role = (CS_ROLES.includes(r.role as CsRole) ? r.role : roleFromLegacy(r)) as CsRole;
+    const flags = csFlagsFromRoles(parseCsRoles(r));
     return {
       ...r,
-      role,
-      isSupervisor: isElevatedCsRole(role),
+      role: flags.role,
+      roles: flags.roles,
+      isSupervisor: flags.isSupervisor,
       username: r.username || "",
       phone: r.phone || null,
     };
@@ -668,6 +729,7 @@ export async function getCsAgentById(id: number) {
 export async function updateCsAgentByAdmin(input: {
   id: number;
   role?: CsRole;
+  roles?: CsRole[];
   isActive?: boolean;
   name?: string;
   password?: string;
@@ -683,6 +745,9 @@ export async function updateCsAgentByAdmin(input: {
   const username = normalizeCsUsername(
     (agent as { username?: string }).username || agent.email?.split("@")[0] || "",
   );
+  if (username === "mm" && input.roles && !input.roles.includes("admin")) {
+    return { ok: false as const, message: "لا يمكن تغيير دور الأدمن mm." };
+  }
   if (username === "mm" && input.role && input.role !== "admin") {
     return { ok: false as const, message: "لا يمكن تغيير دور الأدمن mm." };
   }
@@ -690,8 +755,14 @@ export async function updateCsAgentByAdmin(input: {
     return { ok: false as const, message: "لا يمكن تعطيل الأدمن mm." };
   }
 
-  const role = input.role ?? ((agent as { role?: CsRole }).role || "agent");
-  const isSupervisor = isElevatedCsRole(role);
+  const currentRoles = parseCsRoles(agent as { role?: string; roles?: string | null; isSupervisor?: boolean; username?: string });
+  const nextRoles = input.roles?.length
+    ? normalizeCsRoles(input.roles)
+    : input.role
+      ? normalizeCsRoles([input.role])
+      : currentRoles;
+  if (!nextRoles.length) return { ok: false as const, message: "اختر صلاحية واحدة على الأقل." };
+  const flags = csFlagsFromRoles(nextRoles);
   const name = input.name?.trim() || agent.name;
   const isActive = input.isActive ?? agent.isActive;
   const phone =
@@ -705,11 +776,12 @@ export async function updateCsAgentByAdmin(input: {
 
   try {
     await prisma.$executeRawUnsafe(
-      `UPDATE \`CsAgent\` SET \`name\` = ?, \`role\` = ?, \`isSupervisor\` = ?, \`isActive\` = ?,
+      `UPDATE \`CsAgent\` SET \`name\` = ?, \`role\` = ?, \`roles\` = ?, \`isSupervisor\` = ?, \`isActive\` = ?,
        \`passwordHash\` = ?, \`phone\` = ?, \`updatedAt\` = NOW(3) WHERE \`id\` = ?`,
       name,
-      role,
-      isSupervisor,
+      flags.role,
+      flags.roles.join(","),
+      flags.isSupervisor,
       isActive,
       passwordHash,
       phone,

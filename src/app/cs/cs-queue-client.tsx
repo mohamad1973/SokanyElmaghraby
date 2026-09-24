@@ -910,9 +910,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
               >
                 <div
                   className={`grid gap-x-2 gap-y-2 text-sm font-bold text-[#14213D] ${
-                    isSupervisor
+                    isSupervisor && isAccounting
                       ? "grid-cols-2 sm:grid-cols-7"
-                      : isAccounting
+                      : isSupervisor || isAccounting
                         ? "grid-cols-2 sm:grid-cols-6"
                         : "grid-cols-2 sm:grid-cols-4"
                   }`}
@@ -1009,7 +1009,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                       <span className="text-xs font-extrabold">{item.assignedAgent?.name || "—"}</span>
                     </div>
                   ) : null}
-                  {isSupervisor || isAccounting ? (
+                  {isAccounting ? (
                     <div className="flex items-center self-center">
                       <InvoiceBox
                         confirmationId={item.id}

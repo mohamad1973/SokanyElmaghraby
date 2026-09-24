@@ -31,6 +31,7 @@ export async function GET() {
       name: a.name,
       username: a.username,
       role: a.role,
+      roles: (a as { roles?: CsRole[] }).roles || [a.role],
       phone: (a as { phone?: string | null }).phone || null,
       isActive: a.isActive,
       createdAt: a.createdAt,
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     username?: string;
     password?: string;
     role?: string;
+    roles?: string[];
     phone?: string;
   } = {};
   try {
@@ -55,16 +57,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "طلب غير صالح." }, { status: 400 });
   }
 
-  const role = (body.role || "agent") as CsRole;
-  if (!CS_ROLES.includes(role)) {
-    return NextResponse.json({ message: "دور غير صالح." }, { status: 400 });
+  const roles = (Array.isArray(body.roles) ? body.roles : body.role ? [body.role] : ["agent"]).filter(
+    (role): role is CsRole => CS_ROLES.includes(role as CsRole),
+  );
+  if (!roles.length) {
+    return NextResponse.json({ message: "اختر صلاحية واحدة على الأقل." }, { status: 400 });
   }
 
   const result = await createCsAgent({
     name: String(body.name || ""),
     username: String(body.username || ""),
     password: String(body.password || ""),
-    role,
+    roles,
     phone: body.phone,
   });
   if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
@@ -78,6 +82,7 @@ export async function PATCH(request: Request) {
   let body: {
     id?: number;
     role?: string;
+    roles?: string[];
     isActive?: boolean;
     name?: string;
     password?: string;
@@ -92,14 +97,18 @@ export async function PATCH(request: Request) {
   const id = Number(body.id);
   if (!id) return NextResponse.json({ message: "معرّف مطلوب." }, { status: 400 });
 
-  const role = body.role as CsRole | undefined;
-  if (role && !CS_ROLES.includes(role)) {
-    return NextResponse.json({ message: "دور غير صالح." }, { status: 400 });
+  const roles = Array.isArray(body.roles)
+    ? body.roles.filter((role): role is CsRole => CS_ROLES.includes(role as CsRole))
+    : body.role && CS_ROLES.includes(body.role as CsRole)
+      ? [body.role as CsRole]
+      : undefined;
+  if (Array.isArray(body.roles) && !roles?.length) {
+    return NextResponse.json({ message: "اختر صلاحية واحدة على الأقل." }, { status: 400 });
   }
 
   const result = await updateCsAgentByAdmin({
     id,
-    role,
+    roles,
     isActive: body.isActive,
     name: body.name,
     password: body.password,

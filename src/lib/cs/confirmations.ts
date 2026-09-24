@@ -1000,11 +1000,9 @@ export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: str
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
 
-  const { isAccountingRole } = await import("@/lib/cs/agents");
   const viewer = await resolveCsViewer(input.agentId);
-  const allowed = viewer.isSupervisor || viewer.isAdmin || viewer.isAccounting || isAccountingRole(viewer.role);
-  if (!allowed) {
-    return { ok: false as const, message: "غير مصرح بإدخال رقم الفاتورة." };
+  if (!viewer.isAccounting) {
+    return { ok: false as const, message: "لموظف الحسابات فقط." };
   }
 
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
@@ -1082,8 +1080,7 @@ export async function isOrderCsConfirmed(wooOrderId: number) {
 }
 
 export async function resolveCsViewer(agentId: number) {
-  const { getCsAgentById, isElevatedCsRole, isCsAdminRole, canAccessTransfers, isTransfersRole, isShippingRole, isAccountingRole } =
-    await import("@/lib/cs/agents");
+  const { getCsAgentById, csFlagsFromRoles, parseCsRoles } = await import("@/lib/cs/agents");
   await ensureCsTables();
   const agent = await getCsAgentById(agentId);
   if (!agent) {
@@ -1094,25 +1091,17 @@ export async function resolveCsViewer(agentId: number) {
       isShipping: false,
       isAccounting: false,
       canAccessTransfers: false,
+      canSeeOrders: true,
       role: "agent" as const,
+      roles: ["agent"] as const,
       agent: null,
     };
   }
-  const role = ((agent as { role?: string }).role || "agent") as
-    | "agent"
-    | "supervisor"
-    | "admin"
-    | "transfers"
-    | "shipping"
-    | "accounting";
+  const flags = csFlagsFromRoles(
+    parseCsRoles(agent as { role?: string; roles?: string | string[] | null; isSupervisor?: boolean; username?: string }),
+  );
   return {
-    isSupervisor: isElevatedCsRole(role),
-    isAdmin: isCsAdminRole(role),
-    isTransfers: isTransfersRole(role),
-    isShipping: isShippingRole(role),
-    isAccounting: isAccountingRole(role),
-    canAccessTransfers: canAccessTransfers(role),
-    role,
+    ...flags,
     agent,
   };
 }
