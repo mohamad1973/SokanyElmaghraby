@@ -28,6 +28,7 @@ export type CsQueueItem = {
   depositPaid?: boolean;
   depositApprovalStatus?: string | null;
   salesOrderNumber?: string | null;
+  invoiceNumber?: string | null;
   handedToCarrier?: boolean;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
@@ -335,10 +336,10 @@ function itemMatchesDateFilter(item: CsQueueItem, f: DraftFilters, forAgentWorkD
   return isWithinCairoDateRange(item.customerSnapshot?.dateCreated, f.dateFrom, f.dateTo);
 }
 
-function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervisor?: boolean }) {
+function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervisor?: boolean; orderDate?: boolean }) {
   const status = normalizeFilterStatus(f.status);
   const distributedOnly = status === "DISTRIBUTED";
-  const forAgentWorkDate = !opts?.isSupervisor;
+  const forAgentWorkDate = !opts?.isSupervisor && !opts?.orderDate;
   return items
     .filter((item) => {
       if (distributedOnly) {
@@ -380,16 +381,81 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
 
+function InvoiceBox({
+  confirmationId,
+  value,
+  onSaved,
+}: {
+  confirmationId: number;
+  value: string;
+  onSaved: (next: string) => void;
+}) {
+  const [text, setText] = useState(value);
+  const [hint, setHint] = useState("");
+  const timer = useRef<number | null>(null);
+  const saved = useRef(value);
+
+  useEffect(() => {
+    setText(value);
+    saved.current = value;
+  }, [value]);
+
+  async function persist(next: string) {
+    const trimmed = next.trim();
+    if (trimmed === saved.current.trim()) return;
+    setHint("حفظ...");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceNumber: trimmed }),
+    });
+    const data = (await res.json()) as { message?: string; invoiceNumber?: string | null };
+    if (!res.ok) {
+      setHint(data.message || "تعذر الحفظ");
+      return;
+    }
+    const stored = data.invoiceNumber || "";
+    saved.current = stored;
+    onSaved(stored);
+    setHint("تم");
+  }
+
+  return (
+    <label className="flex w-full min-w-[8rem] flex-col gap-0.5">
+      <span className="text-[10px] font-bold text-[#14213D]/55">رقم الفاتورة</span>
+      <input
+        value={text}
+        dir="ltr"
+        placeholder="رقم الفاتورة"
+        onChange={(e) => {
+          const next = e.target.value;
+          setText(next);
+          setHint("");
+          if (timer.current) window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => void persist(next), 700);
+        }}
+        onBlur={() => {
+          if (timer.current) window.clearTimeout(timer.current);
+          void persist(text);
+        }}
+        className="h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold text-[#14213D]"
+      />
+      {hint ? <span className="text-[10px] font-bold text-[#14213D]/60">{hint}</span> : null}
+    </label>
+  );
+}
+
 type Props = {
   initialItems: CsQueueItem[];
   isSupervisor?: boolean;
+  isAccounting?: boolean;
   agents?: Array<{ id: number; name: string }>;
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
 type TemimaPrintScope = "confirmed" | "all";
 
-export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props) {
+export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents = [] }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
   const [message, setMessage] = useState("");
@@ -455,8 +521,8 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         .filter((item) => matchesSearchQuery(item, q))
         .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
     }
-    return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor) });
-  }, [items, draft.query, applied, isSupervisor]);
+    return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor), orderDate: Boolean(isAccounting) });
+  }, [items, draft.query, applied, isSupervisor, isAccounting]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
 
@@ -484,13 +550,14 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
           ? items.filter((item) => matchesSearchQuery(item, q))
           : applyFilters(items, { ...applied, status: "CONFIRMED", shipping: "sayed_temima" }, {
               isSupervisor: Boolean(isSupervisor),
+              orderDate: Boolean(isAccounting),
             });
         return source.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
       }
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -805,7 +872,7 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
         {filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
             {items.length === 0 ? (
-              isSupervisor ? (
+              isSupervisor || isAccounting ? (
                 <p className="font-bold">لا توجد طلبات — راجعي المزامنة أو وسّعي تاريخ الفلتر.</p>
               ) : (
                 <p className="font-bold">لم يُوزَّع عليكِ أوردرات بعد — اطلبي من المشرفة التوزيع.</p>
@@ -842,7 +909,11 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
               >
                 <div
                   className={`grid gap-x-2 gap-y-2 text-sm font-bold text-[#14213D] ${
-                    isSupervisor ? "grid-cols-2 sm:grid-cols-6" : "grid-cols-2 sm:grid-cols-4"
+                    isSupervisor
+                      ? "grid-cols-2 sm:grid-cols-6"
+                      : isAccounting && applied.status === "CONFIRMED"
+                        ? "grid-cols-2 sm:grid-cols-5"
+                        : "grid-cols-2 sm:grid-cols-4"
                   }`}
                 >
                   <div className="flex flex-col gap-0.5">
@@ -936,6 +1007,22 @@ export function CsQueueClient({ initialItems, isSupervisor, agents = [] }: Props
                     <div className="flex flex-col items-center justify-center gap-0.5 self-center text-center">
                       <span className="text-[10px] font-bold text-[#14213D]/55">موظف خدمة العملاء</span>
                       <span className="text-xs font-extrabold">{item.assignedAgent?.name || "—"}</span>
+                    </div>
+                  ) : null}
+                  {isAccounting && applied.status === "CONFIRMED" ? (
+                    <div className="flex flex-col items-stretch justify-center gap-1 self-center">
+                      <span className="text-[10px] font-bold text-[#14213D]/55">
+                        {item.assignedAgent?.name || "بدون موظف"}
+                      </span>
+                      <InvoiceBox
+                        confirmationId={item.id}
+                        value={item.invoiceNumber || ""}
+                        onSaved={(next) =>
+                          setItems((prev) =>
+                            prev.map((row) => (row.id === item.id ? { ...row, invoiceNumber: next || null } : row)),
+                          )
+                        }
+                      />
                     </div>
                   ) : null}
                   <div className="flex flex-col items-start gap-1.5 sm:items-end">

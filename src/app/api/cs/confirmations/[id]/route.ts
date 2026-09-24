@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { saveCsConfirmation, setCsShippingCompany, resolveCsViewer } from "@/lib/cs/confirmations";
+import { saveCsConfirmation, setCsInvoiceNumber, setCsShippingCompany, resolveCsViewer } from "@/lib/cs/confirmations";
 import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -22,6 +22,7 @@ type Body = {
   depositToMethod?: string | null;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   salesOrderNumber?: string | null;
+  invoiceNumber?: string | null;
   postCancel?: {
     invoice?: "before" | "after" | "";
     systemNo?: string | null;
@@ -53,6 +54,36 @@ export async function PUT(request: Request, context: Context) {
     return NextResponse.json({ message: "طلب غير صالح." }, { status: 400 });
   }
 
+  if (
+    body.invoiceNumber !== undefined &&
+    body.shippingCompany === undefined &&
+    !body.answers &&
+    !body.finalize &&
+    !body.failContact &&
+    !body.cancelOrder &&
+    body.trackingNumber === undefined &&
+    body.waybillPrinted === undefined &&
+    body.depositAmount === undefined &&
+    body.depositPaid === undefined &&
+    body.depositPayMethod === undefined &&
+    body.depositFromNumber === undefined &&
+    body.depositToPhone === undefined &&
+    body.depositToMethod === undefined &&
+    body.salesOrderNumber === undefined &&
+    !body.postCancel &&
+    !body.followUp
+  ) {
+    const result = await setCsInvoiceNumber({
+      id: numericId,
+      invoiceNumber: body.invoiceNumber,
+      agentId: session.user.csAgentId,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ message: result.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, invoiceNumber: result.invoiceNumber });
+  }
+
   // Supervisor-only quick update for shipping company from the queue
   if (
     body.shippingCompany !== undefined &&
@@ -69,6 +100,7 @@ export async function PUT(request: Request, context: Context) {
     body.depositToPhone === undefined &&
     body.depositToMethod === undefined &&
     body.salesOrderNumber === undefined &&
+    body.invoiceNumber === undefined &&
     !body.postCancel &&
     !body.followUp
   ) {

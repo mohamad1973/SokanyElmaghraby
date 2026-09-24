@@ -17,6 +17,7 @@ const ROLE_LABEL: Record<string, string> = {
   supervisor: "مشرف توزيع",
   transfers: "التحويلات",
   shipping: "حساب شحن — سيد تميمة",
+  accounting: "موظف حسابات",
   admin: "أدمن",
 };
 
@@ -160,6 +161,7 @@ export function CsUsersClient() {
             <option value="supervisor">مشرف توزيع</option>
             <option value="transfers">التحويلات</option>
             <option value="shipping">حساب شحن — سيد تميمة</option>
+            <option value="accounting">موظف حسابات</option>
             <option value="admin">أدمن</option>
           </select>
         </label>
@@ -215,6 +217,7 @@ export function CsUsersClient() {
                       <option value="supervisor">مشرف توزيع</option>
                       <option value="transfers">التحويلات</option>
                       <option value="shipping">حساب شحن — سيد تميمة</option>
+                      <option value="accounting">موظف حسابات</option>
                       <option value="admin">أدمن</option>
                     </select>
                   )}

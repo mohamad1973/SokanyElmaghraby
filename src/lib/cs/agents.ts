@@ -3,9 +3,9 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/security";
 
-export type CsRole = "agent" | "supervisor" | "admin" | "transfers" | "shipping";
+export type CsRole = "agent" | "supervisor" | "admin" | "transfers" | "shipping" | "accounting";
 
-export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin", "transfers", "shipping"];
+export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin", "transfers", "shipping", "accounting"];
 
 export function normalizeCsUsername(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
@@ -29,6 +29,10 @@ export function isTransfersRole(role: string | null | undefined) {
 
 export function isShippingRole(role: string | null | undefined) {
   return role === "shipping";
+}
+
+export function isAccountingRole(role: string | null | undefined) {
+  return role === "accounting";
 }
 
 export function canAccessTransfers(role: string | null | undefined) {
@@ -288,6 +292,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelSystemNo` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelRefundPaid` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumber` VARCHAR(64) NULL",
   ];
 
   for (const sql of alters) {

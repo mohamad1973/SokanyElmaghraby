@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { ensureCsTables, ensureDefaultCsAgent, isShippingRole, isTransfersRole, listActiveCsAgents } from "@/lib/cs/agents";
+import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, isTransfersRole, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -22,15 +22,24 @@ export default async function CsHomePage() {
   }
 
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
+  const isAccounting = viewer.isAccounting || isAccountingRole(session.user.csRole);
 
   const rows = await listCsConfirmationsForViewer({
     agentId: session.user.csAgentId,
     isSupervisor,
+    seeAll: isAccounting,
   });
   const initialItems = rows.map(serializeCsQueueItem);
   const agents = isSupervisor
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
 
-  return <CsQueueClient initialItems={initialItems} isSupervisor={isSupervisor} agents={agents} />;
+  return (
+    <CsQueueClient
+      initialItems={initialItems}
+      isSupervisor={isSupervisor}
+      isAccounting={isAccounting}
+      agents={agents}
+    />
+  );
 }

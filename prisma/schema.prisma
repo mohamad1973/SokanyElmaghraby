@@ -285,6 +285,7 @@ model CsOrderConfirmation {
   handedToCarrierAt    DateTime?
   shippingAssignedAt   DateTime?
   salesOrderNumber     String?             @db.VarChar(64)
+  invoiceNumber        String?             @db.VarChar(64)
   postCancelInvoice    String?             @db.VarChar(16)
   postCancelSystemNo   String?             @db.VarChar(64)
   postCancelRefundPaid Boolean             @default(false)

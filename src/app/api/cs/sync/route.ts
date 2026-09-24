@@ -6,6 +6,7 @@ import {
   serializeCsQueueItem,
   syncRecentOrdersForCs,
 } from "@/lib/cs/confirmations";
+import { isAccountingRole } from "@/lib/cs/agents";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function POST() {
@@ -23,6 +24,7 @@ export async function POST() {
   const rows = await listCsConfirmationsForViewer({
     agentId: session.user.csAgentId,
     isSupervisor: viewer.isSupervisor || Boolean(session.user.csIsSupervisor),
+    seeAll: viewer.isAccounting || isAccountingRole(session.user.csRole),
   });
 
   return NextResponse.json({

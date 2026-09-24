@@ -590,6 +590,7 @@ function CsHeader() {
   const role = session?.user?.csRole || "";
   const isTransfersOnly = Boolean(session?.user?.csIsTransfers) && !session?.user?.csIsAdmin && !session?.user?.csIsSupervisor;
   const isShipping = role === "shipping";
+  const isAccounting = role === "accounting";
   const canSettlement = isShipping || Boolean(session?.user?.csIsSupervisor) || Boolean(session?.user?.csIsAdmin);
   const canTransfers = Boolean(
     session?.user?.csIsAdmin ||
@@ -621,7 +622,9 @@ function CsHeader() {
                 ? "التحويلات · مخزون الموقع وحد الطلب"
                 : isShipping
                   ? "حساب شحن · تصفية سيد تميمة"
-                  : "خدمة العملاء · الأوردرات والتحويلات"}
+                  : isAccounting
+                    ? "حسابات · كل الأوردرات"
+                    : "خدمة العملاء · الأوردرات والتحويلات"}
             </p>
           </div>
           <div className="shrink-0 overflow-visible">

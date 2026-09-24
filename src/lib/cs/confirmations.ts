@@ -309,6 +309,7 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
 export async function listCsConfirmationsForViewer(opts: {
   agentId: number;
   isSupervisor: boolean;
+  seeAll?: boolean;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
@@ -409,7 +410,7 @@ export async function listCsConfirmationsForViewer(opts: {
     return workIso.some((iso) => typeof iso === "string" && isWithinCairoLastDays(iso, 30));
   });
 
-  if (opts.isSupervisor) {
+  if (opts.isSupervisor || opts.seeAll) {
     return sortByOrderNumberDesc(inWindow);
   }
 
@@ -459,6 +460,7 @@ export function serializeCsQueueItem(row: {
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
   salesOrderNumber?: string | null;
+  invoiceNumber?: string | null;
   customerSnapshot?: unknown;
   startedAt?: Date | string | null;
   confirmedAt?: Date | string | null;
@@ -524,6 +526,7 @@ export function serializeCsQueueItem(row: {
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
     salesOrderNumber: row.salesOrderNumber ? String(row.salesOrderNumber) : null,
+    invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : null,
     assignedAgent: row.assignedAgent
       ? { id: row.assignedAgent.id, name: row.assignedAgent.name }
       : null,
@@ -992,6 +995,31 @@ export async function saveCsConfirmation(input: {
   return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
 }
 
+export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: string | null; agentId: number }) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const { isAccountingRole } = await import("@/lib/cs/agents");
+  const viewer = await resolveCsViewer(input.agentId);
+  if (!viewer.isAccounting && !isAccountingRole(viewer.role)) {
+    return { ok: false as const, message: "لموظف الحسابات فقط." };
+  }
+
+  const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
+  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+  if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
+    return { ok: false as const, message: "رقم الفاتورة للأوردرات المحفوظة فقط." };
+  }
+
+  const invoiceNumber = String(input.invoiceNumber || "").trim() || null;
+  await prisma.csOrderConfirmation.update({
+    where: { id: input.id },
+    data: { invoiceNumber } as never,
+  });
+  return { ok: true as const, invoiceNumber };
+}
+
 export async function setCsShippingCompany(input: {
   id: number;
   shippingCompany: "bosta" | "sayed_temima" | null;
@@ -1056,7 +1084,7 @@ export async function isOrderCsConfirmed(wooOrderId: number) {
 }
 
 export async function resolveCsViewer(agentId: number) {
-  const { getCsAgentById, isElevatedCsRole, isCsAdminRole, canAccessTransfers, isTransfersRole, isShippingRole } =
+  const { getCsAgentById, isElevatedCsRole, isCsAdminRole, canAccessTransfers, isTransfersRole, isShippingRole, isAccountingRole } =
     await import("@/lib/cs/agents");
   await ensureCsTables();
   const agent = await getCsAgentById(agentId);
@@ -1066,6 +1094,7 @@ export async function resolveCsViewer(agentId: number) {
       isAdmin: false,
       isTransfers: false,
       isShipping: false,
+      isAccounting: false,
       canAccessTransfers: false,
       role: "agent" as const,
       agent: null,
@@ -1076,12 +1105,14 @@ export async function resolveCsViewer(agentId: number) {
     | "supervisor"
     | "admin"
     | "transfers"
-    | "shipping";
+    | "shipping"
+    | "accounting";
   return {
     isSupervisor: isElevatedCsRole(role),
     isAdmin: isCsAdminRole(role),
     isTransfers: isTransfersRole(role),
     isShipping: isShippingRole(role),
+    isAccounting: isAccountingRole(role),
     canAccessTransfers: canAccessTransfers(role),
     role,
     agent,
