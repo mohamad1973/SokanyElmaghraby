@@ -37,14 +37,17 @@ export async function POST(request: Request, context: RouteContext) {
     state: { value: statusValue },
   });
   const shipment = result.ok ? result.shipment : null;
+  const businessReference = String(payload.businessReference || "").trim();
+  const parsedReference = businessReference ? Number.parseInt(businessReference, 10) : NaN;
   const wooOrderId = shipment?.wooOrderId
     ? shipment.wooOrderId
-    : payload.businessReference
-      ? Number.parseInt(payload.businessReference, 10)
+    : Number.isInteger(parsedReference)
+      ? parsedReference
       : null;
 
   await recordBostaWebhookOnConfirmation({
     wooOrderId,
+    wooOrderNumber: businessReference || null,
     trackingNumber: payload.trackingNumber || shipment?.trackingNumber,
     status: statusValue,
     raw: payload,

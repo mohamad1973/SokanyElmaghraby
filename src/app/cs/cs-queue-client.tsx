@@ -1036,9 +1036,13 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                     <span className="rounded-lg bg-[#14213D] px-2.5 py-1 text-base font-extrabold text-[#FCA311]">
                       {item.customerSnapshot?.total || "—"} ج.م
                     </span>
-                    {item.shippingCompany === "bosta" && item.bostaShippingFee != null ? (
+                    {item.shippingCompany === "bosta" && (item.trackingNumber || item.bostaShippingFee != null) ? (
                       <span className="text-[11px] font-extrabold text-[#14213D]">
-                        شحن بوسطة: {Number(item.bostaShippingFee).toLocaleString("ar-EG")} ج.م
+                        {item.trackingNumber ? <span dir="ltr">{item.trackingNumber}</span> : null}
+                        {item.trackingNumber && item.bostaShippingFee != null ? " · " : ""}
+                        {item.bostaShippingFee != null
+                          ? `شحن ${Number(item.bostaShippingFee).toLocaleString("ar-EG")} ج.م`
+                          : ""}
                         {item.bostaStatus ? ` · ${getBostaStatusLabelAr(item.bostaStatus)}` : ""}
                       </span>
                     ) : null}

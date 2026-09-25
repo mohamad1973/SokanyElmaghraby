@@ -11,7 +11,7 @@ import {
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
-import { syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
+import { attachBostaWaybillByOrderReference, syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import {
   parseWooOrderNumber,
 } from "@/lib/cs/assignments";
@@ -282,7 +282,32 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
     });
   }
 
+  await linkMissingBostaWaybills(prisma);
+
   return { ok: true as const, imported, totalFetched: windowOrders.length };
+}
+
+async function linkMissingBostaWaybills(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+  const missing = await prisma.csOrderConfirmation.findMany({
+    where: {
+      AND: [
+        { OR: [{ trackingNumber: null }, { trackingNumber: "" }] },
+        { OR: [{ shippingCompany: "bosta" }, { shippingCompany: null }] },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    take: 15,
+  });
+  for (const row of missing) {
+    if (String(row.trackingNumber || "").trim()) continue;
+    if (row.shippingCompany === "sayed_temima") continue;
+    await attachBostaWaybillByOrderReference({
+      confirmationId: row.id,
+      wooOrderId: row.wooOrderId,
+      wooOrderNumber: row.wooOrderNumber,
+      snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
+    });
+  }
 }
 
 export async function enqueueOrderFromWebhook(order: AdminOrder) {
@@ -291,7 +316,7 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
   await ensureCsTables();
   const tracking = await trackingMapForOrders([order.id]);
 
-  await prisma.csOrderConfirmation.upsert({
+  const saved = await prisma.csOrderConfirmation.upsert({
     where: { wooOrderId: order.id },
     create: {
       wooOrderId: order.id,
@@ -305,6 +330,14 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       customerSnapshot: snapshotFromOrder(order, tracking.get(order.id)),
     },
   });
+  if (!String(saved.trackingNumber || "").trim() && saved.shippingCompany !== "sayed_temima") {
+    await attachBostaWaybillByOrderReference({
+      confirmationId: saved.id,
+      wooOrderId: saved.wooOrderId,
+      wooOrderNumber: saved.wooOrderNumber,
+      snapshot: (saved.customerSnapshot as Record<string, unknown> | null) || null,
+    });
+  }
 }
 
 export async function listCsConfirmationsForViewer(opts: {

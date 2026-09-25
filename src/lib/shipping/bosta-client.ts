@@ -317,6 +317,108 @@ export async function findBostaDeliveryByCustomer(input: {
   };
 }
 
+function rowBusinessReference(row: Record<string, unknown>) {
+  const nested = asRecord(row.delivery) || asRecord(row.shipment) || {};
+  return String(row.businessReference || row.business_reference || nested.businessReference || "").trim();
+}
+
+function sameOrderReference(left: string, right: string) {
+  const a = left.trim();
+  const b = right.trim();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const da = a.replace(/\D/g, "");
+  const db = b.replace(/\D/g, "");
+  return da.length >= 3 && da === db;
+}
+
+export async function findBostaDeliveryByOrderReference(input: {
+  wooOrderId: number;
+  wooOrderNumber: string;
+}): Promise<BostaCustomerLookup> {
+  const refs = [...new Set([String(input.wooOrderId), String(input.wooOrderNumber || "").trim()].filter((value) => value && value !== "0"))];
+  if (!refs.length) return { details: null, error: "رقم الأوردر غير موجود للبحث في بوسطة." };
+
+  const found: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const remember = (rows: Record<string, unknown>[]) => {
+    for (const row of rows) {
+      const key = rowTracking(row) || rowBusinessReference(row) || JSON.stringify(row).slice(0, 120);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push(row);
+    }
+  };
+
+  for (const ref of refs) {
+    const searched = await bostaFetch("/deliveries/search", {
+      method: "POST",
+      body: JSON.stringify({
+        businessReference: ref,
+        businessReferences: refs,
+        pageNumber: 0,
+        pageLimit: 20,
+        limit: 20,
+      }),
+    });
+    if (searched.ok) remember(deliveryRecords(searched.data));
+    const query = new URLSearchParams({
+      pageNumber: "0",
+      pageLimit: "20",
+      limit: "20",
+      businessReference: ref,
+    });
+    const listed = await bostaFetch(`/deliveries?${query.toString()}`);
+    if (listed.ok) remember(deliveryRecords(listed.data));
+  }
+
+  const matched = found.filter((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
+  if (!matched.length) return { details: null, error: null };
+
+  const finished = (row: Record<string, unknown>) =>
+    /delivered|returned|cancel|terminated|^45$|^46$|^48$|^49$/.test(
+      String(readBostaStatus(row) || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, "_"),
+    );
+  const active = matched.filter((row) => !finished(row));
+  const pool = active.length ? active : matched;
+  const ranked = pool
+    .map((row) => {
+      const details = readBostaLiveDetails(row);
+      const trackingNumber = details.trackingNumber || rowTracking(row);
+      const created = Date.parse(String(row.createdAt || row.updatedAt || "")) || 0;
+      return { details: { ...details, trackingNumber }, created };
+    })
+    .filter((row) => row.details.trackingNumber)
+    .sort((a, b) => b.created - a.created);
+
+  const picked = ranked[0];
+  if (!picked?.details.trackingNumber) return { details: null, error: null };
+  const live = await fetchCsBostaDelivery(picked.details.trackingNumber);
+  if (live.ok) {
+    const payload = bostaPayload(live.data);
+    const liveRef = payload ? rowBusinessReference(payload) : "";
+    if (liveRef && !refs.some((ref) => sameOrderReference(liveRef, ref))) {
+      return { details: null, error: null };
+    }
+    const full = readBostaLiveDetails(live.data);
+    return {
+      details: {
+        trackingNumber: full.trackingNumber || picked.details.trackingNumber,
+        deliveryId: full.deliveryId || picked.details.deliveryId,
+        status: full.status || picked.details.status,
+        shippingFee: full.shippingFee ?? picked.details.shippingFee,
+        cod: full.cod ?? picked.details.cod,
+        lastEvent: full.lastEvent || picked.details.lastEvent,
+      },
+      error: null,
+    };
+  }
+  return { details: picked.details, error: null };
+}
+
 export const DEFAULT_BOSTA_WEBHOOK_SECRET = "sokany-bosta-webhook-secret";
 
 export function getBostaWebhookSecret() {

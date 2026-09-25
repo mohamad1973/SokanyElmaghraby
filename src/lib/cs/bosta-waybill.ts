@@ -6,6 +6,7 @@ import {
   createCsBostaDelivery,
   fetchCsBostaDelivery,
   findBostaDeliveryByCustomer,
+  findBostaDeliveryByOrderReference,
   readBostaLiveDetails,
   readBostaShippingFee,
   readBostaStatus,
@@ -186,6 +187,83 @@ function customerHints(
   return { phone, name, cod: Number.isFinite(total) ? total : null };
 }
 
+async function persistLinkedDelivery(input: {
+  confirmationId: number;
+  wooOrderId: number;
+  wooOrderNumber: string;
+  snapshot: Snapshot;
+  answers: CsChecklistAnswerInput[];
+  found: {
+    trackingNumber: string;
+    deliveryId: string | null;
+    status: string | null;
+    shippingFee: number | null;
+    cod: number | null;
+    lastEvent: string | null;
+  };
+}): Promise<BostaWaybillState> {
+  const status = normalizeBostaStatus(input.found.status || "created");
+  await writeConfirmation({
+    confirmationId: input.confirmationId,
+    snapshot: input.snapshot,
+    trackingNumber: input.found.trackingNumber,
+    bostaStatus: status,
+    bostaShippingFee: input.found.shippingFee,
+    bostaSyncError: null,
+  });
+  const built = partyFromAnswers({
+    answers: input.answers,
+    snapshot: input.snapshot,
+    wooOrderId: input.wooOrderId,
+    wooOrderNumber: input.wooOrderNumber,
+  });
+  if (built.ok) {
+    await rememberShipment({
+      wooOrderId: input.wooOrderId,
+      wooOrderNumber: input.wooOrderNumber,
+      trackingNumber: input.found.trackingNumber,
+      deliveryId: input.found.deliveryId,
+      status,
+      party: built.party,
+    });
+  }
+  return present({
+    trackingNumber: input.found.trackingNumber,
+    bostaStatus: status,
+    bostaShippingFee: input.found.shippingFee,
+    message: "تم ربط بوليصة بوسطة الموجودة.",
+    bostaSyncedAt: new Date(),
+    cod: input.found.cod,
+    lastEvent: input.found.lastEvent,
+  });
+}
+
+export async function attachBostaWaybillByOrderReference(input: {
+  confirmationId: number;
+  wooOrderId: number;
+  wooOrderNumber: string;
+  snapshot: Snapshot;
+}): Promise<boolean> {
+  const lookup = await findBostaDeliveryByOrderReference({
+    wooOrderId: input.wooOrderId,
+    wooOrderNumber: input.wooOrderNumber,
+  });
+  if (!lookup.details?.trackingNumber) return false;
+  await persistLinkedDelivery({
+    ...input,
+    answers: [],
+    found: {
+      trackingNumber: lookup.details.trackingNumber,
+      deliveryId: lookup.details.deliveryId,
+      status: lookup.details.status,
+      shippingFee: lookup.details.shippingFee,
+      cod: lookup.details.cod,
+      lastEvent: lookup.details.lastEvent,
+    },
+  });
+  return true;
+}
+
 async function linkExistingBostaDelivery(input: {
   confirmationId: number;
   wooOrderId: number;
@@ -193,9 +271,26 @@ async function linkExistingBostaDelivery(input: {
   snapshot: Snapshot;
   answers: CsChecklistAnswerInput[];
 }): Promise<BostaWaybillState | null> {
+  const byOrder = await findBostaDeliveryByOrderReference({
+    wooOrderId: input.wooOrderId,
+    wooOrderNumber: input.wooOrderNumber,
+  });
+  if (byOrder.details?.trackingNumber) {
+    return persistLinkedDelivery({
+      ...input,
+      found: {
+        trackingNumber: byOrder.details.trackingNumber,
+        deliveryId: byOrder.details.deliveryId,
+        status: byOrder.details.status,
+        shippingFee: byOrder.details.shippingFee,
+        cod: byOrder.details.cod,
+        lastEvent: byOrder.details.lastEvent,
+      },
+    });
+  }
   const hints = customerHints(input.snapshot, input.answers);
   if (!hints.phone) {
-    const message = "مفيش رقم موبايل للبحث عن البوليصة في بوسطة.";
+    const message = "مفيش بوليصة على بوسطة بنفس رقم الأوردر.";
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,
@@ -214,7 +309,7 @@ async function linkExistingBostaDelivery(input: {
   const lookup = await findBostaDeliveryByCustomer(hints);
   const found = lookup.details;
   if (!found?.trackingNumber) {
-    const message = lookup.error || "مفيش بوليصة على بوسطة بنفس موبايل العميل.";
+    const message = lookup.error || "مفيش بوليصة على بوسطة بنفس رقم الأوردر.";
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,
@@ -230,39 +325,16 @@ async function linkExistingBostaDelivery(input: {
       bostaSyncedAt: new Date(),
     });
   }
-  const status = normalizeBostaStatus(found.status || "created");
-  await writeConfirmation({
-    confirmationId: input.confirmationId,
-    snapshot: input.snapshot,
-    trackingNumber: found.trackingNumber,
-    bostaStatus: status,
-    bostaShippingFee: found.shippingFee,
-    bostaSyncError: null,
-  });
-  const built = partyFromAnswers({
-    answers: input.answers,
-    snapshot: input.snapshot,
-    wooOrderId: input.wooOrderId,
-    wooOrderNumber: input.wooOrderNumber,
-  });
-  if (built.ok) {
-    await rememberShipment({
-      wooOrderId: input.wooOrderId,
-      wooOrderNumber: input.wooOrderNumber,
+  return persistLinkedDelivery({
+    ...input,
+    found: {
       trackingNumber: found.trackingNumber,
       deliveryId: found.deliveryId,
-      status,
-      party: built.party,
-    });
-  }
-  return present({
-    trackingNumber: found.trackingNumber,
-    bostaStatus: status,
-    bostaShippingFee: found.shippingFee,
-    message: "تم ربط بوليصة بوسطة الموجودة.",
-    bostaSyncedAt: new Date(),
-    cod: found.cod,
-    lastEvent: found.lastEvent,
+      status: found.status,
+      shippingFee: found.shippingFee,
+      cod: found.cod,
+      lastEvent: found.lastEvent,
+    },
   });
 }
 
@@ -515,6 +587,7 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
 
 export async function recordBostaWebhookOnConfirmation(input: {
   wooOrderId?: number | null;
+  wooOrderNumber?: string | null;
   trackingNumber?: string | null;
   status?: string | null;
   raw?: unknown;
@@ -522,12 +595,17 @@ export async function recordBostaWebhookOnConfirmation(input: {
   const prisma = getPrismaClient();
   if (!prisma) return;
   const tracking = String(input.trackingNumber || "").trim();
+  const wooOrderNumber = String(input.wooOrderNumber || "").trim();
   const wooOrderId = input.wooOrderId && Number.isFinite(input.wooOrderId) ? input.wooOrderId : null;
-  const row = wooOrderId
-    ? await prisma.csOrderConfirmation.findUnique({ where: { wooOrderId } })
-    : tracking
-      ? await prisma.csOrderConfirmation.findFirst({ where: { trackingNumber: tracking } })
-      : null;
+  let row = wooOrderNumber
+    ? await prisma.csOrderConfirmation.findFirst({ where: { wooOrderNumber } })
+    : null;
+  if (!row && wooOrderId) {
+    row = await prisma.csOrderConfirmation.findUnique({ where: { wooOrderId } });
+  }
+  if (!row && tracking) {
+    row = await prisma.csOrderConfirmation.findFirst({ where: { trackingNumber: tracking } });
+  }
   if (!row) return;
   const typed = row as { bostaShippingFee?: unknown; trackingNumber?: string | null; bostaStatus?: string | null };
   const fee = readBostaShippingFee(input.raw);
