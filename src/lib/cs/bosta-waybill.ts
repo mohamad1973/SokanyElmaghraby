@@ -243,12 +243,41 @@ export async function attachBostaWaybillByOrderReference(input: {
   wooOrderId: number;
   wooOrderNumber: string;
   snapshot: Snapshot;
+  knownTracking?: string | null;
 }): Promise<boolean> {
+  const knownTracking = String(input.knownTracking || "").trim();
+  if (knownTracking) {
+    const live = await fetchCsBostaDelivery(knownTracking);
+    const details = live.ok ? readBostaLiveDetails(live.data) : null;
+    await persistLinkedDelivery({
+      ...input,
+      answers: [],
+      found: {
+        trackingNumber: details?.trackingNumber || knownTracking,
+        deliveryId: details?.deliveryId || null,
+        status: details?.status || null,
+        shippingFee: details?.shippingFee ?? null,
+        cod: details?.cod ?? null,
+        lastEvent: details?.lastEvent || null,
+      },
+    });
+    return true;
+  }
   const lookup = await findBostaDeliveryByOrderReference({
     wooOrderId: input.wooOrderId,
     wooOrderNumber: input.wooOrderNumber,
   });
-  if (!lookup.details?.trackingNumber) return false;
+  if (!lookup.details?.trackingNumber) {
+    await writeConfirmation({
+      confirmationId: input.confirmationId,
+      snapshot: input.snapshot,
+      trackingNumber: null,
+      bostaStatus: null,
+      bostaShippingFee: null,
+      bostaSyncError: "مفيش بوليصة على بوسطة بنفس رقم الأوردر.",
+    });
+    return false;
+  }
   await persistLinkedDelivery({
     ...input,
     answers: [],

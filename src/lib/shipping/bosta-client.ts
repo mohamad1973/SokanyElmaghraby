@@ -70,14 +70,16 @@ async function bostaFetch<T>(path: string, init?: RequestInit): Promise<{ ok: tr
     }
 
     if (!response.ok) {
-      const detail =
+      const rawDetail =
         typeof parsed === "object" && parsed && "message" in parsed
           ? String((parsed as { message?: string }).message)
           : bodyText.slice(0, 250);
+      const detail = rawDetail.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const readable = detail && !/doctype|cannot get|cannot post/i.test(detail) && detail.length <= 180;
 
       return {
         ok: false,
-        message: `Bosta API ${response.status}: ${detail || "تعذر تنفيذ الطلب"}`,
+        message: readable ? `Bosta API ${response.status}: ${detail}` : "تعذر البحث في بوسطة.",
       };
     }
 
@@ -221,7 +223,6 @@ export async function findBostaDeliveryByCustomer(input: {
     }
     return added;
   };
-  const phoneHit = () => found.some((row) => rowHasPhone(row, phoneKey));
 
   const searched = await bostaFetch("/deliveries/search", {
     method: "POST",
@@ -238,35 +239,6 @@ export async function findBostaDeliveryByCustomer(input: {
   });
   if (searched.ok) remember(deliveryRecords(searched.data));
   else errors.push(searched.message);
-
-  if (!phoneHit()) {
-    const query = new URLSearchParams({
-      pageNumber: "0",
-      pageLimit: "50",
-      limit: "50",
-      phone: variants[0],
-      mobilePhone: variants[0],
-      receiverPhone: variants[0],
-    });
-    const filtered = await bostaFetch(`/deliveries?${query.toString()}`);
-    if (filtered.ok) remember(deliveryRecords(filtered.data));
-    else errors.push(filtered.message);
-  }
-
-  if (!phoneHit()) {
-    for (let page = 0; page < 8; page += 1) {
-      const listed = await bostaFetch(`/deliveries?pageNumber=${page}&pageLimit=50&limit=50`);
-      if (!listed.ok) {
-        errors.push(listed.message);
-        break;
-      }
-      const pageRows = deliveryRecords(listed.data);
-      if (!pageRows.length) break;
-      const added = remember(pageRows);
-      if (phoneHit()) break;
-      if (!added && page > 0) break;
-    }
-  }
 
   const matched = found.filter((row) => rowHasPhone(row, phoneKey));
   if (!matched.length) {
@@ -362,17 +334,10 @@ export async function findBostaDeliveryByOrderReference(input: {
       }),
     });
     if (searched.ok) remember(deliveryRecords(searched.data));
-    const query = new URLSearchParams({
-      pageNumber: "0",
-      pageLimit: "20",
-      limit: "20",
-      businessReference: ref,
-    });
-    const listed = await bostaFetch(`/deliveries?${query.toString()}`);
-    if (listed.ok) remember(deliveryRecords(listed.data));
   }
 
-  const matched = found.filter((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
+  const referenced = found.filter((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
+  const matched = referenced.length ? referenced : found.length === 1 ? found : [];
   if (!matched.length) return { details: null, error: null };
 
   const finished = (row: Record<string, unknown>) =>

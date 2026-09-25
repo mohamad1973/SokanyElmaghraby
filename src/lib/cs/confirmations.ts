@@ -282,12 +282,15 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
     });
   }
 
-  await linkMissingBostaWaybills(prisma);
+  await linkMissingBostaWaybills(prisma, windowOrders);
 
   return { ok: true as const, imported, totalFetched: windowOrders.length };
 }
 
-async function linkMissingBostaWaybills(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+async function linkMissingBostaWaybills(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  orders: AdminOrder[],
+) {
   const missing = await prisma.csOrderConfirmation.findMany({
     where: {
       AND: [
@@ -298,14 +301,17 @@ async function linkMissingBostaWaybills(prisma: NonNullable<ReturnType<typeof ge
     orderBy: { createdAt: "desc" },
     take: 15,
   });
+  const trackingByOrder = new Map(orders.map((order) => [order.id, order.bostaTrackingNumber || ""]));
   for (const row of missing) {
     if (String(row.trackingNumber || "").trim()) continue;
     if (row.shippingCompany === "sayed_temima") continue;
+    const snap = (row.customerSnapshot as { trackingNumber?: string | null } | null) || null;
     await attachBostaWaybillByOrderReference({
       confirmationId: row.id,
       wooOrderId: row.wooOrderId,
       wooOrderNumber: row.wooOrderNumber,
       snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
+      knownTracking: trackingByOrder.get(row.wooOrderId) || snap?.trackingNumber || null,
     });
   }
 }
@@ -336,6 +342,7 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       wooOrderId: saved.wooOrderId,
       wooOrderNumber: saved.wooOrderNumber,
       snapshot: (saved.customerSnapshot as Record<string, unknown> | null) || null,
+      knownTracking: order.bostaTrackingNumber || null,
     });
   }
 }

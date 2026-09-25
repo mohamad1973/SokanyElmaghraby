@@ -61,6 +61,7 @@ export type AdminOrder = {
   currency: string;
   dateCreated: string;
   fulfillmentMode: "internal" | "bosta";
+  bostaTrackingNumber?: string | null;
   shipping?: OrderShippingInfo;
   items: Array<{
     id: number;
@@ -170,6 +171,45 @@ async function wooOrdersFetch<T>(path: string): Promise<WooFetchResult<T>> {
   }
 }
 
+function bostaTrackingFromMetaValue(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    if (/^B\d{6,}$/i.test(text)) return text.toUpperCase();
+    if (text.startsWith("{") || text.startsWith("[")) {
+      try {
+        return bostaTrackingFromMetaValue(JSON.parse(text));
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = bostaTrackingFromMetaValue(item);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  for (const key of ["tracking_number", "trackingNumber", "tracking", "awb"]) {
+    const found = bostaTrackingFromMetaValue(record[key]);
+    if (found) return found;
+  }
+  return "";
+}
+
+export function bostaTrackingFromWooOrder(order: WooOrder) {
+  for (const entry of order.meta_data || []) {
+    const key = String(entry.key || "").toLowerCase();
+    if (!key.includes("bosta") && !key.includes("tracking") && !key.includes("awb")) continue;
+    const found = bostaTrackingFromMetaValue(entry.value);
+    if (found) return found;
+  }
+  return "";
+}
+
 export function mapOrder(order: WooOrder, shipping?: OrderShippingInfo): AdminOrder {
   const customerName = `${order.billing.first_name || ""} ${order.billing.last_name || ""}`.trim();
   const loc = extractLocationFromWooBilling(order);
@@ -190,6 +230,7 @@ export function mapOrder(order: WooOrder, shipping?: OrderShippingInfo): AdminOr
     currency: order.currency,
     dateCreated: order.date_created,
     fulfillmentMode: resolveFulfillmentMode(loc.governorate),
+    bostaTrackingNumber: bostaTrackingFromWooOrder(order) || null,
     shipping,
     items: order.line_items.map((item) => ({
       id: item.id,
