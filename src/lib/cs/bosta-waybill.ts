@@ -351,27 +351,18 @@ export async function syncCsBostaWaybill(input: {
 
   const built = partyFromAnswers(input);
   if (!built.ok) {
-    if (trackingNumber) {
-      return present({
-        trackingNumber,
-        bostaStatus,
-        bostaShippingFee,
-        message: "تم ربط بوليصة بوسطة الموجودة.",
-        bostaSyncedAt: new Date(),
-      });
-    }
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,
-      trackingNumber: input.trackingNumber,
-      bostaStatus: input.bostaStatus,
-      bostaShippingFee: input.bostaShippingFee,
+      trackingNumber,
+      bostaStatus,
+      bostaShippingFee,
       bostaSyncError: built.message,
     });
     return present({
-      trackingNumber: input.trackingNumber,
-      bostaStatus: input.bostaStatus,
-      bostaShippingFee: input.bostaShippingFee,
+      trackingNumber,
+      bostaStatus,
+      bostaShippingFee,
       bostaSyncError: built.message,
       message: built.message,
       bostaSyncedAt: new Date(),

@@ -718,6 +718,25 @@ export async function startCsConfirmation(id: number, agentId: number) {
   return { ok: true as const, confirmation: updated };
 }
 
+function waybillSnapshot(snapshot: Record<string, unknown>, answers: CsChecklistAnswerInput[]) {
+  const text = (key: string) => {
+    const item = answers.find((answer) => answer.itemKey === key);
+    return String(item?.value || "").trim();
+  };
+  const next = { ...snapshot };
+  const name = text("customer_name");
+  const phone = text("primary_phone");
+  const address = text("address_complete");
+  const governorate = text("governorate_confirm");
+  const area = text("area_confirm");
+  if (name) next.customerName = name;
+  if (phone) next.phone = phone;
+  if (address) next.address = address;
+  if (governorate) next.governorate = governorate;
+  if (area) next.area = area;
+  return next;
+}
+
 function shippingCompanyFromAnswers(answers: CsChecklistAnswerInput[]) {
   const item = answers.find((a) => a.itemKey === "shipping_company");
   const value = String(item?.value || "").trim();
@@ -978,6 +997,14 @@ export async function saveCsConfirmation(input: {
       data.postCancelAt = now;
       data.failReason = "الغاء بعد التأكيد";
     }
+    const followAnswers = input.answers?.length ? input.answers : row.answers;
+    const followSnapshot = post?.refundPaid
+      ? { ...snap, ...((data.customerSnapshot as Record<string, unknown> | undefined) || {}) }
+      : waybillSnapshot(
+          { ...snap, ...((data.customerSnapshot as Record<string, unknown> | undefined) || {}) },
+          followAnswers,
+        );
+    if (!post?.refundPaid) data.customerSnapshot = followSnapshot;
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: data as never,
@@ -989,8 +1016,8 @@ export async function saveCsConfirmation(input: {
     const bosta = post?.refundPaid
       ? null
       : await pushBostaIfNeeded({
-          row,
-          answers: input.answers?.length ? input.answers : row.answers,
+          row: { ...row, customerSnapshot: followSnapshot },
+          answers: followAnswers,
           shippingCompany: row.shippingCompany,
           trackingNumber: nextTracking,
           bostaStatus: typed.bostaStatus || null,

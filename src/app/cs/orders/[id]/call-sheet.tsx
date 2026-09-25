@@ -430,7 +430,7 @@ export function CsCallSheet({
     const bostaNote = data.bostaMessage ? ` ${data.bostaMessage}` : "";
 
     if (showFollowUp) {
-      setMessage((postRefundPaid ? "تم تسجيل الإلغاء." : "تم حفظ المتابعة.") + bostaNote);
+      setMessage(postRefundPaid ? "تم تسجيل الإلغاء." : data.bostaMessage || "تم حفظ المتابعة.");
       return;
     }
 
@@ -515,8 +515,8 @@ export function CsCallSheet({
 
       <section className="shrink-0 rounded-2xl bg-[#14213D] px-4 py-3 text-sm text-white">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
-          <span className="font-extrabold">{snapshot?.customerName}</span>
-          <span dir="ltr">{snapshot?.phone}</span>
+          <span className="font-extrabold">{answers.customer_name?.value || snapshot?.customerName}</span>
+          <span dir="ltr">{answers.primary_phone?.value || snapshot?.phone}</span>
           <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
             {snapshot?.total} {snapshot?.currency || "EGP"}
           </span>
@@ -533,9 +533,9 @@ export function CsCallSheet({
           ) : null}
         </div>
         <div className="mt-2 grid gap-1 text-white/90 sm:grid-cols-3">
-          <span>الشارع: {snapshot?.address || "—"}</span>
-          <span>المحافظة: {snapshot?.governorate || "—"}</span>
-          <span>المنطقة: {snapshot?.area || "—"}</span>
+          <span>الشارع: {answers.address_complete?.value || snapshot?.address || "—"}</span>
+          <span>المحافظة: {answers.governorate_confirm?.value || snapshot?.governorate || "—"}</span>
+          <span>المنطقة: {answers.area_confirm?.value || snapshot?.area || "—"}</span>
         </div>
         <div className="mt-2 text-white/80">
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}
