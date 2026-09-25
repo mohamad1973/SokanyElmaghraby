@@ -5,7 +5,6 @@ import { getPrismaClient } from "@/lib/db";
 import {
   createCsBostaDelivery,
   fetchCsBostaDelivery,
-  findBostaDeliveryByCustomer,
   findBostaDeliveryByOrderReference,
   readBostaLiveDetails,
   readBostaShippingFee,
@@ -176,17 +175,6 @@ async function writeConfirmation(input: {
   });
 }
 
-function customerHints(
-  snapshot: Snapshot,
-  answers: CsChecklistAnswerInput[],
-): { phone: string; name: string; cod: number | null } {
-  const snap = snapshot || {};
-  const phone = textOf(answers, "primary_phone") || String(snap.phone || "").trim();
-  const name = textOf(answers, "customer_name") || String(snap.customerName || "").trim();
-  const total = Number(String(snap.total || "").replace(/,/g, ""));
-  return { phone, name, cod: Number.isFinite(total) ? total : null };
-}
-
 async function persistLinkedDelivery(input: {
   confirmationId: number;
   wooOrderId: number;
@@ -274,7 +262,7 @@ export async function attachBostaWaybillByOrderReference(input: {
       trackingNumber: null,
       bostaStatus: null,
       bostaShippingFee: null,
-      bostaSyncError: "مفيش بوليصة على بوسطة بنفس رقم الأوردر.",
+      bostaSyncError: "مفيش بوليصة على بوسطة برقم مرجعي مطابق لرقم الأوردر.",
     });
     return false;
   }
@@ -317,53 +305,20 @@ async function linkExistingBostaDelivery(input: {
       },
     });
   }
-  const hints = customerHints(input.snapshot, input.answers);
-  if (!hints.phone) {
-    const message = "مفيش بوليصة على بوسطة بنفس رقم الأوردر.";
-    await writeConfirmation({
-      confirmationId: input.confirmationId,
-      snapshot: input.snapshot,
-      trackingNumber: null,
-      bostaStatus: null,
-      bostaShippingFee: null,
-      bostaSyncError: message,
-    });
-    return present({
-      trackingNumber: null,
-      bostaSyncError: message,
-      message,
-      bostaSyncedAt: new Date(),
-    });
-  }
-  const lookup = await findBostaDeliveryByCustomer(hints);
-  const found = lookup.details;
-  if (!found?.trackingNumber) {
-    const message = lookup.error || "مفيش بوليصة على بوسطة بنفس رقم الأوردر.";
-    await writeConfirmation({
-      confirmationId: input.confirmationId,
-      snapshot: input.snapshot,
-      trackingNumber: null,
-      bostaStatus: null,
-      bostaShippingFee: null,
-      bostaSyncError: message,
-    });
-    return present({
-      trackingNumber: null,
-      bostaSyncError: message,
-      message,
-      bostaSyncedAt: new Date(),
-    });
-  }
-  return persistLinkedDelivery({
-    ...input,
-    found: {
-      trackingNumber: found.trackingNumber,
-      deliveryId: found.deliveryId,
-      status: found.status,
-      shippingFee: found.shippingFee,
-      cod: found.cod,
-      lastEvent: found.lastEvent,
-    },
+  const message = byOrder.error || "مفيش بوليصة على بوسطة برقم مرجعي مطابق لرقم الأوردر.";
+  await writeConfirmation({
+    confirmationId: input.confirmationId,
+    snapshot: input.snapshot,
+    trackingNumber: null,
+    bostaStatus: null,
+    bostaShippingFee: null,
+    bostaSyncError: message,
+  });
+  return present({
+    trackingNumber: null,
+    bostaSyncError: message,
+    message,
+    bostaSyncedAt: new Date(),
   });
 }
 

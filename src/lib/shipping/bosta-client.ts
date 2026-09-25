@@ -291,7 +291,14 @@ export async function findBostaDeliveryByCustomer(input: {
 
 function rowBusinessReference(row: Record<string, unknown>) {
   const nested = asRecord(row.delivery) || asRecord(row.shipment) || {};
-  return String(row.businessReference || row.business_reference || nested.businessReference || "").trim();
+  return String(
+    row.businessReference ||
+      row.uniqueBusinessReference ||
+      row.business_reference ||
+      nested.businessReference ||
+      nested.uniqueBusinessReference ||
+      "",
+  ).trim();
 }
 
 function sameOrderReference(left: string, right: string) {
@@ -308,7 +315,11 @@ export async function findBostaDeliveryByOrderReference(input: {
   wooOrderId: number;
   wooOrderNumber: string;
 }): Promise<BostaCustomerLookup> {
-  const refs = [...new Set([String(input.wooOrderId), String(input.wooOrderNumber || "").trim()].filter((value) => value && value !== "0"))];
+  const refs = [
+    ...new Set(
+      [String(input.wooOrderNumber || "").trim(), String(input.wooOrderId)].filter((value) => value && value !== "0"),
+    ),
+  ];
   if (!refs.length) return { details: null, error: "رقم الأوردر غير موجود للبحث في بوسطة." };
 
   const found: Record<string, unknown>[] = [];
@@ -322,22 +333,36 @@ export async function findBostaDeliveryByOrderReference(input: {
     }
   };
 
+  const referenceHit = () => found.some((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
   for (const ref of refs) {
     const searched = await bostaFetch("/deliveries/search", {
       method: "POST",
       body: JSON.stringify({
         businessReference: ref,
+        uniqueBusinessReference: ref,
         businessReferences: refs,
         pageNumber: 0,
-        pageLimit: 20,
-        limit: 20,
+        pageLimit: 50,
+        limit: 50,
       }),
     });
     if (searched.ok) remember(deliveryRecords(searched.data));
+    if (referenceHit()) break;
   }
 
-  const referenced = found.filter((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
-  const matched = referenced.length ? referenced : found.length === 1 ? found : [];
+  if (!referenceHit()) {
+    for (let page = 0; page < 8; page += 1) {
+      const listed = await bostaFetch(`/deliveries/business?pageNumber=${page}&pageLimit=50&limit=50`);
+      if (!listed.ok) break;
+      const pageRows = deliveryRecords(listed.data);
+      if (!pageRows.length) break;
+      const before = found.length;
+      remember(pageRows);
+      if (referenceHit() || found.length === before) break;
+    }
+  }
+
+  const matched = found.filter((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
   if (!matched.length) return { details: null, error: null };
 
   const finished = (row: Record<string, unknown>) =>
