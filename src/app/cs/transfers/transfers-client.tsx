@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-type TabId = "stock" | "motion" | "returns" | "tips";
+type TabId = "stock" | "motion" | "returns" | "tips" | "warehouses";
 
 type StockProduct = {
   id: number;
@@ -85,7 +85,36 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "motion", label: "الحركة" },
   { id: "returns", label: "التسليم والمرتجع" },
   { id: "tips", label: "التوصيات" },
+  { id: "warehouses", label: "تحويل المخازن" },
 ];
+
+type WarehouseSuggestion = {
+  productId: number;
+  name: string;
+  model: string;
+  sku: string;
+  onlineQty: number;
+  threshold: number;
+  tenthQty: number;
+  tenthHomeQty: number;
+  suggestedQty: number;
+  source: string;
+  systemRecommends: boolean;
+};
+
+type WarehouseUnmatched = {
+  warehouse: string;
+  code: string;
+  name: string;
+  qty: number;
+  reason: string;
+};
+
+type WarehouseReport = {
+  columns: { online: string; tenth: string; tenthHome: string };
+  suggestions: WarehouseSuggestion[];
+  unmatched: WarehouseUnmatched[];
+};
 
 const RETURN_REASONS = [
   "رفض استلام",
@@ -115,6 +144,8 @@ export function CsTransfersClient() {
   const [categoryId, setCategoryId] = useState("");
   const [draftThresholds, setDraftThresholds] = useState<Record<number, string>>({});
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
+  const [warehouseReport, setWarehouseReport] = useState<WarehouseReport | null>(null);
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [returnForm, setReturnForm] = useState({
     wooOrderNumber: "",
     productId: "",
@@ -290,6 +321,25 @@ export function CsTransfersClient() {
       isManufacturingDefect: false,
     });
     await loadAnalytics(true);
+  }
+
+  async function submitWarehouses(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setWarehouseLoading(true);
+    const res = await fetch("/api/cs/transfers/warehouses", {
+      method: "POST",
+      body: new FormData(event.currentTarget),
+    });
+    const data = (await res.json()) as WarehouseReport & { message?: string };
+    setWarehouseLoading(false);
+    if (!res.ok) {
+      setWarehouseReport(null);
+      setMessage(data.message || "تعذر قراءة ملفات المخازن.");
+      return;
+    }
+    setWarehouseReport(data);
+    setMessage(`تم بناء التقرير: ${data.suggestions?.length || 0} صنف يمكن تحويله.`);
   }
 
   function downloadCsv() {
@@ -783,6 +833,124 @@ export function CsTransfersClient() {
             </ul>
           </div>
         </div>
+      ) : null}
+
+      {tab === "warehouses" ? (
+        <>
+          <form
+            onSubmit={(event) => void submitWarehouses(event)}
+            className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 md:grid-cols-4"
+          >
+            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+              مخزن الأونلاين
+              <input name="online" type="file" accept=".xlsx,.xls,.csv" required className="text-xs font-bold" />
+            </label>
+            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+              مخزن العاشر
+              <input name="tenth" type="file" accept=".xlsx,.xls,.csv" required className="text-xs font-bold" />
+            </label>
+            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+              مخزن العاشر المنزلي
+              <input name="tenthHome" type="file" accept=".xlsx,.xls,.csv" required className="text-xs font-bold" />
+            </label>
+            <button
+              type="submit"
+              disabled={warehouseLoading}
+              className="self-end rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+            >
+              {warehouseLoading ? "جاري…" : "اعمل التقرير"}
+            </button>
+            <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
+              الملف لازم يكون فيه عمود موديل أو كود، وعمود رصيد. الصنف يظهر لما رصيد الأونلاين يوصل حد الطلب وفي العاشر أو العاشر المنزلي كمية.
+            </p>
+          </form>
+
+          {warehouseReport ? (
+            <>
+              <p className="text-xs font-bold text-[#14213D]/60">
+                الأعمدة: أونلاين {warehouseReport.columns.online} · العاشر {warehouseReport.columns.tenth} · العاشر منزلي{" "}
+                {warehouseReport.columns.tenthHome}
+              </p>
+              <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
+                    <tr>
+                      <th className="px-3 py-2">الصنف</th>
+                      <th className="px-3 py-2">الموديل</th>
+                      <th className="px-3 py-2">أونلاين</th>
+                      <th className="px-3 py-2">حد الطلب</th>
+                      <th className="px-3 py-2">العاشر</th>
+                      <th className="px-3 py-2">العاشر منزلي</th>
+                      <th className="px-3 py-2">المقترح</th>
+                      <th className="px-3 py-2">من</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {warehouseReport.suggestions.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-8 text-center text-[#14213D]/60">
+                          مفيش صنف أونلاينه عند الحد ومصدره فيه كمية.
+                        </td>
+                      </tr>
+                    ) : (
+                      warehouseReport.suggestions.map((row) => (
+                        <tr
+                          key={row.productId}
+                          className={`border-t border-[#E5E5E5] ${row.systemRecommends ? "bg-amber-50" : ""}`}
+                        >
+                          <td className="px-3 py-2 font-bold">
+                            {row.name}
+                            {row.systemRecommends ? (
+                              <span className="mr-2 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] text-black">
+                                توصية النظام
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 font-bold" dir="ltr">
+                            {row.model}
+                          </td>
+                          <td className="px-3 py-2 font-extrabold">{row.onlineQty}</td>
+                          <td className="px-3 py-2">{row.threshold}</td>
+                          <td className="px-3 py-2">{row.tenthQty}</td>
+                          <td className="px-3 py-2">{row.tenthHomeQty}</td>
+                          <td className="px-3 py-2 font-extrabold">{row.suggestedQty}</td>
+                          <td className="px-3 py-2 font-bold">{row.source}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+                <p className="px-3 py-2 text-sm font-extrabold text-[#14213D]">لم تُطابق ({warehouseReport.unmatched.length})</p>
+                <table className="min-w-full text-sm">
+                  <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
+                    <tr>
+                      <th className="px-3 py-2">المخزن</th>
+                      <th className="px-3 py-2">الكود</th>
+                      <th className="px-3 py-2">الاسم</th>
+                      <th className="px-3 py-2">الرصيد</th>
+                      <th className="px-3 py-2">السبب</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {warehouseReport.unmatched.slice(0, 80).map((row, index) => (
+                      <tr key={`${row.warehouse}-${row.code}-${index}`} className="border-t border-[#E5E5E5]">
+                        <td className="px-3 py-2">{row.warehouse}</td>
+                        <td className="px-3 py-2 font-bold" dir="ltr">
+                          {row.code}
+                        </td>
+                        <td className="px-3 py-2">{row.name || "—"}</td>
+                        <td className="px-3 py-2">{row.qty}</td>
+                        <td className="px-3 py-2">{row.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
