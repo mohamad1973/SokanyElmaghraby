@@ -82,6 +82,7 @@ export async function POST(request: Request) {
         systemRecommends: recommended.has(product.id) || product.isAtOrBelowThreshold,
       })),
       online: onlineFile.items,
+      onlineZeros: onlineFile.zeros,
       tenth: tenthFile.items,
       tenthHome: tenthHomeFile.items,
     });

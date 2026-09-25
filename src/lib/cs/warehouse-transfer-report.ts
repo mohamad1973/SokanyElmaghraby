@@ -8,6 +8,7 @@ export type BalanceRow = {
 
 export type ParsedBalanceFile = {
   items: BalanceRow[];
+  zeros: BalanceRow[];
   codeHeader: string;
   qtyHeader: string;
 };
@@ -144,23 +145,27 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
     };
   }
   const items: BalanceRow[] = [];
+  const zeros: BalanceRow[] = [];
   for (const row of grid.slice(headerIndex + 1)) {
     const code = cellText(row[codeIndex]);
     const qty = parseQty(row[qtyIndex]);
     if (!code || qty == null) continue;
-    items.push({
+    const entry = {
       code,
       name: nameIndex >= 0 ? cellText(row[nameIndex]) : "",
       qty,
-    });
+    };
+    if (qty === 0) zeros.push(entry);
+    else items.push(entry);
   }
-  if (!items.length) {
+  if (!items.length && !zeros.length) {
     return { ok: false, message: "الملف فيه عناوين بس مفيش أصناف برصيد." };
   }
   return {
     ok: true,
     file: {
       items,
+      zeros,
       codeHeader: cellText(grid[headerIndex][codeIndex]),
       qtyHeader: cellText(grid[headerIndex][qtyIndex]),
     },
@@ -203,6 +208,7 @@ function matchProduct(map: Map<string, CatalogProduct | typeof AMBIGUOUS>, row: 
 export function buildWarehouseTransferReport(input: {
   products: CatalogProduct[];
   online: BalanceRow[];
+  onlineZeros?: BalanceRow[];
   tenth: BalanceRow[];
   tenthHome: BalanceRow[];
 }) {
@@ -237,6 +243,12 @@ export function buildWarehouseTransferReport(input: {
   consume("أونلاين", input.online, (bucket, row) => {
     bucket.onlineQty = (bucket.onlineQty ?? 0) + row.qty;
   });
+  for (const row of input.onlineZeros || []) {
+    const product = matchProduct(index, row);
+    if (!product) continue;
+    const bucket = ensure(product);
+    if (bucket.onlineQty == null) bucket.onlineQty = 0;
+  }
   consume("العاشر", input.tenth, (bucket, row) => {
     bucket.tenthQty += row.qty;
   });
@@ -248,11 +260,13 @@ export function buildWarehouseTransferReport(input: {
   for (const bucket of buckets.values()) {
     const { product } = bucket;
     if (product.threshold <= 0) {
+      const qty = bucket.onlineQty ?? 0;
+      if (qty <= 0 && bucket.tenthQty <= 0 && bucket.tenthHomeQty <= 0) continue;
       unmatched.push({
         warehouse: "أونلاين",
         code: product.model || product.sku,
         name: product.name,
-        qty: bucket.onlineQty ?? 0,
+        qty: qty || bucket.tenthQty || bucket.tenthHomeQty,
         reason: "لم يُحفظ له حد طلب",
       });
       continue;

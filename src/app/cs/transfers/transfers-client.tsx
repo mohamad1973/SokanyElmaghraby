@@ -141,6 +141,7 @@ export function CsTransfersClient() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [lowOnly, setLowOnly] = useState(searchParams.get("low") === "1");
+  const [hideZero, setHideZero] = useState(true);
   const [categoryId, setCategoryId] = useState("");
   const [draftThresholds, setDraftThresholds] = useState<Record<number, string>>({});
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
@@ -242,9 +243,20 @@ export function CsTransfersClient() {
     if (tab !== "stock" && !analytics) void loadAnalytics();
   }, [tab, analytics, loadAnalytics]);
 
+  const visibleProducts = useMemo(
+    () => (hideZero ? products.filter((product) => product.stockQuantity > 0) : products),
+    [products, hideZero],
+  );
   const lowCount = useMemo(
-    () => products.filter((p) => p.isAtOrBelowThreshold).length,
-    [products],
+    () => visibleProducts.filter((product) => product.isAtOrBelowThreshold).length,
+    [visibleProducts],
+  );
+  const visibleSuggestions = useMemo(
+    () =>
+      hideZero
+        ? (warehouseReport?.suggestions || []).filter((row) => row.onlineQty > 0)
+        : warehouseReport?.suggestions || [],
+    [warehouseReport, hideZero],
   );
 
   async function saveThreshold(productId: number) {
@@ -344,7 +356,7 @@ export function CsTransfersClient() {
 
   function downloadCsv() {
     const headers = ["اسم المنتج", "الموديل", "SKU", "الكمية", "حد الطلب", "الحالة"];
-    const rows = products.map((p) => [
+    const rows = visibleProducts.map((p) => [
       p.name,
       p.model,
       p.sku,
@@ -387,7 +399,7 @@ export function CsTransfersClient() {
           ) : null}
         </p>
         <p className="mt-2 text-sm font-extrabold text-[#14213D]">
-          الأصناف: {products.length} — تحت الحد:{" "}
+          الأصناف: {visibleProducts.length} — تحت الحد:{" "}
           <span className="rounded bg-amber-500 px-2 py-0.5 text-black">{lowCount}</span>
         </p>
       </div>
@@ -432,15 +444,26 @@ export function CsTransfersClient() {
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-2 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold">
-              <input
-                type="checkbox"
-                checked={lowOnly}
-                onChange={(e) => setLowOnly(e.target.checked)}
-                className="accent-[#FCA311]"
-              />
-              تحت حد الطلب فقط
-            </label>
+            <div className="flex flex-col justify-center gap-2 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={lowOnly}
+                  onChange={(e) => setLowOnly(e.target.checked)}
+                  className="accent-[#FCA311]"
+                />
+                تحت حد الطلب فقط
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={hideZero}
+                  onChange={(e) => setHideZero(e.target.checked)}
+                  className="accent-[#FCA311]"
+                />
+                إخفاء الكمية صفر
+              </label>
+            </div>
             <button
               type="button"
               disabled={loading}
@@ -471,14 +494,14 @@ export function CsTransfersClient() {
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 ? (
+                {visibleProducts.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-3 py-8 text-center text-[#14213D]/60">
                       {loading ? "جاري التحميل…" : "لا توجد أصناف مطابقة."}
                     </td>
                   </tr>
                 ) : (
-                  products.map((p) => (
+                  visibleProducts.map((p) => (
                     <tr
                       key={p.id}
                       className={`border-t border-[#E5E5E5] ${p.isAtOrBelowThreshold ? "bg-amber-50" : ""}`}
@@ -860,8 +883,17 @@ export function CsTransfersClient() {
             >
               {warehouseLoading ? "جاري…" : "اعمل التقرير"}
             </button>
+            <label className="flex items-center gap-2 text-sm font-bold text-[#14213D] md:col-span-4">
+              <input
+                type="checkbox"
+                checked={hideZero}
+                onChange={(e) => setHideZero(e.target.checked)}
+                className="accent-[#FCA311]"
+              />
+              إخفاء الكمية صفر، بما فيها مخزن الأونلاين
+            </label>
             <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
-              الملف لازم يكون فيه عمود موديل أو كود، وعمود رصيد. الصنف يظهر لما رصيد الأونلاين يوصل حد الطلب وفي العاشر أو العاشر المنزلي كمية.
+              الملف لازم يكون فيه عمود موديل أو كود، وعمود رصيد. الصنف يظهر لما رصيد الأونلاين يوصل حد الطلب وفي العاشر أو العاشر المنزلي كمية. شيل العلامة عشان تشوف أصناف الأونلاين الصفرية.
             </p>
           </form>
 
@@ -886,14 +918,14 @@ export function CsTransfersClient() {
                     </tr>
                   </thead>
                   <tbody>
-                    {warehouseReport.suggestions.length === 0 ? (
+                    {visibleSuggestions.length === 0 ? (
                       <tr>
                         <td colSpan={8} className="px-3 py-8 text-center text-[#14213D]/60">
                           مفيش صنف أونلاينه عند الحد ومصدره فيه كمية.
                         </td>
                       </tr>
                     ) : (
-                      warehouseReport.suggestions.map((row) => (
+                      visibleSuggestions.map((row) => (
                         <tr
                           key={row.productId}
                           className={`border-t border-[#E5E5E5] ${row.systemRecommends ? "bg-amber-50" : ""}`}
