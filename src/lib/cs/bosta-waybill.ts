@@ -580,10 +580,15 @@ export async function recordBostaWebhookOnConfirmation(input: {
   if (!prisma) return;
   const tracking = String(input.trackingNumber || "").trim();
   const wooOrderNumber = String(input.wooOrderNumber || "").trim();
+  const prefixed = wooOrderNumber.match(/^woocommerce_(\d+)$/i);
+  const orderNumber = prefixed?.[1] || (/^\d+$/.test(wooOrderNumber) ? wooOrderNumber : "");
   const wooOrderId = input.wooOrderId && Number.isFinite(input.wooOrderId) ? input.wooOrderId : null;
-  let row = wooOrderNumber
-    ? await prisma.csOrderConfirmation.findFirst({ where: { wooOrderNumber } })
+  let row = orderNumber
+    ? await prisma.csOrderConfirmation.findFirst({ where: { wooOrderNumber: orderNumber } })
     : null;
+  if (!row && wooOrderNumber && wooOrderNumber !== orderNumber) {
+    row = await prisma.csOrderConfirmation.findFirst({ where: { wooOrderNumber } });
+  }
   if (!row && wooOrderId) {
     row = await prisma.csOrderConfirmation.findUnique({ where: { wooOrderId } });
   }

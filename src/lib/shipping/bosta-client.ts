@@ -311,57 +311,28 @@ function sameOrderReference(left: string, right: string) {
   return da.length >= 3 && da === db;
 }
 
+function wooCommerceReferences(orderNumber: string, wooOrderId: number) {
+  const numbers = [...new Set([orderNumber.trim(), String(wooOrderId)].filter((value) => value && value !== "0"))];
+  return numbers.map((number) => `Woocommerce_${number}`);
+}
+
 export async function findBostaDeliveryByOrderReference(input: {
   wooOrderId: number;
   wooOrderNumber: string;
 }): Promise<BostaCustomerLookup> {
-  const refs = [
-    ...new Set(
-      [String(input.wooOrderNumber || "").trim(), String(input.wooOrderId)].filter((value) => value && value !== "0"),
-    ),
-  ];
+  const refs = wooCommerceReferences(String(input.wooOrderNumber || ""), input.wooOrderId);
   if (!refs.length) return { details: null, error: "رقم الأوردر غير موجود للبحث في بوسطة." };
+  const primary = refs[0];
 
-  const found: Record<string, unknown>[] = [];
-  const seen = new Set<string>();
-  const remember = (rows: Record<string, unknown>[]) => {
-    for (const row of rows) {
-      const key = rowTracking(row) || rowBusinessReference(row) || JSON.stringify(row).slice(0, 120);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      found.push(row);
-    }
-  };
-
-  const referenceHit = () => found.some((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
-  for (const ref of refs) {
-    const searched = await bostaFetch("/deliveries/search", {
-      method: "POST",
-      body: JSON.stringify({
-        businessReference: ref,
-        uniqueBusinessReference: ref,
-        businessReferences: refs,
-        pageNumber: 0,
-        pageLimit: 50,
-        limit: 50,
-      }),
-    });
-    if (searched.ok) remember(deliveryRecords(searched.data));
-    if (referenceHit()) break;
-  }
-
-  if (!referenceHit()) {
-    for (let page = 0; page < 8; page += 1) {
-      const listed = await bostaFetch(`/deliveries/business?pageNumber=${page}&pageLimit=50&limit=50`);
-      if (!listed.ok) break;
-      const pageRows = deliveryRecords(listed.data);
-      if (!pageRows.length) break;
-      const before = found.length;
-      remember(pageRows);
-      if (referenceHit() || found.length === before) break;
-    }
-  }
-
+  const searched = await bostaFetch("/deliveries/search", {
+    method: "POST",
+    body: JSON.stringify({
+      businessReference: primary,
+      uniqueBusinessReference: primary,
+      businessReferences: refs,
+    }),
+  });
+  const found = searched.ok ? deliveryRecords(searched.data) : [];
   const matched = found.filter((row) => refs.some((ref) => sameOrderReference(rowBusinessReference(row), ref)));
   if (!matched.length) return { details: null, error: null };
 
@@ -386,6 +357,9 @@ export async function findBostaDeliveryByOrderReference(input: {
 
   const picked = ranked[0];
   if (!picked?.details.trackingNumber) return { details: null, error: null };
+  if (picked.details.status && picked.details.shippingFee != null) {
+    return { details: picked.details, error: null };
+  }
   const live = await fetchCsBostaDelivery(picked.details.trackingNumber);
   if (live.ok) {
     const payload = bostaPayload(live.data);
