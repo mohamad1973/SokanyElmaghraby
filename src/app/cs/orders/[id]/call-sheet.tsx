@@ -423,6 +423,10 @@ export function CsCallSheet({
     if (data.bostaSyncError !== undefined) setBostaError(data.bostaSyncError || "");
     if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
     if (data.lastEvent) setBostaLastEvent(data.lastEvent);
+    if (data.bostaSyncError) {
+      setMessage(data.bostaMessage || data.bostaSyncError);
+      return;
+    }
     const bostaNote = data.bostaMessage ? ` ${data.bostaMessage}` : "";
 
     if (showFollowUp) {

@@ -788,30 +788,221 @@ export async function createCsBostaDelivery(party: CsBostaParty): Promise<BostaD
   };
 }
 
+function bostaDialPhone(phone: string) {
+  const key = bostaPhoneKey(phone);
+  if (!key) return "";
+  if (key.length === 10) return `0${key}`;
+  if (key.length === 11 && key.startsWith("0")) return key;
+  return key;
+}
+
+function compactPlace(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function placesMatch(left: string, right: string) {
+  const a = compactPlace(left);
+  const b = compactPlace(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length < b.length ? a : b;
+  const longer = a.length < b.length ? b : a;
+  return shorter.length >= 4 && longer.includes(shorter);
+}
+
+function readWaybillEditFields(raw: unknown) {
+  const root = bostaPayload(raw);
+  const drop = asRecord(root?.dropOffAddress) || asRecord(root?.dropoffAddress) || {};
+  const cityValue = drop.city;
+  const cityRecord = asRecord(cityValue);
+  const zoneValue = drop.zone;
+  const zoneRecord = asRecord(zoneValue);
+  const districtValue = drop.district;
+  const districtRecord = asRecord(districtValue);
+  const receiver = asRecord(root?.receiver) || {};
+  return {
+    cityId: cityRecord
+      ? String(cityRecord._id || cityRecord.id || cityRecord.code || "").trim()
+      : String(cityValue || "").trim(),
+    cityName: cityRecord
+      ? String(cityRecord.nameAr || cityRecord.name || cityRecord.nameEn || "").trim()
+      : "",
+    zoneId: String(drop.zoneId || zoneRecord?._id || zoneRecord?.id || "").trim(),
+    districtId: String(drop.districtId || districtRecord?._id || districtRecord?.id || "").trim(),
+    zoneName:
+      typeof zoneValue === "string"
+        ? zoneValue.trim()
+        : String(zoneRecord?.nameAr || zoneRecord?.name || zoneRecord?.nameEn || "").trim(),
+    firstLine: String(drop.firstLine || "").trim(),
+    secondLine: String(drop.secondLine || "").trim(),
+    phone: String(receiver.phone || "").trim(),
+    secondPhone: String(receiver.secondPhone || "").trim(),
+  };
+}
+
+function matchBostaCityOption(cities: BostaCityOption[], governorate: string) {
+  const known = findBostaCity(governorate);
+  const keys = new Set(
+    [governorate, known?.nameAr || "", known?.code || ""].map(compactPlace).filter(Boolean),
+  );
+  return (
+    cities.find(
+      (city) =>
+        keys.has(compactPlace(city.nameAr)) ||
+        keys.has(compactPlace(city.nameEn)) ||
+        keys.has(compactPlace(city.id)),
+    ) || null
+  );
+}
+
+function bostaBodyFailure(data: unknown) {
+  const root = asRecord(data);
+  if (!root) return "";
+  const nested = asRecord(root.data);
+  const failed = root.success === false || root.failed === true || nested?.success === false;
+  if (!failed) return "";
+  return String(root.message || nested?.message || root.error || "بوسطة رفضت تعديل البوليصة.").trim();
+}
+
+function editFieldStuck(before: string, wanted: string, after: string, phone = false) {
+  const norm = phone
+    ? (value: string) => bostaPhoneKey(value)
+    : (value: string) => value.trim().replace(/\s+/g, " ");
+  const previous = norm(before);
+  const next = norm(wanted);
+  const seen = norm(after);
+  if (!next || previous === next) return false;
+  return seen === previous && seen !== next;
+}
+
 export async function updateCsBostaDelivery(trackingNumber: string, party: CsBostaParty) {
-  const city = findBostaCity(party.governorate);
-  if (!city) {
-    return { ok: false as const, locked: false, message: `المحافظة «${party.governorate || "—"}» غير معروفة عند بوسطة.` };
+  const current = await fetchCsBostaDelivery(trackingNumber);
+  if (!current.ok) {
+    return { ok: false as const, locked: false, message: current.message };
   }
-  const full = deliveryPayload(party, city);
-  const result = await bostaFetch(`/deliveries/business/${encodeURIComponent(trackingNumber)}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      receiver: full.receiver,
-      dropOffAddress: full.dropOffAddress,
-      notes: full.notes,
-      cod: full.cod,
-    }),
-  });
+  const before = readWaybillEditFields(current.data);
+  const deliveryId = readBostaLiveDetails(current.data).deliveryId;
+  const citiesResult = await getBostaCityOptions();
+  const cities = citiesResult.ok ? citiesResult.cities : [];
+  const requestedCity = matchBostaCityOption(cities, party.governorate);
+  const currentCity =
+    cities.find(
+      (city) =>
+        city.id === before.cityId ||
+        (before.cityName && placesMatch(city.nameAr, before.cityName)) ||
+        placesMatch(city.nameEn, before.cityId),
+    ) || null;
+  let cityToSend = before.cityId;
+  if (requestedCity && currentCity && requestedCity.id !== currentCity.id) {
+    cityToSend = requestedCity.id;
+  } else if (!cityToSend && requestedCity) {
+    cityToSend = requestedCity.id;
+  } else if (!cityToSend) {
+    const mapped = findBostaCity(party.governorate);
+    if (!mapped) {
+      return {
+        ok: false as const,
+        locked: false,
+        message: `المحافظة «${party.governorate || "—"}» غير معروفة عند بوسطة.`,
+      };
+    }
+    cityToSend = mapped.code;
+  }
+
+  const areaChanged =
+    Boolean(party.area) &&
+    ((before.zoneName && !placesMatch(party.area, before.zoneName)) ||
+      (!before.zoneName && !placesMatch(party.area, before.secondLine)));
+  let zoneId = before.zoneId;
+  let districtId = before.districtId;
+  let zoneName = before.zoneName;
+  let matchedArea = false;
+  if (areaChanged) {
+    const districtsResult = await getBostaDistrictOptions(cityToSend);
+    const hit = districtsResult.ok
+      ? districtsResult.districts.find(
+          (district) => placesMatch(district.nameAr, party.area) || placesMatch(district.nameEn, party.area),
+        )
+      : undefined;
+    if (hit) {
+      districtId = hit.id;
+      matchedArea = true;
+      zoneName = "";
+    }
+  }
+
+  const secondLine =
+    [party.landmarks || "", areaChanged && !matchedArea ? party.area : ""]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" — ") || before.secondLine;
+  const { firstName, lastName } = splitCustomerName(party.name);
+  const phone = bostaDialPhone(party.phone);
+  const secondPhone = party.secondPhone ? bostaDialPhone(party.secondPhone) : "";
+  const dropOffAddress: Record<string, unknown> = {
+    city: cityToSend,
+    firstLine: party.address,
+    secondLine,
+  };
+  if (zoneId) dropOffAddress.zoneId = zoneId;
+  if (districtId) dropOffAddress.districtId = districtId;
+  if (!zoneId && !districtId && zoneName) dropOffAddress.zone = zoneName;
+
+  const body = {
+    receiver: {
+      firstName,
+      lastName,
+      phone,
+      ...(secondPhone ? { secondPhone } : {}),
+    },
+    dropOffAddress,
+    notes: party.notes || party.landmarks || "",
+    cod: party.cod,
+  };
+  const putDelivery = (path: string) =>
+    bostaFetch(path, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  let result = deliveryId
+    ? await putDelivery(`/deliveries/${encodeURIComponent(deliveryId)}`)
+    : await putDelivery(`/deliveries/business/${encodeURIComponent(trackingNumber)}`);
+  if (!result.ok && deliveryId && /cannot put|404/i.test(result.message)) {
+    result = await putDelivery(`/deliveries/business/${encodeURIComponent(trackingNumber)}`);
+  }
   if (!result.ok) {
-    const locked = /picked|cannot|not allowed|already|terminated|received/i.test(result.message);
+    const routeError = /cannot put|cannot get|404/i.test(result.message);
+    const locked = !routeError && /picked|not allowed|already|terminated|received/i.test(result.message);
     return {
       ok: false as const,
       locked,
       message: locked ? "بوسطة قفلت تعديل البوليصة بعد استلام المندوب." : result.message,
     };
   }
-  return { ok: true as const, locked: false, message: "تم تحديث بوليصة بوسطة.", raw: result.data };
+  const rejected = bostaBodyFailure(result.data);
+  if (rejected) {
+    return { ok: false as const, locked: false, message: rejected };
+  }
+
+  const live = await fetchCsBostaDelivery(trackingNumber);
+  const after = readWaybillEditFields(live.ok ? live.data : result.data);
+  const unchanged =
+    editFieldStuck(before.phone, party.phone, after.phone, true) ||
+    editFieldStuck(before.firstLine, party.address, after.firstLine) ||
+    (secondPhone ? editFieldStuck(before.secondPhone, party.secondPhone || "", after.secondPhone, true) : false);
+  if (unchanged) {
+    return {
+      ok: false as const,
+      locked: false,
+      message: "بوسطة قبلت الطلب لكن العنوان أو التليفون ما تغيّروش على البوليصة.",
+    };
+  }
+  return {
+    ok: true as const,
+    locked: false,
+    message: "تم تحديث بوليصة بوسطة.",
+    raw: live.ok ? live.data : result.data,
+  };
 }
 
 export async function fetchCsBostaDelivery(trackingNumber: string) {
