@@ -85,6 +85,8 @@ type Props = {
     refundPaid: boolean;
     at: string | null;
   };
+  confirmedAt?: string | null;
+  confirmationEditedAt?: string | null;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -180,6 +182,8 @@ export function CsCallSheet({
   depositPaidAt: initialDepositPaidAt,
   depositApprovalStatus: initialDepositApprovalStatus,
   postCancel,
+  confirmedAt,
+  confirmationEditedAt,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
@@ -292,6 +296,8 @@ export function CsCallSheet({
   const [saving, setSaving] = useState(false);
 
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
+  const savedWhen = confirmedAt ? formatCairoOrderDateTime(confirmedAt) : null;
+  const editedWhen = confirmationEditedAt ? formatCairoOrderDateTime(confirmationEditedAt) : null;
   const orderTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
   const showDepositCard = Number.isFinite(orderTotal) && orderTotal >= CS_DEPOSIT_THRESHOLD;
   const paymentState =
@@ -463,6 +469,12 @@ export function CsCallSheet({
           <p className="text-xs font-bold text-[#14213D]/60">
             {when.absolute} · {when.relative}
           </p>
+          {savedWhen ? (
+            <p className="text-xs font-bold text-[#14213D]/70">حُفظ {savedWhen.absolute}</p>
+          ) : null}
+          {editedWhen ? (
+            <p className="text-xs font-bold text-[#14213D]/70">عُدّل {editedWhen.absolute}</p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {!showFollowUp ? (

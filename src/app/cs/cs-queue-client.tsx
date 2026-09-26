@@ -11,6 +11,7 @@ import {
   cairoTodayYmd,
   cairoYesterdayYmd,
   formatCairoOrderDate,
+  formatCairoOrderDateTime,
   isWithinCairoDateRange,
   resolvePaymentState,
   type CsPaymentState,
@@ -55,6 +56,7 @@ export type CsQueueItem = {
   } | null;
   startedAt?: string | null;
   confirmedAt?: string | null;
+  confirmationEditedAt?: string | null;
   updatedAt?: string | null;
   distributedAt?: string | null;
   createdAt: string;
@@ -167,6 +169,7 @@ type DraftFilters = {
   agentId: string;
   dateFrom: string;
   dateTo: string;
+  dateBasis: "created" | "saved" | "legacy";
   duplicates: "all" | "only";
   trackingFilter: "all" | "missing";
   waybillFilter: "all" | "not_printed";
@@ -198,6 +201,7 @@ function defaultDraft(): DraftFilters {
     agentId: "all",
     dateFrom: cairoYesterdayYmd(),
     dateTo: cairoTodayYmd(),
+    dateBasis: "created",
     duplicates: "all",
     trackingFilter: "all",
     waybillFilter: "all",
@@ -206,11 +210,23 @@ function defaultDraft(): DraftFilters {
 
 function temimaSheetDraft(): DraftFilters {
   const today = cairoTodayYmd();
-  return { ...defaultDraft(), status: "CONFIRMED", shipping: "sayed_temima", dateFrom: today, dateTo: today };
+  return {
+    ...defaultDraft(),
+    status: "CONFIRMED",
+    shipping: "sayed_temima",
+    dateFrom: today,
+    dateTo: today,
+    dateBasis: "saved",
+  };
 }
 
-function temimaSheetIso(item: CsQueueItem) {
-  return item.shippingAssignedAt || item.confirmedAt || "";
+function temimaDateMode(f: DraftFilters) {
+  return f.shipping === "sayed_temima" && normalizeFilterStatus(f.status) === "CONFIRMED";
+}
+
+function temimaSheetIso(item: CsQueueItem, basis: DraftFilters["dateBasis"]) {
+  if (basis === "created") return item.customerSnapshot?.dateCreated || "";
+  return item.confirmedAt || "";
 }
 
 function applyCourierSupervisorSheet(items: CsQueueItem[], f: DraftFilters, afterLast: boolean) {
@@ -218,7 +234,7 @@ function applyCourierSupervisorSheet(items: CsQueueItem[], f: DraftFilters, afte
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
   if (f.dateFrom && f.dateTo) {
-    rows = rows.filter((item) => isWithinCairoDateRange(temimaSheetIso(item), f.dateFrom, f.dateTo));
+    rows = rows.filter((item) => isWithinCairoDateRange(temimaSheetIso(item, f.dateBasis), f.dateFrom, f.dateTo));
   }
   if (f.payment === "paid" || f.payment === "paid_online") rows = rows.filter((item) => itemPaymentState(item) === "paid");
   else if (f.payment === "awaiting_payment") rows = rows.filter((item) => itemPaymentState(item) === "awaiting_payment");
@@ -391,6 +407,10 @@ function itemWorkDateIsos(item: CsQueueItem): string[] {
 
 function itemMatchesDateFilter(item: CsQueueItem, f: DraftFilters, forAgentWorkDate: boolean) {
   if (!f.dateFrom || !f.dateTo) return true;
+  if (temimaDateMode(f) && f.dateBasis !== "legacy") {
+    const iso = f.dateBasis === "saved" ? item.confirmedAt : item.customerSnapshot?.dateCreated;
+    return isWithinCairoDateRange(iso, f.dateFrom, f.dateTo);
+  }
   if (forAgentWorkDate) {
     return itemWorkDateIsos(item).some((iso) => isWithinCairoDateRange(iso, f.dateFrom, f.dateTo));
   }
@@ -625,7 +645,12 @@ export function CsQueueClient({
         const q = draft.query.trim();
         const source = q
           ? items.filter((item) => matchesSearchQuery(item, q))
-          : applyFilters(items, { ...applied, status: "CONFIRMED", shipping: "sayed_temima" }, {
+          : applyFilters(items, {
+              ...applied,
+              status: "CONFIRMED",
+              shipping: "sayed_temima",
+              dateBasis: temimaDateMode(applied) ? applied.dateBasis : "legacy",
+            }, {
               isSupervisor: Boolean(isSupervisor),
               orderDate: Boolean(isAccounting),
             });
@@ -867,6 +892,16 @@ export function CsQueueClient({
             <option value="sayed_temima">سيد تميمة</option>
           </select>
           )}
+          {isCourierSupervisor || temimaDateMode(draft) ? (
+            <select
+              value={draft.dateBasis}
+              onChange={(e) => patchDraft({ dateBasis: e.target.value === "saved" ? "saved" : "created" })}
+              className={FILTER_CONTROL}
+            >
+              <option value="created">تاريخ إنشاء الأوردر</option>
+              <option value="saved">تاريخ حفظ الأوردر</option>
+            </select>
+          ) : null}
           <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
             <input
@@ -1025,6 +1060,14 @@ export function CsQueueClient({
                     <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] ${meta.className}`}>{meta.label}</span>
                     <span className="text-base font-extrabold">#{item.wooOrderNumber}</span>
                     <span className="text-xs text-[#14213D]/55">{day}</span>
+                    {item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" && item.confirmedAt ? (
+                      <span className="text-[11px] font-bold text-[#14213D]/70">
+                        حُفظ {formatCairoOrderDateTime(item.confirmedAt).absolute}
+                        {item.confirmationEditedAt
+                          ? ` · عُدّل ${formatCairoOrderDateTime(item.confirmationEditedAt).absolute}`
+                          : ""}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span>{item.customerSnapshot?.customerName || "—"}</span>

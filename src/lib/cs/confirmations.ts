@@ -509,6 +509,7 @@ export function serializeCsQueueItem(row: {
   customerSnapshot?: unknown;
   startedAt?: Date | string | null;
   confirmedAt?: Date | string | null;
+  confirmationEditedAt?: Date | string | null;
   updatedAt?: Date | string | null;
   distributedAt?: Date | string | null;
   createdAt: Date;
@@ -617,6 +618,11 @@ export function serializeCsQueueItem(row: {
       ? typeof row.confirmedAt === "string"
         ? row.confirmedAt
         : row.confirmedAt.toISOString()
+      : null,
+    confirmationEditedAt: row.confirmationEditedAt
+      ? typeof row.confirmationEditedAt === "string"
+        ? row.confirmationEditedAt
+        : row.confirmationEditedAt.toISOString()
       : null,
     updatedAt: row.updatedAt
       ? typeof row.updatedAt === "string"
@@ -975,6 +981,10 @@ export async function saveCsConfirmation(input: {
   ) {
     const now = new Date();
     const data: Record<string, unknown> = { ...shippingMetaPatch };
+    if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED) {
+      if (row.confirmedAt) data.confirmationEditedAt = now;
+      else data.confirmedAt = now;
+    }
     if (input.followUp) {
       data.handedToCarrier = Boolean(input.followUp.handedToCarrier);
       data.deliveredToCustomer = Boolean(input.followUp.deliveredToCustomer);
@@ -1155,11 +1165,13 @@ export async function saveCsConfirmation(input: {
     };
   }
 
+  const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
+  const savedAt = new Date();
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {
       status: CS_CONFIRMATION_STATUS.CONFIRMED,
-      confirmedAt: new Date(),
+      ...(alreadySaved ? { confirmationEditedAt: savedAt } : { confirmedAt: savedAt }),
       assignedAgentId: input.agentId,
       shippingCompany,
       failReason: null,

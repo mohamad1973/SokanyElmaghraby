@@ -306,6 +306,7 @@ model CsOrderConfirmation {
   customerFollowUpAt   DateTime?
   startedAt            DateTime?
   confirmedAt          DateTime?
+  confirmationEditedAt DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   answers              CsChecklistAnswer[]

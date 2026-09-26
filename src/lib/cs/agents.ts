@@ -354,6 +354,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `depositApprovalDecidedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `depositAgentDecisionSeenAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingAssignedAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `confirmationEditedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `salesOrderNumber` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelInvoice` VARCHAR(16) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelSystemNo` VARCHAR(64) NULL",

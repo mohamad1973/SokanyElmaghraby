@@ -42,6 +42,8 @@ export default async function CsOrderPage({ params }: Props) {
     bostaShippingFee?: unknown;
     bostaSyncedAt?: Date | null;
     bostaSyncError?: string | null;
+    confirmedAt?: Date | null;
+    confirmationEditedAt?: Date | null;
   };
   const bostaFee = row.bostaShippingFee == null ? null : Number(row.bostaShippingFee);
 
@@ -77,6 +79,8 @@ export default async function CsOrderPage({ params }: Props) {
         deliveredToCustomer: Boolean(confirmation.deliveredToCustomer),
         customerFollowUp: Boolean(confirmation.customerFollowUp),
       }}
+      confirmedAt={row.confirmedAt ? row.confirmedAt.toISOString() : null}
+      confirmationEditedAt={row.confirmationEditedAt ? row.confirmationEditedAt.toISOString() : null}
       initialAnswers={confirmation.answers.map((a) => ({
         itemKey: a.itemKey,
         confirmed: a.confirmed,
