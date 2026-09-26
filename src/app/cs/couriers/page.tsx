@@ -11,6 +11,7 @@ export default async function CsCouriersPage() {
   if (!session?.user.csAgentId) redirect("/cs/login");
   await ensureCsTables();
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isCourierSupervisor && !viewer.isCourier) redirect("/cs");
-  return <CouriersClient mode={viewer.isCourierSupervisor ? "supervisor" : "courier"} />;
+  const asSupervisor = viewer.isCourierSupervisor || viewer.isAdmin;
+  if (!asSupervisor && !viewer.isCourier) redirect("/cs");
+  return <CouriersClient mode={asSupervisor ? "supervisor" : "courier"} />;
 }

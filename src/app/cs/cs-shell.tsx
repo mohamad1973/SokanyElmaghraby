@@ -584,6 +584,10 @@ function CsNotificationsBell() {
 function CsHeader() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [shippingOpen, setShippingOpen] = useState(false);
+  useEffect(() => {
+    setShippingOpen(false);
+  }, [pathname]);
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
   const roles = session?.user?.csRoles?.length
     ? session.user.csRoles
@@ -635,11 +639,45 @@ function CsHeader() {
             {canSeeOrders || isSupervisor ? <CsNotificationsBell /> : null}
           </div>
         </div>
-        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div
+          className={`-mx-1 flex items-center gap-2 px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+            shippingOpen ? "overflow-visible" : "overflow-x-auto"
+          }`}
+        >
           {showOrdersQueue ? (
-            <Link href="/cs" className={navClass(pathname === "/cs")}>
+            <Link href="/cs" className={navClass(pathname === "/cs")} onClick={() => setShippingOpen(false)}>
               الأوردرات
             </Link>
+          ) : null}
+          {isAdmin ? (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setShippingOpen((open) => !open)}
+                className={navClass(pathname.startsWith("/cs/temima") || pathname.startsWith("/cs/couriers"))}
+                aria-expanded={shippingOpen}
+              >
+                شحن
+              </button>
+              {shippingOpen ? (
+                <div className="absolute top-full z-50 mt-1 min-w-44 rounded-xl bg-white p-1 text-[#14213D] shadow-lg ring-1 ring-black/10">
+                  <Link
+                    href="/cs/temima"
+                    onClick={() => setShippingOpen(false)}
+                    className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+                  >
+                    شيت سيد تميمة
+                  </Link>
+                  <Link
+                    href="/cs/couriers"
+                    onClick={() => setShippingOpen(false)}
+                    className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+                  >
+                    توزيع المناديب
+                  </Link>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {canSettlement ? (
             <Link href="/cs/settlement" className={navClass(pathname.startsWith("/cs/settlement"))}>

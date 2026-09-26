@@ -16,14 +16,14 @@ async function viewerOrNull() {
   if (!session?.user.csAgentId) return null;
   await ensureCsTables();
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isCourierSupervisor && !viewer.isCourier) return null;
+  if (!viewer.isCourierSupervisor && !viewer.isCourier && !viewer.isAdmin) return null;
   return { session, viewer };
 }
 
 export async function GET() {
   const access = await viewerOrNull();
   if (!access) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
-  const mode = access.viewer.isCourierSupervisor ? "supervisor" : "courier";
+  const mode = access.viewer.isCourierSupervisor || access.viewer.isAdmin ? "supervisor" : "courier";
   const data = await loadCourierDispatch(access.session.user.csAgentId!, mode);
   return NextResponse.json(data);
 }
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
 
-  if (!access.viewer.isCourierSupervisor) {
+  if (!access.viewer.isCourierSupervisor && !access.viewer.isAdmin) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   }
 
