@@ -330,6 +330,8 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsAgent` ADD COLUMN `courierAreas` TEXT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `courierAgentId` INT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `courierAssignedAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `courierOutcome` VARCHAR(16) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `courierRefusalReason` TEXT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingCompany` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `handedToCarrier` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `deliveredToCustomer` BOOLEAN NOT NULL DEFAULT false",

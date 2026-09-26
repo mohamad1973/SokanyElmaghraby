@@ -32,6 +32,8 @@ export type CourierOrderCard = {
   items: Array<{ name: string; quantity: number }>;
   total: string;
   delivered: boolean;
+  outcome: "delivered" | "refused" | "postponed" | null;
+  refusalReason: string;
   courierId: number | null;
   courierName: string;
   matches: number[];
@@ -59,6 +61,8 @@ function cardFromRow(row: {
   customerSnapshot: unknown;
   deliveredToCustomer: boolean;
   courierAgentId: number | null;
+  courierOutcome: string | null;
+  courierRefusalReason: string | null;
   answers: AnswerRow[];
   courierAgent: { id: number; name: string } | null;
 }): Omit<CourierOrderCard, "matches"> {
@@ -87,7 +91,14 @@ function cardFromRow(row: {
       .map((item) => ({ name: String(item.name || "").trim(), quantity: Number(item.quantity || 1) }))
       .filter((item) => item.name),
     total: String(snap.total || ""),
-    delivered: Boolean(row.deliveredToCustomer),
+    delivered: row.courierOutcome === "delivered" || Boolean(row.deliveredToCustomer),
+    outcome:
+      row.courierOutcome === "delivered" || row.courierOutcome === "refused" || row.courierOutcome === "postponed"
+        ? row.courierOutcome
+        : row.deliveredToCustomer
+          ? "delivered"
+          : null,
+    refusalReason: String(row.courierRefusalReason || "").trim(),
     courierId: row.courierAgentId,
     courierName: row.courierAgent?.name || "",
   };
@@ -129,6 +140,8 @@ async function loadTodayRows() {
       customerSnapshot: true,
       deliveredToCustomer: true,
       courierAgentId: true,
+      courierOutcome: true,
+      courierRefusalReason: true,
       confirmedAt: true,
       courierAssignedAt: true,
       courierAgent: { select: { id: true, name: true } },
@@ -262,7 +275,7 @@ export async function unassignCourierOrder(confirmationId: number) {
   if (!order) return { ok: false as const, message: "الأوردر مش متوزع." };
   await prisma.csOrderConfirmation.update({
     where: { id: order.id },
-    data: { courierAgentId: null, courierAssignedAt: null },
+    data: { courierAgentId: null, courierAssignedAt: null, courierOutcome: null, courierRefusalReason: null },
   });
   return { ok: true as const };
 }
@@ -281,9 +294,16 @@ export async function saveCourierAreas(courierId: number, areas: string[]) {
   return { ok: true as const };
 }
 
-export async function markCourierDelivered(confirmationId: number, courierId: number) {
+export async function markCourierOutcome(
+  confirmationId: number,
+  courierId: number,
+  outcome: "delivered" | "refused" | "postponed",
+  reason?: string,
+) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  const note = String(reason || "").trim();
+  if (outcome === "refused" && !note) return { ok: false as const, message: "اكتب سبب الرفض." };
   const order = await prisma.csOrderConfirmation.findFirst({
     where: { id: confirmationId, courierAgentId: courierId, status: "CONFIRMED", shippingCompany: TEMIMA },
     select: {
@@ -294,14 +314,26 @@ export async function markCourierDelivered(confirmationId: number, courierId: nu
   });
   if (!order) return { ok: false as const, message: "الأوردر مش من أوردراتك." };
   const now = new Date();
-  await prisma.csOrderConfirmation.update({
-    where: { id: order.id },
-    data: {
-      deliveredToCustomer: true,
-      deliveredToCustomerAt: order.deliveredToCustomerAt || now,
-      handedToCarrier: true,
-      handedToCarrierAt: order.handedToCarrierAt || now,
-    },
-  });
+  if (outcome === "delivered") {
+    await prisma.csOrderConfirmation.update({
+      where: { id: order.id },
+      data: {
+        courierOutcome: "delivered",
+        courierRefusalReason: null,
+        deliveredToCustomer: true,
+        deliveredToCustomerAt: order.deliveredToCustomerAt || now,
+        handedToCarrier: true,
+        handedToCarrierAt: order.handedToCarrierAt || now,
+      },
+    });
+  } else {
+    await prisma.csOrderConfirmation.update({
+      where: { id: order.id },
+      data: {
+        courierOutcome: outcome,
+        courierRefusalReason: outcome === "refused" ? note : null,
+      },
+    });
+  }
   return { ok: true as const };
 }

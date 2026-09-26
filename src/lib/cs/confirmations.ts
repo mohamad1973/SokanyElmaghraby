@@ -498,6 +498,10 @@ export function serializeCsQueueItem(row: {
   handedToCarrier?: boolean | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
+  shippingAssignedAt?: Date | string | null;
+  courierAgentId?: number | null;
+  courierOutcome?: string | null;
+  courierRefusalReason?: string | null;
   salesOrderNumber?: string | null;
     invoiceNumber?: string | null;
   bostaStatus?: string | null;
@@ -566,6 +570,14 @@ export function serializeCsQueueItem(row: {
     handedToCarrier: Boolean(row.handedToCarrier),
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
+    shippingAssignedAt: row.shippingAssignedAt
+      ? typeof row.shippingAssignedAt === "string"
+        ? row.shippingAssignedAt
+        : row.shippingAssignedAt.toISOString()
+      : null,
+    courierAgentId: row.courierAgentId ?? null,
+    courierOutcome: row.courierOutcome || null,
+    courierRefusalReason: row.courierRefusalReason ? String(row.courierRefusalReason) : null,
     salesOrderNumber: row.salesOrderNumber ? String(row.salesOrderNumber) : null,
     invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : null,
     bostaStatus: row.bostaStatus ? String(row.bostaStatus) : null,

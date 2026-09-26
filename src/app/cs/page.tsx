@@ -14,7 +14,7 @@ export default async function CsHomePage() {
   await ensureDefaultCsAgent();
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.canSeeOrders && (viewer.isCourierSupervisor || viewer.isCourier)) {
+  if (!viewer.canSeeOrders && viewer.isCourier && !viewer.isCourierSupervisor) {
     redirect("/cs/couriers");
   }
   if (!viewer.canSeeOrders && (viewer.isTransfers || session.user.csIsTransfers)) {
@@ -24,13 +24,14 @@ export default async function CsHomePage() {
     redirect("/cs/settlement");
   }
 
+  const isCourierSupervisor = viewer.isCourierSupervisor;
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
   const isAccounting = viewer.isAccounting || isAccountingRole(session.user.csRole);
 
   const rows = await listCsConfirmationsForViewer({
     agentId: session.user.csAgentId,
     isSupervisor,
-    seeAll: isAccounting,
+    seeAll: isAccounting || isCourierSupervisor,
   });
   const initialItems = rows.map(serializeCsQueueItem);
   const agents = isSupervisor
@@ -43,6 +44,7 @@ export default async function CsHomePage() {
       isSupervisor={isSupervisor}
       isAccounting={isAccounting}
       agents={agents}
+      isCourierSupervisor={isCourierSupervisor}
     />
   );
 }

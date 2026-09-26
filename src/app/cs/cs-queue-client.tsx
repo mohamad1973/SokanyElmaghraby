@@ -58,6 +58,10 @@ export type CsQueueItem = {
   updatedAt?: string | null;
   distributedAt?: string | null;
   createdAt: string;
+  shippingAssignedAt?: string | null;
+  courierAgentId?: number | null;
+  courierOutcome?: string | null;
+  courierRefusalReason?: string | null;
 };
 
 const SAYED_TEMIMA_SHIPPING_EGP = 75;
@@ -198,6 +202,50 @@ function defaultDraft(): DraftFilters {
     trackingFilter: "all",
     waybillFilter: "all",
   };
+}
+
+function temimaSheetDraft(): DraftFilters {
+  const today = cairoTodayYmd();
+  return { ...defaultDraft(), status: "CONFIRMED", shipping: "sayed_temima", dateFrom: today, dateTo: today };
+}
+
+function temimaSheetIso(item: CsQueueItem) {
+  return item.shippingAssignedAt || item.confirmedAt || "";
+}
+
+function applyCourierSupervisorSheet(items: CsQueueItem[], f: DraftFilters, afterLast: boolean) {
+  let rows = items.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
+  const query = f.query.trim();
+  if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
+  if (f.dateFrom && f.dateTo) {
+    rows = rows.filter((item) => isWithinCairoDateRange(temimaSheetIso(item), f.dateFrom, f.dateTo));
+  }
+  if (f.payment === "paid" || f.payment === "paid_online") rows = rows.filter((item) => itemPaymentState(item) === "paid");
+  else if (f.payment === "awaiting_payment") rows = rows.filter((item) => itemPaymentState(item) === "awaiting_payment");
+  else if (f.payment === "cod") rows = rows.filter((item) => itemPaymentState(item) === "cod");
+  if (f.status === "CONFIRMED" && f.followUp !== "all") {
+    rows = rows.filter((item) => {
+      if (f.followUp === "handed" && !item.handedToCarrier) return false;
+      if (f.followUp === "delivered" && !item.deliveredToCustomer) return false;
+      if (f.followUp === "followup" && !item.customerFollowUp) return false;
+      if (f.followUp === "handed_pending" && item.handedToCarrier) return false;
+      if (f.followUp === "delivered_pending" && item.deliveredToCustomer) return false;
+      if (f.followUp === "followup_pending" && item.customerFollowUp) return false;
+      return true;
+    });
+  }
+  if (f.status === "COURIER_DELIVERED") rows = rows.filter((item) => item.courierOutcome === "delivered");
+  else if (f.status === "COURIER_REFUSED") rows = rows.filter((item) => item.courierOutcome === "refused");
+  else if (f.status === "COURIER_POSTPONED") rows = rows.filter((item) => item.courierOutcome === "postponed");
+  else if (f.status === "UNDISTRIBUTED") rows = rows.filter((item) => !item.courierAgentId);
+  if (afterLast) {
+    const last = items.reduce((max, item) => {
+      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED" || !item.courierAgentId) return max;
+      return Math.max(max, parseWooOrderNumber(item.wooOrderNumber));
+    }, 0);
+    rows = rows.filter((item) => !item.courierAgentId && parseWooOrderNumber(item.wooOrderNumber) > last);
+  }
+  return rows.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
 
 function itemTrackingNumber(item: CsQueueItem) {
@@ -464,19 +512,27 @@ type Props = {
   initialItems: CsQueueItem[];
   isSupervisor?: boolean;
   isAccounting?: boolean;
+  isCourierSupervisor?: boolean;
   agents?: Array<{ id: number; name: string }>;
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
 type TemimaPrintScope = "confirmed" | "all";
 
-export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents = [] }: Props) {
+export function CsQueueClient({
+  initialItems,
+  isSupervisor,
+  isAccounting,
+  isCourierSupervisor,
+  agents = [],
+}: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [draft, setDraft] = useState<DraftFilters>(defaultDraft);
-  const [applied, setApplied] = useState<DraftFilters>(defaultDraft);
+  const [draft, setDraft] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
+  const [applied, setApplied] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
+  const [afterLastDistribution, setAfterLastDistribution] = useState(false);
   const [printMode, setPrintMode] = useState<PrintMode>("none");
   const [temimaAsk, setTemimaAsk] = useState(false);
   const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
@@ -530,6 +586,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
 
   // Search is live and independent of other filters: when query is set, match all loaded items.
   const baseFiltered = useMemo(() => {
+    if (isCourierSupervisor) {
+      return applyCourierSupervisorSheet(items, { ...applied, query: draft.query }, afterLastDistribution);
+    }
     const q = draft.query.trim();
     if (q) {
       return items
@@ -537,7 +596,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
         .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
     }
     return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor), orderDate: Boolean(isAccounting) });
-  }, [items, draft.query, applied, isSupervisor, isAccounting]);
+  }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
 
@@ -559,6 +618,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
   const printRows = useMemo(() => {
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
     if (printMode === "sayed_temima") {
+      if (isCourierSupervisor && temimaScope === "confirmed") {
+        return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false);
+      }
       if (temimaScope === "confirmed") {
         const q = draft.query.trim();
         const source = q
@@ -572,7 +634,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -626,9 +688,10 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
   }
 
   function resetFilters() {
-    const next = defaultDraft();
+    const next = isCourierSupervisor ? temimaSheetDraft() : defaultDraft();
     setDraft(next);
     setApplied(next);
+    setAfterLastDistribution(false);
     setMessage("");
   }
 
@@ -636,14 +699,16 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
     <div className="space-y-4" dir="rtl">
       <div className="no-print flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:p-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">قائمة تأكيد الطلبات</h1>
+          <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">
+            {isCourierSupervisor ? "شيت سيد تميمة" : "قائمة تأكيد الطلبات"}
+          </h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
             عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span> من
             أصل {items.length}
           </p>
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
-          {isSupervisor ? (
+          {isSupervisor && !isCourierSupervisor ? (
             <Link
               href="/cs/assign"
               className="shrink-0 rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white sm:px-4 sm:py-2.5 sm:text-sm"
@@ -651,6 +716,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
               توزيع
             </Link>
           ) : null}
+          {isCourierSupervisor ? null : (
           <button
             type="button"
             onClick={() => setPrintMode("bosta")}
@@ -658,6 +724,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
           >
             طباعة بوسطة
           </button>
+          )}
           <button
             type="button"
             onClick={() => setTemimaAsk(true)}
@@ -732,12 +799,24 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             className={FILTER_CONTROL}
           >
             <option value="all">حالة الأوردر</option>
+            {isCourierSupervisor ? (
+              <>
+                <option value="CONFIRMED">المؤكد</option>
+                <option value="COURIER_DELIVERED">تم التسليم</option>
+                <option value="COURIER_REFUSED">تم الرفض</option>
+                <option value="COURIER_POSTPONED">تأجيل</option>
+                <option value="UNDISTRIBUTED">لم يوزع</option>
+              </>
+            ) : (
+              <>
             <option value="PENDING">جديد</option>
             <option value="IN_PROGRESS">جاري</option>
             <option value="CONFIRMED">تم الحفظ</option>
             <option value="FAILED_CONTACT">لم يرد</option>
             <option value="CANCELLED">لاغى</option>
             <option value="DISTRIBUTED">موزع</option>
+              </>
+            )}
           </select>
           {draft.status === "CONFIRMED" ? (
             <select
@@ -777,6 +856,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
               <option value="cod">عند الاستلام</option>
             </select>
           ) : null}
+          {isCourierSupervisor ? null : (
           <select
             value={draft.shipping}
             onChange={(e) => patchDraft({ shipping: e.target.value })}
@@ -786,6 +866,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             <option value="bosta">بوسطة</option>
             <option value="sayed_temima">سيد تميمة</option>
           </select>
+          )}
           <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
             <input
@@ -818,6 +899,7 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             <option value="all">كل أرقام التراك</option>
             <option value="missing">بدون رقم تراك</option>
           </select>
+          {isCourierSupervisor ? null : (
           <select
             value={draft.waybillFilter}
             onChange={(e) =>
@@ -825,9 +907,10 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
             }
             className={FILTER_CONTROL}
           >
-            <option value="all">كل البوليصات</option>
+            <option value="all">كل البوالص</option>
             <option value="not_printed">لم تُطبع البوليصة</option>
           </select>
+          )}
           {isSupervisor ? (
             <select
               value={draft.agentId}
@@ -868,6 +951,17 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
               إعادة
             </button>
           </div>
+          {isCourierSupervisor ? (
+            <label className="col-span-2 flex items-center gap-2 text-xs font-bold text-[#14213D] sm:col-span-3">
+              <input
+                type="checkbox"
+                className="size-4 accent-[#FCA311]"
+                checked={afterLastDistribution}
+                onChange={(event) => setAfterLastDistribution(event.target.checked)}
+              />
+              إظهار الأوردرات المطلوب توزيعها بعد آخر توزيع
+            </label>
+          ) : null}
         </div>
       </div>
 
@@ -881,7 +975,9 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
         {filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
             {items.length === 0 ? (
-              isSupervisor || isAccounting ? (
+              isCourierSupervisor ? (
+                <p className="font-bold">مفيش أوردرات مؤكدة لسيد تميمة في اليوم ده.</p>
+              ) : isSupervisor || isAccounting ? (
                 <p className="font-bold">لا توجد طلبات — راجعي المزامنة أو وسّعي تاريخ الفلتر.</p>
               ) : (
                 <p className="font-bold">لم يُوزَّع عليكِ أوردرات بعد — اطلبي من المشرفة التوزيع.</p>
@@ -953,6 +1049,20 @@ export function CsQueueClient({ initialItems, isSupervisor, isAccounting, agents
                     ) : null}
                     {item.waybillPrinted ? (
                       <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">بوليصة طُبعت</span>
+                    ) : null}
+                    {item.courierOutcome === "delivered" ? (
+                      <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">تم التسليم</span>
+                    ) : null}
+                    {item.courierOutcome === "refused" ? (
+                      <span className="w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">
+                        تم الرفض{item.courierRefusalReason ? `: ${item.courierRefusalReason}` : ""}
+                      </span>
+                    ) : null}
+                    {item.courierOutcome === "postponed" ? (
+                      <span className="w-fit rounded bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-900">تأجيل</span>
+                    ) : null}
+                    {isCourierSupervisor && !item.courierAgentId ? (
+                      <span className="w-fit rounded bg-[#E5E5E5] px-1.5 py-0.5 text-[10px] text-[#14213D]">لم يوزع</span>
                     ) : null}
                     {item.depositApprovalStatus === "pending" ? (
                       <span className="w-fit rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900">

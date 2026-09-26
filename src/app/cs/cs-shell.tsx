@@ -603,7 +603,7 @@ function CsHeader() {
   const isTransfersOnly = isTransfers && !canSeeOrders && !isShipping;
   const canSettlement = isShipping || isSupervisor || isAdmin;
   const canTransfers = isTransfers || isSupervisor || isAdmin || Boolean(session?.user?.csCanAccessTransfers);
-  const showOrdersQueue = roles.length ? canSeeOrders : !isTransfersOnly && !isShipping;
+  const showOrdersQueue = (roles.length ? canSeeOrders : !isTransfersOnly && !isShipping) || isCourierSupervisor;
 
   const navClass = (active: boolean) =>
     `shrink-0 rounded-full px-3 py-1.5 whitespace-nowrap ${

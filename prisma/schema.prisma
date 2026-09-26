@@ -267,6 +267,8 @@ model CsOrderConfirmation {
   assignedAgent        CsAgent?            @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
   courierAgentId       Int?
   courierAssignedAt    DateTime?
+  courierOutcome       String?             @db.VarChar(16)
+  courierRefusalReason String?             @db.Text
   courierAgent         CsAgent?            @relation("TemimaCourier", fields: [courierAgentId], references: [id], onDelete: SetNull)
   customerSnapshot     Json?
   failReason           String?             @db.Text

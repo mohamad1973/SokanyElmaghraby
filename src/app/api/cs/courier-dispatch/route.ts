@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   assignCourierOrder,
   loadCourierDispatch,
-  markCourierDelivered,
+  markCourierOutcome,
   saveCourierAreas,
   unassignCourierOrder,
 } from "@/lib/cs/courier-dispatch";
@@ -37,6 +37,8 @@ export async function POST(request: Request) {
     orderNumber?: string;
     courierId?: number;
     areas?: string[];
+    outcome?: string;
+    reason?: string;
   } | null;
   if (!body?.action) return NextResponse.json({ message: "طلب ناقص." }, { status: 400 });
 
@@ -44,7 +46,8 @@ export async function POST(request: Request) {
     if (!access.viewer.isCourier) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     const confirmationId = Number(body.confirmationId);
     if (!confirmationId) return NextResponse.json({ message: "الأوردر ناقص." }, { status: 400 });
-    const result = await markCourierDelivered(confirmationId, access.session.user.csAgentId!);
+    const outcome = body.outcome === "refused" || body.outcome === "postponed" ? body.outcome : "delivered";
+    const result = await markCourierOutcome(confirmationId, access.session.user.csAgentId!, outcome, body.reason);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
 
