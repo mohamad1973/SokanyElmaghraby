@@ -104,6 +104,11 @@ function cardFromRow(row: {
   };
 }
 
+export async function listCourierAgents() {
+  const rows = await loadCouriers();
+  return rows.map((row) => ({ id: row.id, name: row.name }));
+}
+
 async function loadCouriers(): Promise<CourierRosterRow[]> {
   const prisma = getPrismaClient();
   if (!prisma) return [];

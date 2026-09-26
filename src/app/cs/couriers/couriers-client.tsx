@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type OrderCard = {
   id: number;
@@ -84,16 +84,41 @@ function CourierCard({ order, onPost }: { order: OrderCard; onPost: (body: Recor
   );
 }
 
-export function CouriersClient({ mode }: { mode: "supervisor" | "courier" }) {
+export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "admin" }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [supervisor, setSupervisor] = useState<SupervisorData | null>(null);
   const [mine, setMine] = useState<OrderCard[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [areaDraft, setAreaDraft] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const load = useCallback(async () => {
     setLoading(true);
+    if (mode === "admin") {
+      const rosterRes = await fetch("/api/cs/courier-dispatch");
+      const roster = (await rosterRes.json()) as SupervisorData | { message?: string };
+      if (!rosterRes.ok || !("mode" in roster) || roster.mode !== "supervisor") {
+        setLoading(false);
+        setMessage(("message" in roster && roster.message) || "تعذر تحميل المناديب.");
+        return;
+      }
+      setSupervisor(roster);
+      if (!selectedId) {
+        setMine([]);
+        setLoading(false);
+        setMessage("");
+        return;
+      }
+      const res = await fetch(`/api/cs/courier-dispatch?courierId=${selectedId}`);
+      const data = (await res.json()) as CourierData | { message?: string };
+      setLoading(false);
+      if (!res.ok || !("mode" in data) || data.mode !== "courier") {
+        setMessage(("message" in data && data.message) || "تعذر تحميل أوردرات المندوب.");
+        return;
+      }
+      setMessage("");
+      setMine(data.orders);
+      return;
+    }
     const res = await fetch("/api/cs/courier-dispatch");
     const data = (await res.json()) as SupervisorData | CourierData | { message?: string };
     setLoading(false);
@@ -104,33 +129,41 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" }) {
     setMessage("");
     if (data.mode === "courier") setMine(data.orders);
     else setSupervisor(data);
-  }, []);
+  }, [mode, selectedId]);
   useEffect(() => { void load(); }, [load]);
   const selected = supervisor?.couriers.find((courier) => courier.id === selectedId) || null;
-  const matching = useMemo(() => (selected ? (supervisor?.pool || []).filter((order) => order.matches.includes(selected.id)) : []), [selected, supervisor]);
-  const others = useMemo(() => (selected ? (supervisor?.pool || []).filter((order) => !order.matches.includes(selected.id)) : supervisor?.pool || []), [selected, supervisor]);
   async function post(body: Record<string, unknown>) {
     setMessage("");
-    const res = await fetch("/api/cs/courier-dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const payload = mode === "admin" && selectedId && body.action === "deliver" ? { ...body, courierId: selectedId } : body;
+    const res = await fetch("/api/cs/courier-dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = (await res.json()) as { message?: string };
     if (!res.ok) { setMessage(data.message || "تعذر الحفظ."); return; }
     await load();
   }
-  async function addArea(event: FormEvent) {
-    event.preventDefault();
-    if (!selected) return;
-    const next = areaDraft.trim();
-    if (!next) return;
-    setAreaDraft("");
-    await post({ action: "areas", courierId: selected.id, areas: [...selected.areas, next] });
-  }
-  if (mode === "courier") {
+  if (mode === "courier" || mode === "admin") {
     return (
       <div className="mx-auto grid max-w-3xl gap-3">
-        <h1 className="text-xl font-extrabold text-[#14213D]">أوردراتي</h1>
+        <h1 className="text-xl font-extrabold text-[#14213D]">{mode === "admin" ? "المندوب" : "أوردراتي"}</h1>
+        {mode === "admin" ? (
+          <select
+            value={selectedId ? String(selectedId) : ""}
+            onChange={(event) => setSelectedId(event.target.value ? Number(event.target.value) : null)}
+            className="h-11 rounded-xl border border-[#E5E5E5] bg-white px-3 text-sm font-extrabold text-[#14213D]"
+          >
+            <option value="">اختر المندوب</option>
+            {(supervisor?.couriers || []).map((courier) => (
+              <option key={courier.id} value={String(courier.id)}>{courier.name}</option>
+            ))}
+          </select>
+        ) : null}
         {message ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{message}</p> : null}
         {loading ? <p className="text-sm font-bold text-[#14213D]/60">جاري التحميل…</p> : null}
-        {!loading && mine.length === 0 ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">مفيش أوردرات موزعة لك النهاردة.</p> : null}
+        {mode === "admin" && !selectedId && !loading ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">اختار المندوب عشان تشوف أوردراته.</p> : null}
+        {!loading && (mode === "courier" || selectedId) && mine.length === 0 ? (
+          <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">
+            مفيش أوردرات موزعة {mode === "admin" ? "للمندوب ده" : "لك"} النهاردة.
+          </p>
+        ) : null}
         {mine.map((order) => <CourierCard key={order.id} order={order} onPost={post} />)}
       </div>
     );
@@ -138,55 +171,24 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" }) {
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
       <h1 className="text-xl font-extrabold text-[#14213D]">توزيع المناديب</h1>
-      <p className="text-xs font-bold text-[#14213D]/60">أوردرات شيت سيد تميمة اللي اتأكدت النهاردة. التعليم على أوردر يطلعه من القائمة ويبعته للمندوب المختار.</p>
+      <p className="text-xs font-bold text-[#14213D]/60">اختار المندوب ثم علّم على الأوردرات اللي تخصه. التعليم يطلّع الأوردر من القائمة ويبعته للمندوب.</p>
       {message ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{message}</p> : null}
       {loading ? <p className="text-sm font-bold text-[#14213D]/60">جاري التحميل…</p> : null}
-      <div className="grid gap-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {(supervisor?.couriers || []).length === 0 && !loading ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">لسه مفيش مندوب. من صفحة المستخدمين اعمل حساب بصلاحية مندوب.</p> : null}
         {(supervisor?.couriers || []).map((courier) => (
           <button key={courier.id} type="button" onClick={() => setSelectedId(courier.id)} className={`rounded-2xl p-3 text-right shadow ring-1 ${selectedId === courier.id ? "bg-[#14213D] text-white ring-[#14213D]" : "bg-white text-[#14213D] ring-[#14213D]/10"}`}>
             <span className="block font-extrabold">{courier.name}</span>
-            <span className="mt-1 block text-xs font-bold opacity-80">{courier.areas.length ? courier.areas.join(" · ") : "لسه مفيش مناطق"}</span>
           </button>
         ))}
       </div>
-      {selected ? (
-        <form onSubmit={(event) => void addArea(event)} className="grid gap-2 rounded-2xl bg-white p-4 shadow">
-          <p className="text-sm font-extrabold text-[#14213D]">مناطق {selected.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {selected.areas.map((area) => (
-              <button key={area} type="button" onClick={() => void post({ action: "areas", courierId: selected.id, areas: selected.areas.filter((item) => item !== area) })} className="rounded-full bg-[#E5E5E5] px-3 py-1 text-xs font-extrabold text-[#14213D]">{area} ×</button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(supervisor?.areaOptions || []).filter((area) => !selected.areas.includes(area)).slice(0, 24).map((area) => (
-              <button key={area} type="button" onClick={() => void post({ action: "areas", courierId: selected.id, areas: [...selected.areas, area] })} className="rounded-full border border-[#14213D]/20 px-3 py-1 text-xs font-bold text-[#14213D]">{area}</button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input value={areaDraft} onChange={(event) => setAreaDraft(event.target.value)} placeholder="منطقة جديدة" className="min-w-0 flex-1 rounded-xl border border-[#E5E5E5] px-3 py-2 text-sm font-bold" />
-            <button type="submit" className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black">إضافة</button>
-          </div>
-        </form>
-      ) : null}
       <form onSubmit={(event) => { event.preventDefault(); if (!selected) { setMessage("اختار المندوب الأول."); return; } void post({ action: "assign", courierId: selected.id, orderNumber }); setOrderNumber(""); }} className="flex gap-2">
         <input value={orderNumber} onChange={(event) => setOrderNumber(event.target.value)} placeholder="رقم الأوردر" className="min-w-0 flex-1 rounded-xl border border-[#E5E5E5] bg-white px-3 py-2 text-sm font-bold" />
         <button type="submit" className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white">توزيع برقم الأوردر</button>
       </form>
-      {selected ? (
-        <section className="grid gap-2">
-          <h2 className="text-sm font-extrabold text-[#14213D]">مناطق {selected.name}</h2>
-          {matching.map((order) => (
-            <label key={order.id} className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 shadow">
-              <input type="checkbox" className="mt-1 size-5 accent-[#FCA311]" onChange={() => void post({ action: "assign", confirmationId: order.id, courierId: selected.id })} />
-              <OrderDetails order={order} />
-            </label>
-          ))}
-        </section>
-      ) : null}
       <section className="grid gap-2">
-        <h2 className="text-sm font-extrabold text-[#14213D]">{selected ? "باقي أوردرات النهاردة" : "أوردرات النهاردة"}</h2>
-        {others.map((order) => (
+        <h2 className="text-sm font-extrabold text-[#14213D]">{selected ? `أوردرات ${selected.name}` : "اختار المندوب ثم علّم على أوردراته"}</h2>
+        {(supervisor?.pool || []).map((order) => (
           <label key={order.id} className="flex items-start gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
             <input type="checkbox" className="mt-1 size-5 accent-[#FCA311]" disabled={!selected} onChange={() => selected && void post({ action: "assign", confirmationId: order.id, courierId: selected.id })} />
             <OrderDetails order={order} />

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -37,6 +38,7 @@ export default async function CsHomePage() {
   const agents = isSupervisor
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
+  const couriers = isCourierSupervisor ? await listCourierAgents() : [];
 
   return (
     <CsQueueClient
@@ -44,6 +46,7 @@ export default async function CsHomePage() {
       isSupervisor={isSupervisor}
       isAccounting={isAccounting}
       agents={agents}
+      couriers={couriers}
       isCourierSupervisor={isCourierSupervisor}
     />
   );

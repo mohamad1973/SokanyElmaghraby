@@ -20,9 +20,14 @@ async function viewerOrNull() {
   return { session, viewer };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const access = await viewerOrNull();
   if (!access) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+  const courierId = Number(new URL(request.url).searchParams.get("courierId") || "");
+  if (courierId && access.viewer.isAdmin) {
+    const data = await loadCourierDispatch(courierId, "courier");
+    return NextResponse.json(data);
+  }
   const mode = access.viewer.isCourierSupervisor || access.viewer.isAdmin ? "supervisor" : "courier";
   const data = await loadCourierDispatch(access.session.user.csAgentId!, mode);
   return NextResponse.json(data);
@@ -43,11 +48,12 @@ export async function POST(request: Request) {
   if (!body?.action) return NextResponse.json({ message: "طلب ناقص." }, { status: 400 });
 
   if (body.action === "deliver") {
-    if (!access.viewer.isCourier) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     const confirmationId = Number(body.confirmationId);
     if (!confirmationId) return NextResponse.json({ message: "الأوردر ناقص." }, { status: 400 });
     const outcome = body.outcome === "refused" || body.outcome === "postponed" ? body.outcome : "delivered";
-    const result = await markCourierOutcome(confirmationId, access.session.user.csAgentId!, outcome, body.reason);
+    const courierId = access.viewer.isAdmin && body.courierId ? Number(body.courierId) : access.viewer.isCourier ? access.session.user.csAgentId : 0;
+    if (!courierId) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    const result = await markCourierOutcome(confirmationId, courierId, outcome, body.reason);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
 

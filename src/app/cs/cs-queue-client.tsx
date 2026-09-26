@@ -236,9 +236,15 @@ function applyCourierSupervisorSheet(items: CsQueueItem[], f: DraftFilters, afte
   if (f.dateFrom && f.dateTo) {
     rows = rows.filter((item) => isWithinCairoDateRange(temimaSheetIso(item, f.dateBasis), f.dateFrom, f.dateTo));
   }
-  if (f.payment === "paid" || f.payment === "paid_online") rows = rows.filter((item) => itemPaymentState(item) === "paid");
-  else if (f.payment === "awaiting_payment") rows = rows.filter((item) => itemPaymentState(item) === "awaiting_payment");
-  else if (f.payment === "cod") rows = rows.filter((item) => itemPaymentState(item) === "cod");
+  if (f.payment === "paid" || f.payment === "paid_online" || f.payment === "paid_full") {
+    rows = rows.filter((item) => itemPaymentState(item) === "paid");
+  } else if (f.payment === "partial") {
+    rows = rows.filter((item) => Number(item.depositAmount) > 0 && itemPaymentState(item) !== "paid");
+  } else if (f.payment === "awaiting_payment") {
+    rows = rows.filter((item) => itemPaymentState(item) === "awaiting_payment");
+  } else if (f.payment === "cod") {
+    rows = rows.filter((item) => itemPaymentState(item) === "cod" && !(Number(item.depositAmount) > 0));
+  }
   if (f.status === "CONFIRMED" && f.followUp !== "all") {
     rows = rows.filter((item) => {
       if (f.followUp === "handed" && !item.handedToCarrier) return false;
@@ -534,6 +540,7 @@ type Props = {
   isAccounting?: boolean;
   isCourierSupervisor?: boolean;
   agents?: Array<{ id: number; name: string }>;
+  couriers?: Array<{ id: number; name: string }>;
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
@@ -545,6 +552,7 @@ export function CsQueueClient({
   isAccounting,
   isCourierSupervisor,
   agents = [],
+  couriers = [],
 }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -554,6 +562,8 @@ export function CsQueueClient({
   const [applied, setApplied] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
   const [afterLastDistribution, setAfterLastDistribution] = useState(false);
   const [printMode, setPrintMode] = useState<PrintMode>("none");
+  const [printingCourierId, setPrintingCourierId] = useState<number | null>(null);
+  const [courierPrintPick, setCourierPrintPick] = useState("");
   const [temimaAsk, setTemimaAsk] = useState(false);
   const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
@@ -636,6 +646,9 @@ export function CsQueueClient({
   }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor]);
 
   const printRows = useMemo(() => {
+    if (printingCourierId) {
+      return filtered.filter((item) => item.courierAgentId === printingCourierId);
+    }
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
     if (printMode === "sayed_temima") {
       if (isCourierSupervisor && temimaScope === "confirmed") {
@@ -659,13 +672,14 @@ export function CsQueueClient({
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId]);
 
   useEffect(() => {
     if (printMode === "none") return;
     const timer = window.setTimeout(() => {
       window.print();
       setPrintMode("none");
+      setPrintingCourierId(null);
     }, 50);
     return () => window.clearTimeout(timer);
   }, [printMode]);
@@ -752,11 +766,41 @@ export function CsQueueClient({
           )}
           <button
             type="button"
-            onClick={() => setTemimaAsk(true)}
+            onClick={() => {
+              setPrintingCourierId(null);
+              setTemimaAsk(true);
+            }}
             className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
           >
             طباعة تميمة
           </button>
+          {isCourierSupervisor ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <select
+                value={courierPrintPick}
+                onChange={(e) => setCourierPrintPick(e.target.value)}
+                className="h-9 rounded-xl border border-[#E5E5E5] bg-white px-2 text-xs font-extrabold text-[#14213D]"
+              >
+                <option value="">اسم المندوب</option>
+                {couriers.map((courier) => (
+                  <option key={courier.id} value={String(courier.id)}>
+                    {courier.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!courierPrintPick}
+                onClick={() => {
+                  setPrintingCourierId(Number(courierPrintPick));
+                  setPrintMode("sayed_temima");
+                }}
+                className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50 sm:py-2.5 sm:text-sm"
+              >
+                طباعة المندوب
+              </button>
+            </div>
+          ) : (
           <button
             type="button"
             onClick={() => setPrintMode("all")}
@@ -764,6 +808,7 @@ export function CsQueueClient({
           >
             طباعة الكل
           </button>
+          )}
           <button
             type="button"
             disabled={loading}
@@ -843,7 +888,18 @@ export function CsQueueClient({
               </>
             )}
           </select>
-          {draft.status === "CONFIRMED" ? (
+          {isCourierSupervisor ? (
+            <select
+              value={draft.payment}
+              onChange={(e) => patchDraft({ payment: e.target.value })}
+              className={FILTER_CONTROL}
+            >
+              <option value="all">كل الدفع</option>
+              <option value="paid_full">مدفوع بالكامل</option>
+              <option value="partial">دفع جزئي</option>
+              <option value="cod">عند الاستلام</option>
+            </select>
+          ) : draft.status === "CONFIRMED" ? (
             <select
               value={draft.followUp}
               onChange={(e) => patchDraft({ followUp: e.target.value })}
@@ -869,7 +925,7 @@ export function CsQueueClient({
               <option value="cod">عند الاستلام</option>
             </select>
           )}
-          {draft.status === "CONFIRMED" ? (
+          {!isCourierSupervisor && draft.status === "CONFIRMED" ? (
             <select
               value={draft.payment}
               onChange={(e) => patchDraft({ payment: e.target.value })}
@@ -892,7 +948,7 @@ export function CsQueueClient({
             <option value="sayed_temima">سيد تميمة</option>
           </select>
           )}
-          {isCourierSupervisor || temimaDateMode(draft) ? (
+          {isCourierSupervisor || !temimaDateMode(draft) ? null : (
             <select
               value={draft.dateBasis}
               onChange={(e) => patchDraft({ dateBasis: e.target.value === "saved" ? "saved" : "created" })}
@@ -901,7 +957,7 @@ export function CsQueueClient({
               <option value="created">تاريخ إنشاء الأوردر</option>
               <option value="saved">تاريخ حفظ الأوردر</option>
             </select>
-          ) : null}
+          )}
           <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
             <input
@@ -924,6 +980,7 @@ export function CsQueueClient({
               className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
           </div>
+          {isCourierSupervisor ? null : (
           <select
             value={draft.trackingFilter}
             onChange={(e) =>
@@ -934,6 +991,7 @@ export function CsQueueClient({
             <option value="all">كل أرقام التراك</option>
             <option value="missing">بدون رقم تراك</option>
           </select>
+          )}
           {isCourierSupervisor ? null : (
           <select
             value={draft.waybillFilter}
@@ -1229,7 +1287,9 @@ export function CsQueueClient({
           {printMode === "bosta"
             ? "بوسطة"
             : printMode === "sayed_temima"
-              ? "سيد تميمة"
+              ? printingCourierId
+                ? `سيد تميمة — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
+                : "سيد تميمة"
               : "كل الشركات"}
         </h1>
         <p className="mb-2 text-center text-xs">

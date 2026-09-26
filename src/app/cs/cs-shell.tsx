@@ -686,7 +686,12 @@ function CsHeader() {
               ref={shippingBtnRef}
               type="button"
               onClick={() => setShippingOpen((open) => !open)}
-              className={navClass(pathname.startsWith("/cs/temima") || pathname.startsWith("/cs/couriers"))}
+              className={navClass(
+                pathname.startsWith("/cs/temima") ||
+                  pathname.startsWith("/cs/couriers") ||
+                  pathname === "/cs/courier" ||
+                  pathname.startsWith("/cs/courier/"),
+              )}
               aria-expanded={shippingOpen}
               aria-haspopup="menu"
             >
@@ -761,6 +766,14 @@ function CsHeader() {
                 className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
               >
                 توزيع المناديب
+              </Link>
+              <Link
+                href="/cs/courier"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                المندوب
               </Link>
             </div>,
             document.body,

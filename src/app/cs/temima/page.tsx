@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { ensureCsTables, ensureDefaultCsAgent } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "../cs-queue-client";
@@ -21,6 +22,7 @@ export default async function CsTemimaSheetPage() {
     isSupervisor: true,
     seeAll: true,
   });
+  const couriers = await listCourierAgents();
 
   return (
     <CsQueueClient
@@ -28,6 +30,7 @@ export default async function CsTemimaSheetPage() {
       isSupervisor={false}
       isAccounting={false}
       agents={[]}
+      couriers={couriers}
       isCourierSupervisor
     />
   );
