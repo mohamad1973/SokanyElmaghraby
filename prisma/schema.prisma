@@ -308,6 +308,7 @@ model CsOrderConfirmation {
   startedAt            DateTime?
   confirmedAt          DateTime?
   confirmationEditedAt DateTime?
+  orderTotalDelta      Decimal?            @db.Decimal(12, 2)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   answers              CsChecklistAnswer[]

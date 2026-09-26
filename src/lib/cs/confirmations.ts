@@ -130,6 +130,18 @@ export function normalizeDepositFromNumber(value: unknown): string | null {
   return s || null;
 }
 
+export function parseOrderTotalDelta(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "object" && value !== null && "toNumber" in value) {
+    const n = (value as { toNumber: () => number }).toNumber();
+    if (!Number.isFinite(n) || n === 0) return null;
+    return Math.round(n * 100) / 100;
+  }
+  const n = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").trim());
+  if (!Number.isFinite(n) || n === 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
 export function normalizeDepositInstapayName(value: unknown): string | null {
   const s = String(value || "").trim().replace(/\s+/g, " ").slice(0, 191);
   return s || null;
@@ -859,6 +871,7 @@ export async function saveCsConfirmation(input: {
   depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
+  orderTotalDelta?: number | string | null;
   salesOrderNumber?: string | null;
   postCancel?: {
     invoice?: "before" | "after" | "";
@@ -942,6 +955,7 @@ export async function saveCsConfirmation(input: {
     depositInstapayName?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
+    orderTotalDelta?: unknown;
     customerSnapshot?: Record<string, unknown>;
   } = {};
   if (input.trackingNumber !== undefined) {
@@ -972,6 +986,9 @@ export async function saveCsConfirmation(input: {
   if (input.depositToMethod !== undefined) {
     shippingMetaPatch.depositToMethod = nextDepositToMethod;
   }
+  if (input.orderTotalDelta !== undefined) {
+    shippingMetaPatch.orderTotalDelta = parseOrderTotalDelta(input.orderTotalDelta);
+  }
 
   const salesOrderPatch =
     input.salesOrderNumber !== undefined
@@ -987,7 +1004,8 @@ export async function saveCsConfirmation(input: {
     input.depositFromNumber !== undefined ||
     input.depositInstapayName !== undefined ||
     input.depositToPhone !== undefined ||
-    input.depositToMethod !== undefined;
+    input.depositToMethod !== undefined ||
+    input.orderTotalDelta !== undefined;
 
   const followUpEditable =
     row.status === CS_CONFIRMATION_STATUS.CONFIRMED || Boolean(typed.postCancelAt);

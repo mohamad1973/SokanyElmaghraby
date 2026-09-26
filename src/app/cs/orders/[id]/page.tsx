@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { getCsConfirmation, serializeDepositAmount } from "@/lib/cs/confirmations";
+import { getCsConfirmation, parseOrderTotalDelta, serializeDepositAmount } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsCallSheet } from "./call-sheet";
@@ -45,6 +45,7 @@ export default async function CsOrderPage({ params }: Props) {
     bostaSyncError?: string | null;
     confirmedAt?: Date | null;
     confirmationEditedAt?: Date | null;
+    orderTotalDelta?: unknown;
   };
   const bostaFee = row.bostaShippingFee == null ? null : Number(row.bostaShippingFee);
 
@@ -83,6 +84,7 @@ export default async function CsOrderPage({ params }: Props) {
       }}
       confirmedAt={row.confirmedAt ? row.confirmedAt.toISOString() : null}
       confirmationEditedAt={row.confirmationEditedAt ? row.confirmationEditedAt.toISOString() : null}
+      orderTotalDelta={parseOrderTotalDelta(row.orderTotalDelta)}
       initialAnswers={confirmation.answers.map((a) => ({
         itemKey: a.itemKey,
         confirmed: a.confirmed,

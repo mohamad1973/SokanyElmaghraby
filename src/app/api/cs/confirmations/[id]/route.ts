@@ -21,6 +21,7 @@ type Body = {
   depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
+  orderTotalDelta?: number | string | null;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   salesOrderNumber?: string | null;
   invoiceNumber?: string | null;
@@ -71,6 +72,7 @@ export async function PUT(request: Request, context: Context) {
     body.depositInstapayName === undefined &&
     body.depositToPhone === undefined &&
     body.depositToMethod === undefined &&
+    body.orderTotalDelta === undefined &&
     body.salesOrderNumber === undefined &&
     !body.postCancel &&
     !body.followUp
@@ -102,6 +104,7 @@ export async function PUT(request: Request, context: Context) {
     body.depositInstapayName === undefined &&
     body.depositToPhone === undefined &&
     body.depositToMethod === undefined &&
+    body.orderTotalDelta === undefined &&
     body.salesOrderNumber === undefined &&
     body.invoiceNumber === undefined &&
     !body.postCancel &&
@@ -143,6 +146,7 @@ export async function PUT(request: Request, context: Context) {
     depositInstapayName: body.depositInstapayName,
     depositToPhone: body.depositToPhone,
     depositToMethod: body.depositToMethod,
+    orderTotalDelta: body.orderTotalDelta,
     salesOrderNumber: body.salesOrderNumber,
     postCancel: body.postCancel,
     followUp: body.followUp,

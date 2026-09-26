@@ -88,6 +88,7 @@ type Props = {
   };
   confirmedAt?: string | null;
   confirmationEditedAt?: string | null;
+  orderTotalDelta?: number | null;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -98,6 +99,14 @@ function parseDepositToKey(key: string): { phone: string; method: DepositMethod 
   const [phone = "", method = ""] = key.split(":");
   if (method === "wallet" || method === "instapay") return { phone, method };
   return { phone: "", method: "" };
+}
+
+function splitOrderTotalDelta(value: number | null | undefined): {
+  sign: "plus" | "minus";
+  amount: string;
+} {
+  if (value == null || !Number.isFinite(value) || value === 0) return { sign: "plus", amount: "" };
+  return { sign: value < 0 ? "minus" : "plus", amount: String(Math.abs(value)) };
 }
 
 function parseDepositPaidParts(iso: string | null | undefined): {
@@ -206,6 +215,7 @@ export function CsCallSheet({
   postCancel,
   confirmedAt,
   confirmationEditedAt,
+  orderTotalDelta: initialOrderTotalDelta,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
@@ -319,6 +329,9 @@ export function CsCallSheet({
   );
   const [postSystemNo, setPostSystemNo] = useState(() => String(postCancel?.systemNo || "").trim());
   const [postRefundPaid, setPostRefundPaid] = useState(Boolean(postCancel?.refundPaid));
+  const initialDelta = splitOrderTotalDelta(initialOrderTotalDelta);
+  const [totalSign, setTotalSign] = useState<"plus" | "minus">(initialDelta.sign);
+  const [totalAdjustAmount, setTotalAdjustAmount] = useState(initialDelta.amount);
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
@@ -326,8 +339,16 @@ export function CsCallSheet({
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const savedWhen = confirmedAt ? formatCairoOrderDateTime(confirmedAt) : null;
   const editedWhen = confirmationEditedAt ? formatCairoOrderDateTime(confirmationEditedAt) : null;
-  const orderTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
-  const showDepositCard = Number.isFinite(orderTotal) && orderTotal >= CS_DEPOSIT_THRESHOLD;
+  const wooTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
+  const adjustAbs = Number(String(totalAdjustAmount).replace(/,/g, "").trim());
+  const signedDelta =
+    !String(totalAdjustAmount).trim() || !Number.isFinite(adjustAbs) || adjustAbs <= 0
+      ? 0
+      : totalSign === "minus"
+        ? -adjustAbs
+        : adjustAbs;
+  const adjustedTotal = Math.max(0, (Number.isFinite(wooTotal) ? wooTotal : 0) + signedDelta);
+  const showDepositCard = adjustedTotal >= CS_DEPOSIT_THRESHOLD;
   const paymentState =
     snapshot?.paymentState ||
     resolvePaymentState({
@@ -424,6 +445,7 @@ export function CsCallSheet({
         depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
         depositToPhone: to.phone || null,
         depositToMethod: to.method || null,
+        orderTotalDelta: signedDelta === 0 ? null : Math.round(signedDelta * 100) / 100,
         postCancel:
           showFollowUp && postRefundPaid
             ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
@@ -559,7 +581,10 @@ export function CsCallSheet({
           <span className="font-extrabold">{answers.customer_name?.value || snapshot?.customerName}</span>
           <span dir="ltr">{answers.primary_phone?.value || snapshot?.phone}</span>
           <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
-            {snapshot?.total} {snapshot?.currency || "EGP"}
+            {signedDelta === 0
+              ? snapshot?.total
+              : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+            {snapshot?.currency || "EGP"}
           </span>
           <span>{snapshot?.paymentMethod}</span>
           {lockedShipping ? (
@@ -635,6 +660,42 @@ export function CsCallSheet({
                       />
                       نعم / تم
                     </label>
+                  ) : null}
+                  {item.key === "invoice_total" ? (
+                    <div className="space-y-2">
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setTotalSign("plus")}
+                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
+                            totalSign === "plus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                          }`}
+                        >
+                          زائد
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTotalSign("minus")}
+                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
+                            totalSign === "minus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                          }`}
+                        >
+                          ناقص
+                        </button>
+                      </div>
+                      <input
+                        inputMode="decimal"
+                        value={totalAdjustAmount}
+                        onChange={(e) => setTotalAdjustAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                        placeholder="المبلغ المضاف أو المخصوم"
+                        className={inputCls}
+                      />
+                      <p className="text-xs font-bold text-[#14213D]">
+                        الإجمالي بعد التعديل:{" "}
+                        {adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+                        {snapshot?.currency || "EGP"}
+                      </p>
+                    </div>
                   ) : null}
                   {item.type === "choice" ? (
                     <>
