@@ -585,9 +585,45 @@ function CsHeader() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [shippingOpen, setShippingOpen] = useState(false);
+  const [shippingPos, setShippingPos] = useState<{ top: number; left: number } | null>(null);
+  const shippingBtnRef = useRef<HTMLButtonElement>(null);
+  const shippingMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setShippingOpen(false);
   }, [pathname]);
+  useEffect(() => {
+    if (!shippingOpen) return;
+    const menuWidth = 176;
+    const margin = 8;
+    function place() {
+      const btn = shippingBtnRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const left = Math.max(margin, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - margin));
+      setShippingPos({ top: rect.bottom + 4, left });
+    }
+    shippingBtnRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    place();
+    const frame = window.requestAnimationFrame(place);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [shippingOpen]);
+  useEffect(() => {
+    if (!shippingOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (shippingBtnRef.current?.contains(target) || shippingMenuRef.current?.contains(target)) return;
+      setShippingOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [shippingOpen]);
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
   const roles = session?.user?.csRoles?.length
     ? session.user.csRoles
@@ -639,45 +675,23 @@ function CsHeader() {
             {canSeeOrders || isSupervisor ? <CsNotificationsBell /> : null}
           </div>
         </div>
-        <div
-          className={`-mx-1 flex items-center gap-2 px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-            shippingOpen ? "overflow-visible" : "overflow-x-auto"
-          }`}
-        >
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {showOrdersQueue ? (
             <Link href="/cs" className={navClass(pathname === "/cs")} onClick={() => setShippingOpen(false)}>
               الأوردرات
             </Link>
           ) : null}
           {isAdmin ? (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setShippingOpen((open) => !open)}
-                className={navClass(pathname.startsWith("/cs/temima") || pathname.startsWith("/cs/couriers"))}
-                aria-expanded={shippingOpen}
-              >
-                شحن
-              </button>
-              {shippingOpen ? (
-                <div className="absolute top-full z-50 mt-1 min-w-44 rounded-xl bg-white p-1 text-[#14213D] shadow-lg ring-1 ring-black/10">
-                  <Link
-                    href="/cs/temima"
-                    onClick={() => setShippingOpen(false)}
-                    className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
-                  >
-                    شيت سيد تميمة
-                  </Link>
-                  <Link
-                    href="/cs/couriers"
-                    onClick={() => setShippingOpen(false)}
-                    className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
-                  >
-                    توزيع المناديب
-                  </Link>
-                </div>
-              ) : null}
-            </div>
+            <button
+              ref={shippingBtnRef}
+              type="button"
+              onClick={() => setShippingOpen((open) => !open)}
+              className={navClass(pathname.startsWith("/cs/temima") || pathname.startsWith("/cs/couriers"))}
+              aria-expanded={shippingOpen}
+              aria-haspopup="menu"
+            >
+              شحن
+            </button>
           ) : null}
           {canSettlement ? (
             <Link href="/cs/settlement" className={navClass(pathname.startsWith("/cs/settlement"))}>
@@ -723,6 +737,35 @@ function CsHeader() {
           </button>
         </div>
       </div>
+      {shippingOpen && shippingPos
+        ? createPortal(
+            <div
+              ref={shippingMenuRef}
+              role="menu"
+              dir="rtl"
+              className="fixed z-[80] w-44 rounded-xl bg-white p-1 text-sm font-bold text-[#14213D] shadow-lg ring-1 ring-black/10"
+              style={{ top: shippingPos.top, left: shippingPos.left }}
+            >
+              <Link
+                href="/cs/temima"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                شيت سيد تميمة
+              </Link>
+              <Link
+                href="/cs/couriers"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                توزيع المناديب
+              </Link>
+            </div>,
+            document.body,
+          )
+        : null}
     </header>
   );
 }
