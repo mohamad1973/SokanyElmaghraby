@@ -764,6 +764,14 @@ export function CsQueueClient({
             طباعة بوسطة
           </button>
           )}
+          {isCourierSupervisor ? (
+            <Link
+              href="/cs/temima-scan"
+              className="shrink-0 rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
+            >
+              استلام بالسكان
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => {

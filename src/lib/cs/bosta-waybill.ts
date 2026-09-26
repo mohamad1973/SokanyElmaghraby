@@ -232,6 +232,7 @@ export async function attachBostaWaybillByOrderReference(input: {
   wooOrderNumber: string;
   snapshot: Snapshot;
   knownTracking?: string | null;
+  onlyIfFound?: boolean;
 }): Promise<boolean> {
   const knownTracking = String(input.knownTracking || "").trim();
   if (knownTracking) {
@@ -256,6 +257,7 @@ export async function attachBostaWaybillByOrderReference(input: {
     wooOrderNumber: input.wooOrderNumber,
   });
   if (!lookup.details?.trackingNumber) {
+    if (input.onlyIfFound) return false;
     await writeConfirmation({
       confirmationId: input.confirmationId,
       snapshot: input.snapshot,

@@ -312,7 +312,7 @@ async function linkMissingBostaWaybills(
     where: {
       AND: [
         { OR: [{ trackingNumber: null }, { trackingNumber: "" }] },
-        { OR: [{ shippingCompany: "bosta" }, { shippingCompany: null }] },
+        { OR: [{ shippingCompany: "bosta" }, { shippingCompany: null }, { shippingCompany: "sayed_temima" }] },
       ],
     },
     orderBy: { createdAt: "desc" },
@@ -321,7 +321,6 @@ async function linkMissingBostaWaybills(
   const trackingByOrder = new Map(orders.map((order) => [order.id, order.bostaTrackingNumber || ""]));
   for (const row of missing) {
     if (String(row.trackingNumber || "").trim()) continue;
-    if (row.shippingCompany === "sayed_temima") continue;
     const snap = (row.customerSnapshot as { trackingNumber?: string | null } | null) || null;
     await attachBostaWaybillByOrderReference({
       confirmationId: row.id,
@@ -329,6 +328,7 @@ async function linkMissingBostaWaybills(
       wooOrderNumber: row.wooOrderNumber,
       snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
       knownTracking: trackingByOrder.get(row.wooOrderId) || snap?.trackingNumber || null,
+      onlyIfFound: row.shippingCompany === "sayed_temima",
     });
   }
 }
@@ -353,13 +353,14 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       customerSnapshot: snapshotFromOrder(order, tracking.get(order.id)),
     },
   });
-  if (!String(saved.trackingNumber || "").trim() && saved.shippingCompany !== "sayed_temima") {
+  if (!String(saved.trackingNumber || "").trim()) {
     await attachBostaWaybillByOrderReference({
       confirmationId: saved.id,
       wooOrderId: saved.wooOrderId,
       wooOrderNumber: saved.wooOrderNumber,
       snapshot: (saved.customerSnapshot as Record<string, unknown> | null) || null,
       knownTracking: order.bostaTrackingNumber || null,
+      onlyIfFound: saved.shippingCompany === "sayed_temima",
     });
   }
 }
@@ -1301,6 +1302,16 @@ export async function setCsShippingCompany(input: {
         confirmed: true,
         value: input.shippingCompany,
       },
+    });
+  }
+
+  if (input.shippingCompany === "sayed_temima" && !String(row.trackingNumber || "").trim()) {
+    await attachBostaWaybillByOrderReference({
+      confirmationId: row.id,
+      wooOrderId: row.wooOrderId,
+      wooOrderNumber: row.wooOrderNumber,
+      snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
+      onlyIfFound: true,
     });
   }
 

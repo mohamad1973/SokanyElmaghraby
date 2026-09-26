@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { TrackingScanBox } from "../tracking-scan";
+
 type OrderCard = {
   id: number;
   wooOrderNumber: string;
@@ -144,6 +146,14 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
     return (
       <div className="mx-auto grid max-w-3xl gap-3">
         <h1 className="text-xl font-extrabold text-[#14213D]">{mode === "admin" ? "المندوب" : "أوردراتي"}</h1>
+        {mode === "courier" || selectedId ? (
+          <TrackingScanBox
+            action="deliver"
+            courierId={mode === "admin" ? selectedId : undefined}
+            title="تسليم بالسكان"
+            hint="امسح تراك بوسطة أو اكتبه. تقدر برضو تختار الأوردر من القائمة تحت."
+          />
+        ) : null}
         {mode === "admin" ? (
           <select
             value={selectedId ? String(selectedId) : ""}
