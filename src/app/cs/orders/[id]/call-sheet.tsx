@@ -506,6 +506,41 @@ export function CsCallSheet({
   const inputCls =
     "w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold text-[#14213D]";
   const compactBtn = "rounded-lg px-2.5 py-1 text-[11px] font-extrabold";
+  const invoiceAdjustFields = (
+    <div className="space-y-2">
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => setTotalSign("plus")}
+          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
+            totalSign === "plus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+          }`}
+        >
+          زائد
+        </button>
+        <button
+          type="button"
+          onClick={() => setTotalSign("minus")}
+          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
+            totalSign === "minus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+          }`}
+        >
+          ناقص
+        </button>
+      </div>
+      <input
+        inputMode="decimal"
+        value={totalAdjustAmount}
+        onChange={(e) => setTotalAdjustAmount(e.target.value.replace(/[^\d.]/g, ""))}
+        placeholder="المبلغ المضاف أو المخصوم"
+        className={inputCls}
+      />
+      <p className="text-xs font-bold text-[#14213D]">
+        الإجمالي بعد التعديل: {adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+        {snapshot?.currency || "EGP"}
+      </p>
+    </div>
+  );
 
   const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
@@ -661,42 +696,7 @@ export function CsCallSheet({
                       نعم / تم
                     </label>
                   ) : null}
-                  {item.key === "invoice_total" ? (
-                    <div className="space-y-2">
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setTotalSign("plus")}
-                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
-                            totalSign === "plus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-                          }`}
-                        >
-                          زائد
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTotalSign("minus")}
-                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
-                            totalSign === "minus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-                          }`}
-                        >
-                          ناقص
-                        </button>
-                      </div>
-                      <input
-                        inputMode="decimal"
-                        value={totalAdjustAmount}
-                        onChange={(e) => setTotalAdjustAmount(e.target.value.replace(/[^\d.]/g, ""))}
-                        placeholder="المبلغ المضاف أو المخصوم"
-                        className={inputCls}
-                      />
-                      <p className="text-xs font-bold text-[#14213D]">
-                        الإجمالي بعد التعديل:{" "}
-                        {adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
-                        {snapshot?.currency || "EGP"}
-                      </p>
-                    </div>
-                  ) : null}
+                  {item.key === "invoice_total" ? invoiceAdjustFields : null}
                   {item.type === "choice" ? (
                     <>
                       <select
@@ -771,7 +771,12 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className={`grid grid-cols-1 gap-3 ${showCancelCard ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-3"}`}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="flex min-h-[10rem] flex-col rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
+            <p className="text-lg font-extrabold text-[#14213D]">قيمة الفاتورة</p>
+            <p className="mt-1 text-sm text-[#14213D]/60">زائد أو ناقص على قيمة ووكومرس</p>
+            <div className="mt-3">{invoiceAdjustFields}</div>
+          </div>
           {showCancelCard ? (
             <div className="flex min-h-[10rem] flex-col justify-between rounded-2xl bg-red-50 p-5 shadow ring-2 ring-red-700">
               <div>
