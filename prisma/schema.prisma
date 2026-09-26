@@ -251,7 +251,9 @@ model CsAgent {
   phone         String?
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
-  confirmations CsOrderConfirmation[]
+  courierAreas  String?                @db.Text
+  confirmations CsOrderConfirmation[]  @relation("AssignedAgent")
+  courierOrders CsOrderConfirmation[]  @relation("TemimaCourier")
   assignments   CsOrderAssignment[]    @relation("AssignmentAgent")
   createdAssignments CsOrderAssignment[] @relation("AssignmentCreator")
 }
@@ -262,7 +264,10 @@ model CsOrderConfirmation {
   wooOrderNumber       String
   status               String              @default("PENDING")
   assignedAgentId      Int?
-  assignedAgent        CsAgent?            @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  assignedAgent        CsAgent?            @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  courierAgentId       Int?
+  courierAssignedAt    DateTime?
+  courierAgent         CsAgent?            @relation("TemimaCourier", fields: [courierAgentId], references: [id], onDelete: SetNull)
   customerSnapshot     Json?
   failReason           String?             @db.Text
   shippingCompany      String?
@@ -305,6 +310,7 @@ model CsOrderConfirmation {
 
   @@index([status])
   @@index([assignedAgentId])
+  @@index([courierAgentId])
   @@index([createdAt])
   @@index([shippingCompany])
   @@index([trackingNumber])

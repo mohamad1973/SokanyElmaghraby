@@ -14,6 +14,9 @@ export default async function CsHomePage() {
   await ensureDefaultCsAgent();
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
+  if (!viewer.canSeeOrders && (viewer.isCourierSupervisor || viewer.isCourier)) {
+    redirect("/cs/couriers");
+  }
   if (!viewer.canSeeOrders && (viewer.isTransfers || session.user.csIsTransfers)) {
     redirect("/cs/transfers");
   }

@@ -1274,6 +1274,8 @@ export async function resolveCsViewer(agentId: number) {
       isAccounting: false,
       canAccessTransfers: false,
       canSeeOrders: true,
+      isCourierSupervisor: false,
+      isCourier: false,
       role: "agent" as const,
       roles: ["agent"] as const,
       agent: null,

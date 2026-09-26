@@ -597,6 +597,8 @@ function CsHeader() {
   const isTransfers = roles.includes("transfers") || Boolean(session?.user?.csIsTransfers);
   const isShipping = roles.includes("shipping");
   const isAccounting = roles.includes("accounting");
+  const isCourierSupervisor = roles.includes("courier_supervisor");
+  const isCourier = roles.includes("courier");
   const canSeeOrders = roles.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting");
   const isTransfersOnly = isTransfers && !canSeeOrders && !isShipping;
   const canSettlement = isShipping || isSupervisor || isAdmin;
@@ -618,7 +620,11 @@ function CsHeader() {
           <div className="min-w-0">
             <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">مرحباً، {agentName}</p>
             <p className="text-[11px] text-white/70 sm:text-xs">
-              {isTransfersOnly
+              {isCourierSupervisor
+                ? "مشرف مناديب · توزيع أوردرات اليوم"
+                : isCourier && !canSeeOrders
+                  ? "مندوب · أوردراتك"
+                  : isTransfersOnly
                 ? "التحويلات · مخزون الموقع وحد الطلب"
                 : isShipping
                   ? "حساب شحن · تصفية سيد تميمة"
@@ -628,7 +634,7 @@ function CsHeader() {
             </p>
           </div>
           <div className="shrink-0 overflow-visible">
-            <CsNotificationsBell />
+            {canSeeOrders || isSupervisor ? <CsNotificationsBell /> : null}
           </div>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -660,6 +666,16 @@ function CsHeader() {
           {isAdmin ? (
             <Link href="/cs/users" className={navClass(pathname.startsWith("/cs/users"))}>
               المستخدمون
+            </Link>
+          ) : null}
+          {isCourierSupervisor ? (
+            <Link href="/cs/couriers" className={navClass(pathname.startsWith("/cs/couriers"))}>
+              توزيع المناديب
+            </Link>
+          ) : null}
+          {isCourier && !isCourierSupervisor ? (
+            <Link href="/cs/couriers" className={navClass(pathname.startsWith("/cs/couriers"))}>
+              أوردراتي
             </Link>
           ) : null}
           <button

@@ -19,6 +19,8 @@ const PERMISSIONS = [
   { id: "transfers", label: "التحويلات" },
   { id: "shipping", label: "شحن تميمة" },
   { id: "accounting", label: "حسابات" },
+  { id: "courier_supervisor", label: "مشرف مناديب" },
+  { id: "courier", label: "مندوب" },
   { id: "admin", label: "أدمن" },
 ] as const;
 

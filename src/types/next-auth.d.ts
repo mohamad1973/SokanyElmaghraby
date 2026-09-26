@@ -1,7 +1,15 @@
 import type { DefaultSession } from "next-auth";
 
 export type UserRole = "admin" | "driver" | "cs";
-export type CsAgentRole = "agent" | "supervisor" | "admin" | "transfers" | "shipping" | "accounting";
+export type CsAgentRole =
+  | "agent"
+  | "supervisor"
+  | "admin"
+  | "transfers"
+  | "shipping"
+  | "accounting"
+  | "courier_supervisor"
+  | "courier";
 
 declare module "next-auth" {
   interface Session {

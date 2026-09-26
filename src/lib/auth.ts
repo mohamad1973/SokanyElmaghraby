@@ -51,9 +51,7 @@ export const authOptions: NextAuthOptions = {
         session.user.driverId = token.driverId as number | undefined;
         session.user.csAgentId = token.csAgentId as number | undefined;
         session.user.csIsSupervisor = Boolean(token.csIsSupervisor);
-        session.user.csRole =
-          (token.csRole as "agent" | "supervisor" | "admin" | "transfers" | "shipping" | "accounting" | undefined) ||
-          undefined;
+        session.user.csRole = (token.csRole as CsRole | undefined) || undefined;
         session.user.csRoles = (token.csRoles as CsRole[] | undefined) || undefined;
         session.user.csIsAdmin = Boolean(token.csIsAdmin);
         session.user.csIsTransfers = Boolean(token.csIsTransfers);

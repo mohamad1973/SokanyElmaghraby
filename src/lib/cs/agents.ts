@@ -3,9 +3,26 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/security";
 
-export type CsRole = "agent" | "supervisor" | "admin" | "transfers" | "shipping" | "accounting";
+export type CsRole =
+  | "agent"
+  | "supervisor"
+  | "admin"
+  | "transfers"
+  | "shipping"
+  | "accounting"
+  | "courier_supervisor"
+  | "courier";
 
-export const CS_ROLES: CsRole[] = ["agent", "supervisor", "admin", "transfers", "shipping", "accounting"];
+export const CS_ROLES: CsRole[] = [
+  "agent",
+  "supervisor",
+  "admin",
+  "transfers",
+  "shipping",
+  "accounting",
+  "courier_supervisor",
+  "courier",
+];
 
 export function normalizeCsUsername(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
@@ -65,6 +82,8 @@ export function csFlagsFromRoles(roles: CsRole[]) {
     isTransfers: hasAdmin || list.includes("transfers"),
     isShipping: hasAdmin || list.includes("shipping"),
     isAccounting: hasAdmin || list.includes("accounting"),
+    isCourierSupervisor: list.includes("courier_supervisor"),
+    isCourier: list.includes("courier"),
     canAccessTransfers: hasAdmin || list.includes("transfers") || list.includes("supervisor"),
     canSeeOrders:
       hasAdmin ||
@@ -308,6 +327,9 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsAgent` ADD COLUMN `role` VARCHAR(32) NOT NULL DEFAULT 'agent'",
     "ALTER TABLE `CsAgent` ADD COLUMN `phone` VARCHAR(32) NULL",
     "ALTER TABLE `CsAgent` ADD COLUMN `roles` VARCHAR(191) NULL",
+    "ALTER TABLE `CsAgent` ADD COLUMN `courierAreas` TEXT NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `courierAgentId` INT NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `courierAssignedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `shippingCompany` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `handedToCarrier` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `deliveredToCustomer` BOOLEAN NOT NULL DEFAULT false",
