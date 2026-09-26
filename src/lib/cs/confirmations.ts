@@ -370,7 +370,6 @@ export async function listCsConfirmationsForViewer(opts: {
     rows = (await prisma.csOrderConfirmation.findMany({
       include: { assignedAgent: true, answers: true },
       orderBy: { createdAt: "desc" },
-      take: 500,
     })) as Row[];
   } catch (error) {
     console.error("[cs] listCsConfirmationsForViewer failed, retry after migrate:", error);
@@ -379,7 +378,6 @@ export async function listCsConfirmationsForViewer(opts: {
       rows = (await prisma.csOrderConfirmation.findMany({
         include: { assignedAgent: true, answers: true },
         orderBy: { createdAt: "desc" },
-        take: 500,
       })) as Row[];
     } catch (retryError) {
       console.error("[cs] listCsConfirmationsForViewer legacy fallback:", retryError);
@@ -399,7 +397,7 @@ export async function listCsConfirmationsForViewer(opts: {
         }>
       >(
         `SELECT \`id\`, \`wooOrderId\`, \`wooOrderNumber\`, \`status\`, \`assignedAgentId\`, \`customerSnapshot\`, \`failReason\`, \`startedAt\`, \`confirmedAt\`, \`createdAt\`, \`updatedAt\`
-         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC LIMIT 500`,
+         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC`,
       );
       const agentIds = [...new Set(legacy.map((r) => r.assignedAgentId).filter(Boolean))] as number[];
       const agents =
