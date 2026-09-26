@@ -29,6 +29,7 @@ export default async function CsOrderPage({ params }: Props) {
     depositPaid?: boolean | null;
     depositPayMethod?: string | null;
     depositFromNumber?: string | null;
+    depositInstapayName?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
     depositPaidAt?: Date | null;
@@ -63,6 +64,7 @@ export default async function CsOrderPage({ params }: Props) {
       depositPaid={Boolean(row.depositPaid)}
       depositPayMethod={row.depositPayMethod || null}
       depositFromNumber={row.depositFromNumber || null}
+      depositInstapayName={row.depositInstapayName || null}
       depositToPhone={row.depositToPhone || null}
       depositToMethod={row.depositToMethod || null}
       depositPaidAt={row.depositPaidAt ? row.depositPaidAt.toISOString() : null}

@@ -15,6 +15,7 @@ export type DepositApprovalNotificationBody = {
   depositAmount: number | null;
   depositPayMethod: string | null;
   depositFromNumber: string | null;
+  depositInstapayName: string | null;
   depositToPhone: string | null;
   depositToMethod: string | null;
   depositPaidAt: string | null;

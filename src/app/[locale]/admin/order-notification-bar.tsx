@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { Link } from "@/i18n/navigation";
 import { ensureDepositAlertUnlockedOnGesture, playLoudDepositAlert } from "@/lib/deposit-alert-sound";
+import { formatDepositPaidClock } from "@/lib/cs/order-window";
 
 type DepositItem = {
   id: number;
@@ -16,6 +17,7 @@ type DepositItem = {
   depositAmount: number | null;
   depositPayMethod?: string | null;
   depositFromNumber?: string | null;
+  depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   depositPaidAt?: string | null;
@@ -263,12 +265,7 @@ export function AdminNotificationsBell() {
                     <dt className="font-bold text-zinc-500">وقت الدفع</dt>
                     <dd className="font-extrabold">
                       {selectedDeposit.depositPaidAt
-                        ? new Date(selectedDeposit.depositPaidAt).toLocaleString("ar-EG", {
-                            day: "numeric",
-                            month: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
+                        ? formatDepositPaidClock(selectedDeposit.depositPaidAt)
                         : "—"}
                     </dd>
                   </div>
@@ -279,6 +276,7 @@ export function AdminNotificationsBell() {
                         selectedDeposit.depositPayMethod ||
                         "—"}{" "}
                       · <span dir="ltr">{selectedDeposit.depositFromNumber || "—"}</span>
+                      {selectedDeposit.depositInstapayName ? ` · ${selectedDeposit.depositInstapayName}` : ""}
                     </dd>
                   </div>
                   <div className="sm:col-span-2">

@@ -30,6 +30,7 @@ export async function POST(request: Request, context: Context) {
     depositAmount: body.depositAmount as string | number | null | undefined,
     depositPayMethod: (body.depositPayMethod as string | null) ?? null,
     depositFromNumber: (body.depositFromNumber as string | null) ?? null,
+    depositInstapayName: (body.depositInstapayName as string | null) ?? null,
     depositToPhone: (body.depositToPhone as string | null) ?? null,
     depositToMethod: (body.depositToMethod as string | null) ?? null,
     depositPaidAt: (body.depositPaidAt as string | null) ?? null,

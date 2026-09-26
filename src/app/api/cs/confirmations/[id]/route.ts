@@ -18,6 +18,7 @@ type Body = {
   depositPaid?: boolean;
   depositPayMethod?: string | null;
   depositFromNumber?: string | null;
+  depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
@@ -67,6 +68,7 @@ export async function PUT(request: Request, context: Context) {
     body.depositPaid === undefined &&
     body.depositPayMethod === undefined &&
     body.depositFromNumber === undefined &&
+    body.depositInstapayName === undefined &&
     body.depositToPhone === undefined &&
     body.depositToMethod === undefined &&
     body.salesOrderNumber === undefined &&
@@ -97,6 +99,7 @@ export async function PUT(request: Request, context: Context) {
     body.depositPaid === undefined &&
     body.depositPayMethod === undefined &&
     body.depositFromNumber === undefined &&
+    body.depositInstapayName === undefined &&
     body.depositToPhone === undefined &&
     body.depositToMethod === undefined &&
     body.salesOrderNumber === undefined &&
@@ -137,6 +140,7 @@ export async function PUT(request: Request, context: Context) {
     depositPaid: body.depositPaid,
     depositPayMethod: body.depositPayMethod,
     depositFromNumber: body.depositFromNumber,
+    depositInstapayName: body.depositInstapayName,
     depositToPhone: body.depositToPhone,
     depositToMethod: body.depositToMethod,
     salesOrderNumber: body.salesOrderNumber,

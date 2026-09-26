@@ -130,6 +130,11 @@ export function normalizeDepositFromNumber(value: unknown): string | null {
   return s || null;
 }
 
+export function normalizeDepositInstapayName(value: unknown): string | null {
+  const s = String(value || "").trim().replace(/\s+/g, " ").slice(0, 191);
+  return s || null;
+}
+
 export function normalizeDepositToPhone(value: unknown): string | null {
   const s = String(value || "").trim();
   if ((CS_DEPOSIT_COMPANY_PHONES as readonly string[]).includes(s)) return s;
@@ -851,6 +856,7 @@ export async function saveCsConfirmation(input: {
   depositPaid?: boolean;
   depositPayMethod?: string | null;
   depositFromNumber?: string | null;
+  depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   salesOrderNumber?: string | null;
@@ -883,6 +889,7 @@ export async function saveCsConfirmation(input: {
     depositPaid?: boolean | null;
     depositPayMethod?: string | null;
     depositFromNumber?: string | null;
+    depositInstapayName?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
     postCancelAt?: Date | null;
@@ -910,6 +917,12 @@ export async function saveCsConfirmation(input: {
     input.depositFromNumber !== undefined
       ? normalizeDepositFromNumber(input.depositFromNumber)
       : normalizeDepositFromNumber(typed.depositFromNumber);
+  const nextDepositInstapayName =
+    nextDepositPayMethod === "instapay"
+      ? input.depositInstapayName !== undefined
+        ? normalizeDepositInstapayName(input.depositInstapayName)
+        : normalizeDepositInstapayName(typed.depositInstapayName)
+      : null;
   const nextDepositToPhone =
     input.depositToPhone !== undefined
       ? normalizeDepositToPhone(input.depositToPhone)
@@ -926,6 +939,7 @@ export async function saveCsConfirmation(input: {
     depositPaid?: boolean;
     depositPayMethod?: string | null;
     depositFromNumber?: string | null;
+    depositInstapayName?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
     customerSnapshot?: Record<string, unknown>;
@@ -949,6 +963,9 @@ export async function saveCsConfirmation(input: {
   if (input.depositFromNumber !== undefined) {
     shippingMetaPatch.depositFromNumber = nextDepositFromNumber;
   }
+  if (input.depositInstapayName !== undefined || input.depositPayMethod !== undefined) {
+    shippingMetaPatch.depositInstapayName = nextDepositInstapayName;
+  }
   if (input.depositToPhone !== undefined) {
     shippingMetaPatch.depositToPhone = nextDepositToPhone;
   }
@@ -968,6 +985,7 @@ export async function saveCsConfirmation(input: {
     input.depositPaid !== undefined ||
     input.depositPayMethod !== undefined ||
     input.depositFromNumber !== undefined ||
+    input.depositInstapayName !== undefined ||
     input.depositToPhone !== undefined ||
     input.depositToMethod !== undefined;
 

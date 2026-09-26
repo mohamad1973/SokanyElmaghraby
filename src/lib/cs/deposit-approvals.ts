@@ -8,6 +8,7 @@ import {
 } from "@/lib/admin-notifications";
 import {
   normalizeDepositFromNumber,
+  normalizeDepositInstapayName,
   normalizeDepositPayMethod,
   normalizeDepositToPhone,
   parseDepositAmount,
@@ -39,6 +40,7 @@ export async function requestDepositApproval(input: {
   depositAmount?: number | string | null;
   depositPayMethod?: string | null;
   depositFromNumber?: string | null;
+  depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   depositPaidAt?: string | null;
@@ -64,6 +66,7 @@ export async function requestDepositApproval(input: {
   }
 
   const payMethod = normalizeDepositPayMethod(input.depositPayMethod);
+  const instapayName = payMethod === "instapay" ? normalizeDepositInstapayName(input.depositInstapayName) : null;
   const toPhone = normalizeDepositToPhone(input.depositToPhone);
   const toMethod = normalizeDepositPayMethod(input.depositToMethod);
 
@@ -75,6 +78,7 @@ export async function requestDepositApproval(input: {
       depositAmount: amount,
       depositPayMethod: payMethod,
       depositFromNumber: normalizeDepositFromNumber(input.depositFromNumber),
+      depositInstapayName: instapayName,
       depositToPhone: toPhone,
       depositToMethod: toMethod,
       depositPaidAt: paidAt,
@@ -107,6 +111,7 @@ export async function requestDepositApproval(input: {
         depositAmount: amount,
         depositPayMethod: payMethod,
         depositFromNumber: normalizeDepositFromNumber(input.depositFromNumber),
+        depositInstapayName: instapayName,
         depositToPhone: toPhone,
         depositToMethod: toMethod,
         depositPaidAt: paidAt.toISOString(),
@@ -138,6 +143,7 @@ export async function listPendingDepositApprovals() {
       depositAmount?: unknown;
       depositPayMethod?: string | null;
       depositFromNumber?: string | null;
+      depositInstapayName?: string | null;
       depositToPhone?: string | null;
       depositToMethod?: string | null;
       depositPaidAt?: Date | null;
@@ -151,6 +157,7 @@ export async function listPendingDepositApprovals() {
       depositAmount: serializeDepositAmount(typed.depositAmount),
       depositPayMethod: normalizeDepositPayMethod(typed.depositPayMethod),
       depositFromNumber: typed.depositFromNumber || null,
+      depositInstapayName: normalizeDepositInstapayName(typed.depositInstapayName),
       depositToPhone: typed.depositToPhone || null,
       depositToMethod: normalizeDepositPayMethod(typed.depositToMethod),
       depositPaidAt: typed.depositPaidAt?.toISOString() || null,
@@ -177,6 +184,7 @@ export async function getDepositApprovalById(id: number) {
     depositPaid?: boolean;
     depositPayMethod?: string | null;
     depositFromNumber?: string | null;
+    depositInstapayName?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
     depositPaidAt?: Date | null;
@@ -194,6 +202,7 @@ export async function getDepositApprovalById(id: number) {
     depositPaid: Boolean(typed.depositPaid),
     depositPayMethod: normalizeDepositPayMethod(typed.depositPayMethod),
     depositFromNumber: typed.depositFromNumber || null,
+    depositInstapayName: normalizeDepositInstapayName(typed.depositInstapayName),
     depositToPhone: typed.depositToPhone || null,
     depositToMethod: normalizeDepositPayMethod(typed.depositToMethod),
     depositPaidAt: typed.depositPaidAt?.toISOString() || null,

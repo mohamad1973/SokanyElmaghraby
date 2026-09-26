@@ -279,6 +279,7 @@ model CsOrderConfirmation {
   depositPaid          Boolean             @default(false)
   depositPayMethod     String?
   depositFromNumber    String?             @db.VarChar(32)
+  depositInstapayName  String?             @db.VarChar(191)
   depositToPhone       String?             @db.VarChar(32)
   depositToMethod      String?
   depositPaidAt        DateTime?

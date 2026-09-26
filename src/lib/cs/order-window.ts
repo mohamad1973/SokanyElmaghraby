@@ -200,3 +200,24 @@ export function formatCairoOrderDateTime(iso: string | null | undefined) {
 
   return { absolute, relative };
 }
+
+/** Deposit payment time as day/month hour:minute صباحاً or مساءً in Cairo. */
+export function formatDepositPaidClock(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Cairo",
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  const hour24 = Number(pick("hour"));
+  if (!Number.isFinite(hour24)) return "—";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  const period = hour24 < 12 ? "صباحاً" : "مساءً";
+  return `${pick("day")}/${pick("month")} ${hour12}:${pick("minute")} ${period}`;
+}

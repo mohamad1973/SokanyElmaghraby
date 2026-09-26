@@ -74,6 +74,7 @@ type Props = {
   depositPaid?: boolean;
   depositPayMethod?: string | null;
   depositFromNumber?: string | null;
+  depositInstapayName?: string | null;
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   depositPaidAt?: string | null;
@@ -99,33 +100,53 @@ function parseDepositToKey(key: string): { phone: string; method: DepositMethod 
   return { phone: "", method: "" };
 }
 
-function parseDepositPaidParts(iso: string | null | undefined): { day: string; time: string } {
-  if (!iso) return { day: "", time: "" };
+function parseDepositPaidParts(iso: string | null | undefined): {
+  day: string;
+  hour: string;
+  minute: string;
+  period: "morning" | "evening" | "";
+} {
+  if (!iso) return { day: "", hour: "", minute: "", period: "" };
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { day: "", time: "" };
+  if (Number.isNaN(d.getTime())) return { day: "", hour: "", minute: "", period: "" };
+  const hour24 = d.getHours();
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return { day: String(d.getDate()), time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+  return {
+    day: String(d.getDate()),
+    hour: String(hour12),
+    minute: pad(d.getMinutes()),
+    period: hour24 < 12 ? "morning" : "evening",
+  };
 }
 
-/** Build ISO from day-of-month + HH:mm using current year/month (Cairo-friendly local Date). */
-function buildPaidAtIsoFromDayTime(dayStr: string, timeStr: string): { ok: true; iso: string } | { ok: false; message: string } {
+/** Build ISO from day-of-month + 12-hour clock (صباحاً / مساءً) using the current year and month. */
+function buildPaidAtIsoFromDayTime(
+  dayStr: string,
+  hourStr: string,
+  minuteStr: string,
+  period: "morning" | "evening" | "",
+): { ok: true; iso: string } | { ok: false; message: string } {
   const day = Number(dayStr);
-  const match = /^(\d{1,2}):(\d{2})$/.exec(String(timeStr || "").trim());
+  const hour12 = Number(hourStr);
+  const minute = Number(minuteStr);
   if (!Number.isInteger(day) || day < 1 || day > 31) {
     return { ok: false, message: "أدخل يوم الدفع (1–31)." };
   }
-  if (!match) {
+  if (!String(hourStr || "").trim() || !String(minuteStr || "").trim()) {
     return { ok: false, message: "أدخل ساعة ودقيقة الدفع." };
   }
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+  if (!Number.isInteger(hour12) || hour12 < 1 || hour12 > 12 || !Number.isInteger(minute) || minute < 0 || minute > 59) {
     return { ok: false, message: "وقت الدفع غير صالح." };
   }
+  if (period !== "morning" && period !== "evening") {
+    return { ok: false, message: "اختَر صباحاً أو مساءً." };
+  }
+  const hour24 = period === "morning" ? (hour12 === 12 ? 0 : hour12) : hour12 === 12 ? 12 : hour12 + 12;
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
-  const candidate = new Date(year, month, day, hour, minute, 0, 0);
+  const candidate = new Date(year, month, day, hour24, minute, 0, 0);
   if (candidate.getMonth() !== month || candidate.getDate() !== day) {
     return { ok: false, message: "اليوم غير موجود في الشهر الحالي." };
   }
@@ -177,6 +198,7 @@ export function CsCallSheet({
   depositPaid: initialDepositPaid,
   depositPayMethod: initialDepositPayMethod,
   depositFromNumber: initialDepositFromNumber,
+  depositInstapayName: initialDepositInstapayName,
   depositToPhone: initialDepositToPhone,
   depositToMethod: initialDepositToMethod,
   depositPaidAt: initialDepositPaidAt,
@@ -277,14 +299,20 @@ export function CsCallSheet({
   const [depositFromNumber, setDepositFromNumber] = useState(
     () => String(initialDepositFromNumber || "").trim(),
   );
+  const [depositInstapayName, setDepositInstapayName] = useState(
+    () => String(initialDepositInstapayName || "").trim(),
+  );
   const [depositToKey, setDepositToKey] = useState(() => {
     const phone = String(initialDepositToPhone || "").trim();
     const method = String(initialDepositToMethod || "").trim();
     if (phone && (method === "wallet" || method === "instapay")) return makeDepositToKey(phone, method);
     return "";
   });
-  const [depositPaidDay, setDepositPaidDay] = useState(() => parseDepositPaidParts(initialDepositPaidAt).day);
-  const [depositPaidTime, setDepositPaidTime] = useState(() => parseDepositPaidParts(initialDepositPaidAt).time);
+  const paidParts = parseDepositPaidParts(initialDepositPaidAt);
+  const [depositPaidDay, setDepositPaidDay] = useState(() => paidParts.day);
+  const [depositPaidHour, setDepositPaidHour] = useState(() => paidParts.hour);
+  const [depositPaidMinute, setDepositPaidMinute] = useState(() => paidParts.minute);
+  const [depositPaidPeriod, setDepositPaidPeriod] = useState<"morning" | "evening" | "">(() => paidParts.period);
   const [requestingApproval, setRequestingApproval] = useState(false);
   const [postInvoice, setPostInvoice] = useState<"before" | "after" | "">(
     () => postCancel?.invoice || "",
@@ -393,6 +421,7 @@ export function CsCallSheet({
         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
         depositPayMethod: depositPayMethod || null,
         depositFromNumber: depositFromNumber.trim() || null,
+        depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
         depositToPhone: to.phone || null,
         depositToMethod: to.method || null,
         postCancel:
@@ -853,6 +882,17 @@ export function CsCallSheet({
                   className={inputCls}
                 />
               </div>
+              {depositPayMethod === "instapay" ? (
+                <div>
+                  <label className="text-[10px] font-bold text-[#14213D]/70">اسم حساب انستا</label>
+                  <input
+                    value={depositInstapayName}
+                    onChange={(e) => setDepositInstapayName(e.target.value)}
+                    placeholder="اختياري"
+                    className={inputCls}
+                  />
+                </div>
+              ) : null}
               <div>
                 <label className="text-[10px] font-bold text-[#14213D]/70">الدفع إلى</label>
                 <select
@@ -898,12 +938,45 @@ export function CsCallSheet({
               </div>
               <div>
                 <label className="text-[10px] font-bold text-[#14213D]/70">ساعة ودقيقة الدفع</label>
-                <input
-                  type="time"
-                  value={depositPaidTime}
-                  onChange={(e) => setDepositPaidTime(e.target.value)}
-                  className={inputCls}
-                />
+                <div className="mt-0.5 flex items-center gap-1">
+                  <input
+                    dir="ltr"
+                    inputMode="numeric"
+                    value={depositPaidHour}
+                    onChange={(e) => setDepositPaidHour(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+                    placeholder="ساعة"
+                    className={inputCls}
+                  />
+                  <span className="text-xs font-extrabold text-[#14213D]">:</span>
+                  <input
+                    dir="ltr"
+                    inputMode="numeric"
+                    value={depositPaidMinute}
+                    onChange={(e) => setDepositPaidMinute(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+                    placeholder="دقيقة"
+                    className={inputCls}
+                  />
+                </div>
+                <div className="mt-1 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDepositPaidPeriod("morning")}
+                    className={`${compactBtn} flex-1 ${
+                      depositPaidPeriod === "morning" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    صباحاً
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDepositPaidPeriod("evening")}
+                    className={`${compactBtn} flex-1 ${
+                      depositPaidPeriod === "evening" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                    }`}
+                  >
+                    مساءً
+                  </button>
+                </div>
               </div>
               <div className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
                 {depositApprovalStatus === "pending"
@@ -922,7 +995,12 @@ export function CsCallSheet({
                     setRequestingApproval(true);
                     setMessage("");
                     const to = parseDepositToKey(depositToKey);
-                    const paidAt = buildPaidAtIsoFromDayTime(depositPaidDay, depositPaidTime);
+                    const paidAt = buildPaidAtIsoFromDayTime(
+                      depositPaidDay,
+                      depositPaidHour,
+                      depositPaidMinute,
+                      depositPaidPeriod,
+                    );
                     if (!paidAt.ok) {
                       setMessage(paidAt.message);
                       setRequestingApproval(false);
@@ -935,6 +1013,7 @@ export function CsCallSheet({
                         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
                         depositPayMethod: depositPayMethod || null,
                         depositFromNumber: depositFromNumber.trim() || null,
+                        depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
                         depositToPhone: to.phone || null,
                         depositToMethod: to.method || null,
                         depositPaidAt: paidAt.iso,

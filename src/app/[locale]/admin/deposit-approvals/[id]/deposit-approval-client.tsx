@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Link } from "@/i18n/navigation";
+import { formatDepositPaidClock } from "@/lib/cs/order-window";
 
 type Item = {
   id: number;
@@ -15,6 +16,7 @@ type Item = {
   depositAmount: number | null;
   depositPayMethod: string | null;
   depositFromNumber: string | null;
+  depositInstapayName?: string | null;
   depositToPhone: string | null;
   depositToMethod: string | null;
   depositPaidAt: string | null;
@@ -97,7 +99,7 @@ export function DepositApprovalClient({ item }: { item: Item }) {
           <div>
             <dt className="font-bold text-zinc-500">وقت الدفع</dt>
             <dd className="font-extrabold">
-              {item.depositPaidAt ? new Date(item.depositPaidAt).toLocaleString("ar-EG") : "—"}
+              {item.depositPaidAt ? formatDepositPaidClock(item.depositPaidAt) : "—"}
             </dd>
           </div>
           <div>
@@ -105,6 +107,7 @@ export function DepositApprovalClient({ item }: { item: Item }) {
             <dd className="font-extrabold">
               {METHOD_LABEL[item.depositPayMethod || ""] || item.depositPayMethod || "—"} ·{" "}
               <span dir="ltr">{item.depositFromNumber || "—"}</span>
+              {item.depositInstapayName ? ` · ${item.depositInstapayName}` : ""}
             </dd>
           </div>
           <div>
