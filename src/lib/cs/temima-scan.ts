@@ -81,8 +81,15 @@ async function todayReceiptTally(
 }
 
 function tallyMessage(tally: { received: number; expected: number; matched: boolean }) {
-  if (tally.matched) return `العدد المستلم مطابق — ${tally.received}`;
-  return `المستلم ${tally.received} من ${tally.expected}`;
+  const remaining = Math.max(0, tally.expected - tally.received);
+  if (tally.expected > 0 && remaining === 0) return `تم التسليم بالكامل — ${tally.received}`;
+  return `الأصل ${tally.expected} — الباقي ${remaining}`;
+}
+
+export async function loadTemimaReceiptTally() {
+  const prisma = getPrismaClient();
+  if (!prisma) return { received: 0, expected: 0, matched: false };
+  return todayReceiptTally(prisma, await listTemimaSheetEdits());
 }
 
 export async function scanTemimaHandoff(rawTracking: string) {
@@ -126,7 +133,7 @@ export async function scanTemimaHandoff(rawTracking: string) {
     wooOrderNumber: order.wooOrderNumber,
     customerName: name,
     receipt: tally,
-    message: `تم التسليم لتميمة — ${label}. ${note}`,
+    message: `السكان سليم — ${label}. ${note}`,
   };
 }
 
