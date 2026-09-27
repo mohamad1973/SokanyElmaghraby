@@ -895,8 +895,8 @@ export function CsQueueClient({
             {isCourierSupervisor ? "شيت سيد تميمة" : "قائمة تأكيد الطلبات"}
           </h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
-            عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span> من
-            أصل {items.length}
+            عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span>
+            {isCourierSupervisor ? null : <> من أصل {items.length}</>}
           </p>
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
@@ -1286,7 +1286,9 @@ export function CsQueueClient({
         <p className="no-print rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      <p className="no-print text-sm font-extrabold text-[#14213D]">نتائج الجدول: {filtered.length} أوردر</p>
+      {isCourierSupervisor ? null : (
+        <p className="no-print text-sm font-extrabold text-[#14213D]">نتائج الجدول: {filtered.length} أوردر</p>
+      )}
 
       <div className="no-print space-y-2">
         {filtered.length === 0 ? (

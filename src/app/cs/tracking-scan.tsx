@@ -4,6 +4,51 @@ import { useEffect, useRef, useState } from "react";
 
 type ScanResult = { ok: boolean; already?: boolean; message: string };
 
+let scanAudio: AudioContext | null = null;
+
+function scanAudioContext() {
+  if (typeof window === "undefined") return null;
+  const Ctx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  if (!scanAudio || scanAudio.state === "closed") scanAudio = new Ctx();
+  return scanAudio;
+}
+
+function unlockScanAudio() {
+  const ctx = scanAudioContext();
+  if (!ctx) return;
+  void ctx.resume();
+}
+
+function playScanBeep() {
+  try {
+    const ctx = scanAudioContext();
+    if (!ctx) return;
+    void ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime;
+    osc.type = "square";
+    osc.frequency.value = 1800;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.25, start + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.14);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.16);
+    navigator.vibrate?.(90);
+  } catch {
+    // Autoplay stays blocked until the scan button unlocks audio.
+  }
+}
+
+function stopStream(stream: MediaStream | null | undefined) {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
 export function TrackingScanBox({
   action,
   courierId,
@@ -16,6 +61,7 @@ export function TrackingScanBox({
   hint: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamPromiseRef = useRef<Promise<MediaStream> | null>(null);
   const lastRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
   const busyRef = useRef(false);
   const actionRef = useRef(action);
@@ -58,17 +104,56 @@ export function TrackingScanBox({
     }
   }
 
+  function acceptScan(raw: string) {
+    const code = raw.trim().replace(/\s+/g, "");
+    if (!code || busyRef.current) return;
+    const now = Date.now();
+    if (lastRef.current.code === code && now - lastRef.current.at < 4000) return;
+    playScanBeep();
+    void submit(raw);
+  }
+
   useEffect(() => {
     if (!cameraOn) return;
     const video = videoRef.current;
-    if (!video) return;
+    const pending = streamPromiseRef.current;
+    if (!video || !pending) return;
     let stopped = false;
     let controls: { stop: () => void } | null = null;
     void (async () => {
       try {
+        let stream = await pending;
+        if (stopped) {
+          stopStream(stream);
+          return;
+        }
+        const facing = stream.getVideoTracks()[0]?.getSettings().facingMode;
+        if (facing && facing !== "environment") {
+          stopStream(stream);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: { facingMode: { exact: "environment" } },
+            });
+          } catch {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const back = devices.find((device) => device.kind === "videoinput" && /back|rear|environment|wide/i.test(device.label));
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: back ? { deviceId: { exact: back.deviceId } } : { facingMode: "environment" },
+            });
+          }
+        }
+        if (stopped) {
+          stopStream(stream);
+          return;
+        }
         const { BrowserMultiFormatReader } = await import("@zxing/browser");
         const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
-        if (stopped) return;
+        if (stopped) {
+          stopStream(stream);
+          return;
+        }
         const hints = new Map();
         hints.set(DecodeHintType.POSSIBLE_FORMATS, [
           BarcodeFormat.CODE_128,
@@ -77,33 +162,16 @@ export function TrackingScanBox({
         ]);
         hints.set(DecodeHintType.TRY_HARDER, true);
         const reader = new BrowserMultiFormatReader(hints);
-        const onCode = (found?: { getText?: () => string }) => {
+        controls = await reader.decodeFromStream(stream, video, (found) => {
           const text = found?.getText?.();
-          if (text) void submit(text);
-        };
-        const attempts: MediaStreamConstraints[] = [
-          { audio: false, video: { facingMode: { exact: "environment" } } },
-          { audio: false, video: { facingMode: "environment" } },
-        ];
-        let started = false;
-        for (const constraints of attempts) {
-          try {
-            controls = await reader.decodeFromConstraints(constraints, video, onCode);
-            started = true;
-            break;
-          } catch {
-            // The back camera was refused. Try the next constraint.
-          }
-        }
-        if (!started) {
-          const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-          const back = devices.find((device) => /back|rear|environment|wide/i.test(device.label));
-          controls = await reader.decodeFromVideoDevice(back?.deviceId, video, onCode);
-        }
+          if (text) acceptScan(text);
+        });
         if (stopped) controls?.stop();
       } catch {
-        if (!stopped) setCameraError("الكاميرا مش متاحة. اكتب رقم التراك.");
-        setCameraOn(false);
+        if (!stopped) {
+          setCameraError("الكاميرا مش متاحة. اكتب رقم التراك.");
+          setCameraOn(false);
+        }
       }
     })();
     return () => {
@@ -127,14 +195,23 @@ export function TrackingScanBox({
         <p className="mt-1 text-xs font-bold text-[#14213D]/60">{hint}</p>
       </div>
       {cameraOn ? (
-        <video ref={videoRef} muted playsInline className="aspect-[3/4] w-full rounded-xl bg-black object-cover sm:aspect-video" />
+        <video ref={videoRef} muted autoPlay playsInline className="aspect-[3/4] w-full rounded-xl bg-black object-cover sm:aspect-video" />
       ) : null}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => {
+            if (cameraOn) {
+              setCameraOn(false);
+              return;
+            }
+            unlockScanAudio();
             setCameraError("");
-            setCameraOn((on) => !on);
+            streamPromiseRef.current = navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: { facingMode: { ideal: "environment" } },
+            });
+            setCameraOn(true);
           }}
           className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white"
         >
