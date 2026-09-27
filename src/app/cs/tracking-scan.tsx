@@ -67,13 +67,40 @@ export function TrackingScanBox({
     void (async () => {
       try {
         const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
         if (stopped) return;
-        const reader = new BrowserMultiFormatReader();
-        controls = await reader.decodeFromVideoDevice(undefined, video, (found) => {
-          const text = found?.getText();
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.QR_CODE,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        const reader = new BrowserMultiFormatReader(hints);
+        const onCode = (found?: { getText?: () => string }) => {
+          const text = found?.getText?.();
           if (text) void submit(text);
-        });
-        if (stopped) controls.stop();
+        };
+        const attempts: MediaStreamConstraints[] = [
+          { audio: false, video: { facingMode: { exact: "environment" } } },
+          { audio: false, video: { facingMode: "environment" } },
+        ];
+        let started = false;
+        for (const constraints of attempts) {
+          try {
+            controls = await reader.decodeFromConstraints(constraints, video, onCode);
+            started = true;
+            break;
+          } catch {
+            // The back camera was refused. Try the next constraint.
+          }
+        }
+        if (!started) {
+          const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+          const back = devices.find((device) => /back|rear|environment|wide/i.test(device.label));
+          controls = await reader.decodeFromVideoDevice(back?.deviceId, video, onCode);
+        }
+        if (stopped) controls?.stop();
       } catch {
         if (!stopped) setCameraError("الكاميرا مش متاحة. اكتب رقم التراك.");
         setCameraOn(false);
@@ -111,7 +138,7 @@ export function TrackingScanBox({
           }}
           className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white"
         >
-          {cameraOn ? "إيقاف الكاميرا" : "فتح الكاميرا"}
+          {cameraOn ? "إيقاف" : "سكان"}
         </button>
       </div>
       {cameraError ? <p className="text-sm font-bold text-red-800">{cameraError}</p> : null}
