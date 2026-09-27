@@ -468,6 +468,56 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
 
+function confirmedTemimaPrintRows(
+  items: CsQueueItem[],
+  applied: DraftFilters,
+  query: string,
+  opts: { isSupervisor?: boolean; isAccounting?: boolean },
+) {
+  const q = query.trim();
+  const source = q
+    ? items.filter((item) => matchesSearchQuery(item, q))
+    : applyFilters(
+        items,
+        {
+          ...applied,
+          status: "CONFIRMED",
+          shipping: "sayed_temima",
+          dateBasis: temimaDateMode(applied) ? applied.dateBasis : "legacy",
+        },
+        {
+          isSupervisor: Boolean(opts.isSupervisor),
+          orderDate: Boolean(opts.isAccounting),
+        },
+      );
+  return source.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
+}
+
+function handedTemimaPrintRows(items: CsQueueItem[], applied: DraftFilters, query: string) {
+  const q = query.trim();
+  return items
+    .filter((item) => {
+      if (item.shippingCompany !== "sayed_temima") return false;
+      if (!isWithinCairoDateRange(item.handedToCarrierAt, applied.dateFrom, applied.dateTo)) return false;
+      if (q && !matchesSearchQuery(item, q)) return false;
+      return true;
+    })
+    .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+}
+
+function mergeTemimaPrintRows(groups: CsQueueItem[][]) {
+  const seen = new Set<number>();
+  const merged: CsQueueItem[] = [];
+  for (const group of groups) {
+    for (const row of group) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      merged.push(row);
+    }
+  }
+  return merged.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+}
+
 function InvoiceBox({
   confirmationId,
   value,
@@ -544,7 +594,7 @@ type Props = {
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
-type TemimaPrintScope = "confirmed" | "all";
+type TemimaPrintScope = "confirmed" | "handed" | "all";
 
 export function CsQueueClient({
   initialItems,
@@ -654,21 +704,17 @@ export function CsQueueClient({
       if (isCourierSupervisor && temimaScope === "confirmed") {
         return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false);
       }
-      if (temimaScope === "confirmed") {
-        const q = draft.query.trim();
-        const source = q
-          ? items.filter((item) => matchesSearchQuery(item, q))
-          : applyFilters(items, {
-              ...applied,
-              status: "CONFIRMED",
-              shipping: "sayed_temima",
-              dateBasis: temimaDateMode(applied) ? applied.dateBasis : "legacy",
-            }, {
-              isSupervisor: Boolean(isSupervisor),
-              orderDate: Boolean(isAccounting),
-            });
-        return source.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
+      const confirmed = confirmedTemimaPrintRows(items, applied, draft.query, {
+        isSupervisor,
+        isAccounting,
+      });
+      if (isSupervisor && !isCourierSupervisor) {
+        if (temimaScope === "confirmed") return confirmed;
+        const handed = handedTemimaPrintRows(items, applied, draft.query);
+        if (temimaScope === "handed") return handed;
+        return mergeTemimaPrintRows([confirmed, handed]);
       }
+      if (temimaScope === "confirmed") return confirmed;
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
@@ -842,6 +888,19 @@ export function CsQueueClient({
           >
             المؤكد
           </button>
+          {isSupervisor && !isCourierSupervisor ? (
+            <button
+              type="button"
+              onClick={() => {
+                setTemimaScope("handed");
+                setTemimaAsk(false);
+                setPrintMode("sayed_temima");
+              }}
+              className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white"
+            >
+              تم تسليمه
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
