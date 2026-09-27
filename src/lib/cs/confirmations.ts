@@ -461,6 +461,7 @@ export async function listCsConfirmationsForViewer(opts: {
     if (isWithinCairoLastDays(snap?.dateCreated, 30)) return true;
     const workIso = [
       row.confirmedAt instanceof Date ? row.confirmedAt.toISOString() : row.confirmedAt,
+      row.handedToCarrierAt instanceof Date ? row.handedToCarrierAt.toISOString() : row.handedToCarrierAt,
       row.startedAt instanceof Date ? row.startedAt.toISOString() : row.startedAt,
       row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
     ];
@@ -514,6 +515,7 @@ export function serializeCsQueueItem(row: {
   depositProofUrl?: string | null;
   depositApprovalStatus?: string | null;
   handedToCarrier?: boolean | null;
+  handedToCarrierAt?: Date | string | null;
   deliveredToCustomer?: boolean | null;
   customerFollowUp?: boolean | null;
   shippingAssignedAt?: Date | string | null;
@@ -587,6 +589,11 @@ export function serializeCsQueueItem(row: {
       return "none";
     })(),
     handedToCarrier: Boolean(row.handedToCarrier),
+    handedToCarrierAt: row.handedToCarrierAt
+      ? typeof row.handedToCarrierAt === "string"
+        ? row.handedToCarrierAt
+        : row.handedToCarrierAt.toISOString()
+      : null,
     deliveredToCustomer: Boolean(row.deliveredToCustomer),
     customerFollowUp: Boolean(row.customerFollowUp),
     shippingAssignedAt: row.shippingAssignedAt

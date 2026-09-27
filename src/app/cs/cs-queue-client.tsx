@@ -33,6 +33,7 @@ export type CsQueueItem = {
   bostaStatus?: string | null;
   bostaShippingFee?: number | null;
   handedToCarrier?: boolean;
+  handedToCarrierAt?: string | null;
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
   assignedAgent?: { id?: number; name: string } | null;
@@ -224,17 +225,16 @@ function temimaDateMode(f: DraftFilters) {
   return f.shipping === "sayed_temima" && normalizeFilterStatus(f.status) === "CONFIRMED";
 }
 
-function temimaSheetIso(item: CsQueueItem, basis: DraftFilters["dateBasis"]) {
-  if (basis === "created") return item.customerSnapshot?.dateCreated || "";
-  return item.confirmedAt || "";
-}
-
 function applyCourierSupervisorSheet(items: CsQueueItem[], f: DraftFilters, afterLast: boolean) {
   let rows = items.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
   if (f.dateFrom && f.dateTo) {
-    rows = rows.filter((item) => isWithinCairoDateRange(temimaSheetIso(item, f.dateBasis), f.dateFrom, f.dateTo));
+    rows = rows.filter(
+      (item) =>
+        isWithinCairoDateRange(item.confirmedAt, f.dateFrom, f.dateTo) ||
+        isWithinCairoDateRange(item.handedToCarrierAt, f.dateFrom, f.dateTo),
+    );
   }
   if (f.payment === "paid" || f.payment === "paid_online" || f.payment === "paid_full") {
     rows = rows.filter((item) => itemPaymentState(item) === "paid");
