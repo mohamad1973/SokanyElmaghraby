@@ -98,6 +98,29 @@ export function eachCairoYmdInclusive(fromYmd: string, toYmd: string): string[] 
   return days;
 }
 
+/** Cairo calendar day and minutes since midnight for an ISO timestamp. */
+export function cairoClock(iso: string | null | undefined): { ymd: string; minutes: number } | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  const ymd = `${get("year")}-${get("month")}-${get("day")}`;
+  let hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+  if (!ymd || ymd.includes("undefined") || !Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour === 24) hour = 0;
+  return { ymd, minutes: hour * 60 + minute };
+}
+
 /** Cairo YMD for an ISO timestamp. */
 export function cairoYmdFromIso(iso: string | null | undefined): string {
   if (!iso) return "";

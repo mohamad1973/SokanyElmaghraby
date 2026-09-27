@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
+import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -39,6 +40,7 @@ export default async function CsHomePage() {
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
   const couriers = isCourierSupervisor ? await listCourierAgents() : [];
+  const temimaCutoffs = isCourierSupervisor || isSupervisor ? await listTemimaCutoffs() : [];
 
   return (
     <CsQueueClient
@@ -49,6 +51,8 @@ export default async function CsHomePage() {
       couriers={couriers}
       isCourierSupervisor={isCourierSupervisor}
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
+      canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
+      temimaCutoffs={temimaCutoffs}
     />
   );
 }

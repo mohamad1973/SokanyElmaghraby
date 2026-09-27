@@ -11,6 +11,8 @@ import {
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
+import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { resolveHandedToCarrierAt } from "@/lib/cs/temima-sheet";
 import { attachBostaWaybillByOrderReference, syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import {
   parseWooOrderNumber,
@@ -1033,7 +1035,10 @@ export async function saveCsConfirmation(input: {
       data.handedToCarrier = Boolean(input.followUp.handedToCarrier);
       data.deliveredToCustomer = Boolean(input.followUp.deliveredToCustomer);
       data.customerFollowUp = Boolean(input.followUp.customerFollowUp);
-      data.handedToCarrierAt = input.followUp.handedToCarrier ? now : null;
+      if (input.followUp.handedToCarrier) {
+        const cutoffs = await listTemimaCutoffs();
+        data.handedToCarrierAt = resolveHandedToCarrierAt(row.handedToCarrierAt, row.confirmedAt, now, cutoffs);
+      }
       data.deliveredToCustomerAt = input.followUp.deliveredToCustomer ? now : null;
       data.customerFollowUpAt = input.followUp.customerFollowUp ? now : null;
     }

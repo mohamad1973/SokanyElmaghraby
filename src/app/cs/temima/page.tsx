@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ensureCsTables, ensureDefaultCsAgent } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
+import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "../cs-queue-client";
@@ -23,6 +24,7 @@ export default async function CsTemimaSheetPage() {
     seeAll: true,
   });
   const couriers = await listCourierAgents();
+  const temimaCutoffs = await listTemimaCutoffs();
 
   return (
     <CsQueueClient
@@ -33,6 +35,7 @@ export default async function CsTemimaSheetPage() {
       couriers={couriers}
       isCourierSupervisor
       canOpenOrders={viewer.isAdmin}
+      temimaCutoffs={temimaCutoffs}
     />
   );
 }

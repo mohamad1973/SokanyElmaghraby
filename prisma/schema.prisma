@@ -464,3 +464,10 @@ model CsCourierCashDay {
 
   @@unique([courierAgentId, dayYmd])
 }
+
+model CsTemimaSheetCutoff {
+  id        Int      @id @default(autoincrement())
+  dayYmd    String   @unique @db.VarChar(10)
+  minutes   Int
+  createdAt DateTime @default(now())
+}

@@ -17,6 +17,13 @@ import {
   type CsPaymentState,
 } from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
+import {
+  formatCutoffMinutes,
+  onSayedTemimaSheet,
+  onSecondTemimaSheet,
+  isBeforeTemimaCutoff,
+  type TemimaCutoff,
+} from "@/lib/cs/temima-sheet";
 
 export type CsQueueItem = {
   id: number;
@@ -225,15 +232,18 @@ function temimaDateMode(f: DraftFilters) {
   return f.shipping === "sayed_temima" && normalizeFilterStatus(f.status) === "CONFIRMED";
 }
 
-function applyCourierSupervisorSheet(items: CsQueueItem[], f: DraftFilters, afterLast: boolean) {
+function applyCourierSupervisorSheet(
+  items: CsQueueItem[],
+  f: DraftFilters,
+  afterLast: boolean,
+  cutoffs: TemimaCutoff[],
+) {
   let rows = items.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
   if (f.dateFrom && f.dateTo) {
-    rows = rows.filter(
-      (item) =>
-        isWithinCairoDateRange(item.confirmedAt, f.dateFrom, f.dateTo) ||
-        isWithinCairoDateRange(item.handedToCarrierAt, f.dateFrom, f.dateTo),
+    rows = rows.filter((item) =>
+      onSayedTemimaSheet(item.confirmedAt, item.handedToCarrierAt, f.dateFrom, f.dateTo, cutoffs),
     );
   }
   if (f.payment === "paid" || f.payment === "paid_online" || f.payment === "paid_full") {
@@ -493,14 +503,42 @@ function confirmedTemimaPrintRows(
   return source.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
 }
 
-function handedTemimaPrintRows(items: CsQueueItem[], applied: DraftFilters, query: string) {
+function handedTemimaPrintRows(
+  items: CsQueueItem[],
+  applied: DraftFilters,
+  query: string,
+  cutoffs: TemimaCutoff[],
+) {
   const q = query.trim();
   return items
     .filter((item) => {
-      if (item.shippingCompany !== "sayed_temima") return false;
+      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED") return false;
       if (!isWithinCairoDateRange(item.handedToCarrierAt, applied.dateFrom, applied.dateTo)) return false;
+      if (!isBeforeTemimaCutoff(item.handedToCarrierAt, cutoffs)) return false;
       if (q && !matchesSearchQuery(item, q)) return false;
       return true;
+    })
+    .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+}
+
+function sayedTemimaPrintRows(items: CsQueueItem[], applied: DraftFilters, query: string, cutoffs: TemimaCutoff[]) {
+  const q = query.trim();
+  return items
+    .filter((item) => {
+      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED") return false;
+      if (q && !matchesSearchQuery(item, q)) return false;
+      return onSayedTemimaSheet(item.confirmedAt, item.handedToCarrierAt, applied.dateFrom, applied.dateTo, cutoffs);
+    })
+    .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+}
+
+function secondTemimaPrintRows(items: CsQueueItem[], applied: DraftFilters, query: string, cutoffs: TemimaCutoff[]) {
+  const q = query.trim();
+  return items
+    .filter((item) => {
+      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED") return false;
+      if (q && !matchesSearchQuery(item, q)) return false;
+      return onSecondTemimaSheet(item.confirmedAt, applied.dateFrom, applied.dateTo, cutoffs);
     })
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
@@ -584,18 +622,79 @@ function InvoiceBox({
   );
 }
 
+function TemimaCutoffBox({
+  cutoffs,
+  hour,
+  minute,
+  busy,
+  onHour,
+  onMinute,
+  onLock,
+}: {
+  cutoffs: TemimaCutoff[];
+  hour: string;
+  minute: string;
+  busy: boolean;
+  onHour: (value: string) => void;
+  onMinute: (value: string) => void;
+  onLock: () => Promise<void>;
+}) {
+  const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
+  const hours = Array.from({ length: 9 }, (_, index) => 8 + index);
+  const minutes = hour === "16" ? [0] : Array.from({ length: 60 }, (_, index) => index);
+  if (today) {
+    return (
+      <p className="no-print rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
+        شيت سيد مقفول النهاردة عند {formatCutoffMinutes(today.minutes)}. التغيير يبقى بكرة.
+      </p>
+    );
+  }
+  return (
+    <form
+      className="no-print flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onLock();
+      }}
+    >
+      <p className="w-full text-sm font-extrabold text-[#14213D]">قفل شيت سيد تميمة</p>
+      <label className="text-xs font-bold text-[#14213D]">
+        الساعة
+        <select value={hour} onChange={(event) => onHour(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
+          {hours.map((value) => (
+            <option key={value} value={String(value)}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs font-bold text-[#14213D]">
+        الدقيقة
+        <select value={hour === "16" ? "0" : minute} onChange={(event) => onMinute(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
+          {minutes.map((value) => (
+            <option key={value} value={String(value)}>{String(value).padStart(2, "0")}</option>
+          ))}
+        </select>
+      </label>
+      <button type="submit" disabled={busy} className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60">
+        {busy ? "قفل..." : "قفل الشيت"}
+      </button>
+    </form>
+  );
+}
+
 type Props = {
   initialItems: CsQueueItem[];
   isSupervisor?: boolean;
   isAccounting?: boolean;
   isCourierSupervisor?: boolean;
   canOpenOrders?: boolean;
+  canSetTemimaCutoff?: boolean;
+  temimaCutoffs?: TemimaCutoff[];
   agents?: Array<{ id: number; name: string }>;
   couriers?: Array<{ id: number; name: string }>;
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
-type TemimaPrintScope = "confirmed" | "handed" | "all";
+type TemimaPrintScope = "confirmed" | "handed" | "all" | "late";
 
 export function CsQueueClient({
   initialItems,
@@ -603,6 +702,8 @@ export function CsQueueClient({
   isAccounting,
   isCourierSupervisor,
   canOpenOrders = true,
+  canSetTemimaCutoff = false,
+  temimaCutoffs = [],
   agents = [],
   couriers = [],
 }: Props) {
@@ -618,6 +719,10 @@ export function CsQueueClient({
   const [courierPrintPick, setCourierPrintPick] = useState("");
   const [temimaAsk, setTemimaAsk] = useState(false);
   const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
+  const [cutoffs, setCutoffs] = useState<TemimaCutoff[]>(temimaCutoffs);
+  const [cutoffHour, setCutoffHour] = useState("12");
+  const [cutoffMinute, setCutoffMinute] = useState("0");
+  const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
   const syncingRef = useRef(false);
@@ -669,7 +774,7 @@ export function CsQueueClient({
   // Search is live and independent of other filters: when query is set, match all loaded items.
   const baseFiltered = useMemo(() => {
     if (isCourierSupervisor) {
-      return applyCourierSupervisorSheet(items, { ...applied, query: draft.query }, afterLastDistribution);
+      return applyCourierSupervisorSheet(items, { ...applied, query: draft.query }, afterLastDistribution, cutoffs);
     }
     const q = draft.query.trim();
     if (q) {
@@ -678,7 +783,7 @@ export function CsQueueClient({
         .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
     }
     return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor), orderDate: Boolean(isAccounting) });
-  }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution]);
+  }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution, cutoffs]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
 
@@ -704,23 +809,25 @@ export function CsQueueClient({
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
     if (printMode === "sayed_temima") {
       if (isCourierSupervisor && temimaScope === "confirmed") {
-        return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false);
+        return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false, cutoffs);
       }
       const confirmed = confirmedTemimaPrintRows(items, applied, draft.query, {
         isSupervisor,
         isAccounting,
       });
       if (isSupervisor && !isCourierSupervisor) {
-        if (temimaScope === "confirmed") return confirmed;
-        const handed = handedTemimaPrintRows(items, applied, draft.query);
+        const sayed = sayedTemimaPrintRows(items, applied, draft.query, cutoffs);
+        if (temimaScope === "confirmed") return sayed;
+        const handed = handedTemimaPrintRows(items, applied, draft.query, cutoffs);
         if (temimaScope === "handed") return handed;
-        return mergeTemimaPrintRows([confirmed, handed]);
+        if (temimaScope === "late") return secondTemimaPrintRows(items, applied, draft.query, cutoffs);
+        return mergeTemimaPrintRows([sayed, handed]);
       }
       if (temimaScope === "confirmed") return confirmed;
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId, cutoffs]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -914,6 +1021,19 @@ export function CsQueueClient({
           >
             الكل
           </button>
+          {isSupervisor && !isCourierSupervisor ? (
+            <button
+              type="button"
+              onClick={() => {
+                setTemimaScope("late");
+                setTemimaAsk(false);
+                setPrintMode("sayed_temima");
+              }}
+              className="rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D]"
+            >
+              الشيت التاني
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setTemimaAsk(false)}
@@ -922,6 +1042,41 @@ export function CsQueueClient({
             إلغاء
           </button>
         </div>
+      ) : null}
+
+      {canSetTemimaCutoff ? (
+        <TemimaCutoffBox
+          cutoffs={cutoffs}
+          hour={cutoffHour}
+          minute={cutoffMinute}
+          busy={cutoffBusy}
+          onHour={(value) => {
+            setCutoffHour(value);
+            if (value === "16") setCutoffMinute("0");
+          }}
+          onMinute={setCutoffMinute}
+          onLock={async () => {
+            setCutoffBusy(true);
+            setMessage("");
+            const res = await fetch("/api/cs/temima-cutoff", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ hour: Number(cutoffHour), minute: Number(cutoffMinute) }),
+            });
+            const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
+            setCutoffBusy(false);
+            if (!res.ok || !data.dayYmd || data.minutes == null) {
+              setMessage(data.message || "تعذر قفل الشيت.");
+              return;
+            }
+            setCutoffs((prev) => {
+              const next = prev.filter((row) => row.dayYmd !== data.dayYmd);
+              next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
+              return next;
+            });
+            setMessage(`شيت سيد اتقفل النهاردة عند ${formatCutoffMinutes(data.minutes)}.`);
+          }}
+        />
       ) : null}
 
       <div className="no-print space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">

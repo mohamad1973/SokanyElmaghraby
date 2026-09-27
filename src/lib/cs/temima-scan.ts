@@ -3,6 +3,8 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { markCourierOutcome } from "@/lib/cs/courier-dispatch";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
+import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { onSayedTemimaSheet, resolveHandedToCarrierAt } from "@/lib/cs/temima-sheet";
 
 const TEMIMA = "sayed_temima";
 
@@ -30,6 +32,8 @@ async function findConfirmedByTracking(trackingNumber: string) {
       wooOrderNumber: true,
       customerSnapshot: true,
       handedToCarrier: true,
+      handedToCarrierAt: true,
+      confirmedAt: true,
       courierOutcome: true,
       courierAgentId: true,
     },
@@ -38,8 +42,10 @@ async function findConfirmedByTracking(trackingNumber: string) {
 }
 
 async function todayReceiptTally(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
-  const bounds = cairoYmdBounds(cairoTodayYmd());
+  const today = cairoTodayYmd();
+  const bounds = cairoYmdBounds(today);
   if (!bounds) return { received: 0, expected: 0, matched: false };
+  const cutoffs = await listTemimaCutoffs();
   const rows = await prisma.csOrderConfirmation.findMany({
     where: {
       status: "CONFIRMED",
@@ -49,9 +55,13 @@ async function todayReceiptTally(prisma: NonNullable<ReturnType<typeof getPrisma
         { handedToCarrierAt: { gte: bounds.start, lt: bounds.endExclusive } },
       ],
     },
-    select: { trackingNumber: true, handedToCarrier: true },
+    select: { trackingNumber: true, handedToCarrier: true, confirmedAt: true, handedToCarrierAt: true },
   });
-  const withTracking = rows.filter((row) => String(row.trackingNumber || "").trim());
+  const withTracking = rows.filter(
+    (row) =>
+      String(row.trackingNumber || "").trim() &&
+      onSayedTemimaSheet(row.confirmedAt, row.handedToCarrierAt, today, today, cutoffs),
+  );
   const received = withTracking.filter((row) => row.handedToCarrier).length;
   const expected = withTracking.length;
   return { received, expected, matched: expected > 0 && received === expected };
@@ -70,15 +80,19 @@ export async function scanTemimaHandoff(rawTracking: string) {
   if (!order) return { ok: false as const, message: "مش موجود." };
   const name = customerName(order.customerSnapshot);
   const label = `#${order.wooOrderNumber}${name ? ` ${name}` : ""}`;
-  if (!order.handedToCarrier) {
+  const cutoffs = await listTemimaCutoffs();
+  const now = new Date();
+  const handedAt = resolveHandedToCarrierAt(order.handedToCarrierAt, order.confirmedAt, now, cutoffs);
+  const moved = !order.handedToCarrierAt || handedAt.getTime() !== new Date(order.handedToCarrierAt).getTime();
+  if (!order.handedToCarrier || moved) {
     await prisma.csOrderConfirmation.update({
       where: { id: order.id },
-      data: { handedToCarrier: true, handedToCarrierAt: new Date() },
+      data: { handedToCarrier: true, handedToCarrierAt: handedAt },
     });
   }
   const tally = await todayReceiptTally(prisma);
   const note = tallyMessage(tally);
-  if (order.handedToCarrier) {
+  if (order.handedToCarrier && !moved) {
     return {
       ok: true as const,
       already: true,

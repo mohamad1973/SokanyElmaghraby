@@ -334,6 +334,17 @@ async function runEnsureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsTemimaSheetCutoff\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`dayYmd\` VARCHAR(10) NOT NULL,
+      \`minutes\` INT NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsTemimaSheetCutoff_dayYmd_key\`(\`dayYmd\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",
