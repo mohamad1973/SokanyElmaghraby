@@ -48,6 +48,7 @@ export default async function CsHomePage() {
       agents={agents}
       couriers={couriers}
       isCourierSupervisor={isCourierSupervisor}
+      canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
     />
   );
 }

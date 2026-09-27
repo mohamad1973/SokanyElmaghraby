@@ -589,6 +589,7 @@ type Props = {
   isSupervisor?: boolean;
   isAccounting?: boolean;
   isCourierSupervisor?: boolean;
+  canOpenOrders?: boolean;
   agents?: Array<{ id: number; name: string }>;
   couriers?: Array<{ id: number; name: string }>;
 };
@@ -601,6 +602,7 @@ export function CsQueueClient({
   isSupervisor,
   isAccounting,
   isCourierSupervisor,
+  canOpenOrders = true,
   agents = [],
   couriers = [],
 }: Props) {
@@ -1325,12 +1327,14 @@ export function CsQueueClient({
                       </span>
                     ) : null}
                     {isConfirmed ? (
-                      <Link
-                        href={`/cs/orders/${item.id}`}
-                        className="rounded-lg bg-[#14213D] px-3 py-1.5 text-xs font-extrabold text-white"
-                      >
-                        فتح
-                      </Link>
+                      canOpenOrders ? (
+                        <Link
+                          href={`/cs/orders/${item.id}`}
+                          className="rounded-lg bg-[#14213D] px-3 py-1.5 text-xs font-extrabold text-white"
+                        >
+                          فتح
+                        </Link>
+                      ) : null
                     ) : (
                       <button
                         type="button"

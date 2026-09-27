@@ -32,6 +32,7 @@ export default async function CsTemimaSheetPage() {
       agents={[]}
       couriers={couriers}
       isCourierSupervisor
+      canOpenOrders={viewer.isAdmin}
     />
   );
 }

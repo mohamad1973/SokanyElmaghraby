@@ -453,3 +453,14 @@ model CsCarrierMonth {
 
   @@unique([carrierCompany, closeDate])
 }
+
+model CsCourierCashDay {
+  id             Int      @id @default(autoincrement())
+  courierAgentId Int
+  dayYmd         String   @db.VarChar(10)
+  amount         Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([courierAgentId, dayYmd])
+}

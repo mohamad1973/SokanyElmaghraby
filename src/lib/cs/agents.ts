@@ -321,6 +321,19 @@ async function runEnsureCsTables() {
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsCourierCashDay\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`courierAgentId\` INT NOT NULL,
+      \`dayYmd\` VARCHAR(10) NOT NULL,
+      \`amount\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsCourierCashDay_courier_day_key\`(\`courierAgentId\`, \`dayYmd\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
   const alters = [
     "ALTER TABLE `CsAgent` ADD COLUMN `isSupervisor` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsAgent` ADD COLUMN `username` VARCHAR(191) NULL",

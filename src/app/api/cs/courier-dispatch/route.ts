@@ -4,7 +4,9 @@ import {
   assignCourierOrder,
   loadCourierDispatch,
   markCourierOutcome,
+  markCourierSupervisorDisposition,
   saveCourierAreas,
+  saveCourierCashDay,
   unassignCourierOrder,
 } from "@/lib/cs/courier-dispatch";
 import { ensureCsTables } from "@/lib/cs/agents";
@@ -44,6 +46,7 @@ export async function POST(request: Request) {
     areas?: string[];
     outcome?: string;
     reason?: string;
+    amount?: number;
   } | null;
   if (!body?.action) return NextResponse.json({ message: "طلب ناقص." }, { status: 400 });
 
@@ -76,6 +79,24 @@ export async function POST(request: Request) {
     const confirmationId = Number(body.confirmationId);
     if (!confirmationId) return NextResponse.json({ message: "الأوردر ناقص." }, { status: 400 });
     const result = await unassignCourierOrder(confirmationId);
+    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "disposition") {
+    const confirmationId = Number(body.confirmationId);
+    const courierId = Number(body.courierId);
+    const outcome = body.outcome === "refused" || body.outcome === "postponed" ? body.outcome : "";
+    if (!confirmationId || !courierId || !outcome) {
+      return NextResponse.json({ message: "الطلب ناقص." }, { status: 400 });
+    }
+    const result = await markCourierSupervisorDisposition(confirmationId, courierId, outcome);
+    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "collect") {
+    const courierId = Number(body.courierId);
+    if (!courierId) return NextResponse.json({ message: "اختار المندوب." }, { status: 400 });
+    const result = await saveCourierCashDay(courierId, Number(body.amount));
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
 

@@ -16,6 +16,7 @@ type OrderCard = {
   landmarks: string;
   items: Array<{ name: string; quantity: number }>;
   total: string;
+  cashAmount: number;
   delivered: boolean;
   outcome: "delivered" | "refused" | "postponed" | null;
   refusalReason: string;
@@ -31,6 +32,7 @@ type SupervisorData = {
   areaOptions: string[];
   pool: OrderCard[];
   assigned: OrderCard[];
+  collected: Array<{ courierId: number; amount: number }>;
 };
 type CourierData = { mode: "courier"; orders: OrderCard[] };
 
@@ -93,6 +95,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
   const [mine, setMine] = useState<OrderCard[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [orderNumber, setOrderNumber] = useState("");
+  const [collectedDraft, setCollectedDraft] = useState("");
   const load = useCallback(async () => {
     setLoading(true);
     if (mode === "admin") {
@@ -178,16 +181,34 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
       </div>
     );
   }
+  const collectedTotal = (supervisor?.collected || []).reduce((sum, row) => sum + row.amount, 0);
+  const selectedOrders = (supervisor?.assigned || []).filter((order) => order.courierId === selectedId);
+  const selectedDue = selectedOrders
+    .filter((order) => order.outcome === "delivered")
+    .reduce((sum, order) => sum + order.cashAmount, 0);
+  const money = (value: number) => value.toLocaleString("ar-EG");
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
       <h1 className="text-xl font-extrabold text-[#14213D]">توزيع المناديب</h1>
+      <p className="rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
+        إجمالي النقدية المحصّلة النهاردة: {money(collectedTotal)} ج.م
+      </p>
       <p className="text-xs font-bold text-[#14213D]/60">اختار المندوب ثم علّم على الأوردرات اللي تخصه. التعليم يطلّع الأوردر من القائمة ويبعته للمندوب.</p>
       {message ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{message}</p> : null}
       {loading ? <p className="text-sm font-bold text-[#14213D]/60">جاري التحميل…</p> : null}
       <div className="grid gap-2 sm:grid-cols-2">
         {(supervisor?.couriers || []).length === 0 && !loading ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">لسه مفيش مندوب. من صفحة المستخدمين اعمل حساب بصلاحية مندوب.</p> : null}
         {(supervisor?.couriers || []).map((courier) => (
-          <button key={courier.id} type="button" onClick={() => setSelectedId(courier.id)} className={`rounded-2xl p-3 text-right shadow ring-1 ${selectedId === courier.id ? "bg-[#14213D] text-white ring-[#14213D]" : "bg-white text-[#14213D] ring-[#14213D]/10"}`}>
+          <button
+            key={courier.id}
+            type="button"
+            onClick={() => {
+              setSelectedId(courier.id);
+              const saved = supervisor?.collected.find((row) => row.courierId === courier.id)?.amount;
+              setCollectedDraft(saved ? String(saved) : "");
+            }}
+            className={`rounded-2xl p-3 text-right shadow ring-1 ${selectedId === courier.id ? "bg-[#14213D] text-white ring-[#14213D]" : "bg-white text-[#14213D] ring-[#14213D]/10"}`}
+          >
             <span className="block font-extrabold">{courier.name}</span>
           </button>
         ))}
@@ -205,12 +226,44 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
           </label>
         ))}
       </section>
+      {selected ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void post({ action: "collect", courierId: selected.id, amount: collectedDraft === "" ? 0 : Number(collectedDraft) });
+          }}
+          className="grid gap-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+        >
+          <p className="text-sm font-extrabold text-[#14213D]">مستحق {selected.name} من المسلّم: {money(selectedDue)} ج.م</p>
+          <label className="text-xs font-bold text-[#14213D]">
+            المحصّل النهاردة
+            <input
+              value={collectedDraft}
+              onChange={(event) => setCollectedDraft(event.target.value.replace(/[^\d.]/g, ""))}
+              inputMode="decimal"
+              placeholder="0"
+              className="mt-1 h-10 w-full rounded-xl border border-[#E5E5E5] bg-white px-3 text-sm font-bold"
+            />
+          </label>
+          <button type="submit" className="h-10 rounded-xl bg-[#FCA311] px-3 text-sm font-extrabold text-black">حفظ التحصيل</button>
+        </form>
+      ) : null}
       <section className="grid gap-2">
         <h2 className="text-sm font-extrabold text-[#14213D]">اتوزع النهاردة</h2>
         {(supervisor?.assigned || []).map((order) => (
           <article key={order.id} className="grid gap-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
             <p className="text-xs font-extrabold text-[#FCA311]">{order.courierName}</p>
             <OrderDetails order={order} />
+            <p className="text-sm font-extrabold text-[#14213D]">نقد: {money(order.cashAmount)} ج.م</p>
+            {order.outcome === "delivered" ? <p className="text-sm font-extrabold text-emerald-800">تم التسليم</p> : null}
+            {order.outcome === "refused" ? <p className="text-sm font-extrabold text-red-800">ملغى</p> : null}
+            {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">تأجيل</p> : null}
+            {selected && order.courierId === selected.id ? (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => void post({ action: "disposition", confirmationId: order.id, courierId: selected.id, outcome: "postponed" })} className="rounded-xl bg-orange-500 px-3 py-2 text-xs font-extrabold text-black">تأجيل</button>
+                <button type="button" onClick={() => void post({ action: "disposition", confirmationId: order.id, courierId: selected.id, outcome: "refused" })} className="rounded-xl bg-red-700 px-3 py-2 text-xs font-extrabold text-white">ملغى</button>
+              </div>
+            ) : null}
             <button type="button" onClick={() => void post({ action: "unassign", confirmationId: order.id })} className="justify-self-start rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]">إرجاع للتوزيع</button>
           </article>
         ))}

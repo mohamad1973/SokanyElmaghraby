@@ -61,7 +61,7 @@ function money(value: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function cashAmountOf(row: {
+export function cashAmountOf(row: {
   customerSnapshot: unknown;
   depositAmount: unknown;
   depositPaid: boolean | null;

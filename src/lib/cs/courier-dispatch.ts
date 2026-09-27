@@ -5,6 +5,7 @@ import { parseCsRoles } from "@/lib/cs/agents";
 import { orderMatchesAreas, parseCourierAreas, serializeCourierAreas } from "@/lib/cs/courier-areas";
 import { listCsAreasForGovernorate } from "@/lib/cs/egypt-areas";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
+import { cashAmountOf } from "@/lib/cs/temima-settlement";
 
 const TEMIMA = "sayed_temima";
 const CARD_KEYS = [
@@ -31,6 +32,7 @@ export type CourierOrderCard = {
   landmarks: string;
   items: Array<{ name: string; quantity: number }>;
   total: string;
+  cashAmount: number;
   delivered: boolean;
   outcome: "delivered" | "refused" | "postponed" | null;
   refusalReason: string;
@@ -63,6 +65,8 @@ function cardFromRow(row: {
   courierAgentId: number | null;
   courierOutcome: string | null;
   courierRefusalReason: string | null;
+  depositAmount: unknown;
+  depositPaid: boolean | null;
   answers: AnswerRow[];
   courierAgent: { id: number; name: string } | null;
 }): Omit<CourierOrderCard, "matches"> {
@@ -91,6 +95,11 @@ function cardFromRow(row: {
       .map((item) => ({ name: String(item.name || "").trim(), quantity: Number(item.quantity || 1) }))
       .filter((item) => item.name),
     total: String(snap.total || ""),
+    cashAmount: cashAmountOf({
+      customerSnapshot: row.customerSnapshot,
+      depositAmount: row.depositAmount,
+      depositPaid: row.depositPaid,
+    }),
     delivered: row.courierOutcome === "delivered" || Boolean(row.deliveredToCustomer),
     outcome:
       row.courierOutcome === "delivered" || row.courierOutcome === "refused" || row.courierOutcome === "postponed"
@@ -147,6 +156,8 @@ async function loadTodayRows() {
       courierAgentId: true,
       courierOutcome: true,
       courierRefusalReason: true,
+      depositAmount: true,
+      depositPaid: true,
       confirmedAt: true,
       courierAssignedAt: true,
       courierAgent: { select: { id: true, name: true } },
@@ -190,6 +201,7 @@ export async function loadCourierDispatch(viewerId: number, mode: "supervisor" |
     areaOptions,
     pool: cards.filter((card) => !card.courierId),
     assigned: cards.filter((card) => card.courierId),
+    collected: await listTodayCourierCash(),
   };
 }
 
@@ -340,5 +352,52 @@ export async function markCourierOutcome(
       },
     });
   }
+  return { ok: true as const };
+}
+
+export async function markCourierSupervisorDisposition(
+  confirmationId: number,
+  courierId: number,
+  outcome: "refused" | "postponed",
+) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  const order = await prisma.csOrderConfirmation.findFirst({
+    where: { id: confirmationId, courierAgentId: courierId, status: "CONFIRMED", shippingCompany: TEMIMA },
+    select: { id: true },
+  });
+  if (!order) return { ok: false as const, message: "الأوردر مش متوزع للمندوب ده." };
+  await prisma.csOrderConfirmation.update({
+    where: { id: order.id },
+    data: { courierOutcome: outcome, courierRefusalReason: null },
+  });
+  return { ok: true as const };
+}
+
+export async function listTodayCourierCash() {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  const rows = await prisma.csCourierCashDay.findMany({
+    where: { dayYmd: cairoTodayYmd() },
+    select: { courierAgentId: true, amount: true },
+  });
+  return rows.map((row) => ({ courierId: row.courierAgentId, amount: Number(row.amount) }));
+}
+
+export async function saveCourierCashDay(courierId: number, amount: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  const value = Math.round(Number(amount) * 100) / 100;
+  if (!Number.isFinite(value) || value < 0) return { ok: false as const, message: "المبلغ غير صحيح." };
+  const couriers = await loadCouriers();
+  if (!couriers.some((courier) => courier.id === courierId)) {
+    return { ok: false as const, message: "المندوب غير موجود." };
+  }
+  const dayYmd = cairoTodayYmd();
+  await prisma.csCourierCashDay.upsert({
+    where: { courierAgentId_dayYmd: { courierAgentId: courierId, dayYmd } },
+    create: { courierAgentId: courierId, dayYmd, amount: value },
+    update: { amount: value },
+  });
   return { ok: true as const };
 }
