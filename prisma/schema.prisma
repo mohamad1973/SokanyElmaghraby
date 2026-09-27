@@ -312,6 +312,7 @@ model CsOrderConfirmation {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   answers              CsChecklistAnswer[]
+  sheetEdits           CsTemimaSheetEdit[]
 
   @@index([status])
   @@index([assignedAgentId])
@@ -470,4 +471,16 @@ model CsTemimaSheetCutoff {
   dayYmd    String   @unique @db.VarChar(10)
   minutes   Int
   createdAt DateTime @default(now())
+}
+
+model CsTemimaSheetEdit {
+  id             Int                 @id @default(autoincrement())
+  dayYmd         String              @db.VarChar(10)
+  confirmationId Int
+  kind           String              @db.VarChar(16)
+  createdAt      DateTime            @default(now())
+  confirmation   CsOrderConfirmation @relation(fields: [confirmationId], references: [id], onDelete: Cascade)
+
+  @@unique([dayYmd, confirmationId])
+  @@index([dayYmd])
 }

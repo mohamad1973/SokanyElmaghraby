@@ -1,5 +1,18 @@
 import { cairoClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
 
+export type TemimaSheetEdit = {
+  dayYmd: string;
+  confirmationId: number;
+  kind: "include" | "exclude";
+};
+
+export type TemimaSheetOrder = {
+  id: number;
+  shippingCompany?: string | null;
+  confirmedAt?: string | Date | null;
+  handedToCarrierAt?: string | Date | null;
+};
+
 export type TemimaCutoff = { dayYmd: string; minutes: number };
 
 export function cutoffMinutes(hour: number, minute: number) {
@@ -93,4 +106,76 @@ export function resolveHandedToCarrierAt(
   if (!prev || !next || prev.ymd === next.ymd) return kept;
   if (next.ymd > prev.ymd && isLateTemimaConfirm(confirmedAt, cutoffs)) return now;
   return kept;
+}
+
+function isoOf(value: string | Date | null | undefined) {
+  if (!value) return "";
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function editKind(confirmationId: number, dayYmd: string, edits: TemimaSheetEdit[]) {
+  if (!dayYmd) return null;
+  return edits.find((row) => row.confirmationId === confirmationId && row.dayYmd === dayYmd)?.kind || null;
+}
+
+function includedInRange(confirmationId: number, dateFrom: string, dateTo: string, edits: TemimaSheetEdit[]) {
+  return edits.some(
+    (row) =>
+      row.confirmationId === confirmationId &&
+      row.kind === "include" &&
+      row.dayYmd >= dateFrom &&
+      row.dayYmd <= dateTo,
+  );
+}
+
+function naturalDayVisible(
+  iso: string,
+  confirmationId: number,
+  dateFrom: string,
+  dateTo: string,
+  cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
+  late: boolean,
+) {
+  if (!iso || !isWithinCairoDateRange(iso, dateFrom, dateTo)) return false;
+  const day = cairoClock(iso)?.ymd || "";
+  if (editKind(confirmationId, day, edits) === "exclude") return false;
+  return late ? isLateTemimaConfirm(iso, cutoffs) : isBeforeTemimaCutoff(iso, cutoffs);
+}
+
+/** Admin include/exclude for a sheet day overrides the cutoff rule. */
+export function onEditedSayedTemimaSheet(
+  order: TemimaSheetOrder,
+  dateFrom: string,
+  dateTo: string,
+  cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
+) {
+  if (!dateFrom || !dateTo) return false;
+  if (dateFrom === dateTo) {
+    const kind = editKind(order.id, dateFrom, edits);
+    if (kind === "include") return true;
+    if (kind === "exclude") return false;
+  } else if (includedInRange(order.id, dateFrom, dateTo, edits)) {
+    return true;
+  }
+  if (order.shippingCompany && order.shippingCompany !== "sayed_temima") return false;
+  const saved = naturalDayVisible(isoOf(order.confirmedAt), order.id, dateFrom, dateTo, cutoffs, edits, false);
+  const handed = naturalDayVisible(isoOf(order.handedToCarrierAt), order.id, dateFrom, dateTo, cutoffs, edits, false);
+  return saved || handed;
+}
+
+/** An included order leaves the second sheet. An excluded late order stays there. */
+export function onEditedSecondTemimaSheet(
+  order: TemimaSheetOrder,
+  dateFrom: string,
+  dateTo: string,
+  cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
+) {
+  if (!dateFrom || !dateTo) return false;
+  if (dateFrom === dateTo && editKind(order.id, dateFrom, edits) === "include") return false;
+  if (dateFrom !== dateTo && includedInRange(order.id, dateFrom, dateTo, edits)) return false;
+  if (order.shippingCompany && order.shippingCompany !== "sayed_temima") return false;
+  return onSecondTemimaSheet(order.confirmedAt, dateFrom, dateTo, cutoffs);
 }

@@ -335,6 +335,19 @@ async function runEnsureCsTables() {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsTemimaSheetEdit\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`dayYmd\` VARCHAR(10) NOT NULL,
+      \`confirmationId\` INT NOT NULL,
+      \`kind\` VARCHAR(16) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsTemimaSheetEdit_day_order_key\`(\`dayYmd\`, \`confirmationId\`),
+      INDEX \`CsTemimaSheetEdit_dayYmd_idx\`(\`dayYmd\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsTemimaSheetCutoff\` (
       \`id\` INT NOT NULL AUTO_INCREMENT,
       \`dayYmd\` VARCHAR(10) NOT NULL,

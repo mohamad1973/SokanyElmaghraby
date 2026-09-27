@@ -4,6 +4,7 @@ import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole,
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -35,7 +36,11 @@ export default async function CsHomePage() {
     isSupervisor,
     seeAll: isAccounting || isCourierSupervisor,
   });
-  const initialItems = rows.map(serializeCsQueueItem);
+  const seesTemimaSheet = isCourierSupervisor || isSupervisor;
+  const merged = seesTemimaSheet
+    ? await mergeIncludedConfirmations(rows.map(serializeCsQueueItem))
+    : { items: rows.map(serializeCsQueueItem), edits: [] };
+  const initialItems = merged.items;
   const agents = isSupervisor
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
@@ -53,6 +58,7 @@ export default async function CsHomePage() {
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
       temimaCutoffs={temimaCutoffs}
+      temimaSheetEdits={merged.edits}
     />
   );
 }

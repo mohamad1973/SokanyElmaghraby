@@ -19,10 +19,10 @@ import {
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
   formatCutoffMinutes,
-  onSayedTemimaSheet,
-  onSecondTemimaSheet,
-  isBeforeTemimaCutoff,
+  onEditedSayedTemimaSheet,
+  onEditedSecondTemimaSheet,
   type TemimaCutoff,
+  type TemimaSheetEdit,
 } from "@/lib/cs/temima-sheet";
 
 export type CsQueueItem = {
@@ -237,14 +237,15 @@ function applyCourierSupervisorSheet(
   f: DraftFilters,
   afterLast: boolean,
   cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
 ) {
-  let rows = items.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
+  let rows = items.filter((item) => item.status === "CONFIRMED");
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
   if (f.dateFrom && f.dateTo) {
-    rows = rows.filter((item) =>
-      onSayedTemimaSheet(item.confirmedAt, item.handedToCarrierAt, f.dateFrom, f.dateTo, cutoffs),
-    );
+    rows = rows.filter((item) => onEditedSayedTemimaSheet(item, f.dateFrom, f.dateTo, cutoffs, edits));
+  } else {
+    rows = rows.filter((item) => item.shippingCompany === "sayed_temima");
   }
   if (f.payment === "paid" || f.payment === "paid_online" || f.payment === "paid_full") {
     rows = rows.filter((item) => itemPaymentState(item) === "paid");
@@ -508,37 +509,50 @@ function handedTemimaPrintRows(
   applied: DraftFilters,
   query: string,
   cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
 ) {
   const q = query.trim();
   return items
     .filter((item) => {
-      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED") return false;
-      if (!isWithinCairoDateRange(item.handedToCarrierAt, applied.dateFrom, applied.dateTo)) return false;
-      if (!isBeforeTemimaCutoff(item.handedToCarrierAt, cutoffs)) return false;
+      if (item.status !== "CONFIRMED") return false;
+      if (!onEditedSayedTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits)) return false;
+      if (!item.handedToCarrier && !item.handedToCarrierAt) return false;
       if (q && !matchesSearchQuery(item, q)) return false;
       return true;
     })
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
 
-function sayedTemimaPrintRows(items: CsQueueItem[], applied: DraftFilters, query: string, cutoffs: TemimaCutoff[]) {
+function sayedTemimaPrintRows(
+  items: CsQueueItem[],
+  applied: DraftFilters,
+  query: string,
+  cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
+) {
   const q = query.trim();
   return items
     .filter((item) => {
-      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED") return false;
+      if (item.status !== "CONFIRMED") return false;
       if (q && !matchesSearchQuery(item, q)) return false;
-      return onSayedTemimaSheet(item.confirmedAt, item.handedToCarrierAt, applied.dateFrom, applied.dateTo, cutoffs);
+      return onEditedSayedTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits);
     })
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
 
-function secondTemimaPrintRows(items: CsQueueItem[], applied: DraftFilters, query: string, cutoffs: TemimaCutoff[]) {
+function secondTemimaPrintRows(
+  items: CsQueueItem[],
+  applied: DraftFilters,
+  query: string,
+  cutoffs: TemimaCutoff[],
+  edits: TemimaSheetEdit[],
+) {
   const q = query.trim();
   return items
     .filter((item) => {
-      if (item.shippingCompany !== "sayed_temima" || item.status !== "CONFIRMED") return false;
+      if (item.status !== "CONFIRMED") return false;
       if (q && !matchesSearchQuery(item, q)) return false;
-      return onSecondTemimaSheet(item.confirmedAt, applied.dateFrom, applied.dateTo, cutoffs);
+      return onEditedSecondTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits);
     })
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
@@ -685,7 +699,9 @@ type Props = {
   isCourierSupervisor?: boolean;
   canOpenOrders?: boolean;
   canSetTemimaCutoff?: boolean;
+  canEditTemimaSheet?: boolean;
   temimaCutoffs?: TemimaCutoff[];
+  temimaSheetEdits?: TemimaSheetEdit[];
   agents?: Array<{ id: number; name: string }>;
   couriers?: Array<{ id: number; name: string }>;
 };
@@ -700,7 +716,9 @@ export function CsQueueClient({
   isCourierSupervisor,
   canOpenOrders = true,
   canSetTemimaCutoff = false,
+  canEditTemimaSheet = false,
   temimaCutoffs = [],
+  temimaSheetEdits = [],
   agents = [],
   couriers = [],
 }: Props) {
@@ -717,6 +735,10 @@ export function CsQueueClient({
   const [temimaAsk, setTemimaAsk] = useState(false);
   const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
   const [cutoffs, setCutoffs] = useState<TemimaCutoff[]>(temimaCutoffs);
+  const [sheetEdits, setSheetEdits] = useState<TemimaSheetEdit[]>(temimaSheetEdits);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addOrders, setAddOrders] = useState("");
+  const [sheetEditBusy, setSheetEditBusy] = useState(false);
   const savedCutoff = temimaCutoffs.find((row) => row.dayYmd === cairoTodayYmd());
   const [cutoffHour, setCutoffHour] = useState(savedCutoff ? String(Math.floor(savedCutoff.minutes / 60)) : "12");
   const [cutoffMinute, setCutoffMinute] = useState(savedCutoff ? String(savedCutoff.minutes % 60) : "0");
@@ -772,7 +794,7 @@ export function CsQueueClient({
   // Search is live and independent of other filters: when query is set, match all loaded items.
   const baseFiltered = useMemo(() => {
     if (isCourierSupervisor) {
-      return applyCourierSupervisorSheet(items, { ...applied, query: draft.query }, afterLastDistribution, cutoffs);
+      return applyCourierSupervisorSheet(items, { ...applied, query: draft.query }, afterLastDistribution, cutoffs, sheetEdits);
     }
     const q = draft.query.trim();
     if (q) {
@@ -781,7 +803,7 @@ export function CsQueueClient({
         .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
     }
     return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor), orderDate: Boolean(isAccounting) });
-  }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution, cutoffs]);
+  }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution, cutoffs, sheetEdits]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
 
@@ -807,25 +829,25 @@ export function CsQueueClient({
     if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
     if (printMode === "sayed_temima") {
       if (isCourierSupervisor && temimaScope === "confirmed") {
-        return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false, cutoffs);
+        return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false, cutoffs, sheetEdits);
       }
       const confirmed = confirmedTemimaPrintRows(items, applied, draft.query, {
         isSupervisor,
         isAccounting,
       });
       if (isSupervisor && !isCourierSupervisor) {
-        const sayed = sayedTemimaPrintRows(items, applied, draft.query, cutoffs);
+        const sayed = sayedTemimaPrintRows(items, applied, draft.query, cutoffs, sheetEdits);
         if (temimaScope === "confirmed") return sayed;
-        const handed = handedTemimaPrintRows(items, applied, draft.query, cutoffs);
+        const handed = handedTemimaPrintRows(items, applied, draft.query, cutoffs, sheetEdits);
         if (temimaScope === "handed") return handed;
-        if (temimaScope === "late") return secondTemimaPrintRows(items, applied, draft.query, cutoffs);
+        if (temimaScope === "late") return secondTemimaPrintRows(items, applied, draft.query, cutoffs, sheetEdits);
         return mergeTemimaPrintRows([sayed, handed]);
       }
       if (temimaScope === "confirmed") return confirmed;
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId, cutoffs]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId, cutoffs, sheetEdits]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -877,6 +899,78 @@ export function CsQueueClient({
     setDraft(filters);
     setApplied(filters);
     if (warning) setMessage(warning);
+  }
+
+  const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
+
+  function rememberEdits(next: TemimaSheetEdit[]) {
+    setSheetEdits((prev) => {
+      const kept = prev.filter(
+        (row) => !next.some((item) => item.dayYmd === row.dayYmd && item.confirmationId === row.confirmationId),
+      );
+      return [...kept, ...next];
+    });
+  }
+
+  async function addSheetOrders() {
+    if (!sheetDay || sheetEditBusy) return;
+    setSheetEditBusy(true);
+    setMessage("");
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "include", dayYmd: sheetDay, orderNumbers: addOrders }),
+    });
+    const data = (await res.json()) as {
+      message?: string;
+      edits?: TemimaSheetEdit[];
+      items?: CsQueueItem[];
+    };
+    setSheetEditBusy(false);
+    if (!res.ok || !data.edits) {
+      setMessage(data.message || "تعذر إضافة الأوردر.");
+      return;
+    }
+    rememberEdits(data.edits);
+    if (data.items?.length) {
+      setItems((prev) => {
+        const next = [...prev];
+        for (const item of data.items || []) {
+          const index = next.findIndex((row) => row.id === item.id);
+          if (index >= 0) next[index] = item;
+          else next.push(item);
+        }
+        return next;
+      });
+    }
+    setAddOrders("");
+    setAddOpen(false);
+    setMessage(data.message || "اتضاف الأوردر.");
+  }
+
+  async function removeSheetOrder(confirmationId: number) {
+    if (!sheetDay || sheetEditBusy) return;
+    setSheetEditBusy(true);
+    setMessage("");
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "exclude", dayYmd: sheetDay, confirmationId }),
+    });
+    const data = (await res.json()) as { message?: string; edit?: TemimaSheetEdit };
+    setSheetEditBusy(false);
+    if (!res.ok || !data.edit) {
+      setMessage(data.message || "تعذر حذف الأوردر.");
+      return;
+    }
+    rememberEdits([data.edit]);
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === confirmationId
+          ? { ...item, courierAgentId: null, courierOutcome: null, courierRefusalReason: null }
+          : item,
+      ),
+    );
   }
 
   function resetFilters() {
@@ -1290,6 +1384,38 @@ export function CsQueueClient({
         <p className="no-print text-sm font-extrabold text-[#14213D]">نتائج الجدول: {filtered.length} أوردر</p>
       )}
 
+      {canEditTemimaSheet && sheetDay ? (
+        <form
+          className="no-print grid gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addSheetOrders();
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setAddOpen((open) => !open)}
+            className="h-9 w-9 rounded-xl bg-[#14213D] text-lg font-extrabold text-white"
+          >
+            +
+          </button>
+          {addOpen ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <textarea
+                value={addOrders}
+                onChange={(event) => setAddOrders(event.target.value)}
+                placeholder="رقم الأوردر أو أكتر"
+                rows={2}
+                className="min-w-[12rem] flex-1 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold"
+              />
+              <button type="submit" disabled={sheetEditBusy} className="h-10 rounded-xl bg-[#FCA311] px-3 text-sm font-extrabold text-black disabled:opacity-60">
+                إضافة
+              </button>
+            </div>
+          ) : null}
+        </form>
+      ) : null}
+
       <div className="no-print space-y-2">
         {filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
@@ -1342,7 +1468,19 @@ export function CsQueueClient({
                 >
                   <div className="flex flex-col gap-0.5">
                     <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] ${meta.className}`}>{meta.label}</span>
-                    <span className="text-base font-extrabold">#{item.wooOrderNumber}</span>
+                    <span className="flex items-center gap-2 text-base font-extrabold">
+                      #{item.wooOrderNumber}
+                      {canEditTemimaSheet && sheetDay ? (
+                        <button
+                          type="button"
+                          disabled={sheetEditBusy}
+                          onClick={() => void removeSheetOrder(item.id)}
+                          className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white disabled:opacity-60"
+                        >
+                          x
+                        </button>
+                      ) : null}
+                    </span>
                     <span className="text-xs text-[#14213D]/55">{day}</span>
                     {item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" && item.confirmedAt ? (
                       <span className="text-[11px] font-bold text-[#14213D]/70">

@@ -7,7 +7,8 @@ import { listCsAreasForGovernorate } from "@/lib/cs/egypt-areas";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { onSayedTemimaSheet } from "@/lib/cs/temima-sheet";
+import { listTemimaSheetEdits } from "@/lib/cs/temima-sheet-edits";
+import { onEditedSayedTemimaSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 const TEMIMA = "sayed_temima";
 const CARD_KEYS = [
@@ -171,15 +172,64 @@ async function loadTodayRows() {
   });
 }
 
+async function loadSheetRows(today: string, edits: TemimaSheetEdit[]) {
+  const base = await loadTodayRows();
+  const prisma = getPrismaClient();
+  if (!prisma) return base;
+  const have = new Set(base.map((row) => row.id));
+  const missing = edits
+    .filter((row) => row.kind === "include" && row.dayYmd === today && !have.has(row.confirmationId))
+    .map((row) => row.confirmationId);
+  if (!missing.length) return base;
+  const extra = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: missing }, status: "CONFIRMED" },
+    select: {
+      id: true,
+      wooOrderNumber: true,
+      customerSnapshot: true,
+      deliveredToCustomer: true,
+      courierAgentId: true,
+      courierOutcome: true,
+      courierRefusalReason: true,
+      depositAmount: true,
+      depositPaid: true,
+      confirmedAt: true,
+      handedToCarrierAt: true,
+      courierAssignedAt: true,
+      shippingCompany: true,
+      courierAgent: { select: { id: true, name: true } },
+      answers: { where: { itemKey: { in: [...CARD_KEYS] } }, select: { itemKey: true, value: true, note: true } },
+    },
+  });
+  return [...base, ...extra];
+}
+
+function onTodaySheet(
+  row: { id: number; shippingCompany?: string | null; confirmedAt: Date | null; handedToCarrierAt: Date | null },
+  today: string,
+  cutoffs: Awaited<ReturnType<typeof listTemimaCutoffs>>,
+  edits: TemimaSheetEdit[],
+) {
+  return onEditedSayedTemimaSheet(
+    {
+      id: row.id,
+      shippingCompany: row.shippingCompany || TEMIMA,
+      confirmedAt: row.confirmedAt,
+      handedToCarrierAt: row.handedToCarrierAt,
+    },
+    today,
+    today,
+    cutoffs,
+    edits,
+  );
+}
+
 export async function loadCourierDispatch(viewerId: number, mode: "supervisor" | "courier") {
   const couriers = mode === "supervisor" ? await loadCouriers() : [];
   const today = cairoTodayYmd();
   const cutoffs = await listTemimaCutoffs();
-  const rows = (await loadTodayRows()).filter(
-    (row) =>
-      Boolean(row.courierAgentId) ||
-      onSayedTemimaSheet(row.confirmedAt, row.handedToCarrierAt, today, today, cutoffs),
-  );
+  const edits = await listTemimaSheetEdits();
+  const rows = (await loadSheetRows(today, edits)).filter((row) => onTodaySheet(row, today, cutoffs, edits));
   const cards = rows.map((row) => {
     const card = cardFromRow(row);
     const matches =
@@ -219,54 +269,33 @@ function orderDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
+const ASSIGN_SELECT = {
+  id: true,
+  wooOrderNumber: true,
+  shippingCompany: true,
+  confirmedAt: true,
+  courierAgentId: true,
+  deliveredToCustomer: true,
+  deliveredToCustomerAt: true,
+  handedToCarrier: true,
+  handedToCarrierAt: true,
+} as const;
+
 async function findAssignableOrder(confirmationId?: number, orderNumber?: string) {
   const prisma = getPrismaClient();
   if (!prisma) return null;
-  const { start, endExclusive } = todayBounds();
   if (confirmationId) {
     return prisma.csOrderConfirmation.findFirst({
-      where: {
-        id: confirmationId,
-        status: "CONFIRMED",
-        shippingCompany: TEMIMA,
-        OR: [
-          { confirmedAt: { gte: start, lt: endExclusive } },
-          { handedToCarrierAt: { gte: start, lt: endExclusive } },
-        ],
-      },
-      select: {
-        id: true,
-        wooOrderNumber: true,
-        confirmedAt: true,
-        courierAgentId: true,
-        deliveredToCustomer: true,
-        deliveredToCustomerAt: true,
-        handedToCarrier: true,
-        handedToCarrierAt: true,
-      },
+      where: { id: confirmationId, status: "CONFIRMED" },
+      select: ASSIGN_SELECT,
     });
   }
   const digits = orderDigits(String(orderNumber || ""));
   if (digits.length < 3) return null;
   const rows = await prisma.csOrderConfirmation.findMany({
-    where: {
-      status: "CONFIRMED",
-      shippingCompany: TEMIMA,
-      OR: [
-        { confirmedAt: { gte: start, lt: endExclusive } },
-        { handedToCarrierAt: { gte: start, lt: endExclusive } },
-      ],
-    },
-    select: {
-      id: true,
-      wooOrderNumber: true,
-      confirmedAt: true,
-      courierAgentId: true,
-      deliveredToCustomer: true,
-      deliveredToCustomerAt: true,
-      handedToCarrier: true,
-      handedToCarrierAt: true,
-    },
+    where: { status: "CONFIRMED", wooOrderNumber: { contains: digits } },
+    select: ASSIGN_SELECT,
+    take: 40,
   });
   return rows.find((row) => orderDigits(row.wooOrderNumber) === digits) || null;
 }
@@ -280,9 +309,11 @@ export async function assignCourierOrder(input: { confirmationId?: number; order
   }
   const order = await findAssignableOrder(input.confirmationId, input.orderNumber);
   if (!order) return { ok: false as const, message: "الأوردر مش في شيت تميمة المؤكد النهاردة." };
+  const today = cairoTodayYmd();
   const cutoffs = await listTemimaCutoffs();
-  if (!onSayedTemimaSheet(order.confirmedAt, order.handedToCarrierAt, cairoTodayYmd(), cairoTodayYmd(), cutoffs)) {
-    return { ok: false as const, message: "الأوردر في الشيت التاني ومش هيتوزع النهاردة." };
+  const edits = await listTemimaSheetEdits();
+  if (!onTodaySheet(order, today, cutoffs, edits)) {
+    return { ok: false as const, message: "الأوردر مش في شيت سيد النهاردة." };
   }
   if (order.courierAgentId) return { ok: false as const, message: "الأوردر متوزع بالفعل." };
   const now = new Date();

@@ -4,6 +4,7 @@ import { ensureCsTables, ensureDefaultCsAgent } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "../cs-queue-client";
@@ -23,19 +24,22 @@ export default async function CsTemimaSheetPage() {
     isSupervisor: true,
     seeAll: true,
   });
+  const merged = await mergeIncludedConfirmations(rows.map(serializeCsQueueItem));
   const couriers = await listCourierAgents();
   const temimaCutoffs = await listTemimaCutoffs();
 
   return (
     <CsQueueClient
-      initialItems={rows.map(serializeCsQueueItem)}
+      initialItems={merged.items}
       isSupervisor={false}
       isAccounting={false}
       agents={[]}
       couriers={couriers}
       isCourierSupervisor
       canOpenOrders={viewer.isAdmin}
+      canEditTemimaSheet={viewer.isAdmin}
       temimaCutoffs={temimaCutoffs}
+      temimaSheetEdits={merged.edits}
     />
   );
 }
