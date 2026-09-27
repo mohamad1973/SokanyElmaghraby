@@ -642,13 +642,6 @@ function TemimaCutoffBox({
   const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
   const hours = Array.from({ length: 9 }, (_, index) => 8 + index);
   const minutes = hour === "16" ? [0] : Array.from({ length: 60 }, (_, index) => index);
-  if (today) {
-    return (
-      <p className="no-print rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
-        شيت سيد مقفول النهاردة عند {formatCutoffMinutes(today.minutes)}. التغيير يبقى بكرة.
-      </p>
-    );
-  }
   return (
     <form
       className="no-print flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
@@ -657,7 +650,11 @@ function TemimaCutoffBox({
         void onLock();
       }}
     >
-      <p className="w-full text-sm font-extrabold text-[#14213D]">قفل شيت سيد تميمة</p>
+      <p className="w-full text-sm font-extrabold text-[#14213D]">
+        {today
+          ? `شيت سيد مقفول النهاردة عند ${formatCutoffMinutes(today.minutes)}. تقدر تعدّلي الوقت لو اتقفل بالغلط.`
+          : "قفل شيت سيد تميمة"}
+      </p>
       <label className="text-xs font-bold text-[#14213D]">
         الساعة
         <select value={hour} onChange={(event) => onHour(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
@@ -675,7 +672,7 @@ function TemimaCutoffBox({
         </select>
       </label>
       <button type="submit" disabled={busy} className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60">
-        {busy ? "قفل..." : "قفل الشيت"}
+        {busy ? "حفظ..." : today ? "تعديل الوقت" : "قفل الشيت"}
       </button>
     </form>
   );
@@ -720,8 +717,9 @@ export function CsQueueClient({
   const [temimaAsk, setTemimaAsk] = useState(false);
   const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
   const [cutoffs, setCutoffs] = useState<TemimaCutoff[]>(temimaCutoffs);
-  const [cutoffHour, setCutoffHour] = useState("12");
-  const [cutoffMinute, setCutoffMinute] = useState("0");
+  const savedCutoff = temimaCutoffs.find((row) => row.dayYmd === cairoTodayYmd());
+  const [cutoffHour, setCutoffHour] = useState(savedCutoff ? String(Math.floor(savedCutoff.minutes / 60)) : "12");
+  const [cutoffMinute, setCutoffMinute] = useState(savedCutoff ? String(savedCutoff.minutes % 60) : "0");
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
@@ -1058,15 +1056,16 @@ export function CsQueueClient({
           onLock={async () => {
             setCutoffBusy(true);
             setMessage("");
+            const hadToday = cutoffs.some((row) => row.dayYmd === cairoTodayYmd());
             const res = await fetch("/api/cs/temima-cutoff", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ hour: Number(cutoffHour), minute: Number(cutoffMinute) }),
+              body: JSON.stringify({ hour: Number(cutoffHour), minute: cutoffHour === "16" ? 0 : Number(cutoffMinute) }),
             });
             const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
             setCutoffBusy(false);
             if (!res.ok || !data.dayYmd || data.minutes == null) {
-              setMessage(data.message || "تعذر قفل الشيت.");
+              setMessage(data.message || "تعذر حفظ الوقت.");
               return;
             }
             setCutoffs((prev) => {
@@ -1074,7 +1073,8 @@ export function CsQueueClient({
               next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
               return next;
             });
-            setMessage(`شيت سيد اتقفل النهاردة عند ${formatCutoffMinutes(data.minutes)}.`);
+            const clock = formatCutoffMinutes(data.minutes);
+            setMessage(hadToday ? `اتعدل وقت قفل الشيت إلى ${clock}.` : `شيت سيد اتقفل النهاردة عند ${clock}.`);
           }}
         />
       ) : null}

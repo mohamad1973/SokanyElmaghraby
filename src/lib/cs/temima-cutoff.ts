@@ -22,12 +22,11 @@ export async function lockTemimaCutoff(hour: number, minute: number) {
     return { ok: false as const, message: "الساعة من 8:00 صباحاً إلى 4:00 عصراً." };
   }
   const dayYmd = cairoTodayYmd();
-  const existing = await prisma.csTemimaSheetCutoff.findUnique({ where: { dayYmd }, select: { minutes: true } });
-  if (existing) return { ok: false as const, message: "ساعة النهاردة اتقفلت ومش هتتغير." };
-  try {
-    await prisma.csTemimaSheetCutoff.create({ data: { dayYmd, minutes: cutoffMinutes(hour, minute) } });
-  } catch {
-    return { ok: false as const, message: "ساعة النهاردة اتقفلت ومش هتتغير." };
-  }
-  return { ok: true as const, dayYmd, minutes: cutoffMinutes(hour, minute) };
+  const minutes = cutoffMinutes(hour, minute);
+  await prisma.csTemimaSheetCutoff.upsert({
+    where: { dayYmd },
+    create: { dayYmd, minutes },
+    update: { minutes },
+  });
+  return { ok: true as const, dayYmd, minutes };
 }
