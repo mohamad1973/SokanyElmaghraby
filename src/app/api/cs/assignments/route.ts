@@ -115,7 +115,7 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ message: result.message }, { status: 400 });
   }
-  return NextResponse.json({ ok: true, assignment: result.assignment });
+  return NextResponse.json({ ok: true, assignment: result.assignment, stamped: result.stamped });
 }
 
 export async function DELETE(request: Request) {

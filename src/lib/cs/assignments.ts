@@ -1,5 +1,7 @@
 import "server-only";
 
+import { Prisma } from "@prisma/client";
+
 import { ensureCsTables } from "@/lib/cs/agents";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { getPrismaClient } from "@/lib/db";
@@ -79,22 +81,22 @@ export async function listPendingAfterLastDistribution(limit = 500) {
     }
   }
 
-  const rows = await prisma.csOrderConfirmation.findMany({
-    where: { assignedAgentId: null },
-    orderBy: { createdAt: "desc" },
-    take: Math.max(limit * 2, 800),
-    select: { id: true, wooOrderNumber: true },
-  });
+  const take = Math.max(1, Math.min(2000, Math.floor(limit)));
+  const rows = await prisma.$queryRaw<Array<{ id: number; wooOrderNumber: string; orderNum: bigint | number }>>`
+    SELECT id, wooOrderNumber,
+      CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) AS orderNum
+    FROM CsOrderConfirmation
+    WHERE assignedAgentId IS NULL
+      AND CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) > ${lastTo}
+    ORDER BY orderNum ASC
+    LIMIT ${Prisma.raw(String(take))}
+  `;
 
-  const pending = rows
-    .map((row) => ({
-      id: row.id,
-      wooOrderNumber: row.wooOrderNumber,
-      orderNum: parseWooOrderNumber(row.wooOrderNumber),
-    }))
-    .filter((row) => row.orderNum > lastTo)
-    .sort((a, b) => a.orderNum - b.orderNum)
-    .slice(0, limit);
+  const pending = rows.map((row) => ({
+    id: Number(row.id),
+    wooOrderNumber: row.wooOrderNumber,
+    orderNum: Number(row.orderNum) || 0,
+  }));
 
   return { lastTo, pending };
 }
@@ -130,6 +132,32 @@ export function orderNumberInRanges(orderNumber: string, ranges: Array<{ from: n
   return ranges.some((r) => n >= r.from && n <= r.to);
 }
 
+type CsDb = NonNullable<ReturnType<typeof getPrismaClient>>;
+
+async function stampOrdersInRange(prisma: CsDb, agentId: number, from: number, to: number) {
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET assignedAgentId = ${agentId}
+    WHERE CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
+  `;
+  const counted = await prisma.$queryRaw<Array<{ n: bigint | number }>>`
+    SELECT COUNT(*) AS n
+    FROM CsOrderConfirmation
+    WHERE assignedAgentId = ${agentId}
+      AND CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
+  `;
+  return Number(counted[0]?.n ?? 0);
+}
+
+async function unstampOrdersInRange(prisma: CsDb, agentId: number, from: number, to: number) {
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET assignedAgentId = NULL
+    WHERE assignedAgentId = ${agentId}
+      AND CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
+  `;
+}
+
 export async function createAssignment(input: {
   agentId: number;
   wooOrderNumberFrom: number;
@@ -156,22 +184,7 @@ export async function createAssignment(input: {
     },
   });
 
-  // Stamp assignedAgentId so regular agents only see what was distributed to them
-  const candidates = await prisma.csOrderConfirmation.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 800,
-  });
-  let stamped = 0;
-  for (const c of candidates) {
-    const n = parseWooOrderNumber(c.wooOrderNumber);
-    if (n >= from && n <= to) {
-      await prisma.csOrderConfirmation.update({
-        where: { id: c.id },
-        data: { assignedAgentId: input.agentId },
-      });
-      stamped += 1;
-    }
-  }
+  const stamped = await stampOrdersInRange(prisma, input.agentId, from, to);
 
   return { ok: true as const, assignment: row, stamped };
 }
@@ -180,8 +193,42 @@ export async function deleteAssignment(id: number) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
+  const row = await prisma.csOrderAssignment.findUnique({ where: { id } });
+  if (!row) return { ok: false as const, message: "التوزيع غير موجود." };
+  const from = Math.min(row.wooOrderNumberFrom, row.wooOrderNumberTo);
+  const to = Math.max(row.wooOrderNumberFrom, row.wooOrderNumberTo);
+  await unstampOrdersInRange(prisma, row.agentId, from, to);
   await prisma.csOrderAssignment.delete({ where: { id } });
   return { ok: true as const };
+}
+
+/** One pass over today's saved ranges so a missed stamp still reaches the agent sheet. */
+export async function restampTodayAssignmentsOnce() {
+  const prisma = getPrismaClient();
+  if (!prisma) return { stamped: 0 };
+  await ensureCsTables();
+  const day = cairoTodayYmd();
+  const already = await prisma.$queryRaw<Array<{ dayYmd: string }>>`
+    SELECT dayYmd FROM CsAssignmentRestamp WHERE dayYmd = ${day} LIMIT 1
+  `;
+  if (already.length) return { stamped: 0 };
+
+  const bounds = cairoYmdBounds(day);
+  if (!bounds) return { stamped: 0 };
+  const rows = await prisma.csOrderAssignment.findMany({
+    where: { createdAt: { gte: bounds.start, lt: bounds.endExclusive } },
+    orderBy: { createdAt: "asc" },
+  });
+  let stamped = 0;
+  for (const row of rows) {
+    const from = Math.min(row.wooOrderNumberFrom, row.wooOrderNumberTo);
+    const to = Math.max(row.wooOrderNumberFrom, row.wooOrderNumberTo);
+    stamped += await stampOrdersInRange(prisma, row.agentId, from, to);
+  }
+  await prisma.$executeRaw`
+    INSERT IGNORE INTO CsAssignmentRestamp (dayYmd) VALUES (${day})
+  `;
+  return { stamped };
 }
 
 export async function fairSplitAssign(input: {

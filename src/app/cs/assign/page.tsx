@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { restampTodayAssignmentsOnce } from "@/lib/cs/assignments";
 import { ensureCsTables, ensureDefaultCsAgent, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, resolveCsViewer } from "@/lib/cs/confirmations";
 import { isWithinCairoTodayOrYesterday } from "@/lib/cs/order-window";
@@ -13,6 +14,7 @@ export default async function CsAssignPage() {
 
   await ensureCsTables();
   await ensureDefaultCsAgent();
+  await restampTodayAssignmentsOnce();
   const viewer = await resolveCsViewer(session.user.csAgentId);
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
   if (!isSupervisor) redirect("/cs");

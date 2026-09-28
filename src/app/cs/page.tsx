@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { restampTodayAssignmentsOnce } from "@/lib/cs/assignments";
 import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, listActiveCsAgents } from "@/lib/cs/agents";
 import { listCsConfirmationsForViewer, listCsQueuePage, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
@@ -16,6 +17,7 @@ export default async function CsHomePage() {
 
   await ensureCsTables();
   await ensureDefaultCsAgent();
+  await restampTodayAssignmentsOnce();
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
   if (!viewer.canSeeOrders && viewer.isCourier && !viewer.isCourierSupervisor) {

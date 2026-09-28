@@ -144,13 +144,18 @@ export function CsAssignClient({
         to: Number(form.get("to")),
       }),
     });
-    const data = (await res.json()) as { message?: string };
+    const data = (await res.json()) as { message?: string; stamped?: number };
     setLoading(false);
     if (!res.ok) {
       setMessage(data.message || "تعذر الحفظ.");
       return;
     }
-    setMessage("تم حفظ توزيع النطاق.");
+    const stamped = Number(data.stamped ?? 0);
+    setMessage(
+      stamped > 0
+        ? `تم حفظ التوزيع وارتبط ${stamped} أوردر.`
+        : "اتحفظ النطاق، والأرقام دي مش موجودة في قائمة الأوردرات.",
+    );
     event.currentTarget.reset();
     await loadAssignments(appliedFrom, appliedTo);
     if (showPendingAfterLast) await loadPending();
