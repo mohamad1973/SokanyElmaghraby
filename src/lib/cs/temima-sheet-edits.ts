@@ -3,7 +3,8 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { cairoYmdBounds } from "@/lib/cs/order-window";
-import type { TemimaSheetEdit } from "@/lib/cs/temima-sheet";
+import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { onEditedSayedTemimaSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 function asKind(value: string): TemimaSheetEdit["kind"] | null {
   return value === "include" || value === "exclude" ? value : null;
@@ -146,6 +147,26 @@ export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
       })
     : [];
   return [...rows, ...extra].map((row) => serializeCsQueueItem(row));
+}
+
+/** Same rows Sayed's account shows for these days: cutoff, include, and exclude. */
+export async function listVisibleSayedSheet(dateFrom: string, dateTo: string) {
+  const items = await listSayedSheetOrders(dateFrom, dateTo);
+  const [edits, cutoffs] = await Promise.all([listTemimaSheetEdits(), listTemimaCutoffs()]);
+  return items.filter((item) =>
+    onEditedSayedTemimaSheet(
+      {
+        id: item.id,
+        shippingCompany: item.shippingCompany,
+        confirmedAt: item.confirmedAt,
+        handedToCarrierAt: item.handedToCarrierAt,
+      },
+      dateFrom,
+      dateTo,
+      cutoffs,
+      edits,
+    ),
+  );
 }
 
 export async function includeTemimaOrders(dayYmd: string, confirmationIds: number[]) {

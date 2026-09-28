@@ -704,7 +704,7 @@ type Props = {
   agents?: Array<{ id: number; name: string }>;
   couriers?: Array<{ id: number; name: string }>;
   initialHasMore?: boolean;
-  initialNextCursor?: number | null;
+  initialTotal?: number;
 };
 
 type TemimaAddMatch = {
@@ -732,7 +732,7 @@ export function CsQueueClient({
   agents = [],
   couriers = [],
   initialHasMore = false,
-  initialNextCursor = null,
+  initialTotal = 0,
 }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -764,47 +764,55 @@ export function CsQueueClient({
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
   const syncingRef = useRef(false);
-  const loadedMoreRef = useRef(false);
   const searchWasActive = useRef(false);
   const appliedRef = useRef(applied);
   appliedRef.current = applied;
   const draftQueryRef = useRef(draft.query);
   draftQueryRef.current = draft.query;
+  const pageRef = useRef(1);
   const [hasMore, setHasMore] = useState(initialHasMore);
-  const [nextCursor, setNextCursor] = useState<number | null>(initialNextCursor);
+  const [queuePage, setQueuePage] = useState(1);
+  const [queueTotal, setQueueTotal] = useState(initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
 
   useEffect(() => {
     setItems(initialItems);
     setHasMore(initialHasMore);
-    setNextCursor(initialNextCursor);
-    loadedMoreRef.current = false;
-  }, [initialItems, initialHasMore, initialNextCursor]);
+    setQueuePage(1);
+    setQueueTotal(initialTotal);
+    pageRef.current = 1;
+  }, [initialItems, initialHasMore, initialTotal]);
 
   async function loadQueue(opts: {
     query: string;
     dateFrom: string;
     dateTo: string;
-    cursorId: number | null;
-    append: boolean;
+    page: number;
   }) {
     const params = new URLSearchParams();
     const query = opts.query.trim();
+    const page = Math.max(1, opts.page);
     if (query) params.set("q", query);
     if (!query && opts.dateFrom) params.set("from", opts.dateFrom);
     if (!query && opts.dateTo) params.set("to", opts.dateTo);
-    if (opts.cursorId) params.set("cursor", String(opts.cursorId));
+    params.set("page", String(page));
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
-    const data = (await res.json()) as { message?: string; items?: CsQueueItem[]; hasMore?: boolean; nextCursor?: number | null };
+    const data = (await res.json()) as {
+      message?: string;
+      items?: CsQueueItem[];
+      hasMore?: boolean;
+      total?: number;
+    };
     if (!res.ok) {
       setMessage(data.message || "تعذر تحميل الأوردرات.");
       return;
     }
-    const nextItems = data.items || [];
-    setItems((prev) => (opts.append ? [...prev, ...nextItems] : nextItems));
+    setItems(data.items || []);
     setHasMore(Boolean(data.hasMore));
-    setNextCursor(data.nextCursor ?? null);
-    loadedMoreRef.current = opts.append;
+    setQueueTotal(Number(data.total ?? 0));
+    setQueuePage(page);
+    pageRef.current = page;
   }
 
   async function syncOrders(opts?: { quiet?: boolean }) {
@@ -827,14 +835,13 @@ export function CsQueueClient({
         return;
       }
       const query = draftQueryRef.current.trim();
-      if (!query && !loadedMoreRef.current) {
+      if (!query && pageRef.current === 1) {
         const filters = appliedRef.current;
         await loadQueue({
           query: "",
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
-          cursorId: null,
-          append: false,
+          page: 1,
         });
       }
       if (opts?.quiet && (data.imported ?? 0) > 0) {
@@ -867,8 +874,7 @@ export function CsQueueClient({
           query: "",
           dateFrom: filters.dateFrom,
           dateTo: filters.dateTo,
-          cursorId: null,
-          append: false,
+          page: 1,
         });
         return;
       }
@@ -877,8 +883,7 @@ export function CsQueueClient({
         query,
         dateFrom: "",
         dateTo: "",
-        cursorId: null,
-        append: false,
+        page: 1,
       });
     }, 400);
     return () => window.clearTimeout(handle);
@@ -917,6 +922,7 @@ export function CsQueueClient({
   }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor]);
 
   const printRows = useMemo(() => {
+    if (sheetPrintRows) return sheetPrintRows;
     if (printingCourierId) {
       return filtered.filter((item) => item.courierAgentId === printingCourierId);
     }
@@ -941,7 +947,7 @@ export function CsQueueClient({
       return filtered.filter((i) => i.shippingCompany === "sayed_temima");
     }
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId, cutoffs, sheetEdits]);
+  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId, cutoffs, sheetEdits, sheetPrintRows]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -949,6 +955,7 @@ export function CsQueueClient({
       window.print();
       setPrintMode("none");
       setPrintingCourierId(null);
+      setSheetPrintRows(null);
     }, 50);
     return () => window.clearTimeout(timer);
   }, [printMode]);
@@ -998,8 +1005,7 @@ export function CsQueueClient({
         query: filters.query.trim(),
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
-        cursorId: null,
-        append: false,
+        page: 1,
       });
     }
   }
@@ -1116,18 +1122,28 @@ export function CsQueueClient({
   }
 
   async function startTemimaPrint(scope: TemimaPrintScope) {
-    const dateFrom = printFrom || applied.dateFrom;
-    const dateTo = printTo || applied.dateTo;
-    setDraft((prev) => ({ ...prev, dateFrom, dateTo }));
-    setApplied((prev) => ({ ...prev, dateFrom, dateTo }));
-    const res = await fetch(`/api/cs/orders?sheet=temima&from=${encodeURIComponent(dateFrom)}&to=${encodeURIComponent(dateTo)}`);
-    const data = (await res.json()) as { items?: CsQueueItem[] };
-    if (res.ok && data.items?.length) {
-      setItems((prev) => {
-        const byId = new Map(prev.map((item) => [item.id, item]));
-        for (const item of data.items || []) byId.set(item.id, item);
-        return [...byId.values()];
-      });
+    const dateFrom = printFrom || (isCourierSupervisor ? applied.dateFrom : cairoTodayYmd());
+    const dateTo = printTo || dateFrom;
+    const matchSayed = scope === "confirmed" || (Boolean(isCourierSupervisor) && scope === "all");
+    const res = await fetch(
+      `/api/cs/orders?sheet=temima&from=${encodeURIComponent(dateFrom)}&to=${encodeURIComponent(dateTo)}${matchSayed ? "&match=sayed" : ""}`,
+    );
+    const data = (await res.json()) as { items?: CsQueueItem[]; message?: string };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تجهيز شيت سيد.");
+      return;
+    }
+    if (matchSayed) {
+      setSheetPrintRows(data.items || []);
+    } else {
+      setSheetPrintRows(null);
+      if (data.items?.length) {
+        setItems((prev) => {
+          const byId = new Map(prev.map((item) => [item.id, item]));
+          for (const item of data.items || []) byId.set(item.id, item);
+          return [...byId.values()];
+        });
+      }
     }
     setTemimaScope(scope);
     setTemimaAsk(false);
@@ -1151,7 +1167,7 @@ export function CsQueueClient({
           </h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
             عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span>
-            {!isCourierSupervisor && (isSupervisor || isAccounting) ? <> من أصل {items.length}</> : null}
+            {!isCourierSupervisor ? <> من أصل {queueTotal}</> : null}
           </p>
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
@@ -1166,7 +1182,10 @@ export function CsQueueClient({
           {isSupervisor && !isCourierSupervisor ? (
           <button
             type="button"
-            onClick={() => setPrintMode("bosta")}
+            onClick={() => {
+              setSheetPrintRows(null);
+              setPrintMode("bosta");
+            }}
             className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
           >
             طباعة بوسطة
@@ -1185,8 +1204,8 @@ export function CsQueueClient({
             type="button"
             onClick={() => {
               setPrintingCourierId(null);
-              setPrintFrom(applied.dateFrom);
-              setPrintTo(applied.dateTo);
+              setPrintFrom(isCourierSupervisor ? applied.dateFrom : cairoTodayYmd());
+              setPrintTo(isCourierSupervisor ? applied.dateTo : cairoTodayYmd());
               setTemimaAsk(true);
             }}
             className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
@@ -1212,6 +1231,7 @@ export function CsQueueClient({
                 type="button"
                 disabled={!courierPrintPick}
                 onClick={() => {
+                  setSheetPrintRows(null);
                   setPrintingCourierId(Number(courierPrintPick));
                   setPrintMode("sayed_temima");
                 }}
@@ -1223,7 +1243,10 @@ export function CsQueueClient({
           ) : isSupervisor ? (
           <button
             type="button"
-            onClick={() => setPrintMode("all")}
+            onClick={() => {
+              setSheetPrintRows(null);
+              setPrintMode("all");
+            }}
             className="shrink-0 rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D] sm:py-2.5 sm:text-sm"
           >
             طباعة الكل
@@ -1256,7 +1279,7 @@ export function CsQueueClient({
             onClick={() => void startTemimaPrint("confirmed")}
             className="rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black"
           >
-            المؤكد
+            شيت سيد
           </button>
           {isSupervisor && !isCourierSupervisor ? (
             <button
@@ -1606,6 +1629,48 @@ export function CsQueueClient({
         </form>
       ) : null}
 
+      {!isCourierSupervisor ? (
+        <div className="no-print flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2 shadow ring-1 ring-[#14213D]/10">
+          <p className="text-sm font-extrabold text-[#14213D]">
+            الصفحة {queuePage} · {items.length} من أصل {queueTotal}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={loadingMore || queuePage <= 1}
+              onClick={() => {
+                setLoadingMore(true);
+                void loadQueue({
+                  query: draft.query.trim(),
+                  dateFrom: draft.query.trim() ? "" : applied.dateFrom,
+                  dateTo: draft.query.trim() ? "" : applied.dateTo,
+                  page: queuePage - 1,
+                }).finally(() => setLoadingMore(false));
+              }}
+              className="h-10 rounded-xl bg-[#E5E5E5] px-4 text-sm font-extrabold text-[#14213D] disabled:opacity-50"
+            >
+              السابق
+            </button>
+            <button
+              type="button"
+              disabled={loadingMore || !hasMore}
+              onClick={() => {
+                setLoadingMore(true);
+                void loadQueue({
+                  query: draft.query.trim(),
+                  dateFrom: draft.query.trim() ? "" : applied.dateFrom,
+                  dateTo: draft.query.trim() ? "" : applied.dateTo,
+                  page: queuePage + 1,
+                }).finally(() => setLoadingMore(false));
+              }}
+              className="h-10 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white disabled:opacity-50"
+            >
+              {loadingMore ? "جار التحميل..." : "التالي"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="no-print space-y-2">
         {filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
@@ -1847,25 +1912,6 @@ export function CsQueueClient({
             );
           })
         )}
-        {!isCourierSupervisor && hasMore ? (
-          <button
-            type="button"
-            disabled={loadingMore}
-            onClick={() => {
-              setLoadingMore(true);
-              void loadQueue({
-                query: draft.query.trim(),
-                dateFrom: applied.dateFrom,
-                dateTo: applied.dateTo,
-                cursorId: nextCursor,
-                append: true,
-              }).finally(() => setLoadingMore(false));
-            }}
-            className="mx-auto mt-3 block h-10 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white disabled:opacity-60"
-          >
-            {loadingMore ? "جار التحميل..." : "تحميل المزيد"}
-          </button>
-        ) : null}
       </div>
 
       <div className="print-only hidden">

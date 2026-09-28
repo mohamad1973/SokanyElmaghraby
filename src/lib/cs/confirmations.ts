@@ -548,6 +548,8 @@ export async function listCsConfirmationsForViewer(opts: {
   return sortByOrderNumberDesc(inWindow);
 }
 
+export const CS_QUEUE_PAGE_SIZE = 200;
+
 export async function listCsQueuePage(opts: {
   agentId: number;
   isSupervisor: boolean;
@@ -555,24 +557,22 @@ export async function listCsQueuePage(opts: {
   dateFrom?: string;
   dateTo?: string;
   query?: string;
-  cursorId?: number | null;
+  page?: number;
   limit?: number;
 }) {
   const prisma = getPrismaClient();
-  if (!prisma) return { items: [], nextCursor: null as number | null, hasMore: false };
+  if (!prisma) return { items: [], total: 0, page: 1, pageSize: CS_QUEUE_PAGE_SIZE, hasMore: false };
   await ensureCsTables();
 
   const seeAll = Boolean(opts.isSupervisor || opts.seeAll);
-  const limit = Math.min(200, Math.max(1, opts.limit || 150));
+  const pageSize = Math.min(CS_QUEUE_PAGE_SIZE, Math.max(1, opts.limit || CS_QUEUE_PAGE_SIZE));
+  const page = Math.max(1, Math.floor(opts.page || 1));
+  const offset = (page - 1) * pageSize;
   const where: string[] = [];
   const params: Array<string | number | Date> = [];
   if (!seeAll) {
     where.push("assignedAgentId = ?");
     params.push(opts.agentId);
-  }
-  if (opts.cursorId && opts.cursorId > 0) {
-    where.push("id < ?");
-    params.push(opts.cursorId);
   }
 
   const query = (opts.query || "").trim();
@@ -612,25 +612,29 @@ export async function listCsQueuePage(opts: {
     }
   }
 
-  params.push(limit + 1);
-  const idRows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
-    `SELECT id FROM CsOrderConfirmation ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY id DESC LIMIT ?`,
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint | number }>>(
+    `SELECT COUNT(*) AS n FROM CsOrderConfirmation ${whereSql}`,
     ...params,
   );
-  const ids = idRows.map((row) => Number(row.id));
-  const hasMore = ids.length > limit;
-  const pageIds = hasMore ? ids.slice(0, limit) : ids;
+  const total = Number(counted[0]?.n ?? 0);
+  const idRows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+    `SELECT id FROM CsOrderConfirmation ${whereSql} ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`,
+    ...params,
+  );
+  const pageIds = idRows.map((row) => Number(row.id));
   const loaded = await loadConfirmationsByIds(prisma, pageIds);
   const byId = new Map(loaded.map((row) => [row.id, row]));
   const ordered = pageIds
     .map((id) => byId.get(id))
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
   await attachDistributedAt(ordered);
-  const last = ordered[ordered.length - 1];
   return {
     items: ordered.map((row) => serializeCsQueueItem(row)),
-    nextCursor: hasMore && last ? last.id : null,
-    hasMore,
+    total,
+    page,
+    pageSize,
+    hasMore: offset + ordered.length < total,
   };
 }
 

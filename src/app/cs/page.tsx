@@ -35,7 +35,7 @@ export default async function CsHomePage() {
   const isAccounting = viewer.isAccounting || isAccountingRole(session.user.csRole);
 
   let initialHasMore = false;
-  let initialNextCursor: number | null = null;
+  let initialTotal = 0;
   let initialItems;
   let temimaSheetEdits: Awaited<ReturnType<typeof mergeIncludedConfirmations>>["edits"] = [];
   if (isCourierSupervisor) {
@@ -54,7 +54,7 @@ export default async function CsHomePage() {
       seeAll: isAccounting,
       dateFrom: cairoYesterdayYmd(),
       dateTo: cairoTodayYmd(),
-      limit: 150,
+      limit: 200,
     });
     const merged = isSupervisor
       ? await mergeIncludedConfirmations(queue.items)
@@ -62,7 +62,7 @@ export default async function CsHomePage() {
     initialItems = merged.items;
     temimaSheetEdits = merged.edits;
     initialHasMore = queue.hasMore;
-    initialNextCursor = queue.nextCursor;
+    initialTotal = queue.total;
   }
   const agents = isSupervisor
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
@@ -83,7 +83,7 @@ export default async function CsHomePage() {
       temimaCutoffs={temimaCutoffs}
       temimaSheetEdits={temimaSheetEdits}
       initialHasMore={initialHasMore}
-      initialNextCursor={initialNextCursor}
+      initialTotal={initialTotal}
     />
   );
 }
