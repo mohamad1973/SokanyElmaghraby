@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { excludeTemimaOrder, includeTemimaOrders } from "@/lib/cs/temima-sheet-edits";
+import { excludeTemimaOrder, includeTemimaOrders, searchTemimaSheetOrders } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function POST(request: Request) {
@@ -14,12 +14,18 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     action?: string;
     dayYmd?: string;
-    orderNumbers?: string;
+    query?: string;
+    confirmationIds?: number[];
     confirmationId?: number;
   } | null;
   const dayYmd = String(body?.dayYmd || "");
+  if (body?.action === "search") {
+    const result = await searchTemimaSheetOrders(String(body.query || ""));
+    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 503 });
+  }
   if (body?.action === "include") {
-    const result = await includeTemimaOrders(dayYmd, String(body.orderNumbers || ""));
+    const ids = Array.isArray(body.confirmationIds) ? body.confirmationIds.map((id) => Number(id)) : [];
+    const result = await includeTemimaOrders(dayYmd, ids);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
   if (body?.action === "exclude") {

@@ -8,15 +8,73 @@ function asKind(value: string): TemimaSheetEdit["kind"] | null {
   return value === "include" || value === "exclude" ? value : null;
 }
 
-export function orderNumberTokens(raw: string) {
-  return [
-    ...new Set(
-      String(raw || "")
-        .split(/[\s,،]+/)
-        .map((part) => part.replace(/\D/g, ""))
-        .filter((digits) => digits.length >= 3),
-    ),
-  ];
+export type TemimaSheetSearchHit = {
+  id: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+  status: string;
+};
+
+function cleanLike(value: string) {
+  return value.trim().slice(0, 80).replace(/[\\%_]/g, "");
+}
+
+function snapshotText(value: string | null | undefined) {
+  const text = String(value || "").trim();
+  return text === "null" ? "" : text;
+}
+
+export async function searchTemimaSheetOrders(rawQuery: string) {
+  const prisma = getPrismaClient();
+  const query = rawQuery.trim().slice(0, 80);
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", matches: [] as TemimaSheetSearchHit[] };
+  if (query.length < 2) return { ok: true as const, matches: [] as TemimaSheetSearchHit[] };
+
+  const hasLetters = /[A-Za-z\u0600-\u06FF]/.test(query);
+  const digits = query.replace(/\D/g, "");
+  const where: string[] = [];
+  const params: string[] = [];
+  if (hasLetters) {
+    where.push("JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.customerName')) LIKE ?");
+    params.push(`%${cleanLike(query)}%`);
+  }
+  if (digits.length >= 3) {
+    where.push("REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') = ?");
+    params.push(digits);
+    where.push("JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.phone')) LIKE ?");
+    params.push(`%${digits}%`);
+  }
+  if (!where.length) return { ok: true as const, matches: [] as TemimaSheetSearchHit[] };
+
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      id: number | bigint;
+      wooOrderNumber: string;
+      status: string;
+      customerName: string | null;
+      phone: string | null;
+    }>
+  >(
+    `SELECT id, wooOrderNumber, status,
+      JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.customerName')) AS customerName,
+      JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.phone')) AS phone
+     FROM CsOrderConfirmation
+     WHERE ${where.join(" OR ")}
+     ORDER BY id DESC
+     LIMIT 20`,
+    ...params,
+  );
+  return {
+    ok: true as const,
+    matches: rows.map((row) => ({
+      id: Number(row.id),
+      wooOrderNumber: String(row.wooOrderNumber || ""),
+      customerName: snapshotText(row.customerName),
+      phone: snapshotText(row.phone),
+      status: String(row.status || ""),
+    })),
+  };
 }
 
 export async function listTemimaSheetEdits(): Promise<TemimaSheetEdit[]> {
@@ -45,47 +103,37 @@ export async function mergeIncludedConfirmations<T extends { id: number }>(items
   ];
   if (!missing.length) return { items, edits };
   const rows = await prisma.csOrderConfirmation.findMany({
-    where: { id: { in: missing }, status: "CONFIRMED" },
+    where: { id: { in: missing } },
     include: { assignedAgent: true, answers: true },
   });
   const extra = rows.map((row) => serializeCsQueueItem(row)) as unknown as T[];
   return { items: [...items, ...extra], edits };
 }
 
-export async function includeTemimaOrders(dayYmd: string, rawNumbers: string) {
+export async function includeTemimaOrders(dayYmd: string, confirmationIds: number[]) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return { ok: false as const, message: "اليوم غير صحيح." };
-  const tokens = orderNumberTokens(rawNumbers);
-  if (!tokens.length) return { ok: false as const, message: "اكتب رقم الأوردر." };
+  const ids = [...new Set(confirmationIds.filter((id) => Number.isInteger(id) && id > 0))].slice(0, 20);
+  if (!ids.length) return { ok: false as const, message: "اختر أوردر من النتائج." };
   const rows = await prisma.csOrderConfirmation.findMany({
-    where: { status: "CONFIRMED", OR: tokens.map((token) => ({ wooOrderNumber: { contains: token } })) },
+    where: { id: { in: ids } },
     include: { assignedAgent: true, answers: true },
   });
-  const found = new Map<string, (typeof rows)[number]>();
+  if (!rows.length) return { ok: false as const, message: "مش موجود في الأوردرات." };
   for (const row of rows) {
-    const digits = String(row.wooOrderNumber || "").replace(/\D/g, "");
-    const token = tokens.find((item) => item === digits);
-    if (!token || found.has(token)) continue;
-    found.set(token, row);
-  }
-  const missing = tokens.filter((token) => !found.has(token));
-  const matched = [...found.values()];
-  if (!matched.length) return { ok: false as const, message: `مش موجود: ${missing.join("، ")}` };
-  for (const row of matched) {
     await prisma.csTemimaSheetEdit.upsert({
       where: { dayYmd_confirmationId: { dayYmd, confirmationId: row.id } },
       create: { dayYmd, confirmationId: row.id, kind: "include" },
       update: { kind: "include" },
     });
   }
-  const edits = matched.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
+  const edits = rows.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
   return {
     ok: true as const,
     edits,
-    items: matched.map((row) => serializeCsQueueItem(row)),
-    missing,
-    message: missing.length ? `اتضاف ${matched.length}. مش موجود: ${missing.join("، ")}` : `اتضاف ${matched.length}.`,
+    items: rows.map((row) => serializeCsQueueItem(row)),
+    message: `اتضاف ${rows.length}.`,
   };
 }
 

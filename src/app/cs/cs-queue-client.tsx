@@ -219,6 +219,17 @@ function temimaDateMode(f: DraftFilters) {
   return f.shipping === "sayed_temima" && normalizeFilterStatus(f.status) === "CONFIRMED";
 }
 
+function includedInAppliedRange(id: number, f: DraftFilters, edits: TemimaSheetEdit[]) {
+  if (!f.dateFrom || !f.dateTo) return false;
+  return edits.some(
+    (row) =>
+      row.kind === "include" &&
+      row.confirmationId === id &&
+      row.dayYmd >= f.dateFrom &&
+      row.dayYmd <= f.dateTo,
+  );
+}
+
 function applyCourierSupervisorSheet(
   items: CsQueueItem[],
   f: DraftFilters,
@@ -226,7 +237,7 @@ function applyCourierSupervisorSheet(
   cutoffs: TemimaCutoff[],
   edits: TemimaSheetEdit[],
 ) {
-  let rows = items.filter((item) => item.status === "CONFIRMED");
+  let rows = items.filter((item) => item.status === "CONFIRMED" || includedInAppliedRange(item.id, f, edits));
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
   if (f.dateFrom && f.dateTo) {
@@ -520,7 +531,7 @@ function sayedTemimaPrintRows(
   const q = query.trim();
   return items
     .filter((item) => {
-      if (item.status !== "CONFIRMED") return false;
+      if (item.status !== "CONFIRMED" && !includedInAppliedRange(item.id, applied, edits)) return false;
       if (q && !matchesSearchQuery(item, q)) return false;
       return onEditedSayedTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits);
     })
@@ -695,6 +706,14 @@ type Props = {
   initialNextCursor?: number | null;
 };
 
+type TemimaAddMatch = {
+  id: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+  status: string;
+};
+
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
 type TemimaPrintScope = "confirmed" | "handed" | "all" | "late";
 
@@ -729,6 +748,10 @@ export function CsQueueClient({
   const [sheetEdits, setSheetEdits] = useState<TemimaSheetEdit[]>(temimaSheetEdits);
   const [addOpen, setAddOpen] = useState(false);
   const [addOrders, setAddOrders] = useState("");
+  const [addMatches, setAddMatches] = useState<TemimaAddMatch[]>([]);
+  const [selectedAddIds, setSelectedAddIds] = useState<number[]>([]);
+  const [addSearchState, setAddSearchState] = useState<"idle" | "loading" | "done">("idle");
+  const addSearchSeq = useRef(0);
   const [sheetEditBusy, setSheetEditBusy] = useState(false);
   const savedCutoff = temimaCutoffs.find((row) => row.dayYmd === cairoTodayYmd());
   const [cutoffHour, setCutoffHour] = useState(savedCutoff ? String(Math.floor(savedCutoff.minutes / 60)) : "12");
@@ -988,14 +1011,50 @@ export function CsQueueClient({
     });
   }
 
+  useEffect(() => {
+    if (!canEditTemimaSheet || !addOpen) return;
+    const query = addOrders.trim();
+    if (query.length < 2) {
+      setAddMatches([]);
+      setSelectedAddIds([]);
+      setAddSearchState("idle");
+      return;
+    }
+    setAddSearchState("loading");
+    const seq = addSearchSeq.current + 1;
+    addSearchSeq.current = seq;
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        const res = await fetch("/api/cs/temima-sheet-edit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "search", query }),
+        });
+        const data = (await res.json()) as { message?: string; matches?: TemimaAddMatch[] };
+        if (seq !== addSearchSeq.current) return;
+        if (!res.ok) {
+          setAddMatches([]);
+          setAddSearchState("done");
+          setMessage(data.message || "تعذر البحث في الأوردرات.");
+          return;
+        }
+        const matches = data.matches || [];
+        setAddMatches(matches);
+        setSelectedAddIds((prev) => prev.filter((id) => matches.some((item) => item.id === id)));
+        setAddSearchState("done");
+      })();
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [addOrders, addOpen, canEditTemimaSheet]);
+
   async function addSheetOrders() {
-    if (!sheetDay || sheetEditBusy) return;
+    if (!sheetDay || sheetEditBusy || !selectedAddIds.length) return;
     setSheetEditBusy(true);
     setMessage("");
     const res = await fetch("/api/cs/temima-sheet-edit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "include", dayYmd: sheetDay, orderNumbers: addOrders }),
+      body: JSON.stringify({ action: "include", dayYmd: sheetDay, confirmationIds: selectedAddIds }),
     });
     const data = (await res.json()) as {
       message?: string;
@@ -1020,6 +1079,9 @@ export function CsQueueClient({
       });
     }
     setAddOrders("");
+    setAddMatches([]);
+    setSelectedAddIds([]);
+    setAddSearchState("idle");
     setAddOpen(false);
     setMessage(data.message || "اتضاف الأوردر.");
   }
@@ -1474,17 +1536,52 @@ export function CsQueueClient({
             +
           </button>
           {addOpen ? (
-            <div className="flex flex-wrap items-end gap-2">
-              <textarea
-                value={addOrders}
-                onChange={(event) => setAddOrders(event.target.value)}
-                placeholder="رقم الأوردر أو أكتر"
-                rows={2}
-                className="min-w-[12rem] flex-1 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold"
-              />
-              <button type="submit" disabled={sheetEditBusy} className="h-10 rounded-xl bg-[#FCA311] px-3 text-sm font-extrabold text-black disabled:opacity-60">
-                إضافة
-              </button>
+            <div className="grid gap-2">
+              <div className="flex flex-wrap items-end gap-2">
+                <input
+                  value={addOrders}
+                  onChange={(event) => setAddOrders(event.target.value)}
+                  placeholder="رقم الأوردر أو الموبايل أو اسم العميل"
+                  className="h-10 min-w-[12rem] flex-1 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold"
+                />
+                <button
+                  type="submit"
+                  disabled={sheetEditBusy || !selectedAddIds.length}
+                  className="h-10 rounded-xl bg-[#FCA311] px-3 text-sm font-extrabold text-black disabled:opacity-60"
+                >
+                  إضافة
+                </button>
+              </div>
+              {addSearchState === "loading" ? (
+                <p className="text-xs font-bold text-[#14213D]/60">جار البحث في الأوردرات...</p>
+              ) : null}
+              {addSearchState === "done" && !addMatches.length ? (
+                <p className="text-xs font-bold text-red-700">مش موجود في الأوردرات.</p>
+              ) : null}
+              {addMatches.length ? (
+                <div className="grid max-h-56 gap-1 overflow-auto">
+                  {addMatches.map((match) => {
+                    const selected = selectedAddIds.includes(match.id);
+                    const label = statusMeta[match.status]?.label || match.status;
+                    return (
+                      <button
+                        key={match.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedAddIds((prev) =>
+                            prev.includes(match.id) ? prev.filter((id) => id !== match.id) : [...prev, match.id],
+                          )
+                        }
+                        className={`rounded-xl px-3 py-2 text-right text-sm font-bold ${
+                          selected ? "bg-[#FCA311] text-black" : "bg-[#F5F5F0] text-[#14213D]"
+                        }`}
+                      >
+                        #{match.wooOrderNumber} · {match.customerName || "بدون اسم"} · {match.phone || "بدون موبايل"} · {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </form>
