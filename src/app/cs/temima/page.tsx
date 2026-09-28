@@ -17,7 +17,7 @@ export default async function CsTemimaSheetPage() {
   await ensureDefaultCsAgent();
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isAdmin && !viewer.isCourierSupervisor) redirect("/cs");
+  if (!viewer.isAdmin && !viewer.isSupervisor && !viewer.isCourierSupervisor) redirect("/cs");
 
   const rows = await listCsConfirmationsForViewer({
     agentId: session.user.csAgentId,
@@ -38,6 +38,7 @@ export default async function CsTemimaSheetPage() {
       isCourierSupervisor
       canOpenOrders={viewer.isAdmin}
       canEditTemimaSheet={viewer.isAdmin}
+      canEditInvoice={viewer.isAdmin || viewer.isSupervisor}
       temimaCutoffs={temimaCutoffs}
       temimaSheetEdits={merged.edits}
     />

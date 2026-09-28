@@ -714,6 +714,11 @@ function CsHeader() {
               توزيع
             </Link>
           ) : null}
+          {isSupervisor && !isAdmin ? (
+            <Link href="/cs/temima" className={navClass(pathname.startsWith("/cs/temima"))}>
+              شيت سيد تميمة
+            </Link>
+          ) : null}
           {isSupervisor ? (
             <Link href="/cs/reports" className={navClass(pathname.startsWith("/cs/reports"))}>
               تقارير

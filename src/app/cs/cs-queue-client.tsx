@@ -698,6 +698,7 @@ type Props = {
   canOpenOrders?: boolean;
   canSetTemimaCutoff?: boolean;
   canEditTemimaSheet?: boolean;
+  canEditInvoice?: boolean;
   temimaCutoffs?: TemimaCutoff[];
   temimaSheetEdits?: TemimaSheetEdit[];
   agents?: Array<{ id: number; name: string }>;
@@ -725,6 +726,7 @@ export function CsQueueClient({
   canOpenOrders = true,
   canSetTemimaCutoff = false,
   canEditTemimaSheet = false,
+  canEditInvoice = false,
   temimaCutoffs = [],
   temimaSheetEdits = [],
   agents = [],
@@ -1161,7 +1163,7 @@ export function CsQueueClient({
               توزيع
             </Link>
           ) : null}
-          {isCourierSupervisor ? null : (
+          {isSupervisor && !isCourierSupervisor ? (
           <button
             type="button"
             onClick={() => setPrintMode("bosta")}
@@ -1169,7 +1171,7 @@ export function CsQueueClient({
           >
             طباعة بوسطة
           </button>
-          )}
+          ) : null}
           {isCourierSupervisor ? (
             <Link
               href="/cs/temima-scan"
@@ -1178,6 +1180,7 @@ export function CsQueueClient({
               استلام بالسكان
             </Link>
           ) : null}
+          {isSupervisor || isCourierSupervisor ? (
           <button
             type="button"
             onClick={() => {
@@ -1190,6 +1193,7 @@ export function CsQueueClient({
           >
             طباعة تميمة
           </button>
+          ) : null}
           {isCourierSupervisor ? (
             <div className="flex shrink-0 items-center gap-2">
               <select
@@ -1216,7 +1220,7 @@ export function CsQueueClient({
                 طباعة المندوب
               </button>
             </div>
-          ) : (
+          ) : isSupervisor ? (
           <button
             type="button"
             onClick={() => setPrintMode("all")}
@@ -1224,7 +1228,7 @@ export function CsQueueClient({
           >
             طباعة الكل
           </button>
-          )}
+          ) : null}
           <button
             type="button"
             disabled={loading}
@@ -1649,7 +1653,9 @@ export function CsQueueClient({
                       ? "grid-cols-2 sm:grid-cols-7"
                       : isSupervisor || isAccounting
                         ? "grid-cols-2 sm:grid-cols-6"
-                        : "grid-cols-2 sm:grid-cols-4"
+                        : canEditInvoice
+                          ? "grid-cols-2 sm:grid-cols-5"
+                          : "grid-cols-2 sm:grid-cols-4"
                   }`}
                 >
                   <div className="flex flex-col gap-0.5">
@@ -1790,7 +1796,7 @@ export function CsQueueClient({
                       </span>
                     </div>
                   ) : null}
-                  {isAccounting ? (
+                  {isAccounting || canEditInvoice ? (
                     <div className="flex items-center self-center">
                       <InvoiceBox
                         confirmationId={item.id}

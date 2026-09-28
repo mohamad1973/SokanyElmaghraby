@@ -1408,8 +1408,8 @@ export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: str
   await ensureCsTables();
 
   const viewer = await resolveCsViewer(input.agentId);
-  if (!viewer.isAccounting) {
-    return { ok: false as const, message: "لموظف الحسابات فقط." };
+  if (!viewer.isAccounting && !viewer.isSupervisor && !viewer.isAdmin) {
+    return { ok: false as const, message: "للمشرفة أو الحسابات فقط." };
   }
 
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
