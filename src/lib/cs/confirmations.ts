@@ -18,7 +18,8 @@ import {
   parseWooOrderNumber,
 } from "@/lib/cs/assignments";
 import {
-  getCairoYesterdayStartDateString,
+  cairoDaysAgoYmd,
+  cairoYmdBounds,
   isWithinCairoLastDays,
   isWithinCairoTodayOrYesterday,
   resolvePaymentState,
@@ -155,41 +156,52 @@ export function normalizeDepositToPhone(value: unknown): string | null {
   return null;
 }
 
-export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
-  const prisma = getPrismaClient();
-  if (!prisma) {
-    return { ok: false as const, message: "قاعدة البيانات غير متصلة.", imported: 0 };
+const SYNC_PAGE_SIZE = 100;
+const SYNC_PAGES_PER_TICK = 4;
+const SKIP_WOO_STATUS = new Set(["trash", "auto-draft", "checkout-draft"]);
+
+type CsSyncState = { nextPage: number; slowPage: number; historyDone: boolean };
+
+function syncFlagOn(value: unknown) {
+  return value === true || value === "1" || Number(value) === 1;
+}
+
+async function readCsSyncState(prisma: NonNullable<ReturnType<typeof getPrismaClient>>): Promise<CsSyncState> {
+  const rows = await prisma.$queryRaw<
+    Array<{ nextPage: number | bigint; slowPage: number | bigint; historyDone: boolean | number | bigint }>
+  >`SELECT nextPage, slowPage, historyDone FROM CsOrderSyncState WHERE id = 1`;
+  if (!rows.length) {
+    await prisma.$executeRaw`INSERT INTO CsOrderSyncState (id, nextPage, slowPage, historyDone) VALUES (1, 1, 1, false)`;
+    return { nextPage: 1, slowPage: 1, historyDone: false };
   }
+  const row = rows[0];
+  return {
+    nextPage: Math.max(1, Number(row.nextPage) || 1),
+    slowPage: Math.max(1, Number(row.slowPage) || 1),
+    historyDone: syncFlagOn(row.historyDone),
+  };
+}
 
-  await ensureCsTables();
+async function writeCsSyncState(prisma: NonNullable<ReturnType<typeof getPrismaClient>>, state: CsSyncState) {
+  await prisma.$executeRaw`
+    UPDATE CsOrderSyncState
+    SET nextPage = ${state.nextPage}, slowPage = ${state.slowPage}, historyDone = ${state.historyDone}
+    WHERE id = 1
+  `;
+}
 
-  const after = getCairoYesterdayStartDateString();
-  const result = await getAdminOrders({
-    perPage: String(options?.perPage || 100),
-    page: "1",
-    status: "processing,on-hold,pending",
-    after,
-  });
-
-  if (result.error) {
-    return { ok: false as const, message: result.error, imported: 0 };
-  }
-
-  const windowOrders = result.orders.filter((order) =>
-    isWithinCairoTodayOrYesterday(order.dateCreated),
-  );
-  const tracking = await trackingMapForOrders(windowOrders.map((o) => o.id));
-
-  // Enrich gov/area from Shipment rows when Woo snapshot is incomplete
+async function importWooOrdersForCs(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  orders: AdminOrder[],
+) {
+  const kept = orders.filter((order) => !SKIP_WOO_STATUS.has(order.status));
+  const tracking = await trackingMapForOrders(kept.map((order) => order.id));
   const shipmentByWoo = new Map<number, { governorate: string; area: string }>();
   try {
-    const ships = await getShipmentsByOrderIds(windowOrders.map((o) => o.id));
+    const ships = await getShipmentsByOrderIds(kept.map((order) => order.id));
     for (const [wooId, ship] of ships) {
       if (ship?.governorate || ship?.area) {
-        shipmentByWoo.set(wooId, {
-          governorate: ship.governorate || "",
-          area: ship.area || "",
-        });
+        shipmentByWoo.set(wooId, { governorate: ship.governorate || "", area: ship.area || "" });
       }
     }
   } catch {
@@ -197,19 +209,15 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
   }
 
   let imported = 0;
-  for (const order of windowOrders) {
+  for (const order of kept) {
     const snap = snapshotFromOrder(order, tracking.get(order.id)) as CsQueueSnapshot & {
       governorate?: string;
       area?: string;
     };
     const fromShip = shipmentByWoo.get(order.id);
     if (fromShip) {
-      const govBad =
-        !snap.governorate ||
-        snap.governorate === "غير محدد" ||
-        looksLikeLocationCode(snap.governorate);
-      const areaBad =
-        !snap.area || snap.area === "غير محدد" || looksLikeLocationCode(snap.area);
+      const govBad = !snap.governorate || snap.governorate === "غير محدد" || looksLikeLocationCode(snap.governorate);
+      const areaBad = !snap.area || snap.area === "غير محدد" || looksLikeLocationCode(snap.area);
       if (govBad && fromShip.governorate && !looksLikeLocationCode(fromShip.governorate)) {
         snap.governorate = fromShip.governorate;
       }
@@ -218,9 +226,7 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
       }
     }
 
-    const existing = await prisma.csOrderConfirmation.findUnique({
-      where: { wooOrderId: order.id },
-    });
+    const existing = await prisma.csOrderConfirmation.findUnique({ where: { wooOrderId: order.id } });
     if (existing) {
       await prisma.csOrderConfirmation.update({
         where: { id: existing.id },
@@ -245,65 +251,82 @@ export async function syncRecentOrdersForCs(options?: { perPage?: number }) {
     imported += 1;
   }
 
-  // Refresh snapshots for existing CS rows that still show codes / missing area
-  const existingRows = await prisma.csOrderConfirmation.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  for (const row of existingRows) {
-    const snap = row.customerSnapshot as CsQueueSnapshot | null;
-    if (!snap) continue;
-    const needs =
-      looksLikeLocationCode(snap.governorate || "") ||
-      !snap.area ||
-      snap.area === "غير محدد" ||
-      looksLikeLocationCode(snap.area || "");
-    if (!needs) continue;
-    if (windowOrders.some((o) => o.id === row.wooOrderId)) continue; // already refreshed above
+  return { imported, kept: kept.length };
+}
 
-    const live = await getAdminOrder(String(row.wooOrderId));
-    if (!live) {
-      // Still normalize codes on existing snapshot
-      const fixed = resolveSnapshotLocation({
-        governorate: snap.governorate,
-        area: snap.area,
-        address: snap.address,
-      });
-      if (fixed.governorate !== snap.governorate || fixed.area !== snap.area) {
-        await prisma.csOrderConfirmation.update({
-          where: { id: row.id },
-          data: {
-            customerSnapshot: { ...snap, governorate: fixed.governorate, area: fixed.area, address: fixed.address },
-          },
-        });
-      }
-      continue;
-    }
-    const trackingOne = await trackingMapForOrders([live.id]);
-    const next = snapshotFromOrder(live, trackingOne.get(live.id)) as CsQueueSnapshot;
-    try {
-      const ships = await getShipmentsByOrderIds([live.id]);
-      const fromShip = ships.get(live.id);
-      if (fromShip) {
-        if (looksLikeLocationCode(next.governorate || "") || next.governorate === "غير محدد") {
-          if (fromShip.governorate) next.governorate = fromShip.governorate;
-        }
-        if (!next.area || next.area === "غير محدد") {
-          if (fromShip.area) next.area = fromShip.area;
-        }
-      }
-    } catch {
-      // optional
-    }
-    await prisma.csOrderConfirmation.update({
-      where: { id: row.id },
-      data: { customerSnapshot: next, wooOrderNumber: live.number },
-    });
+export async function syncRecentOrdersForCs(_options?: { perPage?: number }) {
+  const prisma = getPrismaClient();
+  if (!prisma) {
+    return { ok: false as const, message: "قاعدة البيانات غير متصلة.", imported: 0, totalFetched: 0 };
   }
 
-  await linkMissingBostaWaybills(prisma, windowOrders);
+  await ensureCsTables();
+  const state = await readCsSyncState(prisma);
+  let imported = 0;
+  let totalFetched = 0;
+  let pagesUsed = 0;
+  let pageOneOrders: AdminOrder[] = [];
 
-  return { ok: true as const, imported, totalFetched: windowOrders.length };
+  async function pullPage(page: number) {
+    const result = await getAdminOrders({ perPage: String(SYNC_PAGE_SIZE), page: String(page) });
+    if (result.error) return { error: result.error, rawCount: 0, imported: 0 };
+    const saved = await importWooOrdersForCs(prisma!, result.orders);
+    imported += saved.imported;
+    totalFetched += result.orders.length;
+    pagesUsed += 1;
+    if (page === 1) pageOneOrders = result.orders;
+    return { error: null as string | null, rawCount: result.orders.length, imported: saved.imported };
+  }
+
+  if (!state.historyDone) {
+    if (state.nextPage > 1) {
+      const newest = await pullPage(1);
+      if (newest.error) {
+        await writeCsSyncState(prisma, state);
+        return { ok: false as const, message: newest.error, imported, totalFetched };
+      }
+    }
+    while (pagesUsed < SYNC_PAGES_PER_TICK) {
+      const pulled = await pullPage(state.nextPage);
+      if (pulled.error) {
+        await writeCsSyncState(prisma, state);
+        return { ok: false as const, message: pulled.error, imported, totalFetched };
+      }
+      if (pulled.rawCount < SYNC_PAGE_SIZE) {
+        state.historyDone = true;
+        state.nextPage = 1;
+        state.slowPage = 2;
+        break;
+      }
+      state.nextPage += 1;
+    }
+  } else {
+    let page = 1;
+    while (pagesUsed < SYNC_PAGES_PER_TICK) {
+      const pulled = await pullPage(page);
+      if (pulled.error) {
+        await writeCsSyncState(prisma, state);
+        return { ok: false as const, message: pulled.error, imported, totalFetched };
+      }
+      if (pulled.rawCount < SYNC_PAGE_SIZE || pulled.imported === 0) break;
+      page += 1;
+    }
+    if (pagesUsed < SYNC_PAGES_PER_TICK) {
+      const pulled = await pullPage(state.slowPage);
+      if (pulled.error) {
+        await writeCsSyncState(prisma, state);
+        return { ok: false as const, message: pulled.error, imported, totalFetched };
+      }
+      state.slowPage = pulled.rawCount < SYNC_PAGE_SIZE ? 1 : state.slowPage + 1;
+    }
+  }
+
+  await writeCsSyncState(prisma, state);
+  if (state.historyDone && pageOneOrders.length) {
+    await linkMissingBostaWaybills(prisma, pageOneOrders);
+  }
+
+  return { ok: true as const, imported, totalFetched };
 }
 
 async function linkMissingBostaWaybills(
@@ -367,6 +390,59 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
   }
 }
 
+async function confirmationIdsForViewer(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  opts: { agentId: number; isSupervisor: boolean; seeAll?: boolean },
+) {
+  if (!opts.isSupervisor && !opts.seeAll) {
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+      "SELECT id FROM CsOrderConfirmation WHERE assignedAgentId = ? ORDER BY id DESC LIMIT 2000",
+      opts.agentId,
+    );
+    return rows.map((row) => Number(row.id));
+  }
+  const since = cairoDaysAgoYmd(32);
+  const sinceAt = `${since} 00:00:00`;
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+    `SELECT id FROM CsOrderConfirmation
+     WHERE (
+       LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) >= ?
+       OR (confirmedAt IS NOT NULL AND confirmedAt >= ?)
+       OR (handedToCarrierAt IS NOT NULL AND handedToCarrierAt >= ?)
+       OR (startedAt IS NOT NULL AND startedAt >= ?)
+     )
+     ORDER BY id DESC
+     LIMIT 8000`,
+    since,
+    sinceAt,
+    sinceAt,
+    sinceAt,
+  );
+  return rows.map((row) => Number(row.id));
+}
+
+async function loadConfirmationsByIds(prisma: NonNullable<ReturnType<typeof getPrismaClient>>, ids: number[]) {
+  const rows = [];
+  for (let i = 0; i < ids.length; i += 400) {
+    const chunk = ids.slice(i, i + 400);
+    if (!chunk.length) continue;
+    const part = await prisma.csOrderConfirmation.findMany({
+      where: { id: { in: chunk } },
+      include: { assignedAgent: true, answers: true },
+    });
+    rows.push(...part);
+  }
+  return rows;
+}
+
+function isQueueYmd(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function queueLikePattern(query: string) {
+  return `%${query.trim().slice(0, 80).replace(/[\\%_]/g, "")}%`;
+}
+
 export async function listCsConfirmationsForViewer(opts: {
   agentId: number;
   isSupervisor: boolean;
@@ -387,18 +463,14 @@ export async function listCsConfirmationsForViewer(opts: {
 
   let rows: Row[] = [];
   try {
-    rows = (await prisma.csOrderConfirmation.findMany({
-      include: { assignedAgent: true, answers: true },
-      orderBy: { createdAt: "desc" },
-    })) as Row[];
+    const ids = await confirmationIdsForViewer(prisma, opts);
+    rows = (await loadConfirmationsByIds(prisma, ids)) as Row[];
   } catch (error) {
     console.error("[cs] listCsConfirmationsForViewer failed, retry after migrate:", error);
     await ensureCsTables();
     try {
-      rows = (await prisma.csOrderConfirmation.findMany({
-        include: { assignedAgent: true, answers: true },
-        orderBy: { createdAt: "desc" },
-      })) as Row[];
+      const ids = await confirmationIdsForViewer(prisma, opts);
+      rows = (await loadConfirmationsByIds(prisma, ids)) as Row[];
     } catch (retryError) {
       console.error("[cs] listCsConfirmationsForViewer legacy fallback:", retryError);
       const legacy = await prisma.$queryRawUnsafe<
@@ -417,7 +489,7 @@ export async function listCsConfirmationsForViewer(opts: {
         }>
       >(
         `SELECT \`id\`, \`wooOrderId\`, \`wooOrderNumber\`, \`status\`, \`assignedAgentId\`, \`customerSnapshot\`, \`failReason\`, \`startedAt\`, \`confirmedAt\`, \`createdAt\`, \`updatedAt\`
-         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC`,
+         FROM \`CsOrderConfirmation\` ORDER BY \`createdAt\` DESC LIMIT 3000`,
       );
       const agentIds = [...new Set(legacy.map((r) => r.assignedAgentId).filter(Boolean))] as number[];
       const agents =
@@ -456,6 +528,10 @@ export async function listCsConfirmationsForViewer(opts: {
 
   await attachDistributedAt(rows);
 
+  if (!(opts.isSupervisor || opts.seeAll)) {
+    return sortByOrderNumberDesc(rows.filter((row) => row.assignedAgentId === opts.agentId));
+  }
+
   const inWindow = rows.filter((row) => {
     const distributedAt = (row as { distributedAt?: string | null }).distributedAt;
     if (distributedAt && isWithinCairoLastDays(distributedAt, 30)) return true;
@@ -465,19 +541,97 @@ export async function listCsConfirmationsForViewer(opts: {
       row.confirmedAt instanceof Date ? row.confirmedAt.toISOString() : row.confirmedAt,
       row.handedToCarrierAt instanceof Date ? row.handedToCarrierAt.toISOString() : row.handedToCarrierAt,
       row.startedAt instanceof Date ? row.startedAt.toISOString() : row.startedAt,
-      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
     ];
     return workIso.some((iso) => typeof iso === "string" && isWithinCairoLastDays(iso, 30));
   });
 
-  if (opts.isSupervisor || opts.seeAll) {
-    return sortByOrderNumberDesc(inWindow);
+  return sortByOrderNumberDesc(inWindow);
+}
+
+export async function listCsQueuePage(opts: {
+  agentId: number;
+  isSupervisor: boolean;
+  seeAll?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  query?: string;
+  cursorId?: number | null;
+  limit?: number;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { items: [], nextCursor: null as number | null, hasMore: false };
+  await ensureCsTables();
+
+  const seeAll = Boolean(opts.isSupervisor || opts.seeAll);
+  const limit = Math.min(200, Math.max(1, opts.limit || 150));
+  const where: string[] = [];
+  const params: Array<string | number | Date> = [];
+  if (!seeAll) {
+    where.push("assignedAgentId = ?");
+    params.push(opts.agentId);
+  }
+  if (opts.cursorId && opts.cursorId > 0) {
+    where.push("id < ?");
+    params.push(opts.cursorId);
   }
 
-  // Regular agents: only orders explicitly distributed to them by a supervisor.
-  const filtered = inWindow.filter((row) => row.assignedAgentId === opts.agentId);
+  const query = (opts.query || "").trim();
+  const dateFrom = opts.dateFrom || "";
+  const dateTo = opts.dateTo || "";
+  if (query) {
+    const pattern = queueLikePattern(query);
+    where.push("(wooOrderNumber LIKE ? OR CAST(customerSnapshot AS CHAR) LIKE ?)");
+    params.push(pattern, pattern);
+  } else if (isQueueYmd(dateFrom) && isQueueYmd(dateTo)) {
+    if (seeAll) {
+      where.push(
+        "LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) >= ? AND LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) <= ?",
+      );
+      params.push(dateFrom, dateTo);
+    } else {
+      const from = cairoYmdBounds(dateFrom);
+      const to = cairoYmdBounds(dateTo);
+      if (from && to) {
+        where.push(`(
+          (LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) >= ? AND LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) <= ?)
+          OR (confirmedAt >= ? AND confirmedAt < ?)
+          OR (startedAt >= ? AND startedAt < ?)
+          OR (handedToCarrierAt >= ? AND handedToCarrierAt < ?)
+        )`);
+        params.push(
+          dateFrom,
+          dateTo,
+          from.start,
+          to.endExclusive,
+          from.start,
+          to.endExclusive,
+          from.start,
+          to.endExclusive,
+        );
+      }
+    }
+  }
 
-  return sortByOrderNumberDesc(filtered);
+  params.push(limit + 1);
+  const idRows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+    `SELECT id FROM CsOrderConfirmation ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY id DESC LIMIT ?`,
+    ...params,
+  );
+  const ids = idRows.map((row) => Number(row.id));
+  const hasMore = ids.length > limit;
+  const pageIds = hasMore ? ids.slice(0, limit) : ids;
+  const loaded = await loadConfirmationsByIds(prisma, pageIds);
+  const byId = new Map(loaded.map((row) => [row.id, row]));
+  const ordered = pageIds
+    .map((id) => byId.get(id))
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  await attachDistributedAt(ordered);
+  const last = ordered[ordered.length - 1];
+  return {
+    items: ordered.map((row) => serializeCsQueueItem(row)),
+    nextCursor: hasMore && last ? last.id : null,
+    hasMore,
+  };
 }
 
 /** @deprecated use listCsConfirmationsForViewer */

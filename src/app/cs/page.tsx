@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, listActiveCsAgents } from "@/lib/cs/agents";
-import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { listCsConfirmationsForViewer, listCsQueuePage, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
@@ -31,16 +32,36 @@ export default async function CsHomePage() {
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
   const isAccounting = viewer.isAccounting || isAccountingRole(session.user.csRole);
 
-  const rows = await listCsConfirmationsForViewer({
-    agentId: session.user.csAgentId,
-    isSupervisor,
-    seeAll: isAccounting || isCourierSupervisor,
-  });
-  const seesTemimaSheet = isCourierSupervisor || isSupervisor;
-  const merged = seesTemimaSheet
-    ? await mergeIncludedConfirmations(rows.map(serializeCsQueueItem))
-    : { items: rows.map(serializeCsQueueItem), edits: [] };
-  const initialItems = merged.items;
+  let initialHasMore = false;
+  let initialNextCursor: number | null = null;
+  let initialItems;
+  let temimaSheetEdits: Awaited<ReturnType<typeof mergeIncludedConfirmations>>["edits"] = [];
+  if (isCourierSupervisor) {
+    const rows = await listCsConfirmationsForViewer({
+      agentId: session.user.csAgentId,
+      isSupervisor,
+      seeAll: true,
+    });
+    const merged = await mergeIncludedConfirmations(rows.map(serializeCsQueueItem));
+    initialItems = merged.items;
+    temimaSheetEdits = merged.edits;
+  } else {
+    const queue = await listCsQueuePage({
+      agentId: session.user.csAgentId,
+      isSupervisor,
+      seeAll: isAccounting,
+      dateFrom: cairoYesterdayYmd(),
+      dateTo: cairoTodayYmd(),
+      limit: 150,
+    });
+    const merged = isSupervisor
+      ? await mergeIncludedConfirmations(queue.items)
+      : { items: queue.items, edits: [] };
+    initialItems = merged.items;
+    temimaSheetEdits = merged.edits;
+    initialHasMore = queue.hasMore;
+    initialNextCursor = queue.nextCursor;
+  }
   const agents = isSupervisor
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
@@ -58,7 +79,9 @@ export default async function CsHomePage() {
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
       temimaCutoffs={temimaCutoffs}
-      temimaSheetEdits={merged.edits}
+      temimaSheetEdits={temimaSheetEdits}
+      initialHasMore={initialHasMore}
+      initialNextCursor={initialNextCursor}
     />
   );
 }

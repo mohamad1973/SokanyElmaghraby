@@ -348,6 +348,17 @@ async function runEnsureCsTables() {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsOrderSyncState\` (
+      \`id\` INT NOT NULL,
+      \`nextPage\` INT NOT NULL DEFAULT 1,
+      \`slowPage\` INT NOT NULL DEFAULT 1,
+      \`historyDone\` BOOLEAN NOT NULL DEFAULT false,
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsTemimaSheetCutoff\` (
       \`id\` INT NOT NULL AUTO_INCREMENT,
       \`dayYmd\` VARCHAR(10) NOT NULL,

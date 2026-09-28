@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { enqueueOrderFromWebhook } from "@/lib/cs/confirmations";
 import { getCustomerSession } from "@/lib/customer-account";
 import { createFawryPaymentRedirect } from "@/lib/fawry";
+import { getAdminOrder } from "@/lib/orders";
 import { createWooStoreOrder } from "@/lib/woocommerce-orders";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +87,13 @@ export async function POST(request: Request) {
   }
 
   const { order } = orderResult;
+
+  try {
+    const full = await getAdminOrder(String(order.id));
+    if (full) await enqueueOrderFromWebhook(full);
+  } catch (error) {
+    console.error("[checkout] cs enqueue failed", error);
+  }
 
   if (paymentMethod === "cod") {
     return NextResponse.json({

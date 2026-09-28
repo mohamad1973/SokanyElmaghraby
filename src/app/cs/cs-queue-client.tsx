@@ -7,7 +7,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
-  cairoDaysAgoYmd,
   cairoTodayYmd,
   cairoYesterdayYmd,
   formatCairoOrderDate,
@@ -108,8 +107,6 @@ function parseOrderTotal(value: string | null | undefined) {
   return Number.isFinite(n) ? n : 0;
 }
 
-const DATE_FILTER_MAX_DAYS = 30;
-const dateMinYmd = () => cairoDaysAgoYmd(DATE_FILTER_MAX_DAYS);
 const dateMaxYmd = () => cairoTodayYmd();
 
 function itemPaymentState(item: CsQueueItem): CsPaymentState {
@@ -124,28 +121,18 @@ function itemPaymentState(item: CsQueueItem): CsPaymentState {
 }
 
 function clampDateFilters(f: DraftFilters): { filters: DraftFilters; warning: string } {
-  const min = dateMinYmd();
   const max = dateMaxYmd();
-  let dateFrom = f.dateFrom || min;
+  let dateFrom = f.dateFrom || cairoYesterdayYmd();
   let dateTo = f.dateTo || max;
   let warning = "";
 
-  if (dateFrom < min) {
-    dateFrom = min;
-    warning = "أقصى مدى للفلتر 30 يوماً من اليوم.";
-  }
   if (dateTo > max) {
     dateTo = max;
-    warning = "أقصى مدى للفلتر 30 يوماً من اليوم.";
+    warning = "تاريخ النهاية لا يتجاوز اليوم.";
   }
   if (dateFrom > dateTo) {
     dateFrom = dateTo;
     warning = "تم ضبط تاريخ البداية ليطابق النهاية.";
-  }
-  // Span must not exceed 30 calendar days from earliest allowed
-  if (dateFrom < min) {
-    dateFrom = min;
-    warning = "أقصى مدى للفلتر 30 يوماً من اليوم.";
   }
 
   return { filters: { ...f, dateFrom, dateTo }, warning };
@@ -704,6 +691,8 @@ type Props = {
   temimaSheetEdits?: TemimaSheetEdit[];
   agents?: Array<{ id: number; name: string }>;
   couriers?: Array<{ id: number; name: string }>;
+  initialHasMore?: boolean;
+  initialNextCursor?: number | null;
 };
 
 type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
@@ -721,6 +710,8 @@ export function CsQueueClient({
   temimaSheetEdits = [],
   agents = [],
   couriers = [],
+  initialHasMore = false,
+  initialNextCursor = null,
 }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -746,10 +737,48 @@ export function CsQueueClient({
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
   const syncingRef = useRef(false);
+  const loadedMoreRef = useRef(false);
+  const searchWasActive = useRef(false);
+  const appliedRef = useRef(applied);
+  appliedRef.current = applied;
+  const draftQueryRef = useRef(draft.query);
+  draftQueryRef.current = draft.query;
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [nextCursor, setNextCursor] = useState<number | null>(initialNextCursor);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setItems(initialItems);
-  }, [initialItems]);
+    setHasMore(initialHasMore);
+    setNextCursor(initialNextCursor);
+    loadedMoreRef.current = false;
+  }, [initialItems, initialHasMore, initialNextCursor]);
+
+  async function loadQueue(opts: {
+    query: string;
+    dateFrom: string;
+    dateTo: string;
+    cursorId: number | null;
+    append: boolean;
+  }) {
+    const params = new URLSearchParams();
+    const query = opts.query.trim();
+    if (query) params.set("q", query);
+    if (!query && opts.dateFrom) params.set("from", opts.dateFrom);
+    if (!query && opts.dateTo) params.set("to", opts.dateTo);
+    if (opts.cursorId) params.set("cursor", String(opts.cursorId));
+    const res = await fetch(`/api/cs/orders?${params.toString()}`);
+    const data = (await res.json()) as { message?: string; items?: CsQueueItem[]; hasMore?: boolean; nextCursor?: number | null };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تحميل الأوردرات.");
+      return;
+    }
+    const nextItems = data.items || [];
+    setItems((prev) => (opts.append ? [...prev, ...nextItems] : nextItems));
+    setHasMore(Boolean(data.hasMore));
+    setNextCursor(data.nextCursor ?? null);
+    loadedMoreRef.current = opts.append;
+  }
 
   async function syncOrders(opts?: { quiet?: boolean }) {
     if (syncingRef.current) return;
@@ -760,20 +789,28 @@ export function CsQueueClient({
     }
     try {
       const res = await fetch("/api/cs/sync", { method: "POST" });
-      const data = (await res.json()) as {
-        message?: string;
-        imported?: number;
-        items?: CsQueueItem[];
-      };
+      const data = (await res.json()) as { message?: string; imported?: number };
       if (!res.ok) {
         if (!opts?.quiet) setMessage(data.message || "تعذر المزامنة.");
         return;
       }
-      if (data.items) setItems(data.items);
-      if (!opts?.quiet) {
-        setMessage(`تمت المزامنة. طلبات جديدة: ${data.imported ?? 0}`);
-        router.refresh();
-      } else if ((data.imported ?? 0) > 0) {
+      if (!opts?.quiet) setMessage(`تمت المزامنة. طلبات جديدة: ${data.imported ?? 0}`);
+      if (isCourierSupervisor) {
+        if (!opts?.quiet || (data.imported ?? 0) > 0) router.refresh();
+        return;
+      }
+      const query = draftQueryRef.current.trim();
+      if (!query && !loadedMoreRef.current) {
+        const filters = appliedRef.current;
+        await loadQueue({
+          query: "",
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          cursorId: null,
+          append: false,
+        });
+      }
+      if (opts?.quiet && (data.imported ?? 0) > 0) {
         setMessage(`مزامنة تلقائية: طلبات جديدة ${data.imported}`);
       }
     } finally {
@@ -790,6 +827,36 @@ export function CsQueueClient({
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (isCourierSupervisor) return;
+    const handle = window.setTimeout(() => {
+      const query = draft.query.trim();
+      if (!query) {
+        if (!searchWasActive.current) return;
+        searchWasActive.current = false;
+        const filters = appliedRef.current;
+        void loadQueue({
+          query: "",
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          cursorId: null,
+          append: false,
+        });
+        return;
+      }
+      searchWasActive.current = true;
+      void loadQueue({
+        query,
+        dateFrom: "",
+        dateTo: "",
+        cursorId: null,
+        append: false,
+      });
+    }, 400);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.query, isCourierSupervisor]);
 
   // Search is live and independent of other filters: when query is set, match all loaded items.
   const baseFiltered = useMemo(() => {
@@ -899,6 +966,15 @@ export function CsQueueClient({
     setDraft(filters);
     setApplied(filters);
     if (warning) setMessage(warning);
+    if (!isCourierSupervisor) {
+      void loadQueue({
+        query: filters.query.trim(),
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        cursorId: null,
+        append: false,
+      });
+    }
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
@@ -1280,7 +1356,6 @@ export function CsQueueClient({
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
             <input
               type="date"
-              min={dateMinYmd()}
               max={dateMaxYmd()}
               value={draft.dateFrom}
               onChange={(e) => patchDraft({ dateFrom: e.target.value })}
@@ -1291,7 +1366,6 @@ export function CsQueueClient({
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">إلى</span>
             <input
               type="date"
-              min={dateMinYmd()}
               max={dateMaxYmd()}
               value={draft.dateTo}
               onChange={(e) => patchDraft({ dateTo: e.target.value })}
@@ -1645,6 +1719,25 @@ export function CsQueueClient({
             );
           })
         )}
+        {!isCourierSupervisor && hasMore ? (
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={() => {
+              setLoadingMore(true);
+              void loadQueue({
+                query: draft.query.trim(),
+                dateFrom: applied.dateFrom,
+                dateTo: applied.dateTo,
+                cursorId: nextCursor,
+                append: true,
+              }).finally(() => setLoadingMore(false));
+            }}
+            className="mx-auto mt-3 block h-10 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {loadingMore ? "جار التحميل..." : "تحميل المزيد"}
+          </button>
+        ) : null}
       </div>
 
       <div className="print-only hidden">
