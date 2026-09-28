@@ -535,7 +535,7 @@ export function CsAssignClient({
                       <th className="px-3 py-2 font-bold">موظف خدمة العملاء</th>
                       <th className="px-3 py-2 font-bold">من</th>
                       <th className="px-3 py-2 font-bold">إلى</th>
-                      <th className="px-3 py-2 font-bold">تقريبي</th>
+                      <th className="px-3 py-2 font-bold">العدد</th>
                       <th className="px-3 py-2 font-bold">وقت التوزيع</th>
                       <th className="px-3 py-2"></th>
                     </tr>

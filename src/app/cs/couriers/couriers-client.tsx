@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { cairoTodayYmd } from "@/lib/cs/order-window";
+
 import { TrackingScanBox } from "../tracking-scan";
 
 type OrderCard = {
@@ -96,6 +98,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [orderNumber, setOrderNumber] = useState("");
   const [collectedDraft, setCollectedDraft] = useState("");
+  const [day, setDay] = useState(cairoTodayYmd());
   const load = useCallback(async () => {
     setLoading(true);
     if (mode === "admin") {
@@ -113,7 +116,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
         setMessage("");
         return;
       }
-      const res = await fetch(`/api/cs/courier-dispatch?courierId=${selectedId}`);
+      const res = await fetch(`/api/cs/courier-dispatch?courierId=${selectedId}&day=${encodeURIComponent(day)}`);
       const data = (await res.json()) as CourierData | { message?: string };
       setLoading(false);
       if (!res.ok || !("mode" in data) || data.mode !== "courier") {
@@ -124,7 +127,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
       setMine(data.orders);
       return;
     }
-    const res = await fetch("/api/cs/courier-dispatch");
+    const res = await fetch(mode === "courier" ? `/api/cs/courier-dispatch?day=${encodeURIComponent(day)}` : "/api/cs/courier-dispatch");
     const data = (await res.json()) as SupervisorData | CourierData | { message?: string };
     setLoading(false);
     if (!res.ok || !("mode" in data)) {
@@ -134,7 +137,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
     setMessage("");
     if (data.mode === "courier") setMine(data.orders);
     else setSupervisor(data);
-  }, [mode, selectedId]);
+  }, [mode, selectedId, day]);
   useEffect(() => { void load(); }, [load]);
   const selected = supervisor?.couriers.find((courier) => courier.id === selectedId) || null;
   async function post(body: Record<string, unknown>) {
@@ -149,6 +152,10 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
     return (
       <div className="mx-auto grid max-w-3xl gap-3">
         <h1 className="text-xl font-extrabold text-[#14213D]">{mode === "admin" ? "المندوب" : "أوردراتي"}</h1>
+        <label className="flex items-center gap-2 text-sm font-extrabold text-[#14213D]">
+          التاريخ
+          <input type="date" value={day} onChange={(event) => setDay(event.target.value)} className="h-11 rounded-xl border border-[#E5E5E5] bg-white px-3" />
+        </label>
         {mode === "courier" || selectedId ? (
           <TrackingScanBox
             action="deliver"
@@ -174,7 +181,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
         {mode === "admin" && !selectedId && !loading ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">اختار المندوب عشان تشوف أوردراته.</p> : null}
         {!loading && (mode === "courier" || selectedId) && mine.length === 0 ? (
           <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow">
-            مفيش أوردرات موزعة {mode === "admin" ? "للمندوب ده" : "لك"} النهاردة.
+            مفيش أوردرات موزعة {mode === "admin" ? "للمندوب ده" : "لك"} في اليوم ده.
           </p>
         ) : null}
         {mine.map((order) => <CourierCard key={order.id} order={order} onPost={post} />)}

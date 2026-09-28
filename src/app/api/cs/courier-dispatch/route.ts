@@ -25,13 +25,15 @@ async function viewerOrNull() {
 export async function GET(request: Request) {
   const access = await viewerOrNull();
   if (!access) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
-  const courierId = Number(new URL(request.url).searchParams.get("courierId") || "");
+  const url = new URL(request.url);
+  const day = url.searchParams.get("day") || "";
+  const courierId = Number(url.searchParams.get("courierId") || "");
   if (courierId && access.viewer.isAdmin) {
-    const data = await loadCourierDispatch(courierId, "courier");
+    const data = await loadCourierDispatch(courierId, "courier", day);
     return NextResponse.json(data);
   }
   const mode = access.viewer.isCourierSupervisor || access.viewer.isAdmin ? "supervisor" : "courier";
-  const data = await loadCourierDispatch(access.session.user.csAgentId!, mode);
+  const data = await loadCourierDispatch(access.session.user.csAgentId!, mode, day);
   return NextResponse.json(data);
 }
 

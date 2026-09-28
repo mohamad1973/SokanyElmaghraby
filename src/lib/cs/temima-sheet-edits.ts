@@ -2,6 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { cairoYmdBounds } from "@/lib/cs/order-window";
 import type { TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 function asKind(value: string): TemimaSheetEdit["kind"] | null {
@@ -108,6 +109,43 @@ export async function mergeIncludedConfirmations<T extends { id: number }>(items
   });
   const extra = rows.map((row) => serializeCsQueueItem(row)) as unknown as T[];
   return { items: [...items, ...extra], edits };
+}
+
+export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
+  const from = cairoYmdBounds(dateFrom);
+  const to = cairoYmdBounds(dateTo);
+  if (!from || !to) return [];
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: {
+      status: "CONFIRMED",
+      shippingCompany: "sayed_temima",
+      OR: [
+        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
+        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
+      ],
+    },
+    include: { assignedAgent: true, answers: true },
+    take: 2000,
+  });
+  const edits = await listTemimaSheetEdits();
+  const have = new Set(rows.map((row) => row.id));
+  const missing = [
+    ...new Set(
+      edits
+        .filter((row) => row.kind === "include" && row.dayYmd >= dateFrom && row.dayYmd <= dateTo && !have.has(row.confirmationId))
+        .map((row) => row.confirmationId),
+    ),
+  ];
+  const extra = missing.length
+    ? await prisma.csOrderConfirmation.findMany({
+        where: { id: { in: missing } },
+        include: { assignedAgent: true, answers: true },
+      })
+    : [];
+  return [...rows, ...extra].map((row) => serializeCsQueueItem(row));
 }
 
 export async function includeTemimaOrders(dayYmd: string, confirmationIds: number[]) {

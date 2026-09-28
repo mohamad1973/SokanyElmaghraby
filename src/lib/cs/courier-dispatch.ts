@@ -224,8 +224,46 @@ function onTodaySheet(
   );
 }
 
-export async function loadCourierDispatch(viewerId: number, mode: "supervisor" | "courier") {
-  const couriers = mode === "supervisor" ? await loadCouriers() : [];
+async function loadCourierDay(courierId: number, dayYmd?: string) {
+  const prisma = getPrismaClient();
+  const day = dayYmd && /^\d{4}-\d{2}-\d{2}$/.test(dayYmd) ? dayYmd : cairoTodayYmd();
+  const bounds = cairoYmdBounds(day);
+  if (!prisma || !bounds) return { mode: "courier" as const, day, orders: [] as Array<ReturnType<typeof cardFromRow> & { matches: number[] }> };
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: {
+      courierAgentId: courierId,
+      courierAssignedAt: { gte: bounds.start, lt: bounds.endExclusive },
+    },
+    select: {
+      id: true,
+      wooOrderNumber: true,
+      customerSnapshot: true,
+      deliveredToCustomer: true,
+      courierAgentId: true,
+      courierOutcome: true,
+      courierRefusalReason: true,
+      depositAmount: true,
+      depositPaid: true,
+      confirmedAt: true,
+      handedToCarrierAt: true,
+      courierAssignedAt: true,
+      courierAgent: { select: { id: true, name: true } },
+      answers: { where: { itemKey: { in: [...CARD_KEYS] } }, select: { itemKey: true, value: true, note: true } },
+    },
+    orderBy: { wooOrderNumber: "desc" },
+  });
+  return {
+    mode: "courier" as const,
+    day,
+    orders: rows
+      .map((row) => ({ ...cardFromRow(row), matches: [] as number[] }))
+      .filter((card) => card.outcome !== "delivered"),
+  };
+}
+
+export async function loadCourierDispatch(viewerId: number, mode: "supervisor" | "courier", dayYmd?: string) {
+  if (mode === "courier") return loadCourierDay(viewerId, dayYmd);
+  const couriers = await loadCouriers();
   const today = cairoTodayYmd();
   const cutoffs = await listTemimaCutoffs();
   const edits = await listTemimaSheetEdits();
@@ -238,13 +276,6 @@ export async function loadCourierDispatch(viewerId: number, mode: "supervisor" |
         : [];
     return { ...card, matches };
   });
-
-  if (mode === "courier") {
-    return {
-      mode: "courier" as const,
-      orders: cards.filter((card) => card.courierId === viewerId),
-    };
-  }
 
   const areaOptions = [
     ...new Set([

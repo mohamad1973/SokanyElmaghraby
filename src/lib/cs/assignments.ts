@@ -31,17 +31,32 @@ export async function listAssignmentsDetailed(opts?: { fromYmd?: string; toYmd?:
   });
   const agents = await prisma.csAgent.findMany();
   const byId = new Map(agents.map((a) => [a.id, a]));
+  const agentIds = [...new Set(rows.map((row) => row.agentId))];
+  const assigned =
+    agentIds.length > 0
+      ? await prisma.csOrderConfirmation.findMany({
+          where: { assignedAgentId: { in: agentIds } },
+          select: { assignedAgentId: true, wooOrderNumber: true },
+        })
+      : [];
 
-  return rows.map((row) => ({
-    id: row.id,
-    agentId: row.agentId,
-    wooOrderNumberFrom: row.wooOrderNumberFrom,
-    wooOrderNumberTo: row.wooOrderNumberTo,
-    createdById: row.createdById,
-    createdAt: row.createdAt.toISOString(),
-    agentName: byId.get(row.agentId)?.name || `مسؤول #${row.agentId}`,
-    countEstimate: Math.max(0, Math.abs(row.wooOrderNumberTo - row.wooOrderNumberFrom) + 1),
-  }));
+  return rows.map((row) => {
+    const visible = assigned.filter((order) => {
+      if (order.assignedAgentId !== row.agentId) return false;
+      const number = parseWooOrderNumber(order.wooOrderNumber);
+      return number >= row.wooOrderNumberFrom && number <= row.wooOrderNumberTo;
+    }).length;
+    return {
+      id: row.id,
+      agentId: row.agentId,
+      wooOrderNumberFrom: row.wooOrderNumberFrom,
+      wooOrderNumberTo: row.wooOrderNumberTo,
+      createdById: row.createdById,
+      createdAt: row.createdAt.toISOString(),
+      agentName: byId.get(row.agentId)?.name || `مسؤول #${row.agentId}`,
+      countEstimate: visible,
+    };
+  });
 }
 
 /** Unassigned confirmations with order number after last pre-today distribution max. */

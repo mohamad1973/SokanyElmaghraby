@@ -743,6 +743,8 @@ export function CsQueueClient({
   const [printingCourierId, setPrintingCourierId] = useState<number | null>(null);
   const [courierPrintPick, setCourierPrintPick] = useState("");
   const [temimaAsk, setTemimaAsk] = useState(false);
+  const [printFrom, setPrintFrom] = useState("");
+  const [printTo, setPrintTo] = useState("");
   const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
   const [cutoffs, setCutoffs] = useState<TemimaCutoff[]>(temimaCutoffs);
   const [sheetEdits, setSheetEdits] = useState<TemimaSheetEdit[]>(temimaSheetEdits);
@@ -1111,6 +1113,25 @@ export function CsQueueClient({
     );
   }
 
+  async function startTemimaPrint(scope: TemimaPrintScope) {
+    const dateFrom = printFrom || applied.dateFrom;
+    const dateTo = printTo || applied.dateTo;
+    setDraft((prev) => ({ ...prev, dateFrom, dateTo }));
+    setApplied((prev) => ({ ...prev, dateFrom, dateTo }));
+    const res = await fetch(`/api/cs/orders?sheet=temima&from=${encodeURIComponent(dateFrom)}&to=${encodeURIComponent(dateTo)}`);
+    const data = (await res.json()) as { items?: CsQueueItem[] };
+    if (res.ok && data.items?.length) {
+      setItems((prev) => {
+        const byId = new Map(prev.map((item) => [item.id, item]));
+        for (const item of data.items || []) byId.set(item.id, item);
+        return [...byId.values()];
+      });
+    }
+    setTemimaScope(scope);
+    setTemimaAsk(false);
+    setPrintMode("sayed_temima");
+  }
+
   function resetFilters() {
     const next = isCourierSupervisor ? temimaSheetDraft() : defaultDraft();
     setDraft(next);
@@ -1128,7 +1149,7 @@ export function CsQueueClient({
           </h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
             عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span>
-            {isCourierSupervisor ? null : <> من أصل {items.length}</>}
+            {!isCourierSupervisor && (isSupervisor || isAccounting) ? <> من أصل {items.length}</> : null}
           </p>
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
@@ -1161,6 +1182,8 @@ export function CsQueueClient({
             type="button"
             onClick={() => {
               setPrintingCourierId(null);
+              setPrintFrom(applied.dateFrom);
+              setPrintTo(applied.dateTo);
               setTemimaAsk(true);
             }}
             className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
@@ -1216,13 +1239,17 @@ export function CsQueueClient({
       {temimaAsk ? (
         <div className="no-print flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
           <p className="text-sm font-extrabold text-[#14213D]">طباعة تميمة:</p>
+          <label className="flex items-center gap-1 text-xs font-bold text-[#14213D]">
+            من
+            <input type="date" max={dateMaxYmd()} value={printFrom} onChange={(event) => setPrintFrom(event.target.value)} className="h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2" />
+          </label>
+          <label className="flex items-center gap-1 text-xs font-bold text-[#14213D]">
+            إلى
+            <input type="date" max={dateMaxYmd()} value={printTo} onChange={(event) => setPrintTo(event.target.value)} className="h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2" />
+          </label>
           <button
             type="button"
-            onClick={() => {
-              setTemimaScope("confirmed");
-              setTemimaAsk(false);
-              setPrintMode("sayed_temima");
-            }}
+            onClick={() => void startTemimaPrint("confirmed")}
             className="rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black"
           >
             المؤكد
@@ -1230,11 +1257,7 @@ export function CsQueueClient({
           {isSupervisor && !isCourierSupervisor ? (
             <button
               type="button"
-              onClick={() => {
-                setTemimaScope("handed");
-                setTemimaAsk(false);
-                setPrintMode("sayed_temima");
-              }}
+              onClick={() => void startTemimaPrint("handed")}
               className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white"
             >
               تم تسليمه
@@ -1242,11 +1265,7 @@ export function CsQueueClient({
           ) : null}
           <button
             type="button"
-            onClick={() => {
-              setTemimaScope("all");
-              setTemimaAsk(false);
-              setPrintMode("sayed_temima");
-            }}
+            onClick={() => void startTemimaPrint("all")}
             className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white"
           >
             الكل
@@ -1254,11 +1273,7 @@ export function CsQueueClient({
           {isSupervisor && !isCourierSupervisor ? (
             <button
               type="button"
-              onClick={() => {
-                setTemimaScope("late");
-                setTemimaAsk(false);
-                setPrintMode("sayed_temima");
-              }}
+              onClick={() => void startTemimaPrint("late")}
               className="rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D]"
             >
               الشيت التاني
@@ -1705,9 +1720,19 @@ export function CsQueueClient({
                         بانتظار ديبوزت
                       </span>
                     ) : null}
-                    {item.depositAmount != null && item.depositAmount > 0 ? (
+                    {item.depositPaid && item.depositAmount != null && item.depositAmount > 0 ? (
+                      <span className="w-fit rounded bg-[#14213D]/10 px-1.5 py-0.5 text-[10px] font-extrabold text-[#14213D]">
+                        ديبوزت {Number(item.depositAmount).toLocaleString("ar-EG")} · الباقي على شركة الشحن{" "}
+                        {Math.max(0, parseOrderTotal(item.customerSnapshot?.total) - Number(item.depositAmount)).toLocaleString("ar-EG")}
+                      </span>
+                    ) : item.depositAmount != null && item.depositAmount > 0 ? (
                       <span className="w-fit rounded bg-[#14213D]/10 px-1.5 py-0.5 text-[10px] text-[#14213D]" dir="ltr">
                         مقدم: {item.depositAmount}
+                      </span>
+                    ) : null}
+                    {isCourierSupervisor ? (
+                      <span className="w-fit rounded bg-[#FCA311]/30 px-1.5 py-0.5 text-[10px] font-extrabold text-[#14213D]">
+                        تم تحصيل {temimaMoney(item).paid.toLocaleString("ar-EG")} · باقي {temimaMoney(item).remainder.toLocaleString("ar-EG")}
                       </span>
                     ) : null}
                     {item.depositPaid || item.depositApprovalStatus === "approved" ? (
@@ -1849,6 +1874,7 @@ export function CsQueueClient({
               : "كل الشركات"}
         </h1>
         <p className="mb-2 text-center text-xs">
+          {applied.dateFrom === applied.dateTo ? applied.dateFrom : `${applied.dateFrom} → ${applied.dateTo}`} ·{" "}
           {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
         </p>
         {printMode === "sayed_temima" ? (
@@ -1856,7 +1882,7 @@ export function CsQueueClient({
             <table className="w-full border-collapse text-[10px]">
               <thead>
                 <tr>
-                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "رقم الفاتورة", "ديبوزت", "الإجمالي"].map(
+                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "رقم الفاتورة", "تم تحصيل", "الباقي"].map(
                     (h) => (
                       <th key={h} className="border border-black px-1 py-1 text-right">
                         {h}
@@ -1906,16 +1932,14 @@ export function CsQueueClient({
               </tfoot>
             </table>
             {(() => {
-              const ordersTotal = printRows.reduce(
-                (sum, row) => sum + parseOrderTotal(row.customerSnapshot?.total),
-                0,
-              );
+              const ordersTotal = printRows.reduce((sum, row) => sum + temimaMoney(row).remainder, 0);
+              const collectedTotal = printRows.reduce((sum, row) => sum + temimaMoney(row).paid, 0);
               const shippingTotal = printRows.length * SAYED_TEMIMA_SHIPPING_EGP;
               return (
                 <div className="mt-3 space-y-1 text-xs font-bold">
                   <p>
-                    جمع قيمة الأوردرات: {ordersTotal.toLocaleString("ar-EG")} ج.م · عدد الأوردرات:{" "}
-                    {printRows.length}
+                    تم تحصيله قبل الشحن: {collectedTotal.toLocaleString("ar-EG")} ج.م · الباقي للتحصيل:{" "}
+                    {ordersTotal.toLocaleString("ar-EG")} ج.م · عدد الأوردرات: {printRows.length}
                   </p>
                   <p>
                     إجمالي الشحن ({SAYED_TEMIMA_SHIPPING_EGP} × {printRows.length}):{" "}
