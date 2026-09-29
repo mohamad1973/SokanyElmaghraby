@@ -784,19 +784,23 @@ export function CsQueueClient({
     pageRef.current = 1;
   }, [initialItems, initialHasMore, initialTotal]);
 
-  async function loadQueue(opts: {
-    query: string;
-    dateFrom: string;
-    dateTo: string;
-    page: number;
-  }) {
+  async function loadQueue(filters: DraftFilters, page: number) {
     const params = new URLSearchParams();
-    const query = opts.query.trim();
-    const page = Math.max(1, opts.page);
+    const query = filters.query.trim();
+    const pageNo = Math.max(1, page);
     if (query) params.set("q", query);
-    if (!query && opts.dateFrom) params.set("from", opts.dateFrom);
-    if (!query && opts.dateTo) params.set("to", opts.dateTo);
-    params.set("page", String(page));
+    if (filters.dateFrom) params.set("from", filters.dateFrom);
+    if (filters.dateTo) params.set("to", filters.dateTo);
+    if (filters.dateBasis === "saved") params.set("basis", "saved");
+    const status = normalizeFilterStatus(filters.status);
+    if (status && status !== "all") params.set("status", status);
+    if (filters.shipping && filters.shipping !== "all") params.set("shipping", filters.shipping);
+    if (filters.agentId && filters.agentId !== "all") params.set("agent", filters.agentId);
+    if (filters.payment && filters.payment !== "all") params.set("payment", filters.payment);
+    if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
+    if (filters.trackingFilter === "missing") params.set("tracking", "missing");
+    if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
+    params.set("page", String(pageNo));
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
     const data = (await res.json()) as {
       message?: string;
@@ -811,8 +815,8 @@ export function CsQueueClient({
     setItems(data.items || []);
     setHasMore(Boolean(data.hasMore));
     setQueueTotal(Number(data.total ?? 0));
-    setQueuePage(page);
-    pageRef.current = page;
+    setQueuePage(pageNo);
+    pageRef.current = pageNo;
   }
 
   async function syncOrders(opts?: { quiet?: boolean }) {
@@ -836,13 +840,7 @@ export function CsQueueClient({
       }
       const query = draftQueryRef.current.trim();
       if (!query && pageRef.current === 1) {
-        const filters = appliedRef.current;
-        await loadQueue({
-          query: "",
-          dateFrom: filters.dateFrom,
-          dateTo: filters.dateTo,
-          page: 1,
-        });
+        await loadQueue({ ...appliedRef.current, query: "" }, 1);
       }
       if (opts?.quiet && (data.imported ?? 0) > 0) {
         setMessage(`مزامنة تلقائية: طلبات جديدة ${data.imported}`);
@@ -869,22 +867,11 @@ export function CsQueueClient({
       if (!query) {
         if (!searchWasActive.current) return;
         searchWasActive.current = false;
-        const filters = appliedRef.current;
-        void loadQueue({
-          query: "",
-          dateFrom: filters.dateFrom,
-          dateTo: filters.dateTo,
-          page: 1,
-        });
+        void loadQueue({ ...appliedRef.current, query: "" }, 1);
         return;
       }
       searchWasActive.current = true;
-      void loadQueue({
-        query,
-        dateFrom: "",
-        dateTo: "",
-        page: 1,
-      });
+      void loadQueue({ ...appliedRef.current, query }, 1);
     }, 400);
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -895,13 +882,7 @@ export function CsQueueClient({
     if (isCourierSupervisor) {
       return applyCourierSupervisorSheet(items, { ...applied, query: draft.query }, afterLastDistribution, cutoffs, sheetEdits);
     }
-    const q = draft.query.trim();
-    if (q) {
-      return items
-        .filter((item) => matchesSearchQuery(item, q))
-        .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
-    }
-    return applyFilters(items, applied, { isSupervisor: Boolean(isSupervisor), orderDate: Boolean(isAccounting) });
+    return [...items].sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
   }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution, cutoffs, sheetEdits]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
@@ -1001,12 +982,7 @@ export function CsQueueClient({
     setApplied(filters);
     if (warning) setMessage(warning);
     if (!isCourierSupervisor) {
-      void loadQueue({
-        query: filters.query.trim(),
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-        page: 1,
-      });
+      void loadQueue(filters, 1);
     }
   }
 
@@ -1166,7 +1142,7 @@ export function CsQueueClient({
             {isCourierSupervisor ? "شيت سيد تميمة" : "قائمة تأكيد الطلبات"}
           </h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
-            عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{filtered.length}</span>
+            عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{isCourierSupervisor ? filtered.length : items.length}</span>
             {!isCourierSupervisor ? <> من أصل {queueTotal}</> : null}
           </p>
         </div>
@@ -1558,10 +1534,6 @@ export function CsQueueClient({
         <p className="no-print rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      {isCourierSupervisor ? null : (
-        <p className="no-print text-sm font-extrabold text-[#14213D]">نتائج الجدول: {filtered.length} أوردر</p>
-      )}
-
       {canEditTemimaSheet && sheetDay ? (
         <form
           className="no-print grid gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
@@ -1640,12 +1612,7 @@ export function CsQueueClient({
               disabled={loadingMore || queuePage <= 1}
               onClick={() => {
                 setLoadingMore(true);
-                void loadQueue({
-                  query: draft.query.trim(),
-                  dateFrom: draft.query.trim() ? "" : applied.dateFrom,
-                  dateTo: draft.query.trim() ? "" : applied.dateTo,
-                  page: queuePage - 1,
-                }).finally(() => setLoadingMore(false));
+                void loadQueue({ ...applied, query: draft.query }, queuePage - 1).finally(() => setLoadingMore(false));
               }}
               className="h-10 rounded-xl bg-[#E5E5E5] px-4 text-sm font-extrabold text-[#14213D] disabled:opacity-50"
             >
@@ -1656,12 +1623,7 @@ export function CsQueueClient({
               disabled={loadingMore || !hasMore}
               onClick={() => {
                 setLoadingMore(true);
-                void loadQueue({
-                  query: draft.query.trim(),
-                  dateFrom: draft.query.trim() ? "" : applied.dateFrom,
-                  dateTo: draft.query.trim() ? "" : applied.dateTo,
-                  page: queuePage + 1,
-                }).finally(() => setLoadingMore(false));
+                void loadQueue({ ...applied, query: draft.query }, queuePage + 1).finally(() => setLoadingMore(false));
               }}
               className="h-10 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white disabled:opacity-50"
             >

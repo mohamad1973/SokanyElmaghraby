@@ -25,6 +25,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ items, hasMore: false, nextCursor: null });
   }
   const pageRaw = Number(url.searchParams.get("page") || "1");
+  const agentRaw = Number(url.searchParams.get("agent") || "");
   const page = await listCsQueuePage({
     agentId: session.user.csAgentId,
     isSupervisor: viewer.isSupervisor || Boolean(session.user.csIsSupervisor),
@@ -32,6 +33,14 @@ export async function GET(request: Request) {
     query: url.searchParams.get("q") || "",
     dateFrom: url.searchParams.get("from") || "",
     dateTo: url.searchParams.get("to") || "",
+    dateBasis: url.searchParams.get("basis") || "",
+    status: url.searchParams.get("status") || "",
+    shipping: url.searchParams.get("shipping") || "",
+    agentFilterId: Number.isInteger(agentRaw) && agentRaw > 0 ? agentRaw : null,
+    payment: url.searchParams.get("payment") || "",
+    followUp: url.searchParams.get("follow") || "",
+    tracking: url.searchParams.get("tracking") || "",
+    waybill: url.searchParams.get("waybill") || "",
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
     limit: CS_QUEUE_PAGE_SIZE,
   });

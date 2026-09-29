@@ -550,13 +550,23 @@ export async function listCsConfirmationsForViewer(opts: {
 
 export const CS_QUEUE_PAGE_SIZE = 200;
 
+const QUEUE_STATUSES = new Set(["PENDING", "IN_PROGRESS", "CONFIRMED", "FAILED_CONTACT", "CANCELLED", "DISTRIBUTED"]);
+
 export async function listCsQueuePage(opts: {
   agentId: number;
   isSupervisor: boolean;
   seeAll?: boolean;
   dateFrom?: string;
   dateTo?: string;
+  dateBasis?: string;
   query?: string;
+  status?: string;
+  shipping?: string;
+  agentFilterId?: number | null;
+  payment?: string;
+  followUp?: string;
+  tracking?: string;
+  waybill?: string;
   page?: number;
   limit?: number;
 }) {
@@ -578,38 +588,92 @@ export async function listCsQueuePage(opts: {
   const query = (opts.query || "").trim();
   const dateFrom = opts.dateFrom || "";
   const dateTo = opts.dateTo || "";
+  const status = QUEUE_STATUSES.has(opts.status || "") ? String(opts.status) : "all";
+  const fromBounds = isQueueYmd(dateFrom) ? cairoYmdBounds(dateFrom) : null;
+  const toBounds = isQueueYmd(dateTo) ? cairoYmdBounds(dateTo) : null;
   if (query) {
     const pattern = queueLikePattern(query);
     where.push("(wooOrderNumber LIKE ? OR CAST(customerSnapshot AS CHAR) LIKE ?)");
     params.push(pattern, pattern);
+  }
+  if (status === "DISTRIBUTED") {
+    where.push("assignedAgentId IS NOT NULL");
+    if (fromBounds && toBounds) {
+      where.push(`EXISTS (
+        SELECT 1 FROM CsOrderAssignment a
+        WHERE a.agentId = CsOrderConfirmation.assignedAgentId
+        AND CAST(REPLACE(REPLACE(CsOrderConfirmation.wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED)
+            BETWEEN LEAST(a.wooOrderNumberFrom, a.wooOrderNumberTo) AND GREATEST(a.wooOrderNumberFrom, a.wooOrderNumberTo)
+        AND a.createdAt >= ? AND a.createdAt < ?
+      )`);
+      params.push(fromBounds.start, toBounds.endExclusive);
+    }
   } else if (isQueueYmd(dateFrom) && isQueueYmd(dateTo)) {
-    if (seeAll) {
+    if (opts.dateBasis === "saved" && fromBounds && toBounds) {
+      where.push("confirmedAt >= ? AND confirmedAt < ?");
+      params.push(fromBounds.start, toBounds.endExclusive);
+    } else if (seeAll) {
       where.push(
         "LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) >= ? AND LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) <= ?",
       );
       params.push(dateFrom, dateTo);
-    } else {
-      const from = cairoYmdBounds(dateFrom);
-      const to = cairoYmdBounds(dateTo);
-      if (from && to) {
-        where.push(`(
-          (LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) >= ? AND LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) <= ?)
-          OR (confirmedAt >= ? AND confirmedAt < ?)
-          OR (startedAt >= ? AND startedAt < ?)
-          OR (handedToCarrierAt >= ? AND handedToCarrierAt < ?)
-        )`);
-        params.push(
-          dateFrom,
-          dateTo,
-          from.start,
-          to.endExclusive,
-          from.start,
-          to.endExclusive,
-          from.start,
-          to.endExclusive,
-        );
-      }
+    } else if (fromBounds && toBounds) {
+      where.push(`(
+        (LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) >= ? AND LEFT(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')), 10) <= ?)
+        OR (confirmedAt >= ? AND confirmedAt < ?)
+        OR (startedAt >= ? AND startedAt < ?)
+        OR (handedToCarrierAt >= ? AND handedToCarrierAt < ?)
+      )`);
+      params.push(
+        dateFrom,
+        dateTo,
+        fromBounds.start,
+        toBounds.endExclusive,
+        fromBounds.start,
+        toBounds.endExclusive,
+        fromBounds.start,
+        toBounds.endExclusive,
+      );
     }
+  }
+  if (status !== "all" && status !== "DISTRIBUTED") {
+    where.push("status = ?");
+    params.push(status);
+  }
+  if (status === "CONFIRMED" && opts.followUp && opts.followUp !== "all") {
+    if (opts.followUp === "handed") where.push("handedToCarrier = 1");
+    else if (opts.followUp === "delivered") where.push("deliveredToCustomer = 1");
+    else if (opts.followUp === "followup") where.push("customerFollowUp = 1");
+    else if (opts.followUp === "handed_pending") where.push("handedToCarrier = 0");
+    else if (opts.followUp === "delivered_pending") where.push("deliveredToCustomer = 0");
+    else if (opts.followUp === "followup_pending") where.push("customerFollowUp = 0");
+  }
+  const payment = opts.payment === "paid_online" ? "paid" : opts.payment || "all";
+  if (payment === "paid" || payment === "awaiting_payment" || payment === "cod") {
+    where.push(
+      "COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.paymentState')), 'null'), 'cod') = ?",
+    );
+    params.push(payment);
+  }
+  if (opts.shipping === "bosta" || opts.shipping === "sayed_temima") {
+    where.push("shippingCompany = ?");
+    params.push(opts.shipping);
+  }
+  if (opts.agentFilterId && opts.agentFilterId > 0) {
+    where.push("assignedAgentId = ?");
+    params.push(opts.agentFilterId);
+  }
+  if (opts.tracking === "missing") {
+    where.push(`(
+      (trackingNumber IS NULL OR TRIM(trackingNumber) = '')
+      AND (
+        JSON_EXTRACT(customerSnapshot, '$.trackingNumber') IS NULL
+        OR TRIM(JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.trackingNumber'))) IN ('', 'null')
+      )
+    )`);
+  }
+  if (opts.waybill === "not_printed") {
+    where.push("(waybillPrinted = 0 OR waybillPrinted IS NULL)");
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";

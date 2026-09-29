@@ -6,7 +6,7 @@ import { listCsConfirmationsForViewer, listCsQueuePage, resolveCsViewer, seriali
 import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaSheetEdits, mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -56,11 +56,8 @@ export default async function CsHomePage() {
       dateTo: cairoTodayYmd(),
       limit: 200,
     });
-    const merged = isSupervisor
-      ? await mergeIncludedConfirmations(queue.items)
-      : { items: queue.items, edits: [] };
-    initialItems = merged.items;
-    temimaSheetEdits = merged.edits;
+    initialItems = queue.items;
+    temimaSheetEdits = isSupervisor ? await listTemimaSheetEdits() : [];
     initialHasMore = queue.hasMore;
     initialTotal = queue.total;
   }
