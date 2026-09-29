@@ -1,4 +1,4 @@
-import { cairoClock, cairoOffsetClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
+import { addCairoYmdDays, cairoClock, cairoOffsetClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
 
 export type TemimaSheetEdit = {
   dayYmd: string;
@@ -113,7 +113,7 @@ function isoOf(value: string | Date | null | undefined) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-/** Sheet day is the Cairo day the order was saved. Close time does not move it. */
+/** Sheet day is the save day. A save at or after that day's close belongs to the next day. */
 export function sayedSheetYmd(
   order: {
     shippingCompany?: string | null;
@@ -122,11 +122,15 @@ export function sayedSheetYmd(
     handedToCarrier?: boolean | null;
     handedToCarrierAt?: string | Date | null;
   },
-  _cutoffs: TemimaCutoff[],
+  cutoffs: TemimaCutoff[],
 ): string | null {
   if (order.shippingCompany !== "sayed_temima") return null;
   if (order.status && order.status !== "CONFIRMED") return null;
-  return cairoOffsetClock(order.confirmedAt)?.ymd || null;
+  const save = cairoOffsetClock(order.confirmedAt);
+  if (!save) return null;
+  const cutoff = cutoffs.find((row) => row.dayYmd === save.ymd) || null;
+  if (cutoff && save.minutes >= cutoff.minutes) return addCairoYmdDays(save.ymd, 1);
+  return save.ymd;
 }
 
 function editKind(confirmationId: number, dayYmd: string, edits: TemimaSheetEdit[]) {

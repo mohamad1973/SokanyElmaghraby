@@ -2,7 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
-import { cairoYmdBounds } from "@/lib/cs/order-window";
+import { addCairoYmdDays, cairoYmdBounds } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
@@ -125,7 +125,7 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
   const prisma = getPrismaClient();
   if (!prisma) return [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
-  const from = cairoYmdBounds(dateFrom);
+  const from = cairoYmdBounds(addCairoYmdDays(dateFrom, -1));
   const to = cairoYmdBounds(dateTo);
   if (!from || !to) return [];
   const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
