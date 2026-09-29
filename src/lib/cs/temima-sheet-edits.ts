@@ -2,8 +2,9 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
-import { cairoYmdBounds } from "@/lib/cs/order-window";
-import { SAYED_SHEET_JOIN_SQL, sayedSheetMembershipSql, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
+import { addCairoYmdDays, cairoYmdBounds } from "@/lib/cs/order-window";
+import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 function asKind(value: string): TemimaSheetEdit["kind"] | null {
   return value === "include" || value === "exclude" ? value : null;
@@ -111,23 +112,52 @@ export async function mergeIncludedConfirmations<T extends { id: number }>(items
   return { items: [...items, ...extra], edits };
 }
 
+const SHEET_PICK = {
+  id: true,
+  status: true,
+  shippingCompany: true,
+  confirmedAt: true,
+  handedToCarrier: true,
+  handedToCarrierAt: true,
+} as const;
+
 export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
-    `SELECT CsOrderConfirmation.id AS id
-     FROM CsOrderConfirmation
-     ${SAYED_SHEET_JOIN_SQL}
-     WHERE ${sayedSheetMembershipSql()}
-     ORDER BY CsOrderConfirmation.id DESC
-     LIMIT 5000`,
-    dateFrom,
-    dateTo,
-    dateFrom,
-    dateTo,
-  );
-  return rows.map((row) => Number(row.id));
+  const dayBefore = addCairoYmdDays(dateFrom, -1);
+  const from = cairoYmdBounds(dayBefore);
+  const to = cairoYmdBounds(dateTo);
+  if (!from || !to) return [];
+  const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: {
+      status: "CONFIRMED",
+      shippingCompany: "sayed_temima",
+      confirmedAt: { gte: from.start, lt: to.endExclusive },
+    },
+    select: SHEET_PICK,
+    orderBy: { id: "desc" },
+    take: 5000,
+  });
+  const have = new Set(rows.map((row) => row.id));
+  const includeIds = [
+    ...new Set(
+      edits
+        .filter((row) => row.kind === "include" && row.dayYmd >= dateFrom && row.dayYmd <= dateTo && !have.has(row.confirmationId))
+        .map((row) => row.confirmationId),
+    ),
+  ];
+  const extra = includeIds.length
+    ? await prisma.csOrderConfirmation.findMany({
+        where: { id: { in: includeIds } },
+        select: SHEET_PICK,
+      })
+    : [];
+  return [...rows, ...extra]
+    .filter((row) => onUnifiedSayedSheet(row, dateFrom, dateTo, cutoffs, edits))
+    .sort((a, b) => b.id - a.id)
+    .map((row) => row.id);
 }
 
 export async function listUnifiedSayedSheet(dateFrom: string, dateTo: string) {

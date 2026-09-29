@@ -12,7 +12,7 @@ import {
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { resolveHandedToCarrierAt, SAYED_SHEET_JOIN_SQL, sayedSheetMembershipSql } from "@/lib/cs/temima-sheet";
+import { resolveHandedToCarrierAt } from "@/lib/cs/temima-sheet";
 import { attachBostaWaybillByOrderReference, syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import {
   parseWooOrderNumber,
@@ -550,6 +550,60 @@ export async function listCsConfirmationsForViewer(opts: {
 
 export const CS_QUEUE_PAGE_SIZE = 200;
 
+function sheetQueueItemMatches(
+  item: ReturnType<typeof serializeCsQueueItem>,
+  opts: {
+    agentId: number;
+    query?: string;
+    followUp?: string;
+    payment?: string;
+    agentFilterId?: number | null;
+    tracking?: string;
+    waybill?: string;
+  },
+  seeAll: boolean,
+) {
+  if (!seeAll && item.assignedAgent?.id !== opts.agentId) return false;
+  const query = (opts.query || "").trim().toLowerCase();
+  if (query) {
+    const snap = item.customerSnapshot;
+    const hay = [
+      item.wooOrderNumber,
+      snap?.customerName,
+      snap?.phone,
+      snap?.address,
+      snap?.addressFull,
+      snap?.area,
+      snap?.governorate,
+      ...(snap?.items || []).map((line) => line.name),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!hay.includes(query)) return false;
+  }
+  if (opts.followUp && opts.followUp !== "all") {
+    if (opts.followUp === "handed" && !item.handedToCarrier) return false;
+    if (opts.followUp === "delivered" && !item.deliveredToCustomer) return false;
+    if (opts.followUp === "followup" && !item.customerFollowUp) return false;
+    if (opts.followUp === "handed_pending" && item.handedToCarrier) return false;
+    if (opts.followUp === "delivered_pending" && item.deliveredToCustomer) return false;
+    if (opts.followUp === "followup_pending" && item.customerFollowUp) return false;
+  }
+  const payment = opts.payment === "paid_online" ? "paid" : opts.payment || "all";
+  if (payment === "paid" || payment === "awaiting_payment" || payment === "cod") {
+    const state = item.customerSnapshot?.paymentState || "cod";
+    if (state !== payment) return false;
+  }
+  if (opts.agentFilterId && opts.agentFilterId > 0 && item.assignedAgent?.id !== opts.agentFilterId) return false;
+  if (opts.tracking === "missing") {
+    const tracking = String(item.trackingNumber || item.customerSnapshot?.trackingNumber || "").trim();
+    if (tracking && tracking !== "null") return false;
+  }
+  if (opts.waybill === "not_printed" && item.waybillPrinted) return false;
+  return true;
+}
+
 const QUEUE_STATUSES = new Set(["PENDING", "IN_PROGRESS", "CONFIRMED", "FAILED_CONTACT", "CANCELLED", "DISTRIBUTED"]);
 
 export async function listCsQueuePage(opts: {
@@ -598,15 +652,26 @@ export async function listCsQueuePage(opts: {
     opts.dateBasis === "saved" &&
     isQueueYmd(dateFrom) &&
     isQueueYmd(dateTo);
+  if (sheetMode) {
+    const { listUnifiedSayedSheet } = await import("@/lib/cs/temima-sheet-edits");
+    let items = await listUnifiedSayedSheet(dateFrom, dateTo);
+    items = items.filter((item) => sheetQueueItemMatches(item, opts, seeAll));
+    const total = items.length;
+    const pageItems = items.slice(offset, offset + pageSize);
+    return {
+      items: pageItems,
+      total,
+      page,
+      pageSize,
+      hasMore: offset + pageItems.length < total,
+    };
+  }
   if (query) {
     const pattern = queueLikePattern(query);
     where.push("(wooOrderNumber LIKE ? OR CAST(customerSnapshot AS CHAR) LIKE ?)");
     params.push(pattern, pattern);
   }
-  if (sheetMode) {
-    where.push(sayedSheetMembershipSql());
-    params.push(dateFrom, dateTo, dateFrom, dateTo);
-  } else if (status === "DISTRIBUTED") {
+  if (status === "DISTRIBUTED") {
     where.push("assignedAgentId IS NOT NULL");
     if (fromBounds && toBounds) {
       where.push(`EXISTS (
@@ -646,7 +711,7 @@ export async function listCsQueuePage(opts: {
       );
     }
   }
-  if (!sheetMode && status !== "all" && status !== "DISTRIBUTED") {
+  if (status !== "all" && status !== "DISTRIBUTED") {
     where.push("status = ?");
     params.push(status);
   }
@@ -665,7 +730,7 @@ export async function listCsQueuePage(opts: {
     );
     params.push(payment);
   }
-  if (!sheetMode && (opts.shipping === "bosta" || opts.shipping === "sayed_temima")) {
+  if (opts.shipping === "bosta" || opts.shipping === "sayed_temima") {
     where.push("shippingCompany = ?");
     params.push(opts.shipping);
   }
@@ -687,14 +752,13 @@ export async function listCsQueuePage(opts: {
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const fromSql = `FROM CsOrderConfirmation ${sheetMode ? SAYED_SHEET_JOIN_SQL : ""}`;
   const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint | number }>>(
-    `SELECT COUNT(*) AS n ${fromSql} ${whereSql}`,
+    `SELECT COUNT(*) AS n FROM CsOrderConfirmation ${whereSql}`,
     ...params,
   );
   const total = Number(counted[0]?.n ?? 0);
   const idRows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
-    `SELECT CsOrderConfirmation.id AS id ${fromSql} ${whereSql} ORDER BY CsOrderConfirmation.id DESC LIMIT ${pageSize} OFFSET ${offset}`,
+    `SELECT id FROM CsOrderConfirmation ${whereSql} ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`,
     ...params,
   );
   const pageIds = idRows.map((row) => Number(row.id));
