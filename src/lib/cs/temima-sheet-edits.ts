@@ -125,15 +125,19 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
   const prisma = getPrismaClient();
   if (!prisma) return [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
-  const from = cairoYmdBounds(addCairoYmdDays(dateFrom, -1));
+  const saveFrom = cairoYmdBounds(addCairoYmdDays(dateFrom, -1));
+  const handFrom = cairoYmdBounds(dateFrom);
   const to = cairoYmdBounds(dateTo);
-  if (!from || !to) return [];
+  if (!saveFrom || !handFrom || !to) return [];
   const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
   const rows = await prisma.csOrderConfirmation.findMany({
     where: {
       status: "CONFIRMED",
       shippingCompany: "sayed_temima",
-      confirmedAt: { gte: from.start, lt: to.endExclusive },
+      OR: [
+        { confirmedAt: { gte: saveFrom.start, lt: to.endExclusive } },
+        { handedToCarrierAt: { gte: handFrom.start, lt: to.endExclusive } },
+      ],
     },
     select: SHEET_PICK,
     orderBy: { id: "desc" },

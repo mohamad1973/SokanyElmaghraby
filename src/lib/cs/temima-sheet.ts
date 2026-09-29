@@ -133,6 +133,26 @@ export function sayedSheetYmd(
   return save.ymd;
 }
 
+/** Handoff day when the transfer is before that day's close. A closed minute does not count. */
+function handoffSheetYmd(
+  order: {
+    shippingCompany?: string | null;
+    status?: string | null;
+    handedToCarrier?: boolean | null;
+    handedToCarrierAt?: string | Date | null;
+  },
+  cutoffs: TemimaCutoff[],
+): string | null {
+  if (order.shippingCompany !== "sayed_temima") return null;
+  if (order.status && order.status !== "CONFIRMED") return null;
+  if (order.handedToCarrier === false) return null;
+  const hand = cairoOffsetClock(order.handedToCarrierAt);
+  if (!hand) return null;
+  const cutoff = cutoffs.find((row) => row.dayYmd === hand.ymd) || null;
+  if (cutoff && hand.minutes >= cutoff.minutes) return null;
+  return hand.ymd;
+}
+
 function editKind(confirmationId: number, dayYmd: string, edits: TemimaSheetEdit[]) {
   if (!dayYmd) return null;
   return edits.find((row) => row.confirmationId === confirmationId && row.dayYmd === dayYmd)?.kind || null;
@@ -179,6 +199,8 @@ export function onUnifiedSayedSheet(
   }
   const day = sayedSheetYmd(order, cutoffs);
   if (day && day >= dateFrom && day <= dateTo && editKind(order.id, day, edits) !== "exclude") return true;
+  const handed = handoffSheetYmd(order, cutoffs);
+  if (handed && handed >= dateFrom && handed <= dateTo && editKind(order.id, handed, edits) !== "exclude") return true;
   return edits.some(
     (row) =>
       row.kind === "include" &&
