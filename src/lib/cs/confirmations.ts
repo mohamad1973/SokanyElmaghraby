@@ -649,7 +649,6 @@ export async function listCsQueuePage(opts: {
   const sheetMode =
     status === "CONFIRMED" &&
     opts.shipping === "sayed_temima" &&
-    opts.dateBasis === "saved" &&
     isQueueYmd(dateFrom) &&
     isQueueYmd(dateTo);
   if (sheetMode) {

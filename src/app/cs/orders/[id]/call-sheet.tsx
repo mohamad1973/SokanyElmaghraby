@@ -335,6 +335,10 @@ export function CsCallSheet({
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [allowPartialPay, setAllowPartialPay] = useState(() => {
+    const amount = Number(initialDepositAmount);
+    return Number.isFinite(amount) && amount > 0;
+  });
 
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const savedWhen = confirmedAt ? formatCairoOrderDateTime(confirmedAt) : null;
@@ -348,7 +352,7 @@ export function CsCallSheet({
         ? -adjustAbs
         : adjustAbs;
   const adjustedTotal = Math.max(0, (Number.isFinite(wooTotal) ? wooTotal : 0) + signedDelta);
-  const showDepositCard = adjustedTotal >= CS_DEPOSIT_THRESHOLD;
+  const showDepositCard = adjustedTotal >= CS_DEPOSIT_THRESHOLD || allowPartialPay;
   const paymentState =
     snapshot?.paymentState ||
     resolvePaymentState({
@@ -390,6 +394,7 @@ export function CsCallSheet({
   }
 
   async function save(finalize: boolean, failContact = false, cancelOrder = false) {
+    if (saving) return;
     setSaving(true);
     setMessage("");
     if (finalize && !failContact && !cancelOrder && !confirmed) {
@@ -571,7 +576,7 @@ export function CsCallSheet({
                 onClick={() => void save(false)}
                 className="rounded-xl bg-white px-3 py-2 text-sm font-extrabold text-[#14213D] ring-1 ring-[#E5E5E5] disabled:opacity-60"
               >
-                مسودة
+                {saving ? "جاري التحميل" : "مسودة"}
               </button>
               <button
                 type="button"
@@ -579,7 +584,7 @@ export function CsCallSheet({
                 onClick={() => void save(true)}
                 className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black disabled:opacity-60"
               >
-                حفظ نهائي
+                {saving ? "جاري التحميل" : "حفظ نهائي"}
               </button>
               <button
                 type="button"
@@ -587,7 +592,7 @@ export function CsCallSheet({
                 onClick={() => void save(true, true)}
                 className="rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
               >
-                لم يرد
+                {saving ? "جاري التحميل" : "لم يرد"}
               </button>
               <button
                 type="button"
@@ -595,7 +600,7 @@ export function CsCallSheet({
                 onClick={() => void save(true, false, true)}
                 className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
               >
-                لاغى
+                {saving ? "جاري التحميل" : "لاغى"}
               </button>
             </>
           ) : (
@@ -605,7 +610,7 @@ export function CsCallSheet({
               onClick={() => void save(false)}
               className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
             >
-              حفظ المتابعة
+              {saving ? "جاري التحميل" : "حفظ المتابعة"}
             </button>
           )}
         </div>
@@ -621,6 +626,16 @@ export function CsCallSheet({
               : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
             {snapshot?.currency || "EGP"}
           </span>
+          <label className="flex items-center gap-1 text-xs font-bold">
+            <input
+              type="checkbox"
+              className="size-4 accent-[#FCA311]"
+              checked={showDepositCard}
+              disabled={adjustedTotal >= CS_DEPOSIT_THRESHOLD}
+              onChange={(event) => setAllowPartialPay(event.target.checked)}
+            />
+            العميل يدفع جزء أو كل القيمة
+          </label>
           <span>{snapshot?.paymentMethod}</span>
           {lockedShipping ? (
             <span className="rounded bg-white/15 px-2 py-0.5">
@@ -1098,7 +1113,7 @@ export function CsCallSheet({
                 }}
                 className="w-full rounded-lg bg-[#0D9488] px-2 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50"
               >
-                {depositApprovalStatus === "pending" ? "بانتظار الرد…" : "طلب موافقه"}
+                {requestingApproval ? "جاري التحميل" : depositApprovalStatus === "pending" ? "بانتظار الرد…" : "طلب موافقه"}
               </button>
             </div>
           </div>

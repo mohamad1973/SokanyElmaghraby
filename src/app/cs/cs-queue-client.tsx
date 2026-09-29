@@ -73,8 +73,6 @@ export type CsQueueItem = {
   courierRefusalReason?: string | null;
 };
 
-const SAYED_TEMIMA_SHIPPING_EGP = 75;
-
 function formatOrderNames(item: CsQueueItem) {
   const lines = item.customerSnapshot?.items || [];
   if (!lines.length) return "—";
@@ -87,6 +85,12 @@ function formatOrderNames(item: CsQueueItem) {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function sheetDepositNet(item: CsQueueItem) {
+  const total = parseOrderTotal(item.customerSnapshot?.total);
+  const deposit = item.depositAmount && item.depositAmount > 0 ? Number(item.depositAmount) : 0;
+  return { deposit, net: Math.max(0, total - deposit) };
 }
 
 function temimaMoney(item: CsQueueItem) {
@@ -483,7 +487,7 @@ function InvoiceBox({
   async function persist(next: string) {
     const trimmed = next.trim();
     if (trimmed === saved.current.trim()) return;
-    setHint("حفظ...");
+    setHint("جاري التحميل");
     const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -577,7 +581,7 @@ function TemimaCutoffBox({
         </select>
       </label>
       <button type="submit" disabled={busy} className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60">
-        {busy ? "حفظ..." : today ? "تعديل الوقت" : "قفل الشيت"}
+        {busy ? "جاري التحميل" : today ? "تعديل الوقت" : "قفل الشيت"}
       </button>
     </form>
   );
@@ -632,6 +636,8 @@ export function CsQueueClient({
   const [items, setItems] = useState(initialItems);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [filtering, setFiltering] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [draft, setDraft] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
   const [applied, setApplied] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
   const [afterLastDistribution, setAfterLastDistribution] = useState(false);
@@ -807,6 +813,7 @@ export function CsQueueClient({
     if (printMode === "none") return;
     const timer = window.setTimeout(() => {
       window.print();
+      setPrinting(false);
       setPrintMode("none");
       setPrintingCourierId(null);
       setSheetPrintRows(null);
@@ -819,6 +826,7 @@ export function CsQueueClient({
   }
 
   async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima") {
+    if (savingShipId) return;
     setSavingShipId(id);
     setMessage("");
     // Optimistic UI
@@ -854,8 +862,9 @@ export function CsQueueClient({
     setDraft(filters);
     setApplied(filters);
     if (warning) setMessage(warning);
-    if (isCourierSupervisor) void loadSayedSheet(filters);
-    else void loadQueue(filters, 1);
+    setFiltering(true);
+    const work = isCourierSupervisor ? loadSayedSheet(filters) : loadQueue(filters, 1);
+    void Promise.resolve(work).finally(() => setFiltering(false));
   }
 
   async function loadSayedSheet(filters: DraftFilters) {
@@ -874,12 +883,15 @@ export function CsQueueClient({
   }
 
   async function printApplied() {
+    if (printing) return;
+    setPrinting(true);
     const filters = { ...applied, query: draft.query };
     if (isCourierSupervisor || temimaDateMode(filters)) {
       const params = new URLSearchParams({ sheet: "temima", from: filters.dateFrom, to: filters.dateTo });
       const res = await fetch(`/api/cs/orders?${params.toString()}`);
       const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
       if (!res.ok) {
+        setPrinting(false);
         setMessage(data.message || "تعذر تجهيز الطباعة.");
         return;
       }
@@ -905,6 +917,7 @@ export function CsQueueClient({
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
     const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
     if (!res.ok) {
+      setPrinting(false);
       setMessage(data.message || "تعذر تجهيز الطباعة.");
       return;
     }
@@ -1034,8 +1047,9 @@ export function CsQueueClient({
     setApplied(next);
     setAfterLastDistribution(false);
     setMessage("");
-    if (isCourierSupervisor) void loadSayedSheet(next);
-    else void loadQueue(next, 1);
+    setFiltering(true);
+    const work = isCourierSupervisor ? loadSayedSheet(next) : loadQueue(next, 1);
+    void Promise.resolve(work).finally(() => setFiltering(false));
   }
 
   return (
@@ -1062,13 +1076,14 @@ export function CsQueueClient({
           {canPrintQueue ? (
           <button
             type="button"
+            disabled={printing}
             onClick={() => {
               setPrintingCourierId(null);
               void printApplied();
             }}
-            className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
+            className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white disabled:opacity-60 sm:py-2.5 sm:text-sm"
           >
-            طباعة
+            {printing ? "جاري التحميل" : "طباعة"}
           </button>
           ) : null}
           {isCourierSupervisor ? (
@@ -1095,15 +1110,17 @@ export function CsQueueClient({
               </select>
               <button
                 type="button"
-                disabled={!courierPrintPick}
+                disabled={printing || !courierPrintPick}
                 onClick={() => {
+                  if (printing) return;
+                  setPrinting(true);
                   setSheetPrintRows(null);
                   setPrintingCourierId(Number(courierPrintPick));
                   setPrintMode("sheet");
                 }}
                 className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50 sm:py-2.5 sm:text-sm"
               >
-                طباعة المندوب
+                {printing ? "جاري التحميل" : "طباعة المندوب"}
               </button>
             </div>
           ) : null}
@@ -1113,7 +1130,7 @@ export function CsQueueClient({
             onClick={() => void syncOrders()}
             className="shrink-0 rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
           >
-            {loading ? "مزامنة..." : "مزامنة"}
+            {loading ? "جاري التحميل" : "مزامنة"}
           </button>
         </div>
       </div>
@@ -1261,14 +1278,7 @@ export function CsQueueClient({
           </select>
           )}
           {isCourierSupervisor || !temimaDateMode(draft) ? null : (
-            <select
-              value={draft.dateBasis}
-              onChange={(e) => patchDraft({ dateBasis: e.target.value === "saved" ? "saved" : "created" })}
-              className={FILTER_CONTROL}
-            >
-              <option value="created">تاريخ إنشاء الأوردر</option>
-              <option value="saved">تاريخ حفظ الأوردر</option>
-            </select>
+            <p className={`${FILTER_CONTROL} flex items-center text-[11px] font-extrabold`}>تاريخ الحفظ</p>
           )}
           <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
@@ -1341,17 +1351,19 @@ export function CsQueueClient({
           <div className="col-span-2 flex flex-wrap items-stretch gap-2 sm:col-span-1">
             <button
               type="button"
+              disabled={filtering}
               onClick={runFilter}
-              className="h-9 flex-1 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black"
+              className="h-9 flex-1 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
             >
-              فلتر
+              {filtering ? "جاري التحميل" : "فلتر"}
             </button>
             <button
               type="button"
+              disabled={filtering}
               onClick={resetFilters}
-              className="h-9 rounded-lg bg-[#E5E5E5] px-3 text-xs font-bold text-[#14213D]"
+              className="h-9 rounded-lg bg-[#E5E5E5] px-3 text-xs font-bold text-[#14213D] disabled:opacity-60"
             >
-              إعادة
+              {filtering ? "جاري التحميل" : "إعادة"}
             </button>
           </div>
           {isCourierSupervisor ? (
@@ -1401,7 +1413,7 @@ export function CsQueueClient({
                   disabled={sheetEditBusy || !selectedAddIds.length}
                   className="h-10 rounded-xl bg-[#FCA311] px-3 text-sm font-extrabold text-black disabled:opacity-60"
                 >
-                  إضافة
+                  {sheetEditBusy ? "جاري التحميل" : "إضافة"}
                 </button>
               </div>
               {addSearchState === "loading" ? (
@@ -1454,7 +1466,7 @@ export function CsQueueClient({
               }}
               className="h-10 rounded-xl bg-[#E5E5E5] px-4 text-sm font-extrabold text-[#14213D] disabled:opacity-50"
             >
-              السابق
+              {loadingMore ? "جاري التحميل" : "السابق"}
             </button>
             <button
               type="button"
@@ -1465,7 +1477,7 @@ export function CsQueueClient({
               }}
               className="h-10 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white disabled:opacity-50"
             >
-              {loadingMore ? "جار التحميل..." : "التالي"}
+              {loadingMore ? "جاري التحميل" : "التالي"}
             </button>
           </div>
         </div>
@@ -1534,7 +1546,7 @@ export function CsQueueClient({
                           onClick={() => void removeSheetOrder(item.id)}
                           className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white disabled:opacity-60"
                         >
-                          x
+                          {sheetEditBusy ? "جاري التحميل" : "x"}
                         </button>
                       ) : null}
                     </span>
@@ -1652,6 +1664,9 @@ export function CsQueueClient({
                         />
                         تميمة
                       </label>
+                      {savingShipId === item.id ? (
+                        <span className="text-[10px] font-extrabold text-[#14213D]">جاري التحميل</span>
+                      ) : null}
                     </div>
                   ) : null}
                   {isSupervisor || isAccounting ? (
@@ -1714,92 +1729,74 @@ export function CsQueueClient({
         )}
       </div>
 
-      <div className="print-only hidden">
+      <div className="print-only hidden" dir="rtl">
         <h1 className="mb-2 text-center text-lg font-bold">
-          شيت مخزن —{" "}
-          {printMode === "sheet"
-            ? printingCourierId
-              ? `سيد تميمة — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
-              : "سيد تميمة"
+          {printMode === "sheet" || applied.shipping === "sayed_temima"
+            ? `شيت مخزن سيد تميمة — ${
+                applied.dateFrom === applied.dateTo ? applied.dateFrom : `${applied.dateFrom} → ${applied.dateTo}`
+              }${
+                printingCourierId
+                  ? ` — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
+                  : ""
+              }`
             : "قائمة الطلبات"}
         </h1>
         <p className="mb-2 text-center text-xs">
-          {applied.dateFrom === applied.dateTo ? applied.dateFrom : `${applied.dateFrom} → ${applied.dateTo}`} ·{" "}
           {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
         </p>
-        {printMode === "sheet" ? (
-          <>
-            <table className="w-full border-collapse text-[10px]">
-              <thead>
-                <tr>
-                  {["مسلسل", "الرقم", "الاسم", "موبايل", "العنوان", "المنتجات", "رقم الفاتورة", "تم تحصيل", "الباقي"].map(
-                    (h) => (
-                      <th key={h} className="border border-black px-1 py-1 text-right">
-                        {h}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {printRows.map((item, index) => {
-                  const dup = dupMeta.get(item.id);
-                  const money = temimaMoney(item);
-                  return (
-                    <tr key={item.id} className={dup ? dup.colorClass : undefined}>
-                      <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
-                      <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
-                      <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
-                      <td className="border border-black px-1 py-1" dir="ltr">
-                        {item.customerSnapshot?.phone}
-                        {dup ? ` (×${dup.count})` : ""}
-                      </td>
-                      <td className="border border-black px-1 py-1">
-                        {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
-                      </td>
-                      <td className="border border-black px-1 py-1 whitespace-pre-line">{formatOrderNames(item)}</td>
-                      <td className="border border-black px-1 py-1" dir="ltr">
-                        {item.invoiceNumber || ""}
-                      </td>
-                      <td className="border border-black px-1 py-1">{money.paid ? money.paid : ""}</td>
-                      <td className="border border-black px-1 py-1">{money.remainder}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td className="border border-black px-1 py-1 font-bold" colSpan={7}>
-                    المجموع
-                  </td>
-                  <td className="border border-black px-1 py-1 font-bold">
-                    {printRows.reduce((sum, row) => sum + temimaMoney(row).paid, 0).toLocaleString("ar-EG")}
-                  </td>
-                  <td className="border border-black px-1 py-1 font-bold">
-                    {printRows.reduce((sum, row) => sum + temimaMoney(row).remainder, 0).toLocaleString("ar-EG")}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-            {(() => {
-              const ordersTotal = printRows.reduce((sum, row) => sum + temimaMoney(row).remainder, 0);
-              const collectedTotal = printRows.reduce((sum, row) => sum + temimaMoney(row).paid, 0);
-              const shippingTotal = printRows.length * SAYED_TEMIMA_SHIPPING_EGP;
-              return (
-                <div className="mt-3 space-y-1 text-xs font-bold">
-                  <p>
-                    تم تحصيله قبل الشحن: {collectedTotal.toLocaleString("ar-EG")} ج.م · الباقي للتحصيل:{" "}
-                    {ordersTotal.toLocaleString("ar-EG")} ج.م · عدد الأوردرات: {printRows.length}
-                  </p>
-                  <p>
-                    إجمالي الشحن ({SAYED_TEMIMA_SHIPPING_EGP} × {printRows.length}):{" "}
-                    {shippingTotal.toLocaleString("ar-EG")} ج.م
-                  </p>
-                  <p>الإجمالي الكلي (أوردرات − شحن): {(ordersTotal - shippingTotal).toLocaleString("ar-EG")} ج.م</p>
-                </div>
-              );
-            })()}
-          </>
+        {printMode === "sheet" || applied.shipping === "sayed_temima" ? (
+          <table className="w-full border-collapse text-[10px]">
+            <thead>
+              <tr>
+                {["مسلسل", "الرقم", "الاسم", "الموبايل", "العنوان", "المنتجات", "رقم الفاتورة", "ديبوزت", "الصافي"].map(
+                  (h) => (
+                    <th key={h} className="border border-black px-1 py-1 text-right">
+                      {h}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {printRows.map((item, index) => {
+                const dup = dupMeta.get(item.id);
+                const money = sheetDepositNet(item);
+                return (
+                  <tr key={item.id} className={dup ? dup.colorClass : undefined}>
+                    <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
+                    <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
+                    <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
+                    <td className="border border-black px-1 py-1" dir="ltr">
+                      {item.customerSnapshot?.phone}
+                      {dup ? ` (×${dup.count})` : ""}
+                    </td>
+                    <td className="border border-black px-1 py-1">
+                      {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
+                    </td>
+                    <td className="border border-black px-1 py-1 whitespace-pre-line">{formatOrderNames(item)}</td>
+                    <td className="border border-black px-1 py-1" dir="ltr">
+                      {item.invoiceNumber || ""}
+                    </td>
+                    <td className="border border-black px-1 py-1">{money.deposit ? money.deposit : ""}</td>
+                    <td className="border border-black px-1 py-1">{money.net}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td className="border border-black px-1 py-1 font-bold" colSpan={7}>
+                  المجموع
+                </td>
+                <td className="border border-black px-1 py-1 font-bold">
+                  {printRows.reduce((sum, row) => sum + sheetDepositNet(row).deposit, 0).toLocaleString("ar-EG")}
+                </td>
+                <td className="border border-black px-1 py-1 font-bold">
+                  {printRows.reduce((sum, row) => sum + sheetDepositNet(row).net, 0).toLocaleString("ar-EG")}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         ) : (
           <table className="w-full border-collapse text-[10px]">
             <thead>
