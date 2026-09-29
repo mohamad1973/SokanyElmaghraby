@@ -19,7 +19,7 @@ export async function lockTemimaCutoff(hour: number, minute: number) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   if (!isValidTemimaCutoff(hour, minute)) {
-    return { ok: false as const, message: "الساعة من 8:00 صباحاً إلى 4:00 عصراً." };
+    return { ok: false as const, message: "الساعة غير صحيحة." };
   }
   const dayYmd = cairoTodayYmd();
   const minutes = cutoffMinutes(hour, minute);

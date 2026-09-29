@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 
 import { restampTodayAssignmentsOnce } from "@/lib/cs/assignments";
 import { ensureCsTables, ensureDefaultCsAgent, isAccountingRole, isShippingRole, listActiveCsAgents } from "@/lib/cs/agents";
-import { listCsConfirmationsForViewer, listCsQueuePage, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
 import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { listTemimaSheetEdits, mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -37,16 +37,11 @@ export default async function CsHomePage() {
   let initialHasMore = false;
   let initialTotal = 0;
   let initialItems;
-  let temimaSheetEdits: Awaited<ReturnType<typeof mergeIncludedConfirmations>>["edits"] = [];
+  let temimaSheetEdits: Awaited<ReturnType<typeof listTemimaSheetEdits>> = [];
   if (isCourierSupervisor) {
-    const rows = await listCsConfirmationsForViewer({
-      agentId: session.user.csAgentId,
-      isSupervisor,
-      seeAll: true,
-    });
-    const merged = await mergeIncludedConfirmations(rows.map(serializeCsQueueItem));
-    initialItems = merged.items;
-    temimaSheetEdits = merged.edits;
+    const today = cairoTodayYmd();
+    initialItems = await listUnifiedSayedSheet(today, today);
+    temimaSheetEdits = await listTemimaSheetEdits();
   } else {
     const queue = await listCsQueuePage({
       agentId: session.user.csAgentId,
@@ -77,6 +72,7 @@ export default async function CsHomePage() {
       isCourierSupervisor={isCourierSupervisor}
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
+      canPrintQueue={isSupervisor && !isCourierSupervisor}
       temimaCutoffs={temimaCutoffs}
       temimaSheetEdits={temimaSheetEdits}
       initialHasMore={initialHasMore}

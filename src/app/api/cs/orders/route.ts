@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAccountingRole } from "@/lib/cs/agents";
 import { CS_QUEUE_PAGE_SIZE, listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
-import { listSayedSheetOrders, listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function GET(request: Request) {
@@ -14,17 +14,15 @@ export async function GET(request: Request) {
   const viewer = await resolveCsViewer(session.user.csAgentId);
   const url = new URL(request.url);
   if (url.searchParams.get("sheet") === "temima") {
-    const canPrint = viewer.isSupervisor || viewer.isCourierSupervisor || viewer.isAdmin || viewer.isAccounting || isAccountingRole(session.user.csRole);
-    if (!canPrint) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    const canSeeSheet = viewer.isAdmin || viewer.isSupervisor || viewer.isCourierSupervisor;
+    if (!canSeeSheet) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     const from = url.searchParams.get("from") || "";
     const to = url.searchParams.get("to") || "";
-    const items =
-      url.searchParams.get("match") === "sayed"
-        ? await listVisibleSayedSheet(from, to)
-        : await listSayedSheetOrders(from, to);
-    return NextResponse.json({ items, hasMore: false, nextCursor: null });
+    const items = await listVisibleSayedSheet(from, to);
+    return NextResponse.json({ items, total: items.length, hasMore: false, nextCursor: null });
   }
   const pageRaw = Number(url.searchParams.get("page") || "1");
+  const canPrintAll = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
   const agentRaw = Number(url.searchParams.get("agent") || "");
   const page = await listCsQueuePage({
     agentId: session.user.csAgentId,
@@ -43,6 +41,7 @@ export async function GET(request: Request) {
     waybill: url.searchParams.get("waybill") || "",
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
     limit: CS_QUEUE_PAGE_SIZE,
+    all: canPrintAll && url.searchParams.get("all") === "1",
   });
 
   return NextResponse.json(page);

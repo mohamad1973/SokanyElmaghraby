@@ -7,8 +7,8 @@ import { listCsAreasForGovernorate } from "@/lib/cs/egypt-areas";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { listTemimaSheetEdits } from "@/lib/cs/temima-sheet-edits";
-import { onEditedSayedTemimaSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
+import { listTemimaSheetEdits, listUnifiedSayedSheetIds } from "@/lib/cs/temima-sheet-edits";
+import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 const TEMIMA = "sayed_temima";
 const CARD_KEYS = [
@@ -138,51 +138,13 @@ async function loadCouriers(): Promise<CourierRosterRow[]> {
     }));
 }
 
-async function loadTodayRows() {
+async function loadSheetRows(today: string) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
-  const { start, endExclusive } = todayBounds();
+  const ids = await listUnifiedSayedSheetIds(today, today);
+  if (!ids.length) return [];
   return prisma.csOrderConfirmation.findMany({
-    where: {
-      status: "CONFIRMED",
-      shippingCompany: TEMIMA,
-      OR: [
-        { confirmedAt: { gte: start, lt: endExclusive } },
-        { courierAssignedAt: { gte: start, lt: endExclusive } },
-        { handedToCarrierAt: { gte: start, lt: endExclusive } },
-      ],
-    },
-    select: {
-      id: true,
-      wooOrderNumber: true,
-      customerSnapshot: true,
-      deliveredToCustomer: true,
-      courierAgentId: true,
-      courierOutcome: true,
-      courierRefusalReason: true,
-      depositAmount: true,
-      depositPaid: true,
-      confirmedAt: true,
-      handedToCarrierAt: true,
-      courierAssignedAt: true,
-      courierAgent: { select: { id: true, name: true } },
-      answers: { where: { itemKey: { in: [...CARD_KEYS] } }, select: { itemKey: true, value: true, note: true } },
-    },
-    orderBy: { wooOrderNumber: "desc" },
-  });
-}
-
-async function loadSheetRows(today: string, edits: TemimaSheetEdit[]) {
-  const base = await loadTodayRows();
-  const prisma = getPrismaClient();
-  if (!prisma) return base;
-  const have = new Set(base.map((row) => row.id));
-  const missing = edits
-    .filter((row) => row.kind === "include" && row.dayYmd === today && !have.has(row.confirmationId))
-    .map((row) => row.confirmationId);
-  if (!missing.length) return base;
-  const extra = await prisma.csOrderConfirmation.findMany({
-    where: { id: { in: missing }, status: "CONFIRMED" },
+    where: { id: { in: ids } },
     select: {
       id: true,
       wooOrderNumber: true,
@@ -197,24 +159,32 @@ async function loadSheetRows(today: string, edits: TemimaSheetEdit[]) {
       handedToCarrierAt: true,
       courierAssignedAt: true,
       shippingCompany: true,
+      handedToCarrier: true,
       courierAgent: { select: { id: true, name: true } },
       answers: { where: { itemKey: { in: [...CARD_KEYS] } }, select: { itemKey: true, value: true, note: true } },
     },
   });
-  return [...base, ...extra];
 }
 
 function onTodaySheet(
-  row: { id: number; shippingCompany?: string | null; confirmedAt: Date | null; handedToCarrierAt: Date | null },
+  row: {
+    id: number;
+    shippingCompany?: string | null;
+    confirmedAt: Date | null;
+    handedToCarrier?: boolean | null;
+    handedToCarrierAt: Date | null;
+  },
   today: string,
   cutoffs: Awaited<ReturnType<typeof listTemimaCutoffs>>,
   edits: TemimaSheetEdit[],
 ) {
-  return onEditedSayedTemimaSheet(
+  return onUnifiedSayedSheet(
     {
       id: row.id,
-      shippingCompany: row.shippingCompany || TEMIMA,
+      status: "CONFIRMED",
+      shippingCompany: row.shippingCompany,
       confirmedAt: row.confirmedAt,
+      handedToCarrier: row.handedToCarrier,
       handedToCarrierAt: row.handedToCarrierAt,
     },
     today,
@@ -265,9 +235,7 @@ export async function loadCourierDispatch(viewerId: number, mode: "supervisor" |
   if (mode === "courier") return loadCourierDay(viewerId, dayYmd);
   const couriers = await loadCouriers();
   const today = cairoTodayYmd();
-  const cutoffs = await listTemimaCutoffs();
-  const edits = await listTemimaSheetEdits();
-  const rows = (await loadSheetRows(today, edits)).filter((row) => onTodaySheet(row, today, cutoffs, edits));
+  const rows = await loadSheetRows(today);
   const cards = rows.map((row) => {
     const card = cardFromRow(row);
     const matches =

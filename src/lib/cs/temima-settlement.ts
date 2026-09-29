@@ -2,12 +2,8 @@ import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolvePaymentState } from "@/lib/cs/order-window";
-import {
-  cairoTodayYmd,
-  cairoYmdBounds,
-  cairoYmdFromIso,
-  isWithinCairoDateRange,
-} from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
+import { listUnifiedSayedSheetIds } from "@/lib/cs/temima-sheet-edits";
 import { getPrismaClient } from "@/lib/db";
 
 export const TEMIMA_COMPANY = "sayed_temima";
@@ -85,17 +81,6 @@ export function cashAmountOf(row: {
   if (state !== "cod") return 0;
   const deposit = row.depositPaid ? money(row.depositAmount) : 0;
   return Math.max(0, money(snap.total) - deposit);
-}
-
-function anchorIso(row: {
-  shippingAssignedAt: Date | null;
-  createdAt: Date;
-  customerSnapshot: unknown;
-}) {
-  if (row.shippingAssignedAt) return row.shippingAssignedAt.toISOString();
-  const snap = row.customerSnapshot as { dateCreated?: string } | null;
-  if (snap?.dateCreated) return snap.dateCreated;
-  return row.createdAt.toISOString();
 }
 
 function customerNameOf(snapshot: unknown) {
@@ -206,28 +191,32 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
     };
   }
 
-  const orders = await prisma.csOrderConfirmation.findMany({
-    where: { shippingCompany: TEMIMA_COMPANY },
-    orderBy: { createdAt: "desc" },
-    take: 1500,
-    select: {
-      id: true,
-      wooOrderNumber: true,
-      customerSnapshot: true,
-      depositAmount: true,
-      depositPaid: true,
-      shippingAssignedAt: true,
-      createdAt: true,
-    },
-  });
+  const sheetIds = await listUnifiedSayedSheetIds(sunday, saturday);
+  const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id));
+  const orderIds = [...sheetIds, ...carryIds];
+  const orders = orderIds.length
+    ? await prisma.csOrderConfirmation.findMany({
+        where: { id: { in: orderIds } },
+        select: {
+          id: true,
+          wooOrderNumber: true,
+          customerSnapshot: true,
+          depositAmount: true,
+          depositPaid: true,
+          shippingAssignedAt: true,
+          createdAt: true,
+        },
+      })
+    : [];
 
   const postponeIds = new Set(openPostpones.map((row) => row.confirmationId));
   const draft = new Map((week?.lines || []).map((line) => [line.confirmationId, line]));
 
   const rows: TemimaSheetRow[] = [];
+  const sheetIdSet = new Set(sheetIds);
   for (const order of orders) {
+    if (!sheetIdSet.has(order.id)) continue;
     if (settledIds.has(order.id) || postponeIds.has(order.id)) continue;
-    if (!isWithinCairoDateRange(anchorIso(order), sunday, saturday)) continue;
     const saved = draft.get(order.id);
     rows.push({
       confirmationId: order.id,

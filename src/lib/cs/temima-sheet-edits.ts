@@ -3,8 +3,7 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { cairoYmdBounds } from "@/lib/cs/order-window";
-import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { onEditedSayedTemimaSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
+import { SAYED_SHEET_JOIN_SQL, sayedSheetMembershipSql, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 function asKind(value: string): TemimaSheetEdit["kind"] | null {
   return value === "include" || value === "exclude" ? value : null;
@@ -112,6 +111,40 @@ export async function mergeIncludedConfirmations<T extends { id: number }>(items
   return { items: [...items, ...extra], edits };
 }
 
+export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+    `SELECT CsOrderConfirmation.id AS id
+     FROM CsOrderConfirmation
+     ${SAYED_SHEET_JOIN_SQL}
+     WHERE ${sayedSheetMembershipSql()}
+     ORDER BY CsOrderConfirmation.id DESC
+     LIMIT 5000`,
+    dateFrom,
+    dateTo,
+    dateFrom,
+    dateTo,
+  );
+  return rows.map((row) => Number(row.id));
+}
+
+export async function listUnifiedSayedSheet(dateFrom: string, dateTo: string) {
+  const prisma = getPrismaClient();
+  const ids = await listUnifiedSayedSheetIds(dateFrom, dateTo);
+  if (!prisma || !ids.length) return [];
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: ids } },
+    include: { assignedAgent: true, answers: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [serializeCsQueueItem(row)] : [];
+  });
+}
+
 export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
@@ -149,24 +182,9 @@ export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
   return [...rows, ...extra].map((row) => serializeCsQueueItem(row));
 }
 
-/** Same rows Sayed's account shows for these days: cutoff, include, and exclude. */
+/** Same rows every Temima screen shows for these days, including admin include and exclude. */
 export async function listVisibleSayedSheet(dateFrom: string, dateTo: string) {
-  const items = await listSayedSheetOrders(dateFrom, dateTo);
-  const [edits, cutoffs] = await Promise.all([listTemimaSheetEdits(), listTemimaCutoffs()]);
-  return items.filter((item) =>
-    onEditedSayedTemimaSheet(
-      {
-        id: item.id,
-        shippingCompany: item.shippingCompany,
-        confirmedAt: item.confirmedAt,
-        handedToCarrierAt: item.handedToCarrierAt,
-      },
-      dateFrom,
-      dateTo,
-      cutoffs,
-      edits,
-    ),
-  );
+  return listUnifiedSayedSheet(dateFrom, dateTo);
 }
 
 export async function includeTemimaOrders(dayYmd: string, confirmationIds: number[]) {

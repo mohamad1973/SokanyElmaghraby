@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 
 import { ensureCsTables, ensureDefaultCsAgent } from "@/lib/cs/agents";
-import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
+import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
+import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { mergeIncludedConfirmations } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "../cs-queue-client";
@@ -19,18 +20,17 @@ export default async function CsTemimaSheetPage() {
   const viewer = await resolveCsViewer(session.user.csAgentId);
   if (!viewer.isAdmin && !viewer.isSupervisor && !viewer.isCourierSupervisor) redirect("/cs");
 
-  const rows = await listCsConfirmationsForViewer({
-    agentId: session.user.csAgentId,
-    isSupervisor: true,
-    seeAll: true,
-  });
-  const merged = await mergeIncludedConfirmations(rows.map(serializeCsQueueItem));
-  const couriers = await listCourierAgents();
-  const temimaCutoffs = await listTemimaCutoffs();
+  const today = cairoTodayYmd();
+  const [items, temimaSheetEdits, couriers, temimaCutoffs] = await Promise.all([
+    listUnifiedSayedSheet(today, today),
+    listTemimaSheetEdits(),
+    listCourierAgents(),
+    listTemimaCutoffs(),
+  ]);
 
   return (
     <CsQueueClient
-      initialItems={merged.items}
+      initialItems={items}
       isSupervisor={false}
       isAccounting={false}
       agents={[]}
@@ -39,8 +39,9 @@ export default async function CsTemimaSheetPage() {
       canOpenOrders={viewer.isAdmin}
       canEditTemimaSheet={viewer.isAdmin}
       canEditInvoice={viewer.isAdmin || viewer.isSupervisor}
+      canPrintQueue={viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor)}
       temimaCutoffs={temimaCutoffs}
-      temimaSheetEdits={merged.edits}
+      temimaSheetEdits={temimaSheetEdits}
     />
   );
 }

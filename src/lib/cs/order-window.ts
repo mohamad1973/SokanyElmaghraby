@@ -98,6 +98,26 @@ export function eachCairoYmdInclusive(fromYmd: string, toYmd: string): string[] 
   return days;
 }
 
+/** Cairo clock using the same fixed +02:00 offset as day bounds and SQL. */
+export function cairoOffsetClock(value: string | Date | null | undefined): { ymd: string; minutes: number } | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  if (Number.isNaN(time)) return null;
+  const shifted = new Date(time + 2 * 60 * 60 * 1000);
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return { ymd: `${y}-${m}-${d}`, minutes: shifted.getUTCHours() * 60 + shifted.getUTCMinutes() };
+}
+
+export function addCairoYmdDays(ymd: string, days: number) {
+  const [y, m, d] = ymd.split("-").map((part) => Number(part));
+  if (!y || !m || !d) return "";
+  const utc = new Date(Date.UTC(y, m - 1, d + days));
+  return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(2, "0")}-${String(utc.getUTCDate()).padStart(2, "0")}`;
+}
+
 /** Cairo calendar day and minutes since midnight for an ISO timestamp. */
 export function cairoClock(iso: string | null | undefined): { ymd: string; minutes: number } | null {
   if (!iso) return null;

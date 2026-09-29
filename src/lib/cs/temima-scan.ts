@@ -2,10 +2,10 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { markCourierOutcome } from "@/lib/cs/courier-dispatch";
-import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
+import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { listTemimaSheetEdits } from "@/lib/cs/temima-sheet-edits";
-import { onEditedSayedTemimaSheet, resolveHandedToCarrierAt, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
+import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { resolveHandedToCarrierAt } from "@/lib/cs/temima-sheet";
 
 const TEMIMA = "sayed_temima";
 
@@ -42,41 +42,11 @@ async function findConfirmedByTracking(trackingNumber: string) {
   return { prisma, order };
 }
 
-async function todayReceiptTally(
-  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
-  edits: TemimaSheetEdit[],
-) {
+async function todayReceiptTally() {
   const today = cairoTodayYmd();
-  const bounds = cairoYmdBounds(today);
-  if (!bounds) return { received: 0, expected: 0, matched: false };
-  const cutoffs = await listTemimaCutoffs();
-  const rows = await prisma.csOrderConfirmation.findMany({
-    where: {
-      status: "CONFIRMED",
-      shippingCompany: TEMIMA,
-      OR: [
-        { confirmedAt: { gte: bounds.start, lt: bounds.endExclusive } },
-        { handedToCarrierAt: { gte: bounds.start, lt: bounds.endExclusive } },
-      ],
-    },
-    select: { id: true, trackingNumber: true, handedToCarrier: true, confirmedAt: true, handedToCarrierAt: true, shippingCompany: true },
-  });
-  const includeIds = edits
-    .filter((row) => row.kind === "include" && row.dayYmd === today && !rows.some((item) => item.id === row.confirmationId))
-    .map((row) => row.confirmationId);
-  const extra = includeIds.length
-    ? await prisma.csOrderConfirmation.findMany({
-        where: { id: { in: includeIds }, status: "CONFIRMED" },
-        select: { id: true, trackingNumber: true, handedToCarrier: true, confirmedAt: true, handedToCarrierAt: true, shippingCompany: true },
-      })
-    : [];
-  const withTracking = [...rows, ...extra].filter(
-    (row) =>
-      String(row.trackingNumber || "").trim() &&
-      onEditedSayedTemimaSheet(row, today, today, cutoffs, edits),
-  );
-  const received = withTracking.filter((row) => row.handedToCarrier).length;
-  const expected = withTracking.length;
+  const rows = await listUnifiedSayedSheet(today, today);
+  const received = rows.filter((row) => row.handedToCarrier).length;
+  const expected = rows.length;
   return { received, expected, matched: expected > 0 && received === expected };
 }
 
@@ -89,7 +59,7 @@ function tallyMessage(tally: { received: number; expected: number; matched: bool
 export async function loadTemimaReceiptTally() {
   const prisma = getPrismaClient();
   if (!prisma) return { received: 0, expected: 0, matched: false };
-  return todayReceiptTally(prisma, await listTemimaSheetEdits());
+  return todayReceiptTally();
 }
 
 export async function scanTemimaHandoff(rawTracking: string) {
@@ -115,7 +85,7 @@ export async function scanTemimaHandoff(rawTracking: string) {
       data: { handedToCarrier: true, handedToCarrierAt: handedAt },
     });
   }
-  const tally = await todayReceiptTally(prisma, edits);
+  const tally = await todayReceiptTally();
   const note = tallyMessage(tally);
   if (order.handedToCarrier && !moved) {
     return {

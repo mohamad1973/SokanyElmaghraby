@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
+  cairoOffsetClock,
   cairoTodayYmd,
   cairoYesterdayYmd,
   formatCairoOrderDate,
@@ -18,8 +19,7 @@ import {
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
   formatCutoffMinutes,
-  onEditedSayedTemimaSheet,
-  onEditedSecondTemimaSheet,
+  onUnifiedSayedSheet,
   type TemimaCutoff,
   type TemimaSheetEdit,
 } from "@/lib/cs/temima-sheet";
@@ -219,17 +219,6 @@ function temimaDateMode(f: DraftFilters) {
   return f.shipping === "sayed_temima" && normalizeFilterStatus(f.status) === "CONFIRMED";
 }
 
-function includedInAppliedRange(id: number, f: DraftFilters, edits: TemimaSheetEdit[]) {
-  if (!f.dateFrom || !f.dateTo) return false;
-  return edits.some(
-    (row) =>
-      row.kind === "include" &&
-      row.confirmationId === id &&
-      row.dayYmd >= f.dateFrom &&
-      row.dayYmd <= f.dateTo,
-  );
-}
-
 function applyCourierSupervisorSheet(
   items: CsQueueItem[],
   f: DraftFilters,
@@ -237,14 +226,9 @@ function applyCourierSupervisorSheet(
   cutoffs: TemimaCutoff[],
   edits: TemimaSheetEdit[],
 ) {
-  let rows = items.filter((item) => item.status === "CONFIRMED" || includedInAppliedRange(item.id, f, edits));
+  let rows = items.filter((item) => onUnifiedSayedSheet(item, f.dateFrom, f.dateTo, cutoffs, edits));
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
-  if (f.dateFrom && f.dateTo) {
-    rows = rows.filter((item) => onEditedSayedTemimaSheet(item, f.dateFrom, f.dateTo, cutoffs, edits));
-  } else {
-    rows = rows.filter((item) => item.shippingCompany === "sayed_temima");
-  }
   if (f.payment === "paid" || f.payment === "paid_online" || f.payment === "paid_full") {
     rows = rows.filter((item) => itemPaymentState(item) === "paid");
   } else if (f.payment === "partial") {
@@ -477,97 +461,6 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
 
-function confirmedTemimaPrintRows(
-  items: CsQueueItem[],
-  applied: DraftFilters,
-  query: string,
-  opts: { isSupervisor?: boolean; isAccounting?: boolean },
-) {
-  const q = query.trim();
-  const source = q
-    ? items.filter((item) => matchesSearchQuery(item, q))
-    : applyFilters(
-        items,
-        {
-          ...applied,
-          status: "CONFIRMED",
-          shipping: "sayed_temima",
-          dateBasis: temimaDateMode(applied) ? applied.dateBasis : "legacy",
-        },
-        {
-          isSupervisor: Boolean(opts.isSupervisor),
-          orderDate: Boolean(opts.isAccounting),
-        },
-      );
-  return source.filter((item) => item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED");
-}
-
-function handedTemimaPrintRows(
-  items: CsQueueItem[],
-  applied: DraftFilters,
-  query: string,
-  cutoffs: TemimaCutoff[],
-  edits: TemimaSheetEdit[],
-) {
-  const q = query.trim();
-  return items
-    .filter((item) => {
-      if (item.status !== "CONFIRMED") return false;
-      if (!onEditedSayedTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits)) return false;
-      if (!item.handedToCarrier && !item.handedToCarrierAt) return false;
-      if (q && !matchesSearchQuery(item, q)) return false;
-      return true;
-    })
-    .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
-}
-
-function sayedTemimaPrintRows(
-  items: CsQueueItem[],
-  applied: DraftFilters,
-  query: string,
-  cutoffs: TemimaCutoff[],
-  edits: TemimaSheetEdit[],
-) {
-  const q = query.trim();
-  return items
-    .filter((item) => {
-      if (item.status !== "CONFIRMED" && !includedInAppliedRange(item.id, applied, edits)) return false;
-      if (q && !matchesSearchQuery(item, q)) return false;
-      return onEditedSayedTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits);
-    })
-    .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
-}
-
-function secondTemimaPrintRows(
-  items: CsQueueItem[],
-  applied: DraftFilters,
-  query: string,
-  cutoffs: TemimaCutoff[],
-  edits: TemimaSheetEdit[],
-) {
-  const q = query.trim();
-  return items
-    .filter((item) => {
-      if (item.status !== "CONFIRMED") return false;
-      if (q && !matchesSearchQuery(item, q)) return false;
-      return onEditedSecondTemimaSheet(item, applied.dateFrom, applied.dateTo, cutoffs, edits);
-    })
-    .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
-}
-
-function mergeTemimaPrintRows(groups: CsQueueItem[][]) {
-  const seen = new Set<number>();
-  const merged: CsQueueItem[] = [];
-  for (const group of groups) {
-    for (const row of group) {
-      if (seen.has(row.id)) continue;
-      seen.add(row.id);
-      merged.push(row);
-    }
-  }
-  return merged.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
-}
-
 function InvoiceBox({
   confirmationId,
   value,
@@ -652,8 +545,8 @@ function TemimaCutoffBox({
   onLock: () => Promise<void>;
 }) {
   const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
-  const hours = Array.from({ length: 9 }, (_, index) => 8 + index);
-  const minutes = hour === "16" ? [0] : Array.from({ length: 60 }, (_, index) => index);
+  const hours = Array.from({ length: 24 }, (_, index) => index);
+  const minutes = Array.from({ length: 60 }, (_, index) => index);
   return (
     <form
       className="no-print flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
@@ -677,7 +570,7 @@ function TemimaCutoffBox({
       </label>
       <label className="text-xs font-bold text-[#14213D]">
         الدقيقة
-        <select value={hour === "16" ? "0" : minute} onChange={(event) => onMinute(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
+        <select value={minute} onChange={(event) => onMinute(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
           {minutes.map((value) => (
             <option key={value} value={String(value)}>{String(value).padStart(2, "0")}</option>
           ))}
@@ -699,6 +592,7 @@ type Props = {
   canSetTemimaCutoff?: boolean;
   canEditTemimaSheet?: boolean;
   canEditInvoice?: boolean;
+  canPrintQueue?: boolean;
   temimaCutoffs?: TemimaCutoff[];
   temimaSheetEdits?: TemimaSheetEdit[];
   agents?: Array<{ id: number; name: string }>;
@@ -715,8 +609,7 @@ type TemimaAddMatch = {
   status: string;
 };
 
-type PrintMode = "none" | "bosta" | "sayed_temima" | "all";
-type TemimaPrintScope = "confirmed" | "handed" | "all" | "late";
+type PrintMode = "none" | "sheet" | "queue";
 
 export function CsQueueClient({
   initialItems,
@@ -727,6 +620,7 @@ export function CsQueueClient({
   canSetTemimaCutoff = false,
   canEditTemimaSheet = false,
   canEditInvoice = false,
+  canPrintQueue = false,
   temimaCutoffs = [],
   temimaSheetEdits = [],
   agents = [],
@@ -744,10 +638,6 @@ export function CsQueueClient({
   const [printMode, setPrintMode] = useState<PrintMode>("none");
   const [printingCourierId, setPrintingCourierId] = useState<number | null>(null);
   const [courierPrintPick, setCourierPrintPick] = useState("");
-  const [temimaAsk, setTemimaAsk] = useState(false);
-  const [printFrom, setPrintFrom] = useState("");
-  const [printTo, setPrintTo] = useState("");
-  const [temimaScope, setTemimaScope] = useState<TemimaPrintScope>("all");
   const [cutoffs, setCutoffs] = useState<TemimaCutoff[]>(temimaCutoffs);
   const [sheetEdits, setSheetEdits] = useState<TemimaSheetEdit[]>(temimaSheetEdits);
   const [addOpen, setAddOpen] = useState(false);
@@ -758,8 +648,13 @@ export function CsQueueClient({
   const addSearchSeq = useRef(0);
   const [sheetEditBusy, setSheetEditBusy] = useState(false);
   const savedCutoff = temimaCutoffs.find((row) => row.dayYmd === cairoTodayYmd());
-  const [cutoffHour, setCutoffHour] = useState(savedCutoff ? String(Math.floor(savedCutoff.minutes / 60)) : "12");
-  const [cutoffMinute, setCutoffMinute] = useState(savedCutoff ? String(savedCutoff.minutes % 60) : "0");
+  const nowClock = cairoOffsetClock(new Date());
+  const [cutoffHour, setCutoffHour] = useState(
+    savedCutoff ? String(Math.floor(savedCutoff.minutes / 60)) : String(Math.floor((nowClock?.minutes ?? 0) / 60)),
+  );
+  const [cutoffMinute, setCutoffMinute] = useState(
+    savedCutoff ? String(savedCutoff.minutes % 60) : String((nowClock?.minutes ?? 0) % 60),
+  );
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
@@ -835,7 +730,7 @@ export function CsQueueClient({
       }
       if (!opts?.quiet) setMessage(`تمت المزامنة. طلبات جديدة: ${data.imported ?? 0}`);
       if (isCourierSupervisor) {
-        if (!opts?.quiet || (data.imported ?? 0) > 0) router.refresh();
+        if (!opts?.quiet || (data.imported ?? 0) > 0) await loadSayedSheet(appliedRef.current);
         return;
       }
       const query = draftQueryRef.current.trim();
@@ -904,31 +799,9 @@ export function CsQueueClient({
 
   const printRows = useMemo(() => {
     if (sheetPrintRows) return sheetPrintRows;
-    if (printingCourierId) {
-      return filtered.filter((item) => item.courierAgentId === printingCourierId);
-    }
-    if (printMode === "bosta") return filtered.filter((i) => i.shippingCompany === "bosta");
-    if (printMode === "sayed_temima") {
-      if (isCourierSupervisor && temimaScope === "confirmed") {
-        return applyCourierSupervisorSheet(items, { ...applied, query: draft.query, status: "CONFIRMED" }, false, cutoffs, sheetEdits);
-      }
-      const confirmed = confirmedTemimaPrintRows(items, applied, draft.query, {
-        isSupervisor,
-        isAccounting,
-      });
-      if (isSupervisor && !isCourierSupervisor) {
-        const sayed = sayedTemimaPrintRows(items, applied, draft.query, cutoffs, sheetEdits);
-        if (temimaScope === "confirmed") return sayed;
-        const handed = handedTemimaPrintRows(items, applied, draft.query, cutoffs, sheetEdits);
-        if (temimaScope === "handed") return handed;
-        if (temimaScope === "late") return secondTemimaPrintRows(items, applied, draft.query, cutoffs, sheetEdits);
-        return mergeTemimaPrintRows([sayed, handed]);
-      }
-      if (temimaScope === "confirmed") return confirmed;
-      return filtered.filter((i) => i.shippingCompany === "sayed_temima");
-    }
+    if (printingCourierId) return filtered.filter((item) => item.courierAgentId === printingCourierId);
     return filtered;
-  }, [filtered, printMode, temimaScope, draft.query, items, applied, isSupervisor, isAccounting, isCourierSupervisor, printingCourierId, cutoffs, sheetEdits, sheetPrintRows]);
+  }, [filtered, printingCourierId, sheetPrintRows]);
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -981,9 +854,67 @@ export function CsQueueClient({
     setDraft(filters);
     setApplied(filters);
     if (warning) setMessage(warning);
-    if (!isCourierSupervisor) {
-      void loadQueue(filters, 1);
+    if (isCourierSupervisor) void loadSayedSheet(filters);
+    else void loadQueue(filters, 1);
+  }
+
+  async function loadSayedSheet(filters: DraftFilters) {
+    const params = new URLSearchParams({
+      sheet: "temima",
+      from: filters.dateFrom,
+      to: filters.dateTo,
+    });
+    const res = await fetch(`/api/cs/orders?${params.toString()}`);
+    const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تحميل شيت سيد.");
+      return;
     }
+    setItems(data.items || []);
+  }
+
+  async function printApplied() {
+    const filters = { ...applied, query: draft.query };
+    if (isCourierSupervisor || temimaDateMode(filters)) {
+      const params = new URLSearchParams({ sheet: "temima", from: filters.dateFrom, to: filters.dateTo });
+      const res = await fetch(`/api/cs/orders?${params.toString()}`);
+      const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
+      if (!res.ok) {
+        setMessage(data.message || "تعذر تجهيز الطباعة.");
+        return;
+      }
+      setSheetPrintRows(data.items || []);
+      setPrintMode("sheet");
+      return;
+    }
+    const params = new URLSearchParams();
+    const query = filters.query.trim();
+    if (query) params.set("q", query);
+    if (filters.dateFrom) params.set("from", filters.dateFrom);
+    if (filters.dateTo) params.set("to", filters.dateTo);
+    if (filters.dateBasis === "saved") params.set("basis", "saved");
+    const status = normalizeFilterStatus(filters.status);
+    if (status && status !== "all") params.set("status", status);
+    if (filters.shipping && filters.shipping !== "all") params.set("shipping", filters.shipping);
+    if (filters.agentId && filters.agentId !== "all") params.set("agent", filters.agentId);
+    if (filters.payment && filters.payment !== "all") params.set("payment", filters.payment);
+    if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
+    if (filters.trackingFilter === "missing") params.set("tracking", "missing");
+    if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
+    params.set("all", "1");
+    const res = await fetch(`/api/cs/orders?${params.toString()}`);
+    const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تجهيز الطباعة.");
+      return;
+    }
+    let rows = data.items || [];
+    if (draft.duplicates === "only") {
+      const meta = buildDuplicateMeta(rows);
+      rows = rows.filter((item) => meta.has(item.id));
+    }
+    setSheetPrintRows(rows);
+    setPrintMode("queue");
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
@@ -1097,41 +1028,14 @@ export function CsQueueClient({
     );
   }
 
-  async function startTemimaPrint(scope: TemimaPrintScope) {
-    const dateFrom = printFrom || (isCourierSupervisor ? applied.dateFrom : cairoTodayYmd());
-    const dateTo = printTo || dateFrom;
-    const matchSayed = scope === "confirmed" || (Boolean(isCourierSupervisor) && scope === "all");
-    const res = await fetch(
-      `/api/cs/orders?sheet=temima&from=${encodeURIComponent(dateFrom)}&to=${encodeURIComponent(dateTo)}${matchSayed ? "&match=sayed" : ""}`,
-    );
-    const data = (await res.json()) as { items?: CsQueueItem[]; message?: string };
-    if (!res.ok) {
-      setMessage(data.message || "تعذر تجهيز شيت سيد.");
-      return;
-    }
-    if (matchSayed) {
-      setSheetPrintRows(data.items || []);
-    } else {
-      setSheetPrintRows(null);
-      if (data.items?.length) {
-        setItems((prev) => {
-          const byId = new Map(prev.map((item) => [item.id, item]));
-          for (const item of data.items || []) byId.set(item.id, item);
-          return [...byId.values()];
-        });
-      }
-    }
-    setTemimaScope(scope);
-    setTemimaAsk(false);
-    setPrintMode("sayed_temima");
-  }
-
   function resetFilters() {
     const next = isCourierSupervisor ? temimaSheetDraft() : defaultDraft();
     setDraft(next);
     setApplied(next);
     setAfterLastDistribution(false);
     setMessage("");
+    if (isCourierSupervisor) void loadSayedSheet(next);
+    else void loadQueue(next, 1);
   }
 
   return (
@@ -1155,16 +1059,16 @@ export function CsQueueClient({
               توزيع
             </Link>
           ) : null}
-          {isSupervisor && !isCourierSupervisor ? (
+          {canPrintQueue ? (
           <button
             type="button"
             onClick={() => {
-              setSheetPrintRows(null);
-              setPrintMode("bosta");
+              setPrintingCourierId(null);
+              void printApplied();
             }}
             className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
           >
-            طباعة بوسطة
+            طباعة
           </button>
           ) : null}
           {isCourierSupervisor ? (
@@ -1174,20 +1078,6 @@ export function CsQueueClient({
             >
               استلام بالسكان
             </Link>
-          ) : null}
-          {isSupervisor || isCourierSupervisor ? (
-          <button
-            type="button"
-            onClick={() => {
-              setPrintingCourierId(null);
-              setPrintFrom(isCourierSupervisor ? applied.dateFrom : cairoTodayYmd());
-              setPrintTo(isCourierSupervisor ? applied.dateTo : cairoTodayYmd());
-              setTemimaAsk(true);
-            }}
-            className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
-          >
-            طباعة تميمة
-          </button>
           ) : null}
           {isCourierSupervisor ? (
             <div className="flex shrink-0 items-center gap-2">
@@ -1209,24 +1099,13 @@ export function CsQueueClient({
                 onClick={() => {
                   setSheetPrintRows(null);
                   setPrintingCourierId(Number(courierPrintPick));
-                  setPrintMode("sayed_temima");
+                  setPrintMode("sheet");
                 }}
                 className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50 sm:py-2.5 sm:text-sm"
               >
                 طباعة المندوب
               </button>
             </div>
-          ) : isSupervisor ? (
-          <button
-            type="button"
-            onClick={() => {
-              setSheetPrintRows(null);
-              setPrintMode("all");
-            }}
-            className="shrink-0 rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D] sm:py-2.5 sm:text-sm"
-          >
-            طباعة الكل
-          </button>
           ) : null}
           <button
             type="button"
@@ -1239,69 +1118,13 @@ export function CsQueueClient({
         </div>
       </div>
 
-      {temimaAsk ? (
-        <div className="no-print flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
-          <p className="text-sm font-extrabold text-[#14213D]">طباعة تميمة:</p>
-          <label className="flex items-center gap-1 text-xs font-bold text-[#14213D]">
-            من
-            <input type="date" max={dateMaxYmd()} value={printFrom} onChange={(event) => setPrintFrom(event.target.value)} className="h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2" />
-          </label>
-          <label className="flex items-center gap-1 text-xs font-bold text-[#14213D]">
-            إلى
-            <input type="date" max={dateMaxYmd()} value={printTo} onChange={(event) => setPrintTo(event.target.value)} className="h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2" />
-          </label>
-          <button
-            type="button"
-            onClick={() => void startTemimaPrint("confirmed")}
-            className="rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black"
-          >
-            شيت سيد
-          </button>
-          {isSupervisor && !isCourierSupervisor ? (
-            <button
-              type="button"
-              onClick={() => void startTemimaPrint("handed")}
-              className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white"
-            >
-              تم تسليمه
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void startTemimaPrint("all")}
-            className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white"
-          >
-            الكل
-          </button>
-          {isSupervisor && !isCourierSupervisor ? (
-            <button
-              type="button"
-              onClick={() => void startTemimaPrint("late")}
-              className="rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D]"
-            >
-              الشيت التاني
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setTemimaAsk(false)}
-            className="rounded-xl bg-[#E5E5E5] px-3 py-2 text-xs font-extrabold text-[#14213D]"
-          >
-            إلغاء
-          </button>
-        </div>
-      ) : null}
-
       {canSetTemimaCutoff ? (
         <TemimaCutoffBox
           cutoffs={cutoffs}
           hour={cutoffHour}
           minute={cutoffMinute}
           busy={cutoffBusy}
-          onHour={(value) => {
-            setCutoffHour(value);
-            if (value === "16") setCutoffMinute("0");
-          }}
+          onHour={setCutoffHour}
           onMinute={setCutoffMinute}
           onLock={async () => {
             setCutoffBusy(true);
@@ -1310,7 +1133,7 @@ export function CsQueueClient({
             const res = await fetch("/api/cs/temima-cutoff", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ hour: Number(cutoffHour), minute: cutoffHour === "16" ? 0 : Number(cutoffMinute) }),
+              body: JSON.stringify({ hour: Number(cutoffHour), minute: Number(cutoffMinute) }),
             });
             const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
             setCutoffBusy(false);
@@ -1339,7 +1162,14 @@ export function CsQueueClient({
           />
           <select
             value={normalizeFilterStatus(draft.status)}
-            onChange={(e) => patchDraft({ status: e.target.value, followUp: "all" })}
+            onChange={(e) =>
+              patchDraft({
+                status: e.target.value,
+                followUp: "all",
+                dateBasis:
+                  e.target.value === "CONFIRMED" && draft.shipping === "sayed_temima" ? "saved" : draft.dateBasis,
+              })
+            }
             className={FILTER_CONTROL}
           >
             <option value="all">حالة الأوردر</option>
@@ -1414,7 +1244,15 @@ export function CsQueueClient({
           {isCourierSupervisor ? null : (
           <select
             value={draft.shipping}
-            onChange={(e) => patchDraft({ shipping: e.target.value })}
+            onChange={(e) =>
+              patchDraft({
+                shipping: e.target.value,
+                dateBasis:
+                  e.target.value === "sayed_temima" && normalizeFilterStatus(draft.status) === "CONFIRMED"
+                    ? "saved"
+                    : draft.dateBasis,
+              })
+            }
             className={FILTER_CONTROL}
           >
             <option value="all">كل شركات الشحن</option>
@@ -1879,19 +1717,17 @@ export function CsQueueClient({
       <div className="print-only hidden">
         <h1 className="mb-2 text-center text-lg font-bold">
           شيت مخزن —{" "}
-          {printMode === "bosta"
-            ? "بوسطة"
-            : printMode === "sayed_temima"
-              ? printingCourierId
-                ? `سيد تميمة — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
-                : "سيد تميمة"
-              : "كل الشركات"}
+          {printMode === "sheet"
+            ? printingCourierId
+              ? `سيد تميمة — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
+              : "سيد تميمة"
+            : "قائمة الطلبات"}
         </h1>
         <p className="mb-2 text-center text-xs">
           {applied.dateFrom === applied.dateTo ? applied.dateFrom : `${applied.dateFrom} → ${applied.dateTo}`} ·{" "}
           {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
         </p>
-        {printMode === "sayed_temima" ? (
+        {printMode === "sheet" ? (
           <>
             <table className="w-full border-collapse text-[10px]">
               <thead>

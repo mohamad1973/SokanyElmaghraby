@@ -12,7 +12,7 @@ import {
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { resolveHandedToCarrierAt } from "@/lib/cs/temima-sheet";
+import { resolveHandedToCarrierAt, SAYED_SHEET_JOIN_SQL, sayedSheetMembershipSql } from "@/lib/cs/temima-sheet";
 import { attachBostaWaybillByOrderReference, syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import {
   parseWooOrderNumber,
@@ -569,14 +569,15 @@ export async function listCsQueuePage(opts: {
   waybill?: string;
   page?: number;
   limit?: number;
+  all?: boolean;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { items: [], total: 0, page: 1, pageSize: CS_QUEUE_PAGE_SIZE, hasMore: false };
   await ensureCsTables();
 
   const seeAll = Boolean(opts.isSupervisor || opts.seeAll);
-  const pageSize = Math.min(CS_QUEUE_PAGE_SIZE, Math.max(1, opts.limit || CS_QUEUE_PAGE_SIZE));
-  const page = Math.max(1, Math.floor(opts.page || 1));
+  const pageSize = opts.all ? 5000 : Math.min(CS_QUEUE_PAGE_SIZE, Math.max(1, opts.limit || CS_QUEUE_PAGE_SIZE));
+  const page = opts.all ? 1 : Math.max(1, Math.floor(opts.page || 1));
   const offset = (page - 1) * pageSize;
   const where: string[] = [];
   const params: Array<string | number | Date> = [];
@@ -591,12 +592,21 @@ export async function listCsQueuePage(opts: {
   const status = QUEUE_STATUSES.has(opts.status || "") ? String(opts.status) : "all";
   const fromBounds = isQueueYmd(dateFrom) ? cairoYmdBounds(dateFrom) : null;
   const toBounds = isQueueYmd(dateTo) ? cairoYmdBounds(dateTo) : null;
+  const sheetMode =
+    status === "CONFIRMED" &&
+    opts.shipping === "sayed_temima" &&
+    opts.dateBasis === "saved" &&
+    isQueueYmd(dateFrom) &&
+    isQueueYmd(dateTo);
   if (query) {
     const pattern = queueLikePattern(query);
     where.push("(wooOrderNumber LIKE ? OR CAST(customerSnapshot AS CHAR) LIKE ?)");
     params.push(pattern, pattern);
   }
-  if (status === "DISTRIBUTED") {
+  if (sheetMode) {
+    where.push(sayedSheetMembershipSql());
+    params.push(dateFrom, dateTo, dateFrom, dateTo);
+  } else if (status === "DISTRIBUTED") {
     where.push("assignedAgentId IS NOT NULL");
     if (fromBounds && toBounds) {
       where.push(`EXISTS (
@@ -636,7 +646,7 @@ export async function listCsQueuePage(opts: {
       );
     }
   }
-  if (status !== "all" && status !== "DISTRIBUTED") {
+  if (!sheetMode && status !== "all" && status !== "DISTRIBUTED") {
     where.push("status = ?");
     params.push(status);
   }
@@ -655,7 +665,7 @@ export async function listCsQueuePage(opts: {
     );
     params.push(payment);
   }
-  if (opts.shipping === "bosta" || opts.shipping === "sayed_temima") {
+  if (!sheetMode && (opts.shipping === "bosta" || opts.shipping === "sayed_temima")) {
     where.push("shippingCompany = ?");
     params.push(opts.shipping);
   }
@@ -677,13 +687,14 @@ export async function listCsQueuePage(opts: {
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const fromSql = `FROM CsOrderConfirmation ${sheetMode ? SAYED_SHEET_JOIN_SQL : ""}`;
   const counted = await prisma.$queryRawUnsafe<Array<{ n: bigint | number }>>(
-    `SELECT COUNT(*) AS n FROM CsOrderConfirmation ${whereSql}`,
+    `SELECT COUNT(*) AS n ${fromSql} ${whereSql}`,
     ...params,
   );
   const total = Number(counted[0]?.n ?? 0);
   const idRows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
-    `SELECT id FROM CsOrderConfirmation ${whereSql} ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`,
+    `SELECT CsOrderConfirmation.id AS id ${fromSql} ${whereSql} ORDER BY CsOrderConfirmation.id DESC LIMIT ${pageSize} OFFSET ${offset}`,
     ...params,
   );
   const pageIds = idRows.map((row) => Number(row.id));
