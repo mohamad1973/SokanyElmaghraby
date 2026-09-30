@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
-import { cairoClock } from "@/lib/cs/order-window";
+import { cairoClock, cairoTodayYmd } from "@/lib/cs/order-window";
 import { type TemimaCutoff } from "@/lib/cs/temima-sheet";
 
 export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
@@ -15,13 +15,22 @@ export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
   return rows.map((row) => ({ dayYmd: row.dayYmd, minutes: row.minutes }));
 }
 
-export async function lockTemimaCutoff() {
+export async function lockTemimaCutoff(chosenMinutes?: number) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  const clock = cairoClock(new Date().toISOString());
-  if (!clock) return { ok: false as const, message: "الساعة غير صحيحة." };
-  const dayYmd = clock.ymd;
-  const minutes = clock.minutes;
+  let dayYmd = "";
+  let minutes = 0;
+  if (chosenMinutes == null) {
+    const clock = cairoClock(new Date().toISOString());
+    if (!clock) return { ok: false as const, message: "الساعة غير صحيحة." };
+    dayYmd = clock.ymd;
+    minutes = clock.minutes;
+  } else if (!Number.isInteger(chosenMinutes) || chosenMinutes < 0 || chosenMinutes > 23 * 60 + 59) {
+    return { ok: false as const, message: "الساعة غير صحيحة." };
+  } else {
+    dayYmd = cairoTodayYmd();
+    minutes = chosenMinutes;
+  }
   await prisma.csTemimaSheetCutoff.upsert({
     where: { dayYmd },
     create: { dayYmd, minutes },

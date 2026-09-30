@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
+  cairoClock,
   cairoTodayYmd,
   cairoYesterdayYmd,
   formatCairoOrderDate,
@@ -17,7 +18,8 @@ import {
 } from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
-  formatCutoffMinutes,
+  cutoffMinutesFrom12,
+  formatCutoffClock12,
   onUnifiedSayedSheet,
   type TemimaCutoff,
   type TemimaSheetEdit,
@@ -530,33 +532,122 @@ function InvoiceBox({
   );
 }
 
+function clockParts(totalMinutes: number) {
+  const hour24 = Math.floor(totalMinutes / 60);
+  return {
+    hour12: hour24 % 12 || 12,
+    minute: totalMinutes % 60,
+    period: (hour24 < 12 ? "ص" : "م") as "ص" | "م",
+  };
+}
+
 function TemimaCutoffBox({
   cutoffs,
   busy,
-  onLock,
+  onLockNow,
+  onLockMinutes,
 }: {
   cutoffs: TemimaCutoff[];
   busy: boolean;
-  onLock: () => Promise<void>;
+  onLockNow: () => Promise<void>;
+  onLockMinutes: (minutes: number) => Promise<void>;
 }) {
   const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
+  const seed = today?.minutes ?? cairoClock(new Date().toISOString())?.minutes ?? 0;
+  const seeded = clockParts(seed);
+  const [hour12, setHour12] = useState(seeded.hour12);
+  const [minute, setMinute] = useState(seeded.minute);
+  const [period, setPeriod] = useState<"ص" | "م">(seeded.period);
+  const [step, setStep] = useState<"hour" | "minute" | null>(null);
+
+  useEffect(() => {
+    if (today == null) return;
+    const parts = clockParts(today.minutes);
+    setHour12(parts.hour12);
+    setMinute(parts.minute);
+    setPeriod(parts.period);
+  }, [today?.dayYmd, today?.minutes]);
+
+  function save(nextHour: number, nextMinute: number, nextPeriod: "ص" | "م") {
+    const total = cutoffMinutesFrom12(nextHour, nextMinute, nextPeriod);
+    if (total == null || busy) return;
+    setStep(null);
+    void onLockMinutes(total);
+  }
+
+  const face = step === "hour" ? Array.from({ length: 12 }, (_, index) => index + 1) : Array.from({ length: 60 }, (_, index) => index);
   return (
-    <form
-      className="no-print flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void onLock();
-      }}
-    >
-      <p className="w-full text-sm font-extrabold text-[#14213D]">
-        {today
-          ? `شيت سيد مقفول النهاردة عند ${formatCutoffMinutes(today.minutes)}. ضغطة الآن تسجّل لحظة الضغط.`
-          : "قفل شيت سيد تميمة"}
+    <div className="no-print rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+      <p className="text-sm font-extrabold text-[#14213D]">
+        {today ? `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(today.minutes)}.` : "قفل شيت سيد تميمة"}
       </p>
-      <button type="submit" disabled={busy} className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60">
-        {busy ? "جاري التحميل" : "الآن"}
-      </button>
-    </form>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setStep(step === "hour" ? null : "hour")}
+          className="h-9 min-w-10 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-sm font-extrabold text-[#14213D]"
+        >
+          {hour12}
+        </button>
+        <span className="text-sm font-extrabold text-[#14213D]">:</span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setStep(step === "minute" ? null : "minute")}
+          className="h-9 min-w-10 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-sm font-extrabold text-[#14213D]"
+        >
+          {String(minute).padStart(2, "0")}
+        </button>
+        <div className="flex overflow-hidden rounded-lg border border-[#E5E5E5]">
+          {(["ص", "م"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setPeriod(value);
+                if (today) save(hour12, minute, value);
+              }}
+              className={`h-9 px-2 text-xs font-extrabold ${period === value ? "bg-[#14213D] text-white" : "bg-[#F5F5F0] text-[#14213D]"}`}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void onLockNow()}
+          className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
+        >
+          {busy ? "جاري التحميل" : "الآن"}
+        </button>
+      </div>
+      {step ? (
+        <div className={`mt-2 grid gap-1 ${step === "hour" ? "grid-cols-6" : "grid-cols-6 sm:grid-cols-10"}`}>
+          {face.map((value) => (
+            <button
+              key={value}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (step === "hour") {
+                  setHour12(value);
+                  setStep("minute");
+                  return;
+                }
+                setMinute(value);
+                save(hour12, value, period);
+              }}
+              className="h-8 rounded-lg bg-[#F5F5F0] text-xs font-extrabold text-[#14213D] hover:bg-[#FCA311]"
+            >
+              {step === "minute" ? String(value).padStart(2, "0") : value}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -628,6 +719,30 @@ export function CsQueueClient({
   const [sheetEditBusy, setSheetEditBusy] = useState(false);
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
+
+  async function lockCutoff(body: { now: true } | { minutes: number }) {
+    setCutoffBusy(true);
+    setMessage("");
+    const hadToday = cutoffs.some((row) => row.dayYmd === cairoTodayYmd());
+    const res = await fetch("/api/cs/temima-cutoff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
+    setCutoffBusy(false);
+    if (!res.ok || !data.dayYmd || data.minutes == null) {
+      setMessage(data.message || "تعذر حفظ الوقت.");
+      return;
+    }
+    setCutoffs((prev) => {
+      const next = prev.filter((row) => row.dayYmd !== data.dayYmd);
+      next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
+      return next;
+    });
+    const clock = formatCutoffClock12(data.minutes);
+    setMessage(hadToday ? `اتعدل وقت قفل الشيت إلى ${clock}.` : `شيت سيد اتقفل النهاردة عند ${clock}.`);
+  }
 
   const syncingRef = useRef(false);
   const searchWasActive = useRef(false);
@@ -1104,29 +1219,8 @@ export function CsQueueClient({
         <TemimaCutoffBox
           cutoffs={cutoffs}
           busy={cutoffBusy}
-          onLock={async () => {
-            setCutoffBusy(true);
-            setMessage("");
-            const hadToday = cutoffs.some((row) => row.dayYmd === cairoTodayYmd());
-            const res = await fetch("/api/cs/temima-cutoff", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ now: true }),
-            });
-            const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
-            setCutoffBusy(false);
-            if (!res.ok || !data.dayYmd || data.minutes == null) {
-              setMessage(data.message || "تعذر حفظ الوقت.");
-              return;
-            }
-            setCutoffs((prev) => {
-              const next = prev.filter((row) => row.dayYmd !== data.dayYmd);
-              next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
-              return next;
-            });
-            const clock = formatCutoffMinutes(data.minutes);
-            setMessage(hadToday ? `اتعدل وقت قفل الشيت إلى ${clock}.` : `شيت سيد اتقفل النهاردة عند ${clock}.`);
-          }}
+          onLockNow={() => lockCutoff({ now: true })}
+          onLockMinutes={(minutes) => lockCutoff({ minutes })}
         />
       ) : null}
 

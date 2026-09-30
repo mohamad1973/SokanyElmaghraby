@@ -32,6 +32,21 @@ export function formatCutoffMinutes(minutes: number) {
   return `${hour}:${String(minute).padStart(2, "0")}`;
 }
 
+export function formatCutoffClock12(minutes: number) {
+  const hour24 = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const hour12 = hour24 % 12 || 12;
+  const period = hour24 < 12 ? "ص" : "م";
+  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+export function cutoffMinutesFrom12(hour12: number, minute: number, period: "ص" | "م") {
+  if (!Number.isInteger(hour12) || hour12 < 1 || hour12 > 12) return null;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+  const hour24 = period === "ص" ? (hour12 === 12 ? 0 : hour12) : hour12 === 12 ? 12 : hour12 + 12;
+  return hour24 * 60 + minute;
+}
+
 function clockOf(value: string | Date | null | undefined) {
   const iso = value instanceof Date ? value.toISOString() : value;
   return cairoClock(iso);
