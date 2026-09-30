@@ -18,7 +18,6 @@ import {
 } from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
-  cutoffMinutesFrom12,
   formatCutoffClock12,
   onUnifiedSayedSheet,
   type TemimaCutoff,
@@ -532,13 +531,17 @@ function InvoiceBox({
   );
 }
 
-function clockParts(totalMinutes: number) {
-  const hour24 = Math.floor(totalMinutes / 60);
-  return {
-    hour12: hour24 % 12 || 12,
-    minute: totalMinutes % 60,
-    period: (hour24 < 12 ? "ص" : "م") as "ص" | "م",
-  };
+function minutesToTimeValue(totalMinutes: number) {
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function timeValueToMinutes(value: string) {
+  const [hour, minute] = value.split(":").map((part) => Number(part));
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
 }
 
 function TemimaCutoffBox({
@@ -553,29 +556,25 @@ function TemimaCutoffBox({
   onLockMinutes: (minutes: number) => Promise<void>;
 }) {
   const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
-  const seed = today?.minutes ?? cairoClock(new Date().toISOString())?.minutes ?? 0;
-  const seeded = clockParts(seed);
-  const [hour12, setHour12] = useState(seeded.hour12);
-  const [minute, setMinute] = useState(seeded.minute);
-  const [period, setPeriod] = useState<"ص" | "م">(seeded.period);
-  const [step, setStep] = useState<"hour" | "minute" | null>(null);
+  const shown = today?.minutes ?? cairoClock(new Date().toISOString())?.minutes ?? 0;
+  const picker = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (today == null) return;
-    const parts = clockParts(today.minutes);
-    setHour12(parts.hour12);
-    setMinute(parts.minute);
-    setPeriod(parts.period);
-  }, [today?.dayYmd, today?.minutes]);
-
-  function save(nextHour: number, nextMinute: number, nextPeriod: "ص" | "م") {
-    const total = cutoffMinutesFrom12(nextHour, nextMinute, nextPeriod);
-    if (total == null || busy) return;
-    setStep(null);
-    void onLockMinutes(total);
+  function openPicker() {
+    const input = picker.current;
+    if (!input || busy) return;
+    const showPicker = input.showPicker?.bind(input);
+    if (showPicker) {
+      try {
+        showPicker();
+        return;
+      } catch {
+        input.click();
+        return;
+      }
+    }
+    input.click();
   }
 
-  const face = step === "hour" ? Array.from({ length: 12 }, (_, index) => index + 1) : Array.from({ length: 60 }, (_, index) => index);
   return (
     <div className="no-print rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
       <p className="text-sm font-extrabold text-[#14213D]">
@@ -585,36 +584,24 @@ function TemimaCutoffBox({
         <button
           type="button"
           disabled={busy}
-          onClick={() => setStep(step === "hour" ? null : "hour")}
-          className="h-9 min-w-10 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-sm font-extrabold text-[#14213D]"
+          onClick={openPicker}
+          className="h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-extrabold text-[#14213D] disabled:opacity-60"
         >
-          {hour12}
+          {formatCutoffClock12(shown)}
         </button>
-        <span className="text-sm font-extrabold text-[#14213D]">:</span>
-        <button
-          type="button"
+        <input
+          ref={picker}
+          type="time"
+          tabIndex={-1}
           disabled={busy}
-          onClick={() => setStep(step === "minute" ? null : "minute")}
-          className="h-9 min-w-10 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-sm font-extrabold text-[#14213D]"
-        >
-          {String(minute).padStart(2, "0")}
-        </button>
-        <div className="flex overflow-hidden rounded-lg border border-[#E5E5E5]">
-          {(["ص", "م"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setPeriod(value);
-                if (today) save(hour12, minute, value);
-              }}
-              className={`h-9 px-2 text-xs font-extrabold ${period === value ? "bg-[#14213D] text-white" : "bg-[#F5F5F0] text-[#14213D]"}`}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
+          value={minutesToTimeValue(shown)}
+          onChange={(event) => {
+            const total = timeValueToMinutes(event.target.value);
+            if (total == null || busy) return;
+            void onLockMinutes(total);
+          }}
+          className="sr-only"
+        />
         <button
           type="button"
           disabled={busy}
@@ -624,29 +611,6 @@ function TemimaCutoffBox({
           {busy ? "جاري التحميل" : "الآن"}
         </button>
       </div>
-      {step ? (
-        <div className={`mt-2 grid gap-1 ${step === "hour" ? "grid-cols-6" : "grid-cols-6 sm:grid-cols-10"}`}>
-          {face.map((value) => (
-            <button
-              key={value}
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                if (step === "hour") {
-                  setHour12(value);
-                  setStep("minute");
-                  return;
-                }
-                setMinute(value);
-                save(hour12, value, period);
-              }}
-              className="h-8 rounded-lg bg-[#F5F5F0] text-xs font-extrabold text-[#14213D] hover:bg-[#FCA311]"
-            >
-              {step === "minute" ? String(value).padStart(2, "0") : value}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
