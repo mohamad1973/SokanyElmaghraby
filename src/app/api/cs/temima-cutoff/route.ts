@@ -25,7 +25,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const viewer = await viewerOrNull();
   if (!viewer) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
-  const body = (await request.json().catch(() => null)) as { hour?: number; minute?: number } | null;
-  const result = await lockTemimaCutoff(Number(body?.hour), Number(body?.minute));
+  const body = (await request.json().catch(() => null)) as { now?: boolean } | null;
+  if (!body?.now) return NextResponse.json({ message: "الساعة غير صحيحة." }, { status: 400 });
+  const result = await lockTemimaCutoff();
   return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
 }

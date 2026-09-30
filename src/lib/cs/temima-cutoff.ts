@@ -1,8 +1,8 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
-import { cairoTodayYmd } from "@/lib/cs/order-window";
-import { cutoffMinutes, isValidTemimaCutoff, type TemimaCutoff } from "@/lib/cs/temima-sheet";
+import { cairoClock } from "@/lib/cs/order-window";
+import { type TemimaCutoff } from "@/lib/cs/temima-sheet";
 
 export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
   const prisma = getPrismaClient();
@@ -15,14 +15,13 @@ export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
   return rows.map((row) => ({ dayYmd: row.dayYmd, minutes: row.minutes }));
 }
 
-export async function lockTemimaCutoff(hour: number, minute: number) {
+export async function lockTemimaCutoff() {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  if (!isValidTemimaCutoff(hour, minute)) {
-    return { ok: false as const, message: "الساعة غير صحيحة." };
-  }
-  const dayYmd = cairoTodayYmd();
-  const minutes = cutoffMinutes(hour, minute);
+  const clock = cairoClock(new Date().toISOString());
+  if (!clock) return { ok: false as const, message: "الساعة غير صحيحة." };
+  const dayYmd = clock.ymd;
+  const minutes = clock.minutes;
   await prisma.csTemimaSheetCutoff.upsert({
     where: { dayYmd },
     create: { dayYmd, minutes },

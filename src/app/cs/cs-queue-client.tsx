@@ -7,7 +7,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
-  cairoOffsetClock,
   cairoTodayYmd,
   cairoYesterdayYmd,
   formatCairoOrderDate,
@@ -533,27 +532,17 @@ function InvoiceBox({
 
 function TemimaCutoffBox({
   cutoffs,
-  hour,
-  minute,
   busy,
-  onHour,
-  onMinute,
   onLock,
 }: {
   cutoffs: TemimaCutoff[];
-  hour: string;
-  minute: string;
   busy: boolean;
-  onHour: (value: string) => void;
-  onMinute: (value: string) => void;
   onLock: () => Promise<void>;
 }) {
   const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
-  const hours = Array.from({ length: 24 }, (_, index) => index);
-  const minutes = Array.from({ length: 60 }, (_, index) => index);
   return (
     <form
-      className="no-print flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
+      className="no-print flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
       onSubmit={(event) => {
         event.preventDefault();
         void onLock();
@@ -561,27 +550,11 @@ function TemimaCutoffBox({
     >
       <p className="w-full text-sm font-extrabold text-[#14213D]">
         {today
-          ? `شيت سيد مقفول النهاردة عند ${formatCutoffMinutes(today.minutes)}. تقدر تعدّلي الوقت لو اتقفل بالغلط.`
+          ? `شيت سيد مقفول النهاردة عند ${formatCutoffMinutes(today.minutes)}. ضغطة الآن تسجّل لحظة الضغط.`
           : "قفل شيت سيد تميمة"}
       </p>
-      <label className="text-xs font-bold text-[#14213D]">
-        الساعة
-        <select value={hour} onChange={(event) => onHour(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
-          {hours.map((value) => (
-            <option key={value} value={String(value)}>{value}</option>
-          ))}
-        </select>
-      </label>
-      <label className="text-xs font-bold text-[#14213D]">
-        الدقيقة
-        <select value={minute} onChange={(event) => onMinute(event.target.value)} className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2">
-          {minutes.map((value) => (
-            <option key={value} value={String(value)}>{String(value).padStart(2, "0")}</option>
-          ))}
-        </select>
-      </label>
       <button type="submit" disabled={busy} className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60">
-        {busy ? "جاري التحميل" : today ? "تعديل الوقت" : "قفل الشيت"}
+        {busy ? "جاري التحميل" : "الآن"}
       </button>
     </form>
   );
@@ -653,14 +626,6 @@ export function CsQueueClient({
   const [addSearchState, setAddSearchState] = useState<"idle" | "loading" | "done">("idle");
   const addSearchSeq = useRef(0);
   const [sheetEditBusy, setSheetEditBusy] = useState(false);
-  const savedCutoff = temimaCutoffs.find((row) => row.dayYmd === cairoTodayYmd());
-  const nowClock = cairoOffsetClock(new Date());
-  const [cutoffHour, setCutoffHour] = useState(
-    savedCutoff ? String(Math.floor(savedCutoff.minutes / 60)) : String(Math.floor((nowClock?.minutes ?? 0) / 60)),
-  );
-  const [cutoffMinute, setCutoffMinute] = useState(
-    savedCutoff ? String(savedCutoff.minutes % 60) : String((nowClock?.minutes ?? 0) % 60),
-  );
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
 
@@ -1138,11 +1103,7 @@ export function CsQueueClient({
       {canSetTemimaCutoff ? (
         <TemimaCutoffBox
           cutoffs={cutoffs}
-          hour={cutoffHour}
-          minute={cutoffMinute}
           busy={cutoffBusy}
-          onHour={setCutoffHour}
-          onMinute={setCutoffMinute}
           onLock={async () => {
             setCutoffBusy(true);
             setMessage("");
@@ -1150,7 +1111,7 @@ export function CsQueueClient({
             const res = await fetch("/api/cs/temima-cutoff", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ hour: Number(cutoffHour), minute: Number(cutoffMinute) }),
+              body: JSON.stringify({ now: true }),
             });
             const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
             setCutoffBusy(false);
