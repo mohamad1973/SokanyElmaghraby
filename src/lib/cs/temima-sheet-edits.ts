@@ -2,7 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
-import { addCairoYmdDays, cairoYmdBounds } from "@/lib/cs/order-window";
+import { cairoYmdBounds } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
@@ -125,18 +125,17 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
   const prisma = getPrismaClient();
   if (!prisma) return [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
-  const saveFrom = cairoYmdBounds(addCairoYmdDays(dateFrom, -1));
-  const handFrom = cairoYmdBounds(dateFrom);
+  const from = cairoYmdBounds(dateFrom);
   const to = cairoYmdBounds(dateTo);
-  if (!saveFrom || !handFrom || !to) return [];
+  if (!from || !to) return [];
   const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
   const rows = await prisma.csOrderConfirmation.findMany({
     where: {
       status: "CONFIRMED",
       shippingCompany: "sayed_temima",
       OR: [
-        { confirmedAt: { gte: saveFrom.start, lt: to.endExclusive } },
-        { handedToCarrierAt: { gte: handFrom.start, lt: to.endExclusive } },
+        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
+        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
       ],
     },
     select: SHEET_PICK,

@@ -1,4 +1,4 @@
-import { addCairoYmdDays, cairoClock, cairoOffsetClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
+import { cairoClock, cairoOffsetClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
 
 export type TemimaSheetEdit = {
   dayYmd: string;
@@ -113,8 +113,6 @@ function isoOf(value: string | Date | null | undefined) {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-const SHEET_OPEN_MINUTES = 8 * 60;
-
 type SheetOrder = {
   shippingCompany?: string | null;
   status?: string | null;
@@ -129,48 +127,26 @@ function temimaConfirmed(order: SheetOrder) {
   return true;
 }
 
-/** True once 08:00 Cairo of that sheet day has passed, including when the day itself is in the past. */
-function sheetMorningOpen(dayYmd: string, now = new Date()) {
-  const clock = cairoOffsetClock(now);
-  if (!clock || !dayYmd) return false;
-  if (clock.ymd > dayYmd) return true;
-  if (clock.ymd < dayYmd) return false;
-  return clock.minutes >= SHEET_OPEN_MINUTES;
+/** Calendar day the order was handed to the carrier. That day replaces the save day. */
+function handoffSheetYmd(order: SheetOrder): string | null {
+  if (!temimaConfirmed(order)) return null;
+  if (order.handedToCarrier === false) return null;
+  return cairoOffsetClock(order.handedToCarrierAt)?.ymd || null;
 }
 
-/** Next calendar day when the first save is at or after that day's close. Later edits do not move it. */
-function rolledSheetYmd(order: SheetOrder, cutoffs: TemimaCutoff[]) {
+/** Save day when the first save is before that day's close. A save after close is not on a sheet. */
+function saveBeforeCloseYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
   if (!temimaConfirmed(order)) return null;
   const save = cairoOffsetClock(order.confirmedAt);
   if (!save) return null;
   const cutoff = cutoffs.find((row) => row.dayYmd === save.ymd) || null;
-  if (!cutoff || save.minutes < cutoff.minutes) return null;
-  return addCairoYmdDays(save.ymd, 1);
-}
-
-/** Sheet day from the first save. After a close, the order stays hidden until 08:00 the next morning. */
-export function sayedSheetYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
-  if (!temimaConfirmed(order)) return null;
-  const rolled = rolledSheetYmd(order, cutoffs);
-  if (rolled) return sheetMorningOpen(rolled) ? rolled : null;
-  const save = cairoOffsetClock(order.confirmedAt);
-  if (!save) return null;
-  if (save.minutes < SHEET_OPEN_MINUTES) {
-    const prevClosed = cutoffs.some((row) => row.dayYmd === addCairoYmdDays(save.ymd, -1));
-    if (prevClosed && !sheetMorningOpen(save.ymd)) return null;
-  }
+  if (cutoff && save.minutes >= cutoff.minutes) return null;
   return save.ymd;
 }
 
-/** Handoff day when the transfer is before that day's close. A closed minute does not count. */
-function handoffSheetYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
-  if (!temimaConfirmed(order)) return null;
-  if (order.handedToCarrier === false) return null;
-  const hand = cairoOffsetClock(order.handedToCarrierAt);
-  if (!hand) return null;
-  const cutoff = cutoffs.find((row) => row.dayYmd === hand.ymd) || null;
-  if (cutoff && hand.minutes >= cutoff.minutes) return null;
-  return hand.ymd;
+/** One sheet day: the handoff day, otherwise the save day before close. */
+export function sayedSheetYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
+  return handoffSheetYmd(order) || saveBeforeCloseYmd(order, cutoffs);
 }
 
 function editKind(confirmationId: number, dayYmd: string, edits: TemimaSheetEdit[]) {
@@ -217,28 +193,8 @@ export function onUnifiedSayedSheet(
     if (kind === "include") return true;
     if (kind === "exclude") return false;
   }
-  const rolled = rolledSheetYmd(order, cutoffs);
-  if (rolled) {
-    if (
-      sheetMorningOpen(rolled) &&
-      rolled >= dateFrom &&
-      rolled <= dateTo &&
-      editKind(order.id, rolled, edits) !== "exclude"
-    ) {
-      return true;
-    }
-    return edits.some(
-      (row) =>
-        row.kind === "include" &&
-        row.confirmationId === order.id &&
-        row.dayYmd >= dateFrom &&
-        row.dayYmd <= dateTo,
-    );
-  }
   const day = sayedSheetYmd(order, cutoffs);
   if (day && day >= dateFrom && day <= dateTo && editKind(order.id, day, edits) !== "exclude") return true;
-  const handed = handoffSheetYmd(order, cutoffs);
-  if (handed && handed >= dateFrom && handed <= dateTo && editKind(order.id, handed, edits) !== "exclude") return true;
   return edits.some(
     (row) =>
       row.kind === "include" &&
