@@ -1,4 +1,4 @@
-import { cairoClock, cairoOffsetClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
+import { cairoClock, isWithinCairoDateRange } from "@/lib/cs/order-window";
 
 export type TemimaSheetEdit = {
   dayYmd: string;
@@ -127,26 +127,38 @@ function temimaConfirmed(order: SheetOrder) {
   return true;
 }
 
-/** Calendar day the order was handed to the carrier. That day replaces the save day. */
+/** Calendar day the order was handed to the carrier, on the Cairo clock. */
 function handoffSheetYmd(order: SheetOrder): string | null {
   if (!temimaConfirmed(order)) return null;
   if (order.handedToCarrier === false) return null;
-  return cairoOffsetClock(order.handedToCarrierAt)?.ymd || null;
+  return clockOf(order.handedToCarrierAt)?.ymd || null;
+}
+
+/** True when the first save is at or after that day's close. No close means the day is still open. */
+function savedAtOrAfterClose(order: SheetOrder, cutoffs: TemimaCutoff[]) {
+  const save = clockOf(order.confirmedAt);
+  if (!save) return false;
+  const cutoff = cutoffs.find((row) => row.dayYmd === save.ymd) || null;
+  return Boolean(cutoff && save.minutes >= cutoff.minutes);
 }
 
 /** Save day when the first save is before that day's close. A save after close is not on a sheet. */
 function saveBeforeCloseYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
   if (!temimaConfirmed(order)) return null;
-  const save = cairoOffsetClock(order.confirmedAt);
-  if (!save) return null;
-  const cutoff = cutoffs.find((row) => row.dayYmd === save.ymd) || null;
-  if (cutoff && save.minutes >= cutoff.minutes) return null;
-  return save.ymd;
+  if (savedAtOrAfterClose(order, cutoffs)) return null;
+  return clockOf(order.confirmedAt)?.ymd || null;
 }
 
-/** One sheet day: the handoff day, otherwise the save day before close. */
+/**
+ * Sheet day is the handoff day, otherwise the save day before close.
+ * A same-day handoff does not put back an order whose first save was at or after the close.
+ * A handoff on a different day still moves the order to that day.
+ */
 export function sayedSheetYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
-  return handoffSheetYmd(order) || saveBeforeCloseYmd(order, cutoffs);
+  const handed = handoffSheetYmd(order);
+  const saveDay = clockOf(order.confirmedAt)?.ymd || "";
+  if (handed && !(handed === saveDay && savedAtOrAfterClose(order, cutoffs))) return handed;
+  return saveBeforeCloseYmd(order, cutoffs);
 }
 
 function editKind(confirmationId: number, dayYmd: string, edits: TemimaSheetEdit[]) {
