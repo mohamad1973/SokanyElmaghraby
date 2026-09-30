@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { listTemimaCutoffs, lockTemimaCutoff } from "@/lib/cs/temima-cutoff";
+import { captureTemimaSheetFreeze } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function viewerOrNull() {
@@ -30,5 +31,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "الساعة غير صحيحة." }, { status: 400 });
   }
   const result = body.now ? await lockTemimaCutoff() : await lockTemimaCutoff(body.minutes);
+  if (result.ok && !result.frozen) await captureTemimaSheetFreeze(result.dayYmd);
   return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
 }

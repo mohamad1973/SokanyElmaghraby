@@ -230,7 +230,9 @@ function applyCourierSupervisorSheet(
   cutoffs: TemimaCutoff[],
   edits: TemimaSheetEdit[],
 ) {
-  let rows = items.filter((item) => onUnifiedSayedSheet(item, f.dateFrom, f.dateTo, cutoffs, edits));
+  const closedDay =
+    Boolean(f.dateFrom) && f.dateFrom === f.dateTo && cutoffs.some((row) => row.dayYmd === f.dateFrom);
+  let rows = closedDay ? items.slice() : items.filter((item) => onUnifiedSayedSheet(item, f.dateFrom, f.dateTo, cutoffs, edits));
   const query = f.query.trim();
   if (query) rows = rows.filter((item) => matchesSearchQuery(item, query));
   if (f.payment === "paid" || f.payment === "paid_online" || f.payment === "paid_full") {
@@ -693,10 +695,14 @@ export function CsQueueClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number };
+    const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number; frozen?: boolean };
     setCutoffBusy(false);
     if (!res.ok || !data.dayYmd || data.minutes == null) {
       setMessage(data.message || "تعذر حفظ الوقت.");
+      return;
+    }
+    if (data.frozen) {
+      setMessage("الشيت متجمد من وقت القفل.");
       return;
     }
     setCutoffs((prev) => {

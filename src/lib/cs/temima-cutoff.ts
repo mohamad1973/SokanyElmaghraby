@@ -2,6 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { cairoClock, cairoTodayYmd } from "@/lib/cs/order-window";
+import { hasTemimaFreezeDay } from "@/lib/cs/temima-sheet-freeze";
 import { type TemimaCutoff } from "@/lib/cs/temima-sheet";
 
 export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
@@ -31,10 +32,14 @@ export async function lockTemimaCutoff(chosenMinutes?: number) {
     dayYmd = cairoTodayYmd();
     minutes = chosenMinutes;
   }
+  if (await hasTemimaFreezeDay(dayYmd)) {
+    const existing = await prisma.csTemimaSheetCutoff.findUnique({ where: { dayYmd }, select: { minutes: true } });
+    return { ok: true as const, dayYmd, minutes: existing?.minutes ?? minutes, frozen: true as const };
+  }
   await prisma.csTemimaSheetCutoff.upsert({
     where: { dayYmd },
     create: { dayYmd, minutes },
     update: { minutes },
   });
-  return { ok: true as const, dayYmd, minutes };
+  return { ok: true as const, dayYmd, minutes, frozen: false as const };
 }

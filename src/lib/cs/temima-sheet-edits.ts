@@ -2,9 +2,15 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
-import { cairoYmdBounds } from "@/lib/cs/order-window";
+import { addCairoYmdDays, cairoYmdBounds } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
-import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
+import {
+  hasTemimaFreezeDay,
+  listTemimaFreezeIds,
+  listTemimaFrozenDays,
+  saveTemimaFreeze,
+} from "@/lib/cs/temima-sheet-freeze";
+import { onUnifiedSayedSheet, sayedSheetYmd, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 function asKind(value: string): TemimaSheetEdit["kind"] | null {
   return value === "include" || value === "exclude" ? value : null;
@@ -121,7 +127,17 @@ const SHEET_PICK = {
   handedToCarrierAt: true,
 } as const;
 
-export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
+function eachSheetDay(dateFrom: string, dateTo: string) {
+  const days: string[] = [];
+  let cursor = dateFrom;
+  while (cursor && cursor <= dateTo && days.length < 40) {
+    days.push(cursor);
+    cursor = addCairoYmdDays(cursor, 1);
+  }
+  return days;
+}
+
+async function liveUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
@@ -160,6 +176,63 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
     .filter((row) => onUnifiedSayedSheet(row, dateFrom, dateTo, cutoffs, edits))
     .sort((a, b) => b.id - a.id)
     .map((row) => row.id);
+}
+
+/** A closed day is snapshotted once. Later saves, edits, and handoffs do not change it. */
+export async function captureTemimaSheetFreeze(dayYmd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return;
+  const cutoffs = await listTemimaCutoffs();
+  if (!cutoffs.some((row) => row.dayYmd === dayYmd)) return;
+  if (await hasTemimaFreezeDay(dayYmd)) return;
+  const ids = await liveUnifiedSayedSheetIds(dayYmd, dayYmd);
+  await saveTemimaFreeze(dayYmd, ids);
+}
+
+async function ensureClosedDaysFrozen(dateFrom: string, dateTo: string) {
+  const cutoffs = await listTemimaCutoffs();
+  for (const day of eachSheetDay(dateFrom, dateTo)) {
+    if (!cutoffs.some((row) => row.dayYmd === day)) continue;
+    if (await hasTemimaFreezeDay(day)) continue;
+    await captureTemimaSheetFreeze(day);
+  }
+}
+
+export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
+  await ensureClosedDaysFrozen(dateFrom, dateTo);
+  const days = eachSheetDay(dateFrom, dateTo);
+  const frozen = await listTemimaFrozenDays(dateFrom, dateTo);
+  const frozenIds = new Set<number>();
+  for (const day of days) {
+    if (!frozen.has(day)) continue;
+    for (const id of await listTemimaFreezeIds(day)) frozenIds.add(id);
+  }
+  if (days.length && days.every((day) => frozen.has(day))) {
+    return [...frozenIds].sort((a, b) => b - a);
+  }
+  const liveIds = await liveUnifiedSayedSheetIds(dateFrom, dateTo);
+  if (!frozen.size) return liveIds;
+  const prisma = getPrismaClient();
+  if (!prisma || !liveIds.length) return [...frozenIds].sort((a, b) => b - a);
+  const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: liveIds } },
+    select: SHEET_PICK,
+  });
+  const openIds = new Set<number>();
+  for (const row of rows) {
+    const day = sayedSheetYmd(row, cutoffs);
+    if (day && day >= dateFrom && day <= dateTo && !frozen.has(day)) {
+      const excluded = edits.some((edit) => edit.confirmationId === row.id && edit.dayYmd === day && edit.kind === "exclude");
+      if (!excluded) openIds.add(row.id);
+    }
+    for (const edit of edits) {
+      if (edit.kind !== "include" || edit.confirmationId !== row.id) continue;
+      if (edit.dayYmd < dateFrom || edit.dayYmd > dateTo || frozen.has(edit.dayYmd)) continue;
+      openIds.add(row.id);
+    }
+  }
+  return [...new Set([...frozenIds, ...openIds])].sort((a, b) => b - a);
 }
 
 export async function listUnifiedSayedSheet(dateFrom: string, dateTo: string) {

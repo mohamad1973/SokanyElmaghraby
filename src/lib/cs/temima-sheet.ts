@@ -142,11 +142,15 @@ function temimaConfirmed(order: SheetOrder) {
   return true;
 }
 
-/** Calendar day the order was handed to the carrier, on the Cairo clock. */
-function handoffSheetYmd(order: SheetOrder): string | null {
+/** Handoff day when the handoff is before that day's close. A handoff at or after close does not enter. */
+function handoffBeforeCloseYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
   if (!temimaConfirmed(order)) return null;
   if (order.handedToCarrier === false) return null;
-  return clockOf(order.handedToCarrierAt)?.ymd || null;
+  const handed = clockOf(order.handedToCarrierAt);
+  if (!handed) return null;
+  const cutoff = cutoffs.find((row) => row.dayYmd === handed.ymd) || null;
+  if (cutoff && handed.minutes >= cutoff.minutes) return null;
+  return handed.ymd;
 }
 
 /** True when the first save is at or after that day's close. No close means the day is still open. */
@@ -164,16 +168,9 @@ function saveBeforeCloseYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string 
   return clockOf(order.confirmedAt)?.ymd || null;
 }
 
-/**
- * Sheet day is the handoff day, otherwise the save day before close.
- * A same-day handoff does not put back an order whose first save was at or after the close.
- * A handoff on a different day still moves the order to that day.
- */
+/** Sheet day is a handoff before close, otherwise a save before close. Nothing after close enters that day. */
 export function sayedSheetYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
-  const handed = handoffSheetYmd(order);
-  const saveDay = clockOf(order.confirmedAt)?.ymd || "";
-  if (handed && !(handed === saveDay && savedAtOrAfterClose(order, cutoffs))) return handed;
-  return saveBeforeCloseYmd(order, cutoffs);
+  return handoffBeforeCloseYmd(order, cutoffs) || saveBeforeCloseYmd(order, cutoffs);
 }
 
 function editKind(confirmationId: number, dayYmd: string, edits: TemimaSheetEdit[]) {
