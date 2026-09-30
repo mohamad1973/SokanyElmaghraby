@@ -23,6 +23,9 @@ export default async function CsHomePage() {
   if (!viewer.canSeeOrders && viewer.isCourier && !viewer.isCourierSupervisor) {
     redirect("/cs/couriers");
   }
+  if (!viewer.canSeeOrders && viewer.isMonaCourier) {
+    redirect("/cs/mona");
+  }
   if (!viewer.canSeeOrders && (viewer.isTransfers || session.user.csIsTransfers)) {
     redirect("/cs/transfers");
   }

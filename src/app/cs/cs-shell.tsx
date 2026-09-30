@@ -637,6 +637,7 @@ function CsHeader() {
   const isAccounting = roles.includes("accounting");
   const isCourierSupervisor = roles.includes("courier_supervisor");
   const isCourier = roles.includes("courier");
+  const isMonaCourier = roles.includes("mona_courier");
   const canSeeOrders = roles.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting");
   const isTransfersOnly = isTransfers && !canSeeOrders && !isShipping;
   const canSettlement = isShipping || isSupervisor || isAdmin;
@@ -660,6 +661,8 @@ function CsHeader() {
             <p className="text-[11px] text-white/70 sm:text-xs">
               {isCourierSupervisor
                 ? "مشرف مناديب · توزيع أوردرات اليوم"
+                : isMonaCourier && !canSeeOrders
+                  ? "مندوب المشرفة · أوردراتك"
                 : isCourier && !canSeeOrders
                   ? "مندوب · أوردراتك"
                   : isTransfersOnly
@@ -741,6 +744,11 @@ function CsHeader() {
           ) : null}
           {isCourier && !isCourierSupervisor ? (
             <Link href="/cs/couriers" className={navClass(pathname.startsWith("/cs/couriers"))}>
+              أوردراتي
+            </Link>
+          ) : null}
+          {isMonaCourier ? (
+            <Link href="/cs/mona" className={navClass(pathname.startsWith("/cs/mona"))}>
               أوردراتي
             </Link>
           ) : null}

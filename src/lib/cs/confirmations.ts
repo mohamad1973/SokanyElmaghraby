@@ -1653,6 +1653,7 @@ export async function resolveCsViewer(agentId: number) {
       canSeeOrders: true,
       isCourierSupervisor: false,
       isCourier: false,
+      isMonaCourier: false,
       role: "agent" as const,
       roles: ["agent"] as const,
       agent: null,

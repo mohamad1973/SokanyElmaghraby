@@ -9,7 +9,8 @@ export type CsAgentRole =
   | "shipping"
   | "accounting"
   | "courier_supervisor"
-  | "courier";
+  | "courier"
+  | "mona_courier";
 
 declare module "next-auth" {
   interface Session {

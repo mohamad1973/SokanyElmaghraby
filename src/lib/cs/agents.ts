@@ -11,7 +11,8 @@ export type CsRole =
   | "shipping"
   | "accounting"
   | "courier_supervisor"
-  | "courier";
+  | "courier"
+  | "mona_courier";
 
 export const CS_ROLES: CsRole[] = [
   "agent",
@@ -22,6 +23,7 @@ export const CS_ROLES: CsRole[] = [
   "accounting",
   "courier_supervisor",
   "courier",
+  "mona_courier",
 ];
 
 export function normalizeCsUsername(value: string) {
@@ -84,6 +86,7 @@ export function csFlagsFromRoles(roles: CsRole[]) {
     isAccounting: hasAdmin || list.includes("accounting"),
     isCourierSupervisor: list.includes("courier_supervisor"),
     isCourier: list.includes("courier"),
+    isMonaCourier: list.includes("mona_courier"),
     canAccessTransfers: hasAdmin || list.includes("transfers") || list.includes("supervisor"),
     canSeeOrders:
       hasAdmin ||
@@ -383,6 +386,17 @@ async function runEnsureCsTables() {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsMonaCourierRemit\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`courierAgentId\` INT NOT NULL,
+      \`amount\` DECIMAL(12,2) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`CsMonaCourierRemit_courierAgentId_idx\`(\`courierAgentId\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsTemimaSheetCutoff\` (
       \`id\` INT NOT NULL AUTO_INCREMENT,
       \`dayYmd\` VARCHAR(10) NOT NULL,
@@ -439,6 +453,10 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaShippingFee` DECIMAL(12,2) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaSyncedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaSyncError` VARCHAR(255) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaCourierId` INT NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaAssignedAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaOutcome` VARCHAR(16) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaRefusalReason` TEXT NULL",
   ];
 
   for (const sql of alters) {
