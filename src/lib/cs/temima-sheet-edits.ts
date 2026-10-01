@@ -5,9 +5,13 @@ import { serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { addCairoYmdDays, cairoYmdBounds } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import {
+  addTemimaFreezeIds,
+  clearTemimaPrepareHold,
   hasTemimaFreezeDay,
+  hasTemimaPrepareHold,
   listTemimaFreezeIds,
   listTemimaFrozenDays,
+  removeTemimaFreezeId,
   saveTemimaFreeze,
 } from "@/lib/cs/temima-sheet-freeze";
 import { onUnifiedSayedSheet, sayedSheetYmd, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
@@ -90,7 +94,7 @@ export async function listTemimaSheetEdits(): Promise<TemimaSheetEdit[]> {
   if (!prisma) return [];
   const rows = await prisma.csTemimaSheetEdit.findMany({
     orderBy: { dayYmd: "desc" },
-    take: 500,
+    take: 2000,
     select: { dayYmd: true, confirmationId: true, kind: true },
   });
   return rows.flatMap((row) => {
@@ -193,8 +197,25 @@ async function ensureClosedDaysFrozen(dateFrom: string, dateTo: string) {
   for (const day of eachSheetDay(dateFrom, dateTo)) {
     if (!cutoffs.some((row) => row.dayYmd === day)) continue;
     if (await hasTemimaFreezeDay(day)) continue;
+    if (await hasTemimaPrepareHold(day)) continue;
     await captureTemimaSheetFreeze(day);
   }
+}
+
+/** Admin backfill: snapshot the orders visible on a prepared day. A second press does not replace the snapshot. */
+export async function freezePreparedTemimaDay(dayYmd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return { ok: false as const, message: "اليوم غير صحيح." };
+  if (await hasTemimaFreezeDay(dayYmd)) {
+    return { ok: true as const, dayYmd, frozen: true as const, message: "الشيت متجمد من وقت القفل." };
+  }
+  const cutoffs = await listTemimaCutoffs();
+  if (!cutoffs.some((row) => row.dayYmd === dayYmd)) {
+    return { ok: false as const, message: "جهّز اليوم الأول." };
+  }
+  await captureTemimaSheetFreeze(dayYmd);
+  await clearTemimaPrepareHold(dayYmd);
+  if (!(await hasTemimaFreezeDay(dayYmd))) return { ok: false as const, message: "تعذر تجميد اليوم." };
+  return { ok: true as const, dayYmd, frozen: true as const, message: "اتقفل وتجمد." };
 }
 
 export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
@@ -310,6 +331,7 @@ export async function includeTemimaOrders(dayYmd: string, confirmationIds: numbe
       update: { kind: "include" },
     });
   }
+  if (await hasTemimaFreezeDay(dayYmd)) await addTemimaFreezeIds(dayYmd, rows.map((row) => row.id));
   const edits = rows.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
   return {
     ok: true as const,
@@ -332,6 +354,7 @@ export async function excludeTemimaOrder(dayYmd: string, confirmationId: number)
     create: { dayYmd, confirmationId, kind: "exclude" },
     update: { kind: "exclude" },
   });
+  if (await hasTemimaFreezeDay(dayYmd)) await removeTemimaFreezeId(dayYmd, confirmationId);
   await prisma.csOrderConfirmation.update({
     where: { id: confirmationId },
     data: { courierAgentId: null, courierAssignedAt: null, courierOutcome: null, courierRefusalReason: null },

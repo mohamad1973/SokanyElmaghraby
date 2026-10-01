@@ -71,3 +71,65 @@ export async function saveTemimaFreeze(dayYmd: string, confirmationIds: number[]
   }
   await prisma.$executeRawUnsafe("INSERT IGNORE INTO CsTemimaSheetFreezeDay (dayYmd) VALUES (?)", dayYmd);
 }
+
+export async function addTemimaFreezeIds(dayYmd: string, confirmationIds: number[]) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dayYmd)) return;
+  const ids = [...new Set(confirmationIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return;
+  await ensureTemimaFreezeTables();
+  const placeholders = ids.map(() => "(?, ?)").join(", ");
+  const params = ids.flatMap((id) => [dayYmd, id]);
+  await prisma.$executeRawUnsafe(
+    `INSERT IGNORE INTO CsTemimaSheetFreeze (dayYmd, confirmationId) VALUES ${placeholders}`,
+    ...params,
+  );
+}
+
+export async function removeTemimaFreezeId(dayYmd: string, confirmationId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dayYmd) || !Number.isInteger(confirmationId) || confirmationId <= 0) return;
+  await ensureTemimaFreezeTables();
+  await prisma.$executeRawUnsafe(
+    "DELETE FROM CsTemimaSheetFreeze WHERE dayYmd = ? AND confirmationId = ?",
+    dayYmd,
+    confirmationId,
+  );
+}
+
+export async function hasTemimaPrepareHold(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dayYmd)) return false;
+  await ensureTemimaPrepareHoldTable();
+  const rows = await prisma.$queryRawUnsafe<Array<{ dayYmd: string }>>(
+    "SELECT dayYmd FROM CsTemimaSheetPrepareHold WHERE dayYmd = ? LIMIT 1",
+    dayYmd,
+  );
+  return rows.length > 0;
+}
+
+export async function markTemimaPrepareHold(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dayYmd)) return;
+  await ensureTemimaPrepareHoldTable();
+  await prisma.$executeRawUnsafe("INSERT IGNORE INTO CsTemimaSheetPrepareHold (dayYmd) VALUES (?)", dayYmd);
+}
+
+export async function clearTemimaPrepareHold(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dayYmd)) return;
+  await ensureTemimaPrepareHoldTable();
+  await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetPrepareHold WHERE dayYmd = ?", dayYmd);
+}
+
+async function ensureTemimaPrepareHoldTable() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsTemimaSheetPrepareHold\` (
+      \`dayYmd\` VARCHAR(10) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`dayYmd\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+}

@@ -20,6 +20,7 @@ import {
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
   formatCutoffClock12,
+  formatSayedSheetHeading,
   onUnifiedSayedSheet,
   type TemimaCutoff,
   type TemimaSheetEdit,
@@ -1083,13 +1084,52 @@ export function CsQueueClient({
       return;
     }
     rememberEdits([data.edit]);
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === confirmationId
-          ? { ...item, courierAgentId: null, courierOutcome: null, courierRefusalReason: null }
-          : item,
-      ),
-    );
+    setItems((prev) => prev.filter((item) => item.id !== confirmationId));
+  }
+
+  async function prepareSheetDay() {
+    if (!sheetDay || sheetEditBusy) return;
+    setSheetEditBusy(true);
+    setMessage("");
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "prepare", dayYmd: sheetDay }),
+    });
+    const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number; frozen?: boolean };
+    setSheetEditBusy(false);
+    if (!res.ok || !data.dayYmd || data.minutes == null) {
+      setMessage(data.message || "تعذر تجهيز اليوم.");
+      return;
+    }
+    if (!data.frozen) {
+      setCutoffs((prev) => {
+        const next = prev.filter((row) => row.dayYmd !== data.dayYmd);
+        next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
+        return next;
+      });
+      await loadSayedSheet(applied);
+    }
+    setMessage(data.message || (data.frozen ? "الشيت متجمد من وقت القفل." : "اليوم اتجهز. أضف أوردرات الورق ثم اقفل."));
+  }
+
+  async function freezeSheetDay() {
+    if (!sheetDay || sheetEditBusy) return;
+    setSheetEditBusy(true);
+    setMessage("");
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "freeze", dayYmd: sheetDay }),
+    });
+    const data = (await res.json()) as { message?: string; frozen?: boolean };
+    setSheetEditBusy(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تجميد اليوم.");
+      return;
+    }
+    await loadSayedSheet(applied);
+    setMessage(data.message || "اتقفل وتجمد.");
   }
 
   function resetFilters() {
@@ -1108,7 +1148,11 @@ export function CsQueueClient({
       <div className="no-print flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:p-4">
         <div className="min-w-0">
           <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">
-            {isCourierSupervisor ? "شيت سيد تميمة" : "قائمة تأكيد الطلبات"}
+            {isCourierSupervisor
+              ? sheetDay
+                ? formatSayedSheetHeading(sheetDay)
+                : "شيت سيد تميمة"
+              : "قائمة تأكيد الطلبات"}
           </h1>
           <p className="mt-1 text-sm font-bold text-[#14213D]/70">
             عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{isCourierSupervisor ? filtered.length : items.length}</span>
@@ -1420,13 +1464,31 @@ export function CsQueueClient({
             void addSheetOrders();
           }}
         >
-          <button
-            type="button"
-            onClick={() => setAddOpen((open) => !open)}
-            className="h-9 w-9 rounded-xl bg-[#14213D] text-lg font-extrabold text-white"
-          >
-            +
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAddOpen((open) => !open)}
+              className="h-9 w-9 rounded-xl bg-[#14213D] text-lg font-extrabold text-white"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              disabled={sheetEditBusy}
+              onClick={() => void prepareSheetDay()}
+              className="h-9 rounded-xl bg-[#14213D] px-3 text-xs font-extrabold text-white disabled:opacity-60"
+            >
+              {sheetEditBusy ? "جاري التحميل" : "تجهيز اليوم"}
+            </button>
+            <button
+              type="button"
+              disabled={sheetEditBusy}
+              onClick={() => void freezeSheetDay()}
+              className="h-9 rounded-xl bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
+            >
+              {sheetEditBusy ? "جاري التحميل" : "قفل وتجميد"}
+            </button>
+          </div>
           {addOpen ? (
             <div className="grid gap-2">
               <div className="flex flex-wrap items-end gap-2">
@@ -1760,8 +1822,10 @@ export function CsQueueClient({
       <div className="print-only hidden" dir="rtl">
         <h1 className="mb-2 text-center text-lg font-bold">
           {printMode === "sheet" || applied.shipping === "sayed_temima"
-            ? `شيت مخزن سيد تميمة — ${
-                applied.dateFrom === applied.dateTo ? applied.dateFrom : `${applied.dateFrom} → ${applied.dateTo}`
+            ? `${
+                applied.dateFrom === applied.dateTo
+                  ? formatSayedSheetHeading(applied.dateFrom)
+                  : `شيت مخزن سيد تميمة — ${applied.dateFrom} → ${applied.dateTo}`
               }${
                 printingCourierId
                   ? ` — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`

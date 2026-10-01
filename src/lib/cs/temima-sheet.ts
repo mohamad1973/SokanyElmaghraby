@@ -32,6 +32,19 @@ export function formatCutoffMinutes(minutes: number) {
   return `${hour}:${String(minute).padStart(2, "0")}`;
 }
 
+const CAIRO_WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
+export function formatSayedSheetHeading(ymd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "شيت مخزن سيد تميمة";
+  const [year, month, day] = ymd.split("-").map((part) => Number(part));
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    weekday: "short",
+  }).format(new Date(Date.UTC(year, month - 1, day, 12, 0, 0)));
+  const weekday = CAIRO_WEEKDAYS[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short)] || "";
+  return `شيت مخزن سيد تميمة يوم ${weekday} ${day}-${month}`;
+}
+
 export function formatCutoffClock12(minutes: number) {
   const hour24 = Math.floor(minutes / 60);
   const minute = minutes % 60;
