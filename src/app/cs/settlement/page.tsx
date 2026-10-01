@@ -11,7 +11,7 @@ export default async function CsSettlementPage() {
   if (!session?.user.csAgentId) redirect("/cs/login");
   await ensureCsTables();
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  const shipping = isShippingRole(viewer.role) || isShippingRole(session.user.csRole);
+  const shipping = viewer.isAdmin || viewer.isShipping || isShippingRole(viewer.role) || isShippingRole(session.user.csRole);
   const follow = viewer.isSupervisor || viewer.isAdmin || Boolean(session.user.csIsSupervisor);
   if (!shipping && !follow) redirect("/cs");
   return <TemimaSettlementClient canEdit={shipping} />;

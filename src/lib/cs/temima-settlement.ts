@@ -45,11 +45,27 @@ export function sundayOnOrBefore(ymd: string) {
   return addDaysYmd(ymd, -weekdayIndex(ymd));
 }
 
-export function defaultSettlementWeekStart() {
+export function defaultSettlementRange() {
   const today = cairoTodayYmd();
   const sunday = sundayOnOrBefore(today);
-  if (sunday === today) return addDaysYmd(today, -7);
-  return sunday;
+  const start = sunday === today ? addDaysYmd(today, -7) : sunday;
+  const saturday = addDaysYmd(start, 6);
+  const end = saturday > today ? today : saturday;
+  return { start, end: end < start ? start : end };
+}
+
+export function defaultSettlementWeekStart() {
+  return defaultSettlementRange().start;
+}
+
+function clampWeekEnd(start: string, endInput?: string) {
+  const saturday = addDaysYmd(start, 6);
+  const today = cairoTodayYmd();
+  const cap = saturday > today ? today : saturday;
+  if (!endInput) return cap < start ? start : cap;
+  if (endInput < start) return start;
+  if (endInput > saturday) return saturday;
+  return endInput;
 }
 
 function money(value: unknown) {
@@ -112,7 +128,7 @@ async function loadWeeks() {
   });
 }
 
-export async function getTemimaWeekSheet(weekStartInput?: string) {
+export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
@@ -181,7 +197,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
     return {
       ok: true as const,
       weekStart: sunday,
-      weekEnd: saturday,
+      weekEnd: cairoYmdFromIso(week.weekEnd.toISOString()) || saturday,
       status: "closed" as const,
       cashDue: Number(week.cashDue),
       cashPaid: Number(week.cashPaid),
@@ -191,7 +207,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
     };
   }
 
-  const sheetIds = await listUnifiedSayedSheetIds(sunday, saturday);
+  const periodEnd = clampWeekEnd(sunday, weekEndInput);
+  const sheetIds = await listUnifiedSayedSheetIds(sunday, periodEnd);
   const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id));
   const orderIds = [...sheetIds, ...carryIds];
   const orders = orderIds.length
@@ -255,7 +272,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string) {
   return {
     ok: true as const,
     weekStart: sunday,
-    weekEnd: saturday,
+    weekEnd: periodEnd,
     status: "open" as const,
     cashDue,
     cashPaid: week ? Number(week.cashPaid) : 0,
@@ -285,17 +302,20 @@ function historyOf(
   }));
 }
 
-async function upsertOpenWeek(sunday: string, saturday: string, agentId: number) {
+async function upsertOpenWeek(sunday: string, endYmd: string, agentId: number) {
   const prisma = getPrismaClient();
   if (!prisma) return null;
   const start = cairoYmdBounds(sunday)?.start;
-  const end = cairoYmdBounds(saturday)?.start;
+  const end = cairoYmdBounds(endYmd)?.start;
   if (!start || !end) return null;
   const existing = await prisma.csCarrierWeek.findUnique({
     where: { carrierCompany_weekStart: { carrierCompany: TEMIMA_COMPANY, weekStart: start } },
   });
   if (existing?.status === "closed") return existing;
-  if (existing) return existing;
+  if (existing) {
+    if (cairoYmdFromIso(existing.weekEnd.toISOString()) === endYmd) return existing;
+    return prisma.csCarrierWeek.update({ where: { id: existing.id }, data: { weekEnd: end } });
+  }
   return prisma.csCarrierWeek.create({
     data: {
       carrierCompany: TEMIMA_COMPANY,
@@ -309,6 +329,7 @@ async function upsertOpenWeek(sunday: string, saturday: string, agentId: number)
 
 export async function saveTemimaWeek(input: {
   weekStart: string;
+  weekEnd?: string;
   cashPaid: number;
   rows: TemimaSheetRow[];
   agentId: number;
@@ -319,8 +340,8 @@ export async function saveTemimaWeek(input: {
   await ensureCsTables();
 
   const sunday = sundayOnOrBefore(input.weekStart);
-  const saturday = addDaysYmd(sunday, 6);
-  const week = await upsertOpenWeek(sunday, saturday, input.agentId);
+  const periodEnd = clampWeekEnd(sunday, input.weekEnd);
+  const week = await upsertOpenWeek(sunday, periodEnd, input.agentId);
   if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
   if (week.status === "closed") return { ok: false as const, message: "هذا الأسبوع مقفل." };
 

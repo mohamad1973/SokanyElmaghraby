@@ -50,9 +50,10 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async (week?: string, monthDate?: string) => {
+  const load = useCallback(async (week?: string, end?: string, monthDate?: string) => {
     const qs = new URLSearchParams();
     if (week) qs.set("week", week);
+    if (end) qs.set("weekEnd", end);
     if (monthDate) qs.set("closeDate", monthDate);
     const res = await fetch(`/api/cs/settlement/temima?${qs}`);
     const data = (await res.json()) as {
@@ -79,7 +80,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   useEffect(() => {
-    void load(undefined, closeDate);
+    void load(undefined, undefined, closeDate);
   }, [load, closeDate]);
 
   const cashDue = useMemo(
@@ -101,7 +102,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
       body: JSON.stringify(
         action === "close-month"
           ? { action, closeDate, shippingPaid }
-          : { action, weekStart, cashPaid, rows },
+          : { action, weekStart, weekEnd, cashPaid, rows },
       ),
     });
     const data = (await res.json()) as { message?: string };
@@ -111,7 +112,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
       return;
     }
     setMessage(action === "close-week" ? "تم قفل الأسبوع." : action === "close-month" ? "تم قفل الشهر." : "تم الحفظ.");
-    await load(weekStart, closeDate);
+    await load(weekStart, weekEnd, closeDate);
   }
 
   return (
@@ -119,7 +120,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
       <div>
         <h1 className="text-2xl font-extrabold text-[#14213D]">تصفية سيد تميمة</h1>
         <p className="text-sm font-bold text-[#14213D]/70">
-          {canEdit ? "تسجيل التصفية والحساب من حساب الشحن." : "متابعة فقط — التسجيل من يوزر حساب الشحن."}
+          {canEdit ? "تسجيل التصفية من حساب الأدمن أو الشحن." : "متابعة فقط — التسجيل من حساب الأدمن أو الشحن."}
         </p>
       </div>
 
@@ -129,13 +130,21 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
           <input
             type="date"
             value={weekStart}
-            onChange={(e) => void load(e.target.value, closeDate)}
+            onChange={(e) => void load(e.target.value, weekEnd, closeDate)}
             className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
           />
         </label>
-        <span className="text-xs font-bold text-[#14213D]/70">
-          إلى {weekEnd || "—"} · {status === "closed" ? "مقفل" : "مفتوح"}
-        </span>
+        <label className="text-xs font-bold text-[#14213D]">
+          إلى
+          <input
+            type="date"
+            value={weekEnd}
+            disabled={status === "closed"}
+            onChange={(e) => void load(weekStart, e.target.value, closeDate)}
+            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+          />
+        </label>
+        <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "مقفل" : "مفتوح"}</span>
       </div>
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">

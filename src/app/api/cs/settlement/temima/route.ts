@@ -13,7 +13,7 @@ import { requireCsSession } from "@/lib/session-guards";
 
 async function viewerOf(requestAgentId: number, sessionRole: string | undefined) {
   const viewer = await resolveCsViewer(requestAgentId);
-  const shipping = isShippingRole(viewer.role) || isShippingRole(sessionRole);
+  const shipping = viewer.isAdmin || viewer.isShipping || isShippingRole(viewer.role) || isShippingRole(sessionRole);
   const follow = viewer.isSupervisor || viewer.isAdmin;
   return { viewer, shipping, follow };
 }
@@ -30,8 +30,9 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const week = url.searchParams.get("week") || undefined;
+  const weekEnd = url.searchParams.get("weekEnd") || undefined;
   const closeDate = url.searchParams.get("closeDate") || undefined;
-  const sheet = await getTemimaWeekSheet(week);
+  const sheet = await getTemimaWeekSheet(week, weekEnd);
   if (!sheet.ok) return NextResponse.json({ message: sheet.message }, { status: 503 });
   const month = await previewTemimaMonth(closeDate);
   return NextResponse.json({
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
   let body: {
     action?: "save" | "close-week" | "close-month";
     weekStart?: string;
+    weekEnd?: string;
     cashPaid?: number;
     rows?: TemimaSheetRow[];
     closeDate?: string;
@@ -78,6 +80,7 @@ export async function POST(request: Request) {
 
   const result = await saveTemimaWeek({
     weekStart: String(body.weekStart || ""),
+    weekEnd: String(body.weekEnd || ""),
     cashPaid: Number(body.cashPaid) || 0,
     rows: body.rows || [],
     agentId: session.user.csAgentId,
