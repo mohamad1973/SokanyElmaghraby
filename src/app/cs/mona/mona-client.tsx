@@ -29,6 +29,7 @@ type LedgerLine = {
   delivered: number;
   postponed: number;
   refused: number;
+  goods: number;
   collected: number;
   fee: number;
   remitted: number;
@@ -45,6 +46,24 @@ type Desk = {
 function egp(value: number) {
   const rounded = Math.round(value * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
+function orderState(order: OrderCard) {
+  if (order.outcome === "delivered") return "مسلم";
+  if (order.outcome === "postponed") return "مؤجّل";
+  if (order.outcome === "refused") return "رفض";
+  return "متوزع";
+}
+
+function SupervisorOrderLine({ order }: { order: OrderCard }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#14213D]">
+      <p className="min-w-0 flex-1 truncate">
+        #{order.wooOrderNumber} · {order.customerName || "—"} · {order.phone || "—"} · {orderState(order)}
+      </p>
+      <p className="shrink-0 font-extrabold">{egp(order.cashAmount)}</p>
+    </div>
+  );
 }
 
 function OrderDetails({ order }: { order: OrderCard }) {
@@ -240,13 +259,13 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
               {orders
                 .filter((order) => Number(order.courierId) === Number(line.courierId))
                 .map((order) => (
-                  <CourierCard key={order.id} order={order} onPost={post} canAct={false} />
+                  <SupervisorOrderLine key={order.id} order={order} />
                 ))}
               <p className="text-sm font-bold text-[#14213D]">
                 مسلّم {line.delivered} · مؤجّل {line.postponed} · رفض {line.refused}
               </p>
-              <p className="text-sm font-bold text-[#14213D]">
-                التحصيل {egp(line.collected)} · الأجر {egp(line.fee)} · التوريد {egp(line.remitted)} · المتبقي {egp(line.remaining)}
+              <p className="text-sm font-extrabold text-[#14213D]">
+                بضاعة {egp(line.goods)} · التحصيل {egp(line.collected)} · الأجر {egp(line.fee)} · التوريد {egp(line.remitted)} · المتبقي {egp(line.remaining)}
               </p>
               <form
                 className="flex flex-wrap gap-2"

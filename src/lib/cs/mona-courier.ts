@@ -54,6 +54,7 @@ export type MonaLedgerLine = {
   delivered: number;
   postponed: number;
   refused: number;
+  goods: number;
   collected: number;
   fee: number;
   remitted: number;
@@ -195,6 +196,9 @@ function ledgerOf(
   return couriers.map((courier) => {
     const mine = cards.filter((card) => card.courierId === Number(courier.id));
     const delivered = mine.filter((card) => card.outcome === "delivered");
+    const goods = mine
+      .filter((card) => card.outcome !== "refused")
+      .reduce((sum, card) => sum + card.cashAmount, 0);
     const collected = delivered.reduce((sum, card) => sum + card.cashAmount, 0);
     const fee = delivered.length * MONA_COURIER_FEE;
     const paid = remitted.get(courier.id) || 0;
@@ -204,6 +208,7 @@ function ledgerOf(
       delivered: delivered.length,
       postponed: mine.filter((card) => card.outcome === "postponed").length,
       refused: mine.filter((card) => card.outcome === "refused").length,
+      goods,
       collected,
       fee,
       remitted: paid,
