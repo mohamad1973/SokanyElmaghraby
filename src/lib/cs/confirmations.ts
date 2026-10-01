@@ -1582,6 +1582,20 @@ export async function setCsShippingCompany(input: {
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
+  if (input.shippingCompany === "sayed_temima") {
+    const held = await prisma.$queryRaw<Array<{ name: string | null }>>`
+      SELECT a.name AS name
+      FROM CsOrderConfirmation c
+      LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+      WHERE c.id = ${input.id} AND c.monaCourierId IS NOT NULL
+      LIMIT 1
+    `;
+    if (held[0]) {
+      const name = String(held[0].name || "").trim() || "مندوب المشرفة";
+      return { ok: false as const, message: `تم توزيع الأوردر الى ${name}` };
+    }
+  }
+
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {

@@ -233,8 +233,10 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
   if (!couriers.some((row) => row.id === courierId)) {
     return { ok: false as const, message: "اختار مندوب المشرفة." };
   }
-  const found = await prisma.$queryRaw<Array<{ id: number; status: string; monaCourierId: number | null }>>`
-    SELECT id, status, monaCourierId
+  const found = await prisma.$queryRaw<
+    Array<{ id: number; status: string; monaCourierId: number | null; shippingCompany: string | null }>
+  >`
+    SELECT id, status, monaCourierId, shippingCompany
     FROM CsOrderConfirmation
     WHERE REPLACE(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', ''), '-', '') = ${digits}
     ORDER BY id DESC
@@ -243,17 +245,24 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
   const row = found[0];
   if (!row) return { ok: false as const, message: "الأوردر مش موجود." };
   if (row.status !== "CONFIRMED") return { ok: false as const, message: "الأوردر لازم يكون مؤكد." };
+  if (row.shippingCompany === "sayed_temima") {
+    return { ok: false as const, message: "تم توزيعه الى سيد تميمة" };
+  }
   if (row.monaCourierId && row.monaCourierId !== courierId) {
     return { ok: false as const, message: "الأوردر متضاف لمندوب تاني." };
   }
   if (row.monaCourierId === courierId) {
     return { ok: true as const, message: "الأوردر موجود عند المندوب." };
   }
-  await prisma.$executeRaw`
+  const changed = await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
     SET monaCourierId = ${courierId}, monaAssignedAt = NOW(3)
     WHERE id = ${row.id} AND monaCourierId IS NULL
+      AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
   `;
+  if (!Number(changed)) {
+    return { ok: false as const, message: "تم توزيعه الى سيد تميمة" };
+  }
   return { ok: true as const, message: "اتضاف الأوردر للمندوب." };
 }
 

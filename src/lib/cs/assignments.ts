@@ -388,6 +388,10 @@ export async function ruleBasedAssign(input: {
   }
 
   let updated = 0;
+  const monaHeld = await prisma.$queryRaw<Array<{ id: number }>>`
+    SELECT id FROM CsOrderConfirmation WHERE monaCourierId IS NOT NULL
+  `;
+  const monaIds = new Set(monaHeld.map((item) => Number(item.id)));
 
   for (const row of rows) {
     const snap = row.customerSnapshot as {
@@ -444,6 +448,7 @@ export async function ruleBasedAssign(input: {
         if (rule.governorate && snap?.governorate !== rule.governorate) continue;
         if (rule.area && snap?.area !== rule.area) continue;
         if (!rule.governorate && !rule.area) continue;
+        if (rule.shippingCompany === "sayed_temima" && monaIds.has(row.id)) continue;
         await prisma.csOrderConfirmation.update({
           where: { id: row.id },
           data: { shippingCompany: rule.shippingCompany },
