@@ -93,13 +93,15 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     total?: string;
     items?: Array<{ name?: string; quantity?: number }>;
   };
-  const mine = answers.filter((item) => item.confirmationId === row.id);
+  const id = Number(row.id);
+  const courierId = row.monaCourierId == null ? null : Number(row.monaCourierId);
+  const mine = answers.filter((item) => Number(item.confirmationId) === id);
   const outcome =
     row.monaOutcome === "delivered" || row.monaOutcome === "refused" || row.monaOutcome === "postponed"
       ? row.monaOutcome
       : null;
   return {
-    id: row.id,
+    id,
     wooOrderNumber: row.wooOrderNumber,
     customerName: answerText(mine, "customer_name") || snap.customerName || "",
     phone: answerText(mine, "primary_phone") || snap.phone || "",
@@ -119,7 +121,7 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     }),
     outcome,
     refusalReason: String(row.monaRefusalReason || "").trim(),
-    courierId: row.monaCourierId,
+    courierId,
     courierName: row.courierName || "",
   };
 }
@@ -134,7 +136,7 @@ export async function listMonaCourierAgents() {
   });
   return rows
     .filter((row) => parseCsRoles(row).includes("mona_courier"))
-    .map((row) => ({ id: row.id, name: row.name }));
+    .map((row) => ({ id: Number(row.id), name: row.name }));
 }
 
 async function loadAssignedOrders(courierId?: number) {
@@ -191,7 +193,7 @@ function ledgerOf(
   remitted: Map<number, number>,
 ): MonaLedgerLine[] {
   return couriers.map((courier) => {
-    const mine = cards.filter((card) => card.courierId === courier.id);
+    const mine = cards.filter((card) => card.courierId === Number(courier.id));
     const delivered = mine.filter((card) => card.outcome === "delivered");
     const collected = delivered.reduce((sum, card) => sum + card.cashAmount, 0);
     const fee = delivered.length * MONA_COURIER_FEE;

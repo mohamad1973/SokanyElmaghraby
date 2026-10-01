@@ -97,6 +97,7 @@ function CourierCard({
   return (
     <article className={`grid gap-3 rounded-2xl p-4 shadow ring-1 ${tone}`}>
       <OrderDetails order={order} />
+      {order.outcome ? null : <p className="text-sm font-extrabold text-[#14213D]">متوزع</p>}
       {order.outcome === "delivered" ? <p className="text-base font-extrabold text-emerald-800">تم بنجاح</p> : null}
       {order.outcome === "refused" ? (
         <p className="text-sm font-extrabold text-red-800">تم الرفض{order.refusalReason ? `: ${order.refusalReason}` : ""}</p>
@@ -236,6 +237,11 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
         ? (desk?.ledger || []).map((line) => (
             <article key={line.courierId} className="grid gap-2 rounded-2xl bg-[#F8F4EA] p-3 ring-1 ring-[#14213D]/10">
               <p className="text-base font-extrabold text-[#14213D]">{line.name}</p>
+              {orders
+                .filter((order) => Number(order.courierId) === Number(line.courierId))
+                .map((order) => (
+                  <CourierCard key={order.id} order={order} onPost={post} canAct={false} />
+                ))}
               <p className="text-sm font-bold text-[#14213D]">
                 مسلّم {line.delivered} · مؤجّل {line.postponed} · رفض {line.refused}
               </p>
@@ -260,11 +266,6 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
                   تسجيل التوريد
                 </button>
               </form>
-              {orders
-                .filter((order) => order.courierId === line.courierId)
-                .map((order) => (
-                  <CourierCard key={order.id} order={order} onPost={post} canAct={false} />
-                ))}
             </article>
           ))
         : null}
