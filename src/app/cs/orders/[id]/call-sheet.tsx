@@ -551,7 +551,13 @@ export function CsCallSheet({
       return;
     }
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    const signature = new TextDecoder().decode(await blob.slice(0, 4).arrayBuffer());
+    if (signature !== "%PDF") {
+      setPrintingWaybill(false);
+      setMessage("بوسطة أنشأت البوليصة من غير ملف للطباعة.");
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
     const frame = document.createElement("iframe");
     frame.setAttribute("title", "طباعة البوليصة");
     frame.style.position = "fixed";

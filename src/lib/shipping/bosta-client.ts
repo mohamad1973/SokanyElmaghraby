@@ -897,6 +897,96 @@ export async function updateBostaDeliveryCod(trackingNumber: string, cod: number
   return { ok: true as const };
 }
 
+const AWB_FILE_KEYS = ["data", "url", "link", "shortLink", "shortenUrl", "awb", "pdf", "file"];
+
+function pdfMagic(bytes: Uint8Array) {
+  return bytes.byteLength >= 4 && Buffer.from(bytes.subarray(0, 4)).toString("utf8") === "%PDF";
+}
+
+function decodePdfBase64(value: string) {
+  const trimmed = value.trim().replace(/^data:application\/pdf;base64,/i, "").replace(/\s+/g, "");
+  if (trimmed.length < 80) return null;
+  try {
+    const bytes = new Uint8Array(Buffer.from(trimmed, "base64"));
+    return pdfMagic(bytes) ? bytes : null;
+  } catch {
+    return null;
+  }
+}
+
+async function pdfFromAwbValue(value: unknown, depth = 0): Promise<Uint8Array | null> {
+  if (depth > 6 || value == null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("%PDF")) return new Uint8Array(Buffer.from(trimmed, "latin1"));
+    if (/^https?:\/\//i.test(trimmed)) {
+      const file = await fetch(trimmed, { cache: "no-store" });
+      if (!file.ok) return null;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (pdfMagic(bytes)) return bytes;
+      const nested = Buffer.from(bytes).toString("utf8").trim();
+      if (nested.startsWith("{") || nested.startsWith("[")) {
+        try {
+          return await pdfFromAwbValue(JSON.parse(nested), depth + 1);
+        } catch {
+          return null;
+        }
+      }
+      return decodePdfBase64(nested);
+    }
+    return decodePdfBase64(trimmed);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = await pdfFromAwbValue(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of AWB_FILE_KEYS) {
+      if (!(key in record)) continue;
+      const found = await pdfFromAwbValue(record[key], depth + 1);
+      if (found) return found;
+    }
+    for (const nested of Object.values(record)) {
+      const found = await pdfFromAwbValue(nested, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+async function readAwbPdf(response: Response) {
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (pdfMagic(bytes)) return bytes;
+  const text = Buffer.from(bytes).toString("utf8").trim();
+  if (text.startsWith("%PDF")) return new Uint8Array(Buffer.from(text, "latin1"));
+  if (!text.startsWith("{") && !text.startsWith("[")) return decodePdfBase64(text);
+  try {
+    return await pdfFromAwbValue(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+async function requestBostaAwb(tracking: string, method: "POST" | "GET") {
+  const url =
+    method === "GET"
+      ? `${bostaBaseUrl}/api/v2/deliveries/mass-awb?trackingNumbers=${encodeURIComponent(tracking)}&requestedAwbType=A4&lang=ar`
+      : `${bostaBaseUrl}/api/v2/deliveries/mass-awb`;
+  return fetch(url, {
+    method,
+    headers: {
+      Authorization: bostaApiKey!,
+      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+    },
+    body: method === "POST" ? JSON.stringify({ trackingNumbers: tracking, requestedAwbType: "A4", lang: "ar" }) : undefined,
+    cache: "no-store",
+  });
+}
+
 export async function fetchBostaAwbPdf(trackingNumber: string) {
   const tracking = trackingNumber.trim();
   if (!tracking) return { ok: false as const, message: "مفيش بوليصة بوسطة للطباعة." };
@@ -904,32 +994,11 @@ export async function fetchBostaAwbPdf(trackingNumber: string) {
     return { ok: false as const, message: "مفتاح Bosta API غير موجود. أضف BOSTA_API_KEY في متغيرات البيئة." };
   }
   try {
-    const response = await fetch(`${bostaBaseUrl}/api/v2/deliveries/mass-awb`, {
-      method: "POST",
-      headers: {
-        Authorization: bostaApiKey!,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ trackingNumbers: [tracking], requestedAwbType: "A4", lang: "ar" }),
-      cache: "no-store",
-    });
-    const type = response.headers.get("content-type") || "";
-    if (response.ok && (type.includes("pdf") || type.includes("octet-stream"))) {
-      return { ok: true as const, bytes: new Uint8Array(await response.arrayBuffer()) };
-    }
-    const text = await response.text();
-    let parsed: { data?: unknown; message?: string; link?: string; url?: string } | null = null;
-    try {
-      parsed = text ? (JSON.parse(text) as { data?: unknown; message?: string; link?: string; url?: string }) : null;
-    } catch {
-      parsed = null;
-    }
-    const link = [parsed?.data, parsed?.link, parsed?.url].find((value) => typeof value === "string" && value.startsWith("http"));
-    if (typeof link === "string") {
-      const file = await fetch(link, { cache: "no-store" });
-      if (file.ok) return { ok: true as const, bytes: new Uint8Array(await file.arrayBuffer()) };
-    }
-    return { ok: false as const, message: String(parsed?.message || "تعذر طباعة بوليصة بوسطة.") };
+    const posted = await readAwbPdf(await requestBostaAwb(tracking, "POST"));
+    if (posted) return { ok: true as const, bytes: posted };
+    const fetched = await readAwbPdf(await requestBostaAwb(tracking, "GET"));
+    if (fetched) return { ok: true as const, bytes: fetched };
+    return { ok: false as const, message: "بوسطة أنشأت البوليصة من غير ملف للطباعة." };
   } catch {
     return { ok: false as const, message: "تعذر الاتصال ببوسطة لطباعة البوليصة." };
   }
