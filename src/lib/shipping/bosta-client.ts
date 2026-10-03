@@ -875,11 +875,17 @@ function editFieldStuck(before: string, wanted: string, after: string, phone = f
   return seen === previous && seen !== next;
 }
 
-export async function updateBostaDeliveryCod(trackingNumber: string, cod: number) {
+export async function updateBostaDeliveryCod(trackingNumber: string, cod: number, itemsCount?: number) {
   const current = await fetchCsBostaDelivery(trackingNumber);
   if (!current.ok) return { ok: false as const, message: current.message };
   const deliveryId = readBostaLiveDetails(current.data).deliveryId;
-  const body = JSON.stringify({ cod });
+  const count = Math.round(Number(itemsCount) || 0);
+  const body = JSON.stringify({
+    cod,
+    ...(count > 0
+      ? { specs: { packageType: "Parcel", size: "SMALL", packageDetails: { itemsCount: count } } }
+      : {}),
+  });
   const put = (path: string) => bostaFetch(path, { method: "PUT", body });
   let result = deliveryId
     ? await put(`/deliveries/${encodeURIComponent(deliveryId)}`)
@@ -889,6 +895,44 @@ export async function updateBostaDeliveryCod(trackingNumber: string, cod: number
   }
   if (!result.ok) return { ok: false as const, message: result.message };
   return { ok: true as const };
+}
+
+export async function fetchBostaAwbPdf(trackingNumber: string) {
+  const tracking = trackingNumber.trim();
+  if (!tracking) return { ok: false as const, message: "مفيش بوليصة بوسطة للطباعة." };
+  if (!hasBostaCredentials()) {
+    return { ok: false as const, message: "مفتاح Bosta API غير موجود. أضف BOSTA_API_KEY في متغيرات البيئة." };
+  }
+  try {
+    const response = await fetch(`${bostaBaseUrl}/api/v2/deliveries/mass-awb`, {
+      method: "POST",
+      headers: {
+        Authorization: bostaApiKey!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ trackingNumbers: [tracking], requestedAwbType: "A4", lang: "ar" }),
+      cache: "no-store",
+    });
+    const type = response.headers.get("content-type") || "";
+    if (response.ok && (type.includes("pdf") || type.includes("octet-stream"))) {
+      return { ok: true as const, bytes: new Uint8Array(await response.arrayBuffer()) };
+    }
+    const text = await response.text();
+    let parsed: { data?: unknown; message?: string; link?: string; url?: string } | null = null;
+    try {
+      parsed = text ? (JSON.parse(text) as { data?: unknown; message?: string; link?: string; url?: string }) : null;
+    } catch {
+      parsed = null;
+    }
+    const link = [parsed?.data, parsed?.link, parsed?.url].find((value) => typeof value === "string" && value.startsWith("http"));
+    if (typeof link === "string") {
+      const file = await fetch(link, { cache: "no-store" });
+      if (file.ok) return { ok: true as const, bytes: new Uint8Array(await file.arrayBuffer()) };
+    }
+    return { ok: false as const, message: String(parsed?.message || "تعذر طباعة بوليصة بوسطة.") };
+  } catch {
+    return { ok: false as const, message: "تعذر الاتصال ببوسطة لطباعة البوليصة." };
+  }
 }
 
 export async function updateCsBostaDelivery(trackingNumber: string, party: CsBostaParty) {

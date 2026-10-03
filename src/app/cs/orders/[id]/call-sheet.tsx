@@ -429,6 +429,11 @@ export function CsCallSheet({
         setMessage("استكمل البنود الناقصة قبل الحفظ النهائي.");
         return;
       }
+      if (lockedShipping === "bosta" && !waybillPrinted) {
+        setSaving(false);
+        setMessage("اطبعي البوليصة قبل الحفظ النهائي.");
+        return;
+      }
     }
 
     const to = parseDepositToKey(depositToKey);
@@ -468,7 +473,7 @@ export function CsCallSheet({
         depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
         depositToPhone: to.phone || null,
         depositToMethod: to.method || null,
-        orderTotalDelta: signedDelta === 0 ? null : Math.round(signedDelta * 100) / 100,
+        orderTotalDelta: null,
         postCancel:
           showFollowUp && postRefundPaid
             ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
@@ -529,41 +534,32 @@ export function CsCallSheet({
   const inputCls =
     "w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold text-[#14213D]";
   const compactBtn = "rounded-lg px-2.5 py-1 text-[11px] font-extrabold";
-  const invoiceAdjustFields = (
-    <div className="space-y-2">
-      <div className="flex gap-1">
-        <button
-          type="button"
-          onClick={() => setTotalSign("plus")}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
-            totalSign === "plus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-          }`}
-        >
-          زائد
-        </button>
-        <button
-          type="button"
-          onClick={() => setTotalSign("minus")}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-extrabold ${
-            totalSign === "minus" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-          }`}
-        >
-          ناقص
-        </button>
-      </div>
-      <input
-        inputMode="decimal"
-        value={totalAdjustAmount}
-        onChange={(e) => setTotalAdjustAmount(e.target.value.replace(/[^\d.]/g, ""))}
-        placeholder="المبلغ المضاف أو المخصوم"
-        className={inputCls}
-      />
-      <p className="text-xs font-bold text-[#14213D]">
-        الإجمالي بعد التعديل: {adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
-        {snapshot?.currency || "EGP"}
-      </p>
-    </div>
-  );
+  const [printingWaybill, setPrintingWaybill] = useState(false);
+
+  async function printWaybill() {
+    if (!trackingNumber.trim()) {
+      setMessage("مفيش بوليصة بوسطة للطباعة.");
+      return;
+    }
+    setPrintingWaybill(true);
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`);
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { message?: string } | null;
+      setPrintingWaybill(false);
+      setMessage(data?.message || "تعذر طباعة بوليصة بوسطة.");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (popup) {
+      popup.addEventListener("load", () => popup.print());
+    }
+    setWaybillPrinted(true);
+    setPrintingWaybill(false);
+    setMessage("اتفتحت بوليصة بوسطة للطباعة.");
+  }
 
   useEffect(() => {
     let stop = false;
@@ -765,9 +761,9 @@ export function CsCallSheet({
       ) : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-2 lg:items-stretch">
-        <div className="order-1 flex min-h-0 min-w-0 flex-col gap-2 pb-1 lg:order-2 lg:h-[calc(100dvh-6.5rem)] lg:overflow-hidden">
+        <div className="order-1 flex min-w-0 flex-col gap-2 p-1 lg:order-2">
       {!showFollowUp ? (
-        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 content-stretch gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {checklistVisible.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
@@ -782,7 +778,7 @@ export function CsCallSheet({
             return (
               <div
                 key={item.key}
-                className={`flex h-full min-h-0 flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
+                className={`flex flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
                   isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
                 }`}
               >
@@ -794,7 +790,16 @@ export function CsCallSheet({
                   <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-[#14213D]/60">{item.help}</p>
                 ) : null}
                 <div className="mt-1 space-y-1">
-                  {item.type === "confirm_text" ? (
+                  {item.key === "address_complete" ? (
+                    <textarea
+                      disabled={confirmed}
+                      rows={Math.min(4, Math.max(1, Math.ceil(state.value.trim().length / 36) || 1))}
+                      dir={/[\u0600-\u06FF]/.test(state.value) ? "rtl" : "ltr"}
+                      value={state.value}
+                      onChange={(e) => update(item.key, { value: e.target.value })}
+                      className={`${inputCls} resize-none leading-5`}
+                    />
+                  ) : item.type === "confirm_text" ? (
                     <input
                       disabled={confirmed}
                       value={state.value}
@@ -802,7 +807,6 @@ export function CsCallSheet({
                       className={inputCls}
                     />
                   ) : null}
-                  {item.key === "invoice_total" ? invoiceAdjustFields : null}
                   {item.type === "choice" ? (
                     <select
                       value={state.value}
@@ -857,12 +861,7 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 content-stretch gap-2 overflow-auto sm:grid-cols-2 lg:overflow-hidden">
-          <div className="flex flex-col rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
-            <p className="text-sm font-extrabold text-[#14213D]">قيمة الفاتورة</p>
-            <p className="mt-1 text-sm text-[#14213D]/60">زائد أو ناقص على قيمة ووكومرس</p>
-            <div className="mt-3">{invoiceAdjustFields}</div>
-          </div>
+        <div className="grid content-start gap-2 sm:grid-cols-2">
           {showCancelCard ? (
             <div className="flex flex-col justify-between rounded-2xl bg-red-50 p-3 shadow ring-2 ring-red-700">
               <div>
@@ -1177,7 +1176,7 @@ export function CsCallSheet({
         ) : null}
 
         <div
-          className={`flex flex-col rounded-xl p-1.5 shadow-sm ring-2 ${
+          className={`m-0.5 flex flex-col rounded-xl p-1.5 shadow-sm ring-2 ring-inset ${
             missing.includes("shipping_company")
               ? "ring-red-500 bg-white"
               : "ring-[#FCA311] bg-[#FCA311]/20"
@@ -1190,7 +1189,7 @@ export function CsCallSheet({
         </div>
 
         {lockedShipping === "bosta" ? (
-          <div className="flex flex-col rounded-xl bg-[#14213D] p-1.5 text-white shadow-sm ring-2 ring-[#FCA311]">
+          <div className="m-0.5 flex flex-col rounded-xl bg-[#14213D] p-1.5 text-white shadow-sm ring-2 ring-inset ring-[#FCA311]">
             <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
             <input
               dir="ltr"
@@ -1214,28 +1213,18 @@ export function CsCallSheet({
           </div>
         ) : null}
 
-        <div className="flex flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-[#059669]">
+        <div className="m-0.5 flex flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#059669]">
           <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
-          <div className="mt-1 flex flex-wrap gap-1">
-            <button
-              type="button"
-              onClick={() => setWaybillPrinted(true)}
-              className={`${compactBtn} ${
-                waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
-              }`}
-            >
-              نعم
-            </button>
-            <button
-              type="button"
-              onClick={() => setWaybillPrinted(false)}
-              className={`${compactBtn} ${
-                !waybillPrinted ? "bg-[#14213D] text-white" : "bg-white text-[#14213D]"
-              }`}
-            >
-              لا
-            </button>
-          </div>
+        <button
+          type="button"
+          disabled={printingWaybill}
+          onClick={() => void printWaybill()}
+          className={`mt-1 rounded-lg px-2 py-1 text-xs font-extrabold ring-1 ring-[#059669] ${
+            waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
+          }`}
+        >
+          {printingWaybill ? "جاري الطباعة" : waybillPrinted ? "اتطبعت" : "طباعة البوليصة"}
+        </button>
         </div>
       </div>
       </div>
@@ -1290,7 +1279,7 @@ export function CsCallSheet({
                     <td className="px-2 py-1">
                       {row.kind === "remove" ? "إلغاء: " : "إضافة: "}
                       {row.productName}
-                      <span className="mr-1 text-[10px] font-bold text-amber-800">بانتظار الأدمن</span>
+                      <span className="mr-1 text-[10px] font-bold text-amber-800">مسودة</span>
                     </td>
                     <td className="px-2 py-1">{row.quantity}</td>
                     <td className="px-2 py-1">{row.unitPrice.toLocaleString("ar-EG")}</td>
@@ -1324,6 +1313,12 @@ export function CsCallSheet({
         </div>
         <div className="grid shrink-0 gap-1 border-t border-[#14213D]/10 bg-[#F8F4EA] px-2 py-1.5 text-sm font-extrabold text-[#14213D]">
           <p className="flex justify-between gap-2">
+            <span>عدد القطع</span>
+            <span>
+              {(snapshot?.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0).toLocaleString("ar-EG")}
+            </span>
+          </p>
+          <p className="flex justify-between gap-2">
             <span>إجمالي الأصناف</span>
             <span>
               {(snapshot?.items || [])
@@ -1335,10 +1330,7 @@ export function CsCallSheet({
           <p className="flex justify-between gap-2">
             <span>قيمة الأوردر</span>
             <span>
-              {signedDelta === 0
-                ? snapshot?.total
-                : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
-              {snapshot?.currency || "EGP"}
+              {snapshot?.total} {snapshot?.currency || "EGP"}
             </span>
           </p>
         </div>

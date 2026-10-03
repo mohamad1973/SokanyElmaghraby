@@ -196,7 +196,11 @@ async function applyTotals(
       depositAmount: row.depositAmount,
       depositPaid: row.depositPaid,
     });
-    const bosta = await updateBostaDeliveryCod(row.trackingNumber, cod);
+    const bosta = await updateBostaDeliveryCod(
+      row.trackingNumber,
+      cod,
+      items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0),
+    );
     if (!bosta.ok) bostaNote = ` السعر اتسجل، وتحديث بوسطة: ${bosta.message}`;
   }
   void wooOrderId;

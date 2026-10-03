@@ -75,13 +75,6 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
     extraRequiredWhenYes: true,
   },
   {
-    key: "invoice_total",
-    label: "قيمة الفاتورة",
-    help: "أكد قيمة الفاتورة مع العميل.",
-    type: "confirm_only",
-    required: true,
-  },
-  {
     key: "payment_preference",
     label: "طريقة الدفع المفضلة / عند الاستلام",
     help: "سجّل طريقة الدفع المتفق عليها.",
