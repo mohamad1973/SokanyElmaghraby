@@ -764,17 +764,17 @@ export function CsCallSheet({
         </p>
       ) : null}
 
-      <div className="grid items-start gap-3 lg:grid-cols-2">
-        <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2">
+      <div className="grid items-start gap-3 lg:grid-cols-2 lg:items-stretch">
+        <div className="order-1 flex min-h-0 min-w-0 flex-col gap-2 lg:order-2 lg:h-[calc(100dvh-6.5rem)] lg:overflow-hidden">
       {!showFollowUp ? (
-        <div className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2">
+        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 content-stretch gap-2 overflow-auto sm:grid-cols-2 lg:grid-cols-3 lg:overflow-hidden">
           {checklistVisible.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
             return (
               <div
                 key={item.key}
-                className={`flex flex-col rounded-2xl bg-white p-3 shadow-sm ring-2 ${
+                className={`flex h-full min-h-0 flex-col overflow-auto rounded-2xl bg-white p-2 shadow-sm ring-2 ${
                   isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
                 }`}
               >
@@ -884,7 +884,7 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2">
+        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 content-stretch gap-2 overflow-auto sm:grid-cols-2 lg:overflow-hidden">
           <div className="flex flex-col rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
             <p className="text-sm font-extrabold text-[#14213D]">قيمة الفاتورة</p>
             <p className="mt-1 text-sm text-[#14213D]/60">زائد أو ناقص على قيمة ووكومرس</p>
@@ -1008,23 +1008,9 @@ export function CsCallSheet({
       ) : null}
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div
-          className={`flex min-h-[7.5rem] flex-col rounded-xl p-2.5 shadow-sm ring-2 ${
-            missing.includes("shipping_company")
-              ? "ring-red-500 bg-white"
-              : "ring-[#FCA311] bg-[#FCA311]/20"
-          }`}
-        >
-          <p className="text-sm font-extrabold text-[#14213D]">شركة الشحن</p>
-          <p className="mt-1 text-xs text-[#14213D]/60">تحددها المشرفة من القائمة</p>
-          <p className="mt-2 text-sm font-extrabold text-[#14213D]">
-            {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
-          </p>
-        </div>
-
+      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
         {showDepositCard ? (
-          <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#0D9488]/15 p-2.5 shadow-sm ring-2 ring-[#0D9488]">
+          <div className="flex max-h-36 shrink-0 flex-col overflow-auto rounded-xl bg-[#0D9488]/15 p-2 shadow-sm ring-2 ring-[#0D9488] sm:col-span-3">
             <p className="text-sm font-extrabold text-[#14213D]">طلب ديبوزت</p>
             <p className="mt-1 text-xs text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
             <div className="mt-1.5 space-y-1.5">
@@ -1217,40 +1203,46 @@ export function CsCallSheet({
           </div>
         ) : null}
 
-        <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#14213D]/10 p-2.5 shadow-sm ring-2 ring-[#14213D]">
-          <p className="text-sm font-extrabold text-[#14213D]">رقم التراك</p>
-          <p className="mt-1 text-xs text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
-          <input
-            dir="ltr"
-            value={trackingNumber}
-            onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="Tracking"
-            className={`mt-2 ${inputCls}`}
-          />
+        <div
+          className={`flex flex-col rounded-xl p-2 shadow-sm ring-2 ${
+            missing.includes("shipping_company")
+              ? "ring-red-500 bg-white"
+              : "ring-[#FCA311] bg-[#FCA311]/20"
+          }`}
+        >
+          <p className="text-xs font-extrabold text-[#14213D]">شركة الشحن</p>
+          <p className="mt-1 text-[11px] font-extrabold text-[#14213D]">
+            {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
+          </p>
         </div>
 
         {lockedShipping === "bosta" ? (
-          <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#14213D] p-2.5 text-white shadow-sm ring-2 ring-[#FCA311]">
+          <div className="flex flex-col rounded-xl bg-[#14213D] p-2 text-white shadow-sm ring-2 ring-[#FCA311]">
             <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
-            <p dir="ltr" className="mt-1 text-sm font-extrabold">{trackingNumber || "—"}</p>
-            <p className="mt-1 text-sm font-extrabold">{bostaStatus ? getBostaStatusLabelAr(bostaStatus) : "لسه مفيش بوليصة"}</p>
-            <p className="mt-1 text-xs font-bold">
-              قيمة الشحن: {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")} ج.م`}
-            </p>
-            <p className="mt-1 text-xs font-bold">
-              التحصيل: {bostaCod == null ? "—" : `${bostaCod.toLocaleString("ar-EG")} ج.م`}
-            </p>
-            {bostaLastEvent ? <p className="mt-1 text-[10px] font-bold text-white/90">{bostaLastEvent}</p> : null}
-            <p className="mt-1 text-[10px] text-white/70">
-              آخر تحديث:{" "}
-              {bostaSyncedAt ? new Date(bostaSyncedAt).toLocaleString("ar-EG") : "—"}
+            <input
+              dir="ltr"
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+              placeholder="رقم التراك"
+              className={`mt-1 ${inputCls} text-[#14213D]`}
+            />
+            <p
+              className="mt-1 text-[10px] font-bold leading-4"
+              title={bostaSyncedAt ? `آخر تحديث ${new Date(bostaSyncedAt).toLocaleString("ar-EG")}` : undefined}
+            >
+              {bostaStatus ? getBostaStatusLabelAr(bostaStatus) : "لسه مفيش بوليصة"}
+              {" · "}
+              شحن {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")}`}
+              {" · "}
+              تحصيل {bostaCod == null ? "—" : `${bostaCod.toLocaleString("ar-EG")}`}
+              {bostaLastEvent ? ` · ${bostaLastEvent}` : ""}
             </p>
             {bostaError ? <p className="mt-1 text-[10px] font-bold text-[#FCA311]">{bostaError}</p> : null}
           </div>
         ) : null}
 
-        <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#059669]/15 p-2.5 shadow-sm ring-2 ring-[#059669]">
-          <p className="text-sm font-extrabold text-[#14213D]">طباعة البوليصة</p>
+        <div className="flex flex-col rounded-xl bg-[#059669]/15 p-2 shadow-sm ring-2 ring-[#059669]">
+          <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
           <p className="mt-1 text-xs text-[#14213D]/60">اختياري — للفلترة فقط</p>
           <div className="mt-2 flex flex-wrap gap-1">
             <button
@@ -1275,7 +1267,7 @@ export function CsCallSheet({
         </div>
       </div>
       </div>
-      <section className="order-2 flex min-h-[28rem] flex-col overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15 lg:order-1 lg:sticky lg:top-3 lg:max-h-[calc(100dvh-6.5rem)]">
+      <section className="order-2 flex min-h-[28rem] flex-col overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15 lg:order-1 lg:sticky lg:top-3 lg:h-[calc(100dvh-6.5rem)] lg:max-h-[calc(100dvh-6.5rem)]">
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full border-collapse text-right text-sm text-[#14213D]">
             <thead className="sticky top-0 z-10 bg-[#F8F4EA] text-xs font-extrabold">

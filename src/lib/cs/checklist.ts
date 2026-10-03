@@ -101,16 +101,9 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
     ],
   },
   {
-    key: "free_shipping",
-    label: "الشحن مجاني؟",
-    help: "أكد للعميل هل الشحن مجاني حسب الطلب.",
-    type: "confirm_only",
-    required: true,
-  },
-  {
     key: "delivery_terms",
-    label: "إعلام بشروط الاستلام",
-    help: "يجب إعلام العميل بشروط الاستلام قبل إنهاء المكالمة.",
+    label: "إعلام بشروط الشحن والاستلام",
+    help: "يجب إعلام العميل بشروط الشحن والاستلام قبل إنهاء المكالمة.",
     type: "confirm_only",
     required: true,
   },
