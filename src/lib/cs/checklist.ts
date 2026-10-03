@@ -82,13 +82,6 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
     required: true,
   },
   {
-    key: "order_items",
-    label: "تفاصيل الأصناف والألوان والكميات",
-    help: "راجع بنود الطلب مع العميل سطراً سطراً.",
-    type: "confirm_only",
-    required: true,
-  },
-  {
     key: "payment_preference",
     label: "طريقة الدفع المفضلة / عند الاستلام",
     help: "سجّل طريقة الدفع المتفق عليها.",
@@ -99,13 +92,6 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
       { value: "already_paid", label: "مدفوع مسبقاً على الموقع" },
       { value: "transfer", label: "تحويل بنكي / فوري لاحقاً" },
     ],
-  },
-  {
-    key: "delivery_terms",
-    label: "إعلام بشروط الشحن والاستلام",
-    help: "يجب إعلام العميل بشروط الشحن والاستلام قبل إنهاء المكالمة.",
-    type: "confirm_only",
-    required: true,
   },
   {
     key: "shipping_company",

@@ -765,84 +765,67 @@ export function CsCallSheet({
       ) : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-2 lg:items-stretch">
-        <div className="order-1 flex min-h-0 min-w-0 flex-col gap-2 lg:order-2 lg:h-[calc(100dvh-6.5rem)] lg:overflow-hidden">
+        <div className="order-1 flex min-h-0 min-w-0 flex-col gap-2 pb-1 lg:order-2 lg:h-[calc(100dvh-6.5rem)] lg:overflow-hidden">
       {!showFollowUp ? (
-        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 content-stretch gap-2 overflow-auto sm:grid-cols-2 lg:grid-cols-3 lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-1 content-stretch gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {checklistVisible.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
+            const confirmBox = (
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-[#FCA311]"
+                checked={state.confirmed}
+                onChange={(e) => update(item.key, { confirmed: e.target.checked })}
+              />
+            );
             return (
               <div
                 key={item.key}
-                className={`flex h-full min-h-0 flex-col overflow-auto rounded-2xl bg-white p-2 shadow-sm ring-2 ${
+                className={`flex h-full min-h-0 flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
                   isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
                 }`}
               >
-                <p className="text-sm font-extrabold text-[#14213D]">{item.label}</p>
-                <p className="mt-1 text-xs leading-5 text-[#14213D]/60">{item.help}</p>
-                <div className="mt-2 flex-1 space-y-2">
+                <label className="flex items-center justify-between gap-1">
+                  <span className="min-w-0 text-xs font-extrabold leading-4 text-[#14213D]">{item.label}</span>
+                  {confirmBox}
+                </label>
+                {item.help && item.type !== "confirm_only" ? (
+                  <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-[#14213D]/60">{item.help}</p>
+                ) : null}
+                <div className="mt-1 space-y-1">
                   {item.type === "confirm_text" ? (
-                    <>
-                      <input
-                        disabled={confirmed}
-                        value={state.value}
-                        onChange={(e) => update(item.key, { value: e.target.value })}
-                        className={inputCls}
-                      />
-                      <label className="flex items-center gap-2 text-sm font-bold">
-                        <input
-                          type="checkbox"
-                          checked={state.confirmed}
-                          onChange={(e) => update(item.key, { confirmed: e.target.checked })}
-                        />
-                        تم
-                      </label>
-                    </>
-                  ) : null}
-                  {item.type === "confirm_only" ? (
-                    <label className="flex items-center gap-2 text-sm font-bold">
-                      <input
-                        type="checkbox"
-                        checked={state.confirmed}
-                        onChange={(e) => update(item.key, { confirmed: e.target.checked })}
-                      />
-                      نعم / تم
-                    </label>
+                    <input
+                      disabled={confirmed}
+                      value={state.value}
+                      onChange={(e) => update(item.key, { value: e.target.value })}
+                      className={inputCls}
+                    />
                   ) : null}
                   {item.key === "invoice_total" ? invoiceAdjustFields : null}
                   {item.type === "choice" ? (
-                    <>
-                      <select
-                        value={state.value}
-                        onChange={(e) =>
-                          update(item.key, { value: e.target.value, confirmed: Boolean(e.target.value) })
-                        }
-                        className={inputCls}
-                      >
-                        <option value="">اختر...</option>
-                        {(item.choices || []).map((c) => (
-                          <option key={c.value} value={c.value}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="flex items-center gap-2 text-sm font-bold">
-                        <input
-                          type="checkbox"
-                          checked={state.confirmed}
-                          onChange={(e) => update(item.key, { confirmed: e.target.checked })}
-                        />
-                        تم
-                      </label>
-                    </>
+                    <select
+                      value={state.value}
+                      onChange={(e) =>
+                        update(item.key, { value: e.target.value, confirmed: Boolean(e.target.value) })
+                      }
+                      className={inputCls}
+                    >
+                      <option value="">اختر...</option>
+                      {(item.choices || []).map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
                   ) : null}
                   {item.type === "yes_no_extra" ? (
                     <>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <button
                           type="button"
                           onClick={() => update(item.key, { yesNo: "yes", confirmed: false })}
-                          className={`flex-1 rounded-xl py-2 text-sm font-extrabold ${
+                          className={`flex-1 rounded-lg py-1 text-xs font-extrabold ${
                             state.yesNo === "yes" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
                           }`}
                         >
@@ -851,7 +834,7 @@ export function CsCallSheet({
                         <button
                           type="button"
                           onClick={() => update(item.key, { yesNo: "no", confirmed: true, note: "" })}
-                          className={`flex-1 rounded-xl py-2 text-sm font-extrabold ${
+                          className={`flex-1 rounded-lg py-1 text-xs font-extrabold ${
                             state.yesNo === "no" ? "bg-black text-white" : "bg-[#E5E5E5] text-[#14213D]"
                           }`}
                         >
@@ -859,22 +842,12 @@ export function CsCallSheet({
                         </button>
                       </div>
                       {state.yesNo === "yes" ? (
-                        <>
-                          <input
-                            value={state.note}
-                            onChange={(e) => update(item.key, { note: e.target.value })}
-                            placeholder="بديل"
-                            className={inputCls}
-                          />
-                          <label className="flex items-center gap-2 text-sm font-bold">
-                            <input
-                              type="checkbox"
-                              checked={state.confirmed}
-                              onChange={(e) => update(item.key, { confirmed: e.target.checked })}
-                            />
-                            تم
-                          </label>
-                        </>
+                        <input
+                          value={state.note}
+                          onChange={(e) => update(item.key, { note: e.target.value })}
+                          placeholder="بديل"
+                          className={inputCls}
+                        />
                       ) : null}
                     </>
                   ) : null}
@@ -1204,7 +1177,7 @@ export function CsCallSheet({
         ) : null}
 
         <div
-          className={`flex flex-col rounded-xl p-2 shadow-sm ring-2 ${
+          className={`flex flex-col rounded-xl p-1.5 shadow-sm ring-2 ${
             missing.includes("shipping_company")
               ? "ring-red-500 bg-white"
               : "ring-[#FCA311] bg-[#FCA311]/20"
@@ -1217,7 +1190,7 @@ export function CsCallSheet({
         </div>
 
         {lockedShipping === "bosta" ? (
-          <div className="flex flex-col rounded-xl bg-[#14213D] p-2 text-white shadow-sm ring-2 ring-[#FCA311]">
+          <div className="flex flex-col rounded-xl bg-[#14213D] p-1.5 text-white shadow-sm ring-2 ring-[#FCA311]">
             <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
             <input
               dir="ltr"
@@ -1241,10 +1214,9 @@ export function CsCallSheet({
           </div>
         ) : null}
 
-        <div className="flex flex-col rounded-xl bg-[#059669]/15 p-2 shadow-sm ring-2 ring-[#059669]">
+        <div className="flex flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-[#059669]">
           <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
-          <p className="mt-1 text-xs text-[#14213D]/60">اختياري — للفلترة فقط</p>
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-1 flex flex-wrap gap-1">
             <button
               type="button"
               onClick={() => setWaybillPrinted(true)}
