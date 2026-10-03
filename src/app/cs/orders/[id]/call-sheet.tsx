@@ -541,10 +541,12 @@ export function CsCallSheet({
       setMessage("مفيش بوليصة بوسطة للطباعة.");
       return;
     }
+    const preview = window.open("", "bosta-awb");
     setPrintingWaybill(true);
     setMessage("");
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`);
     if (!res.ok) {
+      preview?.close();
       const data = (await res.json().catch(() => null)) as { message?: string } | null;
       setPrintingWaybill(false);
       setMessage(data?.message || "تعذر طباعة بوليصة بوسطة.");
@@ -553,38 +555,30 @@ export function CsCallSheet({
     const blob = await res.blob();
     const signature = new TextDecoder().decode(await blob.slice(0, 4).arrayBuffer());
     if (signature !== "%PDF") {
+      preview?.close();
       setPrintingWaybill(false);
       setMessage("بوسطة أنشأت البوليصة من غير ملف للطباعة.");
       return;
     }
     const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
-    const frame = document.createElement("iframe");
-    frame.setAttribute("title", "طباعة البوليصة");
-    frame.style.position = "fixed";
-    frame.style.right = "0";
-    frame.style.bottom = "0";
-    frame.style.width = "8rem";
-    frame.style.height = "8rem";
-    frame.style.opacity = "0";
-    frame.style.pointerEvents = "none";
-    frame.style.border = "0";
     let finished = false;
-    let started = false;
-    let fallback = 0;
-    const finish = (printed: boolean) => {
-      if (finished) return;
-      finished = true;
-      window.clearTimeout(fallback);
-      window.removeEventListener("afterprint", onWindowAfterPrint);
+    const release = (target: Window | null, frame?: HTMLIFrameElement) => {
       window.setTimeout(() => {
-        frame.remove();
+        frame?.remove();
+        if (target && !target.closed) target.close();
         URL.revokeObjectURL(url);
       }, 1500);
+    };
+    const finish = (printed: boolean, target: Window | null, frame?: HTMLIFrameElement) => {
+      if (finished) return;
+      finished = true;
       setPrintingWaybill(false);
       if (!printed) {
+        release(target, frame);
         setMessage("اتفتحت نافذة الطباعة. اختاري الطابعة عشان الحفظ يتم.");
         return;
       }
+      release(target, frame);
       void fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`, { method: "POST" }).then((saved) => {
         if (saved.ok) {
           setWaybillPrinted(true);
@@ -594,28 +588,53 @@ export function CsCallSheet({
         }
       });
     };
-    const onWindowAfterPrint = () => finish(true);
-    const startPrint = () => {
-      if (started) return;
-      started = true;
-      const win = frame.contentWindow;
-      if (!win) {
-        finish(false);
+    const printWhenReady = (target: Window, frame?: HTMLIFrameElement, alreadyLoaded = false) => {
+      let started = false;
+      const arm = () => {
+        if (started || target.closed) return;
+        started = true;
+        window.setTimeout(() => {
+          if (target.closed) {
+            finish(false, null, frame);
+            return;
+          }
+          target.addEventListener("afterprint", () => finish(true, target, frame));
+          target.focus();
+          try {
+            target.print();
+          } catch {
+            finish(false, target, frame);
+          }
+        }, 900);
+      };
+      if (alreadyLoaded) {
+        arm();
         return;
       }
-      win.addEventListener("afterprint", onWindowAfterPrint);
-      window.addEventListener("afterprint", onWindowAfterPrint);
-      win.focus();
-      try {
-        win.print();
-      } catch {
-        finish(false);
-      }
+      target.addEventListener("load", arm);
+      window.setTimeout(arm, 1600);
     };
-    fallback = window.setTimeout(startPrint, 800);
+    if (preview && !preview.closed) {
+      printWhenReady(preview);
+      preview.location.href = url;
+      return;
+    }
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", "طباعة البوليصة");
+    frame.style.position = "fixed";
+    frame.style.inset = "0";
+    frame.style.zIndex = "80";
+    frame.style.width = "100%";
+    frame.style.height = "100%";
+    frame.style.border = "0";
+    frame.style.background = "#fff";
     frame.onload = () => {
-      window.clearTimeout(fallback);
-      startPrint();
+      const win = frame.contentWindow;
+      if (!win) {
+        finish(false, null, frame);
+        return;
+      }
+      printWhenReady(win, frame, true);
     };
     document.body.appendChild(frame);
     frame.src = url;
