@@ -552,13 +552,67 @@ export function CsCallSheet({
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const popup = window.open(url, "_blank", "noopener,noreferrer");
-    if (popup) {
-      popup.addEventListener("load", () => popup.print());
-    }
-    setWaybillPrinted(true);
-    setPrintingWaybill(false);
-    setMessage("اتفتحت بوليصة بوسطة للطباعة.");
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", "طباعة البوليصة");
+    frame.style.position = "fixed";
+    frame.style.right = "0";
+    frame.style.bottom = "0";
+    frame.style.width = "8rem";
+    frame.style.height = "8rem";
+    frame.style.opacity = "0";
+    frame.style.pointerEvents = "none";
+    frame.style.border = "0";
+    let finished = false;
+    let started = false;
+    let fallback = 0;
+    const finish = (printed: boolean) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(fallback);
+      window.removeEventListener("afterprint", onWindowAfterPrint);
+      window.setTimeout(() => {
+        frame.remove();
+        URL.revokeObjectURL(url);
+      }, 1500);
+      setPrintingWaybill(false);
+      if (!printed) {
+        setMessage("اتفتحت نافذة الطباعة. اختاري الطابعة عشان الحفظ يتم.");
+        return;
+      }
+      void fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`, { method: "POST" }).then((saved) => {
+        if (saved.ok) {
+          setWaybillPrinted(true);
+          setMessage("اتطبعت البوليصة على طابعة الجهاز.");
+        } else {
+          setMessage("الطباعة تمت، وتعذر تسجيلها. اضغطي طباعة تاني.");
+        }
+      });
+    };
+    const onWindowAfterPrint = () => finish(true);
+    const startPrint = () => {
+      if (started) return;
+      started = true;
+      const win = frame.contentWindow;
+      if (!win) {
+        finish(false);
+        return;
+      }
+      win.addEventListener("afterprint", onWindowAfterPrint);
+      window.addEventListener("afterprint", onWindowAfterPrint);
+      win.focus();
+      try {
+        win.print();
+      } catch {
+        finish(false);
+      }
+    };
+    fallback = window.setTimeout(startPrint, 800);
+    frame.onload = () => {
+      window.clearTimeout(fallback);
+      startPrint();
+    };
+    document.body.appendChild(frame);
+    frame.src = url;
   }
 
   useEffect(() => {
@@ -1228,8 +1282,49 @@ export function CsCallSheet({
         </div>
       </div>
       </div>
-      <section className="order-2 flex min-h-[28rem] flex-col overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15 lg:order-1 lg:sticky lg:top-3 lg:h-[calc(100dvh-6.5rem)] lg:max-h-[calc(100dvh-6.5rem)]">
-        <div className="min-h-0 flex-1 overflow-auto">
+      <section className="order-2 flex flex-col rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15 lg:order-1">
+        <div className="grid gap-2 border-b border-[#14213D]/10 p-3">
+          <input
+            value={itemQuery}
+            onChange={(event) => setItemQuery(event.target.value)}
+            placeholder="ابحث باسم الصنف أو رقم الموديل"
+            className={inputCls}
+          />
+          {itemHits.length ? (
+            <div className="grid max-h-48 gap-1 overflow-auto">
+              {itemHits.map((hit) => (
+                <button
+                  key={hit.id}
+                  type="button"
+                  disabled={itemBusy}
+                  onClick={() =>
+                    void requestItem({
+                      kind: "add",
+                      wooProductId: hit.id,
+                      productName: hit.name,
+                      quantity: Math.max(1, Number(itemQty) || 1),
+                      unitPrice: Number(String(hit.price).replace(/[^\d.]/g, "")) || 0,
+                    })
+                  }
+                  className="rounded-lg bg-[#F5F5F0] px-2 py-1.5 text-right text-sm font-bold text-[#14213D]"
+                >
+                  {hit.name}
+                  {hit.displayCode ? ` · ${hit.displayCode}` : ""} · {hit.price}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 text-xs font-bold text-[#14213D]">
+            الكمية
+            <input
+              value={itemQty}
+              onChange={(event) => setItemQty(event.target.value.replace(/\D/g, "").slice(0, 3))}
+              inputMode="numeric"
+              className="h-7 w-16 rounded border border-[#E5E5E5] px-2 text-xs"
+            />
+          </label>
+        </div>
+        <div>
           <table className="w-full border-collapse text-right text-sm text-[#14213D]">
             <thead className="sticky top-0 z-10 bg-[#F8F4EA] text-xs font-extrabold">
               <tr>
@@ -1333,47 +1428,6 @@ export function CsCallSheet({
               {snapshot?.total} {snapshot?.currency || "EGP"}
             </span>
           </p>
-        </div>
-        <div className="grid shrink-0 gap-2 border-t border-[#14213D]/10 p-3">
-          <input
-            value={itemQuery}
-            onChange={(event) => setItemQuery(event.target.value)}
-            placeholder="ابحث باسم الصنف أو رقم الموديل"
-            className={inputCls}
-          />
-          {itemHits.length ? (
-            <div className="grid max-h-48 gap-1 overflow-auto">
-              {itemHits.map((hit) => (
-                <button
-                  key={hit.id}
-                  type="button"
-                  disabled={itemBusy}
-                  onClick={() =>
-                    void requestItem({
-                      kind: "add",
-                      wooProductId: hit.id,
-                      productName: hit.name,
-                      quantity: Math.max(1, Number(itemQty) || 1),
-                      unitPrice: Number(String(hit.price).replace(/[^\d.]/g, "")) || 0,
-                    })
-                  }
-                  className="rounded-lg bg-[#F5F5F0] px-2 py-1.5 text-right text-sm font-bold text-[#14213D]"
-                >
-                  {hit.name}
-                  {hit.displayCode ? ` · ${hit.displayCode}` : ""} · {hit.price}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <label className="flex items-center gap-2 text-xs font-bold text-[#14213D]">
-            الكمية
-            <input
-              value={itemQty}
-              onChange={(event) => setItemQty(event.target.value.replace(/\D/g, "").slice(0, 3))}
-              inputMode="numeric"
-              className="h-7 w-16 rounded border border-[#E5E5E5] px-2 text-xs"
-            />
-          </label>
         </div>
       </section>
       </div>
