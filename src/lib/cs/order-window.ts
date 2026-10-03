@@ -185,6 +185,27 @@ export function isPaidOnlineHighlight(paymentMethod: string, paymentMethodId?: s
 
 export type CsPaymentState = "awaiting_payment" | "paid" | "cod";
 
+/** Deposit is money already collected. Net is what shipping still collects. */
+export function sheetCollectedSplit(input: {
+  total: number;
+  wooStatus?: string | null;
+  paymentState: CsPaymentState;
+  depositAmount?: number | null;
+  depositPaid?: boolean | null;
+  depositApprovalStatus?: string | null;
+}) {
+  const total = Math.max(0, Number(input.total) || 0);
+  const status = String(input.wooStatus || "").toLowerCase().trim();
+  const cancelled = status === "cancelled" || status === "canceled" || status === "failed" || status === "refunded" || status === "trash";
+  if (cancelled && input.paymentState !== "paid") return { deposit: 0, net: 0 };
+  if (input.paymentState === "paid") return { deposit: total, net: 0 };
+  const approved =
+    Boolean(input.depositPaid || String(input.depositApprovalStatus || "").toLowerCase() === "approved") &&
+    Number(input.depositAmount) > 0;
+  const deposit = approved ? Math.min(total, Number(input.depositAmount) || 0) : 0;
+  return { deposit, net: Math.max(0, total - deposit) };
+}
+
 /**
  * Real payment completion for CS badges/filters — not just payment method.
  * Online + Woo pending (no date_paid) = awaiting; online + paid/processing = paid; COD = cod.

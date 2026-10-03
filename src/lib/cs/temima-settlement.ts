@@ -1,7 +1,7 @@
 import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { resolvePaymentState } from "@/lib/cs/order-window";
+import { resolvePaymentState, sheetCollectedSplit } from "@/lib/cs/order-window";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { listUnifiedSayedSheetIds } from "@/lib/cs/temima-sheet-edits";
 import { getPrismaClient } from "@/lib/db";
@@ -18,6 +18,7 @@ export type TemimaSheetRow = {
   customerName: string;
   productNames: string;
   cashAmount: number;
+  depositAmount: number;
   disposition: TemimaDisposition;
   isLarge: boolean;
   carried: boolean;
@@ -97,6 +98,38 @@ export function cashAmountOf(row: {
   if (state !== "cod") return 0;
   const deposit = row.depositPaid ? money(row.depositAmount) : 0;
   return Math.max(0, money(snap.total) - deposit);
+}
+
+function settlementSplit(row: {
+  customerSnapshot: unknown;
+  depositAmount: unknown;
+  depositPaid: boolean | null;
+  depositApprovalStatus?: string | null;
+}) {
+  const snap = (row.customerSnapshot || {}) as {
+    total?: string;
+    paymentMethod?: string;
+    paymentMethodId?: string | null;
+    wooStatus?: string;
+    datePaid?: string | null;
+    paymentState?: "awaiting_payment" | "paid" | "cod";
+  };
+  const state =
+    snap.paymentState ||
+    resolvePaymentState({
+      paymentMethod: snap.paymentMethod,
+      paymentMethodId: snap.paymentMethodId,
+      wooStatus: snap.wooStatus,
+      datePaid: snap.datePaid,
+    });
+  return sheetCollectedSplit({
+    total: money(snap.total),
+    wooStatus: snap.wooStatus,
+    paymentState: state,
+    depositAmount: money(row.depositAmount),
+    depositPaid: row.depositPaid,
+    depositApprovalStatus: row.depositApprovalStatus,
+  });
 }
 
 function customerNameOf(snapshot: unknown) {
@@ -179,21 +212,31 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const snaps = ids.length
       ? await prisma.csOrderConfirmation.findMany({
           where: { id: { in: ids } },
-          select: { id: true, customerSnapshot: true },
+          select: {
+            id: true,
+            customerSnapshot: true,
+            depositAmount: true,
+            depositPaid: true,
+            depositApprovalStatus: true,
+          },
         })
       : [];
-    const snapById = new Map(snaps.map((row) => [row.id, row.customerSnapshot]));
-    const rows: TemimaSheetRow[] = week.lines.map((line) => ({
-      confirmationId: line.confirmationId,
-      wooOrderNumber: line.wooOrderNumber,
-      customerName: customerNameOf(snapById.get(line.confirmationId)),
-      productNames: productNamesOf(snapById.get(line.confirmationId)),
-      cashAmount: Number(line.cashAmount),
-      disposition: line.disposition as TemimaDisposition,
-      isLarge: line.isLarge,
-      carried: Boolean(line.resolvesLineId),
-      postponeLineId: line.resolvesLineId,
-    }));
+    const snapById = new Map(snaps.map((row) => [row.id, row]));
+    const rows: TemimaSheetRow[] = week.lines.map((line) => {
+      const order = snapById.get(line.confirmationId);
+      return {
+        confirmationId: line.confirmationId,
+        wooOrderNumber: line.wooOrderNumber,
+        customerName: customerNameOf(order?.customerSnapshot),
+        productNames: productNamesOf(order?.customerSnapshot),
+        cashAmount: Number(line.cashAmount),
+        depositAmount: order ? settlementSplit(order).deposit : 0,
+        disposition: line.disposition as TemimaDisposition,
+        isLarge: line.isLarge,
+        carried: Boolean(line.resolvesLineId),
+        postponeLineId: line.resolvesLineId,
+      };
+    });
     return {
       ok: true as const,
       weekStart: sunday,
@@ -220,6 +263,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
           customerSnapshot: true,
           depositAmount: true,
           depositPaid: true,
+          depositApprovalStatus: true,
           shippingAssignedAt: true,
           createdAt: true,
         },
@@ -235,12 +279,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     if (!sheetIdSet.has(order.id)) continue;
     if (settledIds.has(order.id) || postponeIds.has(order.id)) continue;
     const saved = draft.get(order.id);
+    const split = settlementSplit(order);
     rows.push({
       confirmationId: order.id,
       wooOrderNumber: order.wooOrderNumber,
       customerName: customerNameOf(order.customerSnapshot),
       productNames: productNamesOf(order.customerSnapshot),
-      cashAmount: cashAmountOf(order),
+      cashAmount: split.net,
+      depositAmount: split.deposit,
       disposition: (saved?.disposition as TemimaDisposition) || "collect",
       isLarge: saved?.isLarge || false,
       carried: false,
@@ -257,6 +303,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       customerName: order ? customerNameOf(order.customerSnapshot) : "—",
       productNames: order ? productNamesOf(order.customerSnapshot) : "—",
       cashAmount: carried.cashAmount,
+      depositAmount: order ? settlementSplit(order).deposit : 0,
       disposition: (saved?.disposition as TemimaDisposition) || "postpone",
       isLarge: saved?.isLarge ?? carried.isLarge,
       carried: true,

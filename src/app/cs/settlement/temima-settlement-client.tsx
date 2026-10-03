@@ -12,6 +12,7 @@ type SheetRow = {
   customerName: string;
   productNames: string;
   cashAmount: number;
+  depositAmount: number;
   disposition: Disposition;
   isLarge: boolean;
   carried: boolean;
@@ -87,6 +88,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
     () => rows.filter((row) => row.disposition === "collect").reduce((sum, row) => sum + row.cashAmount, 0),
     [rows],
   );
+  const depositTotal = useMemo(() => rows.reduce((sum, row) => sum + (row.depositAmount || 0), 0), [rows]);
   const locked = !canEdit || status === "closed";
 
   function patchRow(id: number, patch: Partial<SheetRow>) {
@@ -154,7 +156,8 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
               <th className="px-2 py-2">أوردر</th>
               <th className="px-2 py-2">العميل</th>
               <th className="px-2 py-2">المنتج</th>
-              <th className="px-2 py-2">النقد</th>
+              <th className="px-2 py-2">ديبوزت</th>
+              <th className="px-2 py-2">الصافي</th>
               <th className="px-2 py-2">الحالة</th>
               <th className="px-2 py-2">كبير</th>
             </tr>
@@ -162,7 +165,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                <td colSpan={7} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
                   لا توجد أوردرات لهذا الأسبوع.
                 </td>
               </tr>
@@ -175,6 +178,7 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
                   </td>
                   <td className="px-2 py-2">{row.customerName}</td>
                   <td className="px-2 py-2">{row.productNames || "—"}</td>
+                  <td className="px-2 py-2">{row.depositAmount ? money(row.depositAmount) : ""}</td>
                   <td className="px-2 py-2">{money(row.cashAmount)}</td>
                   <td className="px-2 py-2">
                     <select
@@ -203,7 +207,8 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
         </table>
       </div>
 
-      <div className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-3">
+      <div className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-2 lg:grid-cols-4">
+        <p className="text-sm font-extrabold text-[#14213D]">الديبوزت: {money(depositTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">المستحق نقداً: {money(cashDue)} ج</p>
         <label className="text-sm font-bold">
           المدفوع من تميمة

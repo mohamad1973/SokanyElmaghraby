@@ -14,6 +14,7 @@ import {
   formatCairoOrderDateTime,
   isWithinCairoDateRange,
   resolvePaymentState,
+  sheetCollectedSplit,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
@@ -89,9 +90,14 @@ function formatOrderNames(item: CsQueueItem) {
 }
 
 function sheetDepositNet(item: CsQueueItem) {
-  const total = parseOrderTotal(item.customerSnapshot?.total);
-  const deposit = item.depositAmount && item.depositAmount > 0 ? Number(item.depositAmount) : 0;
-  return { deposit, net: Math.max(0, total - deposit) };
+  return sheetCollectedSplit({
+    total: parseOrderTotal(item.customerSnapshot?.total),
+    wooStatus: item.customerSnapshot?.wooStatus,
+    paymentState: itemPaymentState(item),
+    depositAmount: item.depositAmount,
+    depositPaid: item.depositPaid,
+    depositApprovalStatus: item.depositApprovalStatus,
+  });
 }
 
 function temimaMoney(item: CsQueueItem) {
