@@ -983,6 +983,9 @@ export function CsQueueClient({
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
+  const sheetDayTotal = isCourierSupervisor
+    ? filtered.reduce((sum, item) => sum + parseOrderTotal(item.customerSnapshot?.total), 0)
+    : 0;
 
   function rememberEdits(next: TemimaSheetEdit[]) {
     setSheetEdits((prev) => {
@@ -1146,7 +1149,7 @@ export function CsQueueClient({
   return (
     <div className="space-y-4" dir="rtl">
       <div className="no-print flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:p-4">
-        <div className="min-w-0">
+        <div className="min-w-0 sm:flex-1">
           <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">
             {isCourierSupervisor
               ? sheetDay
@@ -1154,10 +1157,20 @@ export function CsQueueClient({
                 : "شيت سيد تميمة"
               : "قائمة تأكيد الطلبات"}
           </h1>
-          <p className="mt-1 text-sm font-bold text-[#14213D]/70">
-            عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{isCourierSupervisor ? filtered.length : items.length}</span>
-            {!isCourierSupervisor ? <> من أصل {queueTotal}</> : null}
-          </p>
+          <div className="mt-1 flex items-center justify-between gap-3 text-sm font-bold text-[#14213D]/70">
+            <p>
+              عدد النتائج: <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">{isCourierSupervisor ? filtered.length : items.length}</span>
+              {!isCourierSupervisor ? <> من أصل {queueTotal}</> : null}
+            </p>
+            {isCourierSupervisor ? (
+              <p className="shrink-0 text-[#14213D]">
+                {sheetDay ? "قيمة اليوم" : "إجمالي القيمة"}:{" "}
+                <span className="rounded bg-[#14213D] px-2 py-0.5 text-[#FCA311]">
+                  {sheetDayTotal.toLocaleString("ar-EG")} ج.م
+                </span>
+              </p>
+            ) : null}
+          </div>
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
           {isSupervisor && !isCourierSupervisor ? (
