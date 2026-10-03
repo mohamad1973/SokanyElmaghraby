@@ -646,7 +646,7 @@ export function CsCallSheet({
   const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
   return (
-    <div className="flex h-auto min-h-[calc(100dvh-5.25rem)] flex-col gap-1.5 overflow-auto p-2 lg:h-[calc(100dvh-5.25rem)] lg:overflow-hidden" dir="rtl">
+    <div className="flex flex-col gap-3 p-3" dir="rtl">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <Link href="/cs" className="text-sm font-bold text-[#14213D] underline">
@@ -764,20 +764,22 @@ export function CsCallSheet({
         </p>
       ) : null}
 
+      <div className="grid items-start gap-3 lg:grid-cols-2">
+        <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-2">
       {!showFollowUp ? (
-        <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1.5 overflow-hidden md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+        <div className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2">
           {checklistVisible.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
             return (
               <div
                 key={item.key}
-                className={`flex min-h-0 flex-col rounded-xl bg-white p-2 shadow-sm ring-2 ${
+                className={`flex flex-col rounded-2xl bg-white p-3 shadow-sm ring-2 ${
                   isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
                 }`}
               >
-                <p className="text-xs font-extrabold text-[#14213D]">{item.label}</p>
-                <p className="mt-0.5 line-clamp-1 text-[10px] text-[#14213D]/60">{item.help}</p>
+                <p className="text-sm font-extrabold text-[#14213D]">{item.label}</p>
+                <p className="mt-1 text-xs leading-5 text-[#14213D]/60">{item.help}</p>
                 <div className="mt-2 flex-1 space-y-2">
                   {item.type === "confirm_text" ? (
                     <>
@@ -882,16 +884,16 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-1.5 overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
-          <div className="flex min-h-0 flex-col rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
-            <p className="text-xs font-extrabold text-[#14213D]">قيمة الفاتورة</p>
+        <div className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2">
+          <div className="flex flex-col rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+            <p className="text-sm font-extrabold text-[#14213D]">قيمة الفاتورة</p>
             <p className="mt-1 text-sm text-[#14213D]/60">زائد أو ناقص على قيمة ووكومرس</p>
             <div className="mt-3">{invoiceAdjustFields}</div>
           </div>
           {showCancelCard ? (
-            <div className="flex min-h-0 flex-col justify-between rounded-xl bg-red-50 p-2 shadow ring-2 ring-red-700">
+            <div className="flex flex-col justify-between rounded-2xl bg-red-50 p-3 shadow ring-2 ring-red-700">
               <div>
-                <p className="text-xs font-extrabold text-red-800">إلغاء بعد التأكيد</p>
+                <p className="text-sm font-extrabold text-red-800">إلغاء بعد التأكيد</p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   <button
                     type="button"
@@ -936,8 +938,8 @@ export function CsCallSheet({
               </label>
             </div>
           ) : null}
-          <label className="flex min-h-0 cursor-pointer flex-col justify-between rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
-            <span className="text-xs font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
+          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-sm font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
@@ -945,8 +947,8 @@ export function CsCallSheet({
               onChange={(e) => setFu((p) => ({ ...p, handedToCarrier: e.target.checked }))}
             />
           </label>
-          <label className="flex min-h-0 cursor-pointer flex-col justify-between rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
-            <span className="text-xs font-extrabold text-[#14213D]">تم التسليم للعميل</span>
+          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-sm font-extrabold text-[#14213D]">تم التسليم للعميل</span>
             <p className="mt-1 text-sm text-[#14213D]/60">من التتبع أو تأكيد الاستلام</p>
             <input
               type="checkbox"
@@ -955,8 +957,8 @@ export function CsCallSheet({
               onChange={(e) => setFu((p) => ({ ...p, deliveredToCustomer: e.target.checked }))}
             />
           </label>
-          <label className="flex min-h-0 cursor-pointer flex-col justify-between rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
-            <span className="text-xs font-extrabold text-[#14213D]">متابعة العميل</span>
+          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-sm font-extrabold text-[#14213D]">متابعة العميل</span>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
@@ -1005,154 +1007,8 @@ export function CsCallSheet({
         </div>
       ) : null}
 
-      <section className="shrink-0 overflow-hidden rounded-xl bg-white shadow ring-1 ring-[#14213D]/15">
-        <div className="max-h-36 overflow-auto">
-          <table className="w-full border-collapse text-right text-[11px] text-[#14213D]">
-            <thead className="bg-[#F8F4EA] text-[10px] font-extrabold">
-              <tr>
-                {["الصنف", "الكمية", "السعر", "القيمة", ""].map((head) => (
-                  <th key={head || "act"} className="border-b border-[#14213D]/10 px-2 py-1">
-                    {head}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(snapshot?.items || []).map((item, index) => {
-                const quantity = Number(item.quantity || 1);
-                const line = Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0;
-                const price = quantity ? line / quantity : line;
-                return (
-                  <tr key={`${item.name}-${index}`} className="border-b border-[#14213D]/10">
-                    <td className="px-2 py-1">{item.name}</td>
-                    <td className="px-2 py-1">{quantity}</td>
-                    <td className="px-2 py-1">{price.toLocaleString("ar-EG")}</td>
-                    <td className="px-2 py-1 font-extrabold">{line.toLocaleString("ar-EG")}</td>
-                    <td className="px-2 py-1">
-                      <button
-                        type="button"
-                        disabled={itemBusy}
-                        onClick={() =>
-                          void requestItem({
-                            kind: "remove",
-                            wooProductId: 0,
-                            productName: item.name,
-                            quantity,
-                            unitPrice: price,
-                          })
-                        }
-                        className="rounded bg-red-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white disabled:opacity-50"
-                      >
-                        إلغاء
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {pendingAdds
-                .filter((row) => row.status === "pending")
-                .map((row) => (
-                  <tr key={`pending-${row.id}`} className="border-b border-amber-200 bg-amber-50">
-                    <td className="px-2 py-1">
-                      {row.kind === "remove" ? "إلغاء: " : "إضافة: "}
-                      {row.productName}
-                      <span className="mr-1 text-[10px] font-bold text-amber-800">بانتظار الأدمن</span>
-                    </td>
-                    <td className="px-2 py-1">{row.quantity}</td>
-                    <td className="px-2 py-1">{row.unitPrice.toLocaleString("ar-EG")}</td>
-                    <td className="px-2 py-1">{row.lineTotal.toLocaleString("ar-EG")}</td>
-                    <td className="px-2 py-1">
-                      {canApproveItems ? (
-                        <span className="flex gap-1">
-                          <button
-                            type="button"
-                            disabled={itemBusy}
-                            onClick={() => void decideItem(row.id, "approved")}
-                            className="rounded bg-emerald-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white"
-                          >
-                            موافقة
-                          </button>
-                          <button
-                            type="button"
-                            disabled={itemBusy}
-                            onClick={() => void decideItem(row.id, "rejected")}
-                            className="rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] font-extrabold text-white"
-                          >
-                            رفض
-                          </button>
-                        </span>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="grid gap-1 border-t border-[#14213D]/10 bg-[#F8F4EA] px-2 py-1.5 text-[11px] font-extrabold text-[#14213D]">
-          <p className="flex justify-between gap-2">
-            <span>إجمالي الأصناف</span>
-            <span>
-              {(snapshot?.items || [])
-                .reduce((sum, item) => sum + (Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0), 0)
-                .toLocaleString("ar-EG")}{" "}
-              ج.م
-            </span>
-          </p>
-          <p className="flex justify-between gap-2">
-            <span>قيمة الأوردر</span>
-            <span>
-              {signedDelta === 0
-                ? snapshot?.total
-                : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
-              {snapshot?.currency || "EGP"}
-            </span>
-          </p>
-        </div>
-        <div className="grid gap-1 border-t border-[#14213D]/10 p-2">
-          <input
-            value={itemQuery}
-            onChange={(event) => setItemQuery(event.target.value)}
-            placeholder="ابحث باسم الصنف أو رقم الموديل"
-            className={inputCls}
-          />
-          {itemHits.length ? (
-            <div className="grid max-h-24 gap-1 overflow-auto">
-              {itemHits.map((hit) => (
-                <button
-                  key={hit.id}
-                  type="button"
-                  disabled={itemBusy}
-                  onClick={() =>
-                    void requestItem({
-                      kind: "add",
-                      wooProductId: hit.id,
-                      productName: hit.name,
-                      quantity: Math.max(1, Number(itemQty) || 1),
-                      unitPrice: Number(String(hit.price).replace(/[^\d.]/g, "")) || 0,
-                    })
-                  }
-                  className="rounded-lg bg-[#F5F5F0] px-2 py-1 text-right text-[11px] font-bold text-[#14213D]"
-                >
-                  {hit.name}
-                  {hit.displayCode ? ` · ${hit.displayCode}` : ""} · {hit.price}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <label className="flex items-center gap-2 text-[10px] font-bold text-[#14213D]">
-            الكمية
-            <input
-              value={itemQty}
-              onChange={(event) => setItemQty(event.target.value.replace(/\D/g, "").slice(0, 3))}
-              inputMode="numeric"
-              className="h-7 w-16 rounded border border-[#E5E5E5] px-2 text-xs"
-            />
-          </label>
-        </div>
-      </section>
-
       {/* Bottom row: shipping + deposit + tracking + waybill */}
-      <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div
           className={`flex min-h-[7.5rem] flex-col rounded-xl p-2.5 shadow-sm ring-2 ${
             missing.includes("shipping_company")
@@ -1160,8 +1016,8 @@ export function CsCallSheet({
               : "ring-[#FCA311] bg-[#FCA311]/20"
           }`}
         >
-          <p className="text-xs font-extrabold text-[#14213D]">شركة الشحن</p>
-          <p className="mt-0.5 text-[10px] text-[#14213D]/60">تحددها المشرفة من القائمة</p>
+          <p className="text-sm font-extrabold text-[#14213D]">شركة الشحن</p>
+          <p className="mt-1 text-xs text-[#14213D]/60">تحددها المشرفة من القائمة</p>
           <p className="mt-2 text-sm font-extrabold text-[#14213D]">
             {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
           </p>
@@ -1169,8 +1025,8 @@ export function CsCallSheet({
 
         {showDepositCard ? (
           <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#0D9488]/15 p-2.5 shadow-sm ring-2 ring-[#0D9488]">
-            <p className="text-xs font-extrabold text-[#14213D]">طلب ديبوزت</p>
-            <p className="mt-0.5 text-[10px] text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
+            <p className="text-sm font-extrabold text-[#14213D]">طلب ديبوزت</p>
+            <p className="mt-1 text-xs text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
             <div className="mt-1.5 space-y-1.5">
               <div>
                 <p className="text-[10px] font-bold text-[#14213D]/70">الدفع من</p>
@@ -1362,8 +1218,8 @@ export function CsCallSheet({
         ) : null}
 
         <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#14213D]/10 p-2.5 shadow-sm ring-2 ring-[#14213D]">
-          <p className="text-xs font-extrabold text-[#14213D]">رقم التراك</p>
-          <p className="mt-0.5 text-[10px] text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
+          <p className="text-sm font-extrabold text-[#14213D]">رقم التراك</p>
+          <p className="mt-1 text-xs text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
           <input
             dir="ltr"
             value={trackingNumber}
@@ -1394,8 +1250,8 @@ export function CsCallSheet({
         ) : null}
 
         <div className="flex min-h-[7.5rem] flex-col rounded-xl bg-[#059669]/15 p-2.5 shadow-sm ring-2 ring-[#059669]">
-          <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
-          <p className="mt-0.5 text-[10px] text-[#14213D]/60">اختياري — للفلترة فقط</p>
+          <p className="text-sm font-extrabold text-[#14213D]">طباعة البوليصة</p>
+          <p className="mt-1 text-xs text-[#14213D]/60">اختياري — للفلترة فقط</p>
           <div className="mt-2 flex flex-wrap gap-1">
             <button
               type="button"
@@ -1417,6 +1273,153 @@ export function CsCallSheet({
             </button>
           </div>
         </div>
+      </div>
+      </div>
+      <section className="order-2 flex min-h-[28rem] flex-col overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15 lg:order-1 lg:sticky lg:top-3 lg:max-h-[calc(100dvh-6.5rem)]">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full border-collapse text-right text-sm text-[#14213D]">
+            <thead className="sticky top-0 z-10 bg-[#F8F4EA] text-xs font-extrabold">
+              <tr>
+                {["الصنف", "الكمية", "السعر", "القيمة", ""].map((head) => (
+                  <th key={head || "act"} className="border-b border-[#14213D]/10 px-2 py-1">
+                    {head}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(snapshot?.items || []).map((item, index) => {
+                const quantity = Number(item.quantity || 1);
+                const line = Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0;
+                const price = quantity ? line / quantity : line;
+                return (
+                  <tr key={`${item.name}-${index}`} className="border-b border-[#14213D]/10">
+                    <td className="px-2 py-1">{item.name}</td>
+                    <td className="px-2 py-1">{quantity}</td>
+                    <td className="px-2 py-1">{price.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1 font-extrabold">{line.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1">
+                      <button
+                        type="button"
+                        disabled={itemBusy}
+                        onClick={() =>
+                          void requestItem({
+                            kind: "remove",
+                            wooProductId: 0,
+                            productName: item.name,
+                            quantity,
+                            unitPrice: price,
+                          })
+                        }
+                        className="rounded bg-red-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white disabled:opacity-50"
+                      >
+                        إلغاء
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {pendingAdds
+                .filter((row) => row.status === "pending")
+                .map((row) => (
+                  <tr key={`pending-${row.id}`} className="border-b border-amber-200 bg-amber-50">
+                    <td className="px-2 py-1">
+                      {row.kind === "remove" ? "إلغاء: " : "إضافة: "}
+                      {row.productName}
+                      <span className="mr-1 text-[10px] font-bold text-amber-800">بانتظار الأدمن</span>
+                    </td>
+                    <td className="px-2 py-1">{row.quantity}</td>
+                    <td className="px-2 py-1">{row.unitPrice.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1">{row.lineTotal.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1">
+                      {canApproveItems ? (
+                        <span className="flex gap-1">
+                          <button
+                            type="button"
+                            disabled={itemBusy}
+                            onClick={() => void decideItem(row.id, "approved")}
+                            className="rounded bg-emerald-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white"
+                          >
+                            موافقة
+                          </button>
+                          <button
+                            type="button"
+                            disabled={itemBusy}
+                            onClick={() => void decideItem(row.id, "rejected")}
+                            className="rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] font-extrabold text-white"
+                          >
+                            رفض
+                          </button>
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid shrink-0 gap-1 border-t border-[#14213D]/10 bg-[#F8F4EA] px-2 py-1.5 text-sm font-extrabold text-[#14213D]">
+          <p className="flex justify-between gap-2">
+            <span>إجمالي الأصناف</span>
+            <span>
+              {(snapshot?.items || [])
+                .reduce((sum, item) => sum + (Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0), 0)
+                .toLocaleString("ar-EG")}{" "}
+              ج.م
+            </span>
+          </p>
+          <p className="flex justify-between gap-2">
+            <span>قيمة الأوردر</span>
+            <span>
+              {signedDelta === 0
+                ? snapshot?.total
+                : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+              {snapshot?.currency || "EGP"}
+            </span>
+          </p>
+        </div>
+        <div className="grid shrink-0 gap-2 border-t border-[#14213D]/10 p-3">
+          <input
+            value={itemQuery}
+            onChange={(event) => setItemQuery(event.target.value)}
+            placeholder="ابحث باسم الصنف أو رقم الموديل"
+            className={inputCls}
+          />
+          {itemHits.length ? (
+            <div className="grid max-h-48 gap-1 overflow-auto">
+              {itemHits.map((hit) => (
+                <button
+                  key={hit.id}
+                  type="button"
+                  disabled={itemBusy}
+                  onClick={() =>
+                    void requestItem({
+                      kind: "add",
+                      wooProductId: hit.id,
+                      productName: hit.name,
+                      quantity: Math.max(1, Number(itemQty) || 1),
+                      unitPrice: Number(String(hit.price).replace(/[^\d.]/g, "")) || 0,
+                    })
+                  }
+                  className="rounded-lg bg-[#F5F5F0] px-2 py-1.5 text-right text-sm font-bold text-[#14213D]"
+                >
+                  {hit.name}
+                  {hit.displayCode ? ` · ${hit.displayCode}` : ""} · {hit.price}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 text-xs font-bold text-[#14213D]">
+            الكمية
+            <input
+              value={itemQty}
+              onChange={(event) => setItemQty(event.target.value.replace(/\D/g, "").slice(0, 3))}
+              inputMode="numeric"
+              className="h-7 w-16 rounded border border-[#E5E5E5] px-2 text-xs"
+            />
+          </label>
+        </div>
+      </section>
       </div>
     </div>
   );
