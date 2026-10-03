@@ -525,12 +525,20 @@ export async function searchProducts(query: string, limit = 8): Promise<Product[
     return [];
   }
 
-  const data = await wooFetch<WooProduct[]>(
-    `products?per_page=${limit}&status=publish&search=${encodeURIComponent(trimmedQuery)}`,
+  const [data, bySku] = await Promise.all([
+    wooFetch<WooProduct[]>(
+      `products?per_page=${limit}&status=publish&search=${encodeURIComponent(trimmedQuery)}`,
+    ),
+    wooFetch<WooProduct[]>(
+      `products?per_page=${limit}&status=publish&sku=${encodeURIComponent(trimmedQuery)}`,
+    ),
+  ]);
+  const merged = uniqueProducts([...(data || []), ...(bySku || [])].map(mapProduct), limit).filter((product) =>
+    visibleForStorefront(product),
   );
 
-  if (data?.length) {
-    return data.map(mapProduct).filter((product) => visibleForStorefront(product));
+  if (merged.length) {
+    return merged;
   }
 
   const storeData = await storeFetch<StoreApiProduct[]>(

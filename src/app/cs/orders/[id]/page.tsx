@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { getCsConfirmation, parseOrderTotalDelta, serializeDepositAmount } from "@/lib/cs/confirmations";
+import { getCsConfirmation, parseOrderTotalDelta, resolveCsViewer, serializeDepositAmount } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsCallSheet } from "./call-sheet";
@@ -14,6 +14,7 @@ export default async function CsOrderPage({ params }: Props) {
 
   await ensureCsTables();
 
+  const viewer = await resolveCsViewer(session.user.csAgentId);
   const { id } = await params;
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) notFound();
@@ -85,6 +86,7 @@ export default async function CsOrderPage({ params }: Props) {
       confirmedAt={row.confirmedAt ? row.confirmedAt.toISOString() : null}
       confirmationEditedAt={row.confirmationEditedAt ? row.confirmationEditedAt.toISOString() : null}
       orderTotalDelta={parseOrderTotalDelta(row.orderTotalDelta)}
+      canApproveItems={viewer.isAdmin}
       initialAnswers={confirmation.answers.map((a) => ({
         itemKey: a.itemKey,
         confirmed: a.confirmed,

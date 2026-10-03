@@ -875,6 +875,22 @@ function editFieldStuck(before: string, wanted: string, after: string, phone = f
   return seen === previous && seen !== next;
 }
 
+export async function updateBostaDeliveryCod(trackingNumber: string, cod: number) {
+  const current = await fetchCsBostaDelivery(trackingNumber);
+  if (!current.ok) return { ok: false as const, message: current.message };
+  const deliveryId = readBostaLiveDetails(current.data).deliveryId;
+  const body = JSON.stringify({ cod });
+  const put = (path: string) => bostaFetch(path, { method: "PUT", body });
+  let result = deliveryId
+    ? await put(`/deliveries/${encodeURIComponent(deliveryId)}`)
+    : await put(`/deliveries/business/${encodeURIComponent(trackingNumber)}`);
+  if (!result.ok && deliveryId && /cannot put|404/i.test(result.message)) {
+    result = await put(`/deliveries/business/${encodeURIComponent(trackingNumber)}`);
+  }
+  if (!result.ok) return { ok: false as const, message: result.message };
+  return { ok: true as const };
+}
+
 export async function updateCsBostaDelivery(trackingNumber: string, party: CsBostaParty) {
   const current = await fetchCsBostaDelivery(trackingNumber);
   if (!current.ok) {

@@ -51,6 +51,14 @@ type NotifPayload = {
     depositAmount?: number | null;
   }>;
   pendingDeposits?: PendingDeposit[];
+  pendingItemAdds?: Array<{
+    id: number;
+    confirmationId: number;
+    wooOrderNumber: string;
+    kind: "add" | "remove";
+    productName: string;
+    lineTotal: number;
+  }>;
   stockAlerts?: Array<{
     id: number;
     productId: number;
@@ -65,6 +73,7 @@ type NotifPayload = {
     followUpDue: number;
     depositDecisions?: number;
     pendingDeposits?: number;
+    pendingItemAdds?: number;
     stockAlerts?: number;
     all: number;
   };
@@ -190,8 +199,9 @@ function CsNotificationsBell() {
   const total = data?.totals.all || 0;
   const depositDecisions = data?.depositDecisions || [];
   const pendingDeposits = data?.pendingDeposits || [];
+  const pendingItemAdds = data?.pendingItemAdds || [];
   const alertActive = isCsAdmin
-    ? pendingDeposits.length > 0
+    ? pendingDeposits.length > 0 || pendingItemAdds.length > 0
     : depositDecisions.length > 0 || total > 0;
 
   async function markDepositSeen() {
@@ -405,6 +415,20 @@ function CsNotificationsBell() {
                               {o.assignedAgent?.name ? ` · ${o.assignedAgent.name}` : ""}
                             </span>
                           </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {pendingItemAdds.length ? (
+                  <div>
+                    <p className="font-extrabold text-[#14213D]">تعديل أصناف ({pendingItemAdds.length})</p>
+                    <ul className="mt-1 space-y-1.5">
+                      {pendingItemAdds.map((row) => (
+                        <li key={`item-${row.id}`} className="rounded-lg bg-[#F8F4EA] px-3 py-2 text-right text-xs font-bold">
+                          <Link href={`/cs/orders/${row.confirmationId}`} className="block" onClick={() => setOpen(false)}>
+                            #{row.wooOrderNumber} · {row.kind === "remove" ? "إلغاء" : "إضافة"} {row.productName} · {row.lineTotal} ج.م
+                          </Link>
                         </li>
                       ))}
                     </ul>

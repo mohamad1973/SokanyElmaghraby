@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { canAccessTransfers, isTransfersRole } from "@/lib/cs/agents";
 import { listPendingDepositApprovals } from "@/lib/cs/deposit-approvals";
+import { listPendingOrderItemAdds } from "@/lib/cs/order-item-adds";
 import { getCsNotificationsForAgent } from "@/lib/cs/notifications";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { listOpenStockAlerts } from "@/lib/cs/stock-alerts";
@@ -39,13 +40,17 @@ export async function GET() {
 
   // CS store admin: only pending deposit approvals + stock threshold (no agent follow-ups)
   if (isCsAdmin) {
-    const pendingDeposits = await listPendingDepositApprovals();
+    const [pendingDeposits, pendingItemAdds] = await Promise.all([
+      listPendingDepositApprovals(),
+      listPendingOrderItemAdds(),
+    ]);
     return NextResponse.json({
       handedToCarrier: [],
       confirmDelivery: [],
       followUpDue: [],
       depositDecisions: [],
       pendingDeposits,
+      pendingItemAdds,
       stockAlerts: stockMapped,
       totals: {
         handedToCarrier: 0,
@@ -53,8 +58,9 @@ export async function GET() {
         followUpDue: 0,
         depositDecisions: 0,
         pendingDeposits: pendingDeposits.length,
+        pendingItemAdds: pendingItemAdds.length,
         stockAlerts: stockMapped.length,
-        all: pendingDeposits.length + stockMapped.length,
+        all: pendingDeposits.length + pendingItemAdds.length + stockMapped.length,
       },
     });
   }

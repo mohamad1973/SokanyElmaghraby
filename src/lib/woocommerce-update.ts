@@ -62,3 +62,71 @@ export async function updateWooOrderStatus(orderId: number, status: "completed" 
 export async function markWooOrderDelivered(orderId: number, deliveryNote: string) {
   return updateWooOrderStatus(orderId, "completed", deliveryNote);
 }
+
+type WooLine = {
+  id?: number;
+  product_id?: number;
+  name?: string;
+  sku?: string;
+  quantity?: number;
+  price?: number | string;
+  total?: string;
+};
+
+export async function appendWooOrderProduct(orderId: number, productId: number, quantity: number) {
+  const current = await wooWriteFetch<{ line_items?: WooLine[]; total?: string }>(`orders/${orderId}`, { method: "GET" });
+  if (!current.ok) return current;
+  const existing = (current.data.line_items || []).map((line) => ({
+    id: line.id,
+    product_id: line.product_id,
+    quantity: line.quantity,
+  }));
+  const saved = await wooWriteFetch<{ line_items?: WooLine[]; total?: string }>(`orders/${orderId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      line_items: [...existing, { product_id: productId, quantity }],
+    }),
+  });
+  if (!saved.ok) return saved;
+  return {
+    ok: true as const,
+    total: String(saved.data.total || current.data.total || "0"),
+    items: (saved.data.line_items || []).map(mapWooLine),
+  };
+}
+
+function mapWooLine(line: WooLine) {
+  return {
+    name: String(line.name || ""),
+    sku: String(line.sku || ""),
+    quantity: Number(line.quantity || 1),
+    price: Number(line.price || 0),
+    total: String(line.total || "0"),
+  };
+}
+
+export async function removeWooOrderProduct(orderId: number, productName: string, productId: number) {
+  const current = await wooWriteFetch<{ line_items?: WooLine[]; total?: string }>(`orders/${orderId}`, { method: "GET" });
+  if (!current.ok) return current;
+  const lines = current.data.line_items || [];
+  const match = lines.find((line) =>
+    (productId > 0 && Number(line.product_id) === productId) || String(line.name || "").trim() === productName.trim(),
+  );
+  if (!match?.id) return { ok: false as const, message: "الصنف مش موجود في طلب ووكومرس." };
+  const saved = await wooWriteFetch<{ line_items?: WooLine[]; total?: string }>(`orders/${orderId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      line_items: lines.map((line) =>
+        line.id === match.id
+          ? { id: line.id, quantity: 0 }
+          : { id: line.id, product_id: line.product_id, quantity: line.quantity },
+      ),
+    }),
+  });
+  if (!saved.ok) return saved;
+  return {
+    ok: true as const,
+    total: String(saved.data.total || "0"),
+    items: (saved.data.line_items || []).filter((line) => Number(line.quantity) > 0).map(mapWooLine),
+  };
+}

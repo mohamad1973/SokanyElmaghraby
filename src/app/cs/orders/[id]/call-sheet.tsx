@@ -89,6 +89,7 @@ type Props = {
   confirmedAt?: string | null;
   confirmationEditedAt?: string | null;
   orderTotalDelta?: number | null;
+  canApproveItems?: boolean;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -216,6 +217,7 @@ export function CsCallSheet({
   confirmedAt,
   confirmationEditedAt,
   orderTotalDelta: initialOrderTotalDelta,
+  canApproveItems = false,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
@@ -334,6 +336,22 @@ export function CsCallSheet({
   const [totalAdjustAmount, setTotalAdjustAmount] = useState(initialDelta.amount);
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemHits, setItemHits] = useState<Array<{ id: number; name: string; price: string; sku: string; displayCode: string }>>([]);
+  const [itemQty, setItemQty] = useState("1");
+  const [pendingAdds, setPendingAdds] = useState<
+    Array<{
+      id: number;
+      kind: "add" | "remove";
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+      status: string;
+      wooProductId: number;
+    }>
+  >([]);
+  const [itemBusy, setItemBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [allowPartialPay, setAllowPartialPay] = useState(() => {
     const amount = Number(initialDepositAmount);
@@ -547,10 +565,88 @@ export function CsCallSheet({
     </div>
   );
 
+  useEffect(() => {
+    let stop = false;
+    void fetch(`/api/cs/confirmations/${confirmationId}/item-add`)
+      .then((res) => res.json())
+      .then((data: { adds?: typeof pendingAdds }) => {
+        if (!stop) setPendingAdds(data.adds || []);
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [confirmationId]);
+
+  useEffect(() => {
+    const query = itemQuery.trim();
+    if (query.length < 2) {
+      setItemHits([]);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void fetch(`/api/products/search?q=${encodeURIComponent(query)}`)
+        .then((res) => res.json())
+        .then((data: { products?: Array<{ id: number; name: string; price: string; sku?: string; displayCode?: string }> }) => {
+          setItemHits(
+            (data.products || []).map((product) => ({
+              id: product.id,
+              name: product.name,
+              price: String(product.price || "0"),
+              sku: product.sku || "",
+              displayCode: product.displayCode || product.sku || "",
+            })),
+          );
+        })
+        .catch(() => setItemHits([]));
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [itemQuery]);
+
+  async function requestItem(body: {
+    kind: "add" | "remove";
+    wooProductId: number;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+  }) {
+    setItemBusy(true);
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}/item-add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { message?: string; adds?: typeof pendingAdds };
+    setItemBusy(false);
+    setMessage(data.message || (res.ok ? "اتبعت الطلب." : "تعذر إرسال الطلب."));
+    if (!res.ok) return;
+    const listed = await fetch(`/api/cs/confirmations/${confirmationId}/item-add`);
+    const next = (await listed.json()) as { adds?: typeof pendingAdds };
+    setPendingAdds(next.adds || []);
+    setItemQuery("");
+    setItemHits([]);
+  }
+
+  async function decideItem(id: number, decision: "approved" | "rejected") {
+    setItemBusy(true);
+    const res = await fetch(`/api/cs/item-adds/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setItemBusy(false);
+    setMessage(data.message || (res.ok ? "تم." : "تعذر حفظ القرار."));
+    if (res.ok && decision === "approved") window.location.reload();
+    if (res.ok && decision === "rejected") {
+      setPendingAdds((rows) => rows.map((row) => (row.id === id ? { ...row, status: "rejected" } : row)));
+    }
+  }
+
   const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
   return (
-    <div className="flex min-h-[calc(100dvh-4.5rem)] flex-col gap-3 overflow-auto p-2" dir="rtl">
+    <div className="flex h-auto min-h-[calc(100dvh-5.25rem)] flex-col gap-1.5 overflow-auto p-2 lg:h-[calc(100dvh-5.25rem)] lg:overflow-hidden" dir="rtl">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <Link href="/cs" className="text-sm font-bold text-[#14213D] underline">
@@ -648,14 +744,14 @@ export function CsCallSheet({
             <span dir="ltr">تتبع: {snapshot.trackingNumber}</span>
           ) : null}
         </div>
-        <div className="mt-2 grid gap-1 text-white/90 sm:grid-cols-3">
-          <span>الشارع: {answers.address_complete?.value || snapshot?.address || "—"}</span>
-          <span>المحافظة: {answers.governorate_confirm?.value || snapshot?.governorate || "—"}</span>
-          <span>المنطقة: {answers.area_confirm?.value || snapshot?.area || "—"}</span>
+        <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-3">
+          <span className="truncate">الشارع: {answers.address_complete?.value || snapshot?.address || "—"}</span>
+          <span className="truncate">المحافظة: {answers.governorate_confirm?.value || snapshot?.governorate || "—"}</span>
+          <span className="truncate">المنطقة: {answers.area_confirm?.value || snapshot?.area || "—"}</span>
         </div>
-        <div className="mt-2 text-white/80">
+        <p className="mt-1 line-clamp-1 text-xs text-white/80">
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}
-        </div>
+        </p>
       </section>
 
       {message ? (
@@ -669,19 +765,19 @@ export function CsCallSheet({
       ) : null}
 
       {!showFollowUp ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1.5 overflow-hidden md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
           {checklistVisible.map((item) => {
             const state = answers[item.key];
             const isMissing = missing.includes(item.key);
             return (
               <div
                 key={item.key}
-                className={`flex min-h-[9rem] flex-col rounded-2xl bg-white p-3 shadow-sm ring-2 ${
+                className={`flex min-h-0 flex-col rounded-xl bg-white p-2 shadow-sm ring-2 ${
                   isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
                 }`}
               >
-                <p className="text-sm font-extrabold text-[#14213D]">{item.label}</p>
-                <p className="mt-1 text-[11px] text-[#14213D]/60">{item.help}</p>
+                <p className="text-xs font-extrabold text-[#14213D]">{item.label}</p>
+                <p className="mt-0.5 line-clamp-1 text-[10px] text-[#14213D]/60">{item.help}</p>
                 <div className="mt-2 flex-1 space-y-2">
                   {item.type === "confirm_text" ? (
                     <>
@@ -786,16 +882,16 @@ export function CsCallSheet({
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="flex min-h-[10rem] flex-col rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
-            <p className="text-lg font-extrabold text-[#14213D]">قيمة الفاتورة</p>
+        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-1.5 overflow-hidden sm:grid-cols-2 xl:grid-cols-4">
+          <div className="flex min-h-0 flex-col rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
+            <p className="text-xs font-extrabold text-[#14213D]">قيمة الفاتورة</p>
             <p className="mt-1 text-sm text-[#14213D]/60">زائد أو ناقص على قيمة ووكومرس</p>
             <div className="mt-3">{invoiceAdjustFields}</div>
           </div>
           {showCancelCard ? (
-            <div className="flex min-h-[10rem] flex-col justify-between rounded-2xl bg-red-50 p-5 shadow ring-2 ring-red-700">
+            <div className="flex min-h-0 flex-col justify-between rounded-xl bg-red-50 p-2 shadow ring-2 ring-red-700">
               <div>
-                <p className="text-lg font-extrabold text-red-800">إلغاء بعد التأكيد</p>
+                <p className="text-xs font-extrabold text-red-800">إلغاء بعد التأكيد</p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   <button
                     type="button"
@@ -840,8 +936,8 @@ export function CsCallSheet({
               </label>
             </div>
           ) : null}
-          <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
-            <span className="text-lg font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
+          <label className="flex min-h-0 cursor-pointer flex-col justify-between rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-xs font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
@@ -849,8 +945,8 @@ export function CsCallSheet({
               onChange={(e) => setFu((p) => ({ ...p, handedToCarrier: e.target.checked }))}
             />
           </label>
-          <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
-            <span className="text-lg font-extrabold text-[#14213D]">تم التسليم للعميل</span>
+          <label className="flex min-h-0 cursor-pointer flex-col justify-between rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-xs font-extrabold text-[#14213D]">تم التسليم للعميل</span>
             <p className="mt-1 text-sm text-[#14213D]/60">من التتبع أو تأكيد الاستلام</p>
             <input
               type="checkbox"
@@ -859,8 +955,8 @@ export function CsCallSheet({
               onChange={(e) => setFu((p) => ({ ...p, deliveredToCustomer: e.target.checked }))}
             />
           </label>
-          <label className="flex min-h-[10rem] cursor-pointer flex-col justify-between rounded-2xl bg-white p-5 shadow ring-2 ring-[#E5E5E5]">
-            <span className="text-lg font-extrabold text-[#14213D]">متابعة العميل</span>
+          <label className="flex min-h-0 cursor-pointer flex-col justify-between rounded-xl bg-white p-2 shadow ring-2 ring-[#E5E5E5]">
+            <span className="text-xs font-extrabold text-[#14213D]">متابعة العميل</span>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
@@ -908,6 +1004,152 @@ export function CsCallSheet({
           </label>
         </div>
       ) : null}
+
+      <section className="shrink-0 overflow-hidden rounded-xl bg-white shadow ring-1 ring-[#14213D]/15">
+        <div className="max-h-36 overflow-auto">
+          <table className="w-full border-collapse text-right text-[11px] text-[#14213D]">
+            <thead className="bg-[#F8F4EA] text-[10px] font-extrabold">
+              <tr>
+                {["الصنف", "الكمية", "السعر", "القيمة", ""].map((head) => (
+                  <th key={head || "act"} className="border-b border-[#14213D]/10 px-2 py-1">
+                    {head}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(snapshot?.items || []).map((item, index) => {
+                const quantity = Number(item.quantity || 1);
+                const line = Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0;
+                const price = quantity ? line / quantity : line;
+                return (
+                  <tr key={`${item.name}-${index}`} className="border-b border-[#14213D]/10">
+                    <td className="px-2 py-1">{item.name}</td>
+                    <td className="px-2 py-1">{quantity}</td>
+                    <td className="px-2 py-1">{price.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1 font-extrabold">{line.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1">
+                      <button
+                        type="button"
+                        disabled={itemBusy}
+                        onClick={() =>
+                          void requestItem({
+                            kind: "remove",
+                            wooProductId: 0,
+                            productName: item.name,
+                            quantity,
+                            unitPrice: price,
+                          })
+                        }
+                        className="rounded bg-red-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white disabled:opacity-50"
+                      >
+                        إلغاء
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {pendingAdds
+                .filter((row) => row.status === "pending")
+                .map((row) => (
+                  <tr key={`pending-${row.id}`} className="border-b border-amber-200 bg-amber-50">
+                    <td className="px-2 py-1">
+                      {row.kind === "remove" ? "إلغاء: " : "إضافة: "}
+                      {row.productName}
+                      <span className="mr-1 text-[10px] font-bold text-amber-800">بانتظار الأدمن</span>
+                    </td>
+                    <td className="px-2 py-1">{row.quantity}</td>
+                    <td className="px-2 py-1">{row.unitPrice.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1">{row.lineTotal.toLocaleString("ar-EG")}</td>
+                    <td className="px-2 py-1">
+                      {canApproveItems ? (
+                        <span className="flex gap-1">
+                          <button
+                            type="button"
+                            disabled={itemBusy}
+                            onClick={() => void decideItem(row.id, "approved")}
+                            className="rounded bg-emerald-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white"
+                          >
+                            موافقة
+                          </button>
+                          <button
+                            type="button"
+                            disabled={itemBusy}
+                            onClick={() => void decideItem(row.id, "rejected")}
+                            className="rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] font-extrabold text-white"
+                          >
+                            رفض
+                          </button>
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid gap-1 border-t border-[#14213D]/10 bg-[#F8F4EA] px-2 py-1.5 text-[11px] font-extrabold text-[#14213D]">
+          <p className="flex justify-between gap-2">
+            <span>إجمالي الأصناف</span>
+            <span>
+              {(snapshot?.items || [])
+                .reduce((sum, item) => sum + (Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0), 0)
+                .toLocaleString("ar-EG")}{" "}
+              ج.م
+            </span>
+          </p>
+          <p className="flex justify-between gap-2">
+            <span>قيمة الأوردر</span>
+            <span>
+              {signedDelta === 0
+                ? snapshot?.total
+                : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
+              {snapshot?.currency || "EGP"}
+            </span>
+          </p>
+        </div>
+        <div className="grid gap-1 border-t border-[#14213D]/10 p-2">
+          <input
+            value={itemQuery}
+            onChange={(event) => setItemQuery(event.target.value)}
+            placeholder="ابحث باسم الصنف أو رقم الموديل"
+            className={inputCls}
+          />
+          {itemHits.length ? (
+            <div className="grid max-h-24 gap-1 overflow-auto">
+              {itemHits.map((hit) => (
+                <button
+                  key={hit.id}
+                  type="button"
+                  disabled={itemBusy}
+                  onClick={() =>
+                    void requestItem({
+                      kind: "add",
+                      wooProductId: hit.id,
+                      productName: hit.name,
+                      quantity: Math.max(1, Number(itemQty) || 1),
+                      unitPrice: Number(String(hit.price).replace(/[^\d.]/g, "")) || 0,
+                    })
+                  }
+                  className="rounded-lg bg-[#F5F5F0] px-2 py-1 text-right text-[11px] font-bold text-[#14213D]"
+                >
+                  {hit.name}
+                  {hit.displayCode ? ` · ${hit.displayCode}` : ""} · {hit.price}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 text-[10px] font-bold text-[#14213D]">
+            الكمية
+            <input
+              value={itemQty}
+              onChange={(event) => setItemQty(event.target.value.replace(/\D/g, "").slice(0, 3))}
+              inputMode="numeric"
+              className="h-7 w-16 rounded border border-[#E5E5E5] px-2 text-xs"
+            />
+          </label>
+        </div>
+      </section>
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
       <div className="mt-auto grid grid-cols-2 gap-2 lg:grid-cols-4">
