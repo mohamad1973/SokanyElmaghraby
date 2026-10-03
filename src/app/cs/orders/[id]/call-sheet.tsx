@@ -1288,8 +1288,8 @@ export function CsCallSheet({
         </div>
       </div>
       </div>
-      <section className="order-2 flex flex-col rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15 lg:order-1">
-        <div className="grid gap-2 border-b border-[#14213D]/10 p-3">
+      <section className="order-2 flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 lg:order-1">
+        <div className="grid gap-2 border-b border-[#14213D]/10 pb-3">
           <input
             value={itemQuery}
             onChange={(event) => setItemQuery(event.target.value)}
@@ -1330,7 +1330,7 @@ export function CsCallSheet({
             />
           </label>
         </div>
-        <div>
+        <div className="max-h-72 overflow-auto">
           <table className="w-full border-collapse text-right text-sm text-[#14213D]">
             <thead className="sticky top-0 z-10 bg-[#F8F4EA] text-xs font-extrabold">
               <tr>
@@ -1412,7 +1412,8 @@ export function CsCallSheet({
             </tbody>
           </table>
         </div>
-        <div className="grid shrink-0 gap-1 border-t border-[#14213D]/10 bg-[#F8F4EA] px-2 py-1.5 text-sm font-extrabold text-[#14213D]">
+        <div className="min-h-24 shrink-0" />
+        <div className="grid shrink-0 gap-1 rounded-xl bg-[#F8F4EA] p-3 text-sm font-extrabold text-[#14213D]">
           <p className="flex justify-between gap-2">
             <span>عدد القطع</span>
             <span>
