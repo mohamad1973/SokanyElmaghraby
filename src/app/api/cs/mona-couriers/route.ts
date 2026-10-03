@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { assignMonaOrder, loadMonaDesk, markMonaOutcome, recordMonaRemit } from "@/lib/cs/mona-courier";
+import { assignMonaOrder, loadMonaDesk, markMonaOutcome, recordMonaRemit, saveMonaCourierAdjust } from "@/lib/cs/mona-courier";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function accessOrNull() {
@@ -22,6 +22,7 @@ export async function GET(request: Request) {
   const desk = await loadMonaDesk(own ? access.session.user.csAgentId! : undefined);
   return NextResponse.json({
     mode: access.supervisor ? "supervisor" : "courier",
+    canEditMoney: Boolean(access.supervisor && access.viewer.isAdmin),
     ...desk,
   });
 }
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
     outcome?: string;
     reason?: string;
     amount?: number;
+    collected?: number;
+    shipping?: number;
+    remitted?: number;
   } | null;
   if (!body?.action) return NextResponse.json({ message: "الطلب ناقص." }, { status: 400 });
 
@@ -62,8 +66,18 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "remit") {
-    if (!access.supervisor) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    if (!access.viewer.isAdmin) return NextResponse.json({ message: "التوريد من حساب الأدمن." }, { status: 403 });
     const result = await recordMonaRemit(Number(body.courierId), Number(body.amount));
+    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "adjust") {
+    if (!access.viewer.isAdmin) return NextResponse.json({ message: "التعديل من حساب الأدمن." }, { status: 403 });
+    const result = await saveMonaCourierAdjust(Number(body.courierId), {
+      collected: Number(body.collected),
+      shipping: Number(body.shipping),
+      remitted: Number(body.remitted),
+    });
     return NextResponse.json(result, { status: result.ok ? 200 : 400 });
   }
 

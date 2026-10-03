@@ -39,7 +39,7 @@ export type MonaOrderCard = {
   area: string;
   address: string;
   landmarks: string;
-  items: Array<{ name: string; quantity: number }>;
+  items: Array<{ name: string; quantity: number; price: number; lineTotal: number }>;
   total: string;
   cashAmount: number;
   outcome: Outcome | null;
@@ -59,6 +59,10 @@ export type MonaLedgerLine = {
   fee: number;
   remitted: number;
   remaining: number;
+  invoiceCollected: number;
+  invoiceShipping: number;
+  invoiceRemitted: number;
+  invoiceRemaining: number;
 };
 
 function orderDigits(value: string) {
@@ -92,7 +96,7 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     governorate?: string;
     area?: string;
     total?: string;
-    items?: Array<{ name?: string; quantity?: number }>;
+    items?: Array<{ name?: string; quantity?: number; price?: number | string; total?: number | string }>;
   };
   const id = Number(row.id);
   const courierId = row.monaCourierId == null ? null : Number(row.monaCourierId);
@@ -112,7 +116,14 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     address: answerText(mine, "address_complete") || snap.address || "",
     landmarks: answerText(mine, "address_landmarks"),
     items: (snap.items || [])
-      .map((item) => ({ name: String(item.name || "").trim(), quantity: Number(item.quantity || 1) }))
+      .map((item) => {
+        const name = String(item.name || "").trim();
+        const quantity = Number(item.quantity || 1) || 1;
+        const lineTotal = Number(String(item.total ?? "").replace(/[^\d.]/g, "")) || 0;
+        const priceRaw = Number(String(item.price ?? "").replace(/[^\d.]/g, "")) || 0;
+        const price = priceRaw || (quantity ? lineTotal / quantity : 0);
+        return { name, quantity, price, lineTotal: lineTotal || price * quantity };
+      })
       .filter((item) => item.name),
     total: String(snap.total || ""),
     cashAmount: cashAmountOf({
@@ -188,10 +199,53 @@ async function remittedByCourier() {
   return map;
 }
 
+type CourierAdjust = {
+  collected: number | null;
+  shipping: number | null;
+  remitted: number | null;
+};
+
+async function ensureMonaAdjustTable() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsMonaCourierAdjust\` (
+      \`courierAgentId\` INT NOT NULL,
+      \`collectedAmount\` DECIMAL(12,2) NULL,
+      \`shippingAmount\` DECIMAL(12,2) NULL,
+      \`remittedAmount\` DECIMAL(12,2) NULL,
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`courierAgentId\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+}
+
+async function loadMonaAdjusts() {
+  const prisma = getPrismaClient();
+  const map = new Map<number, CourierAdjust>();
+  if (!prisma) return map;
+  await ensureMonaAdjustTable();
+  const rows = await prisma.$queryRaw<
+    Array<{ courierAgentId: number; collectedAmount: unknown; shippingAmount: unknown; remittedAmount: unknown }>
+  >`
+    SELECT courierAgentId, collectedAmount, shippingAmount, remittedAmount
+    FROM CsMonaCourierAdjust
+  `;
+  for (const row of rows) {
+    map.set(Number(row.courierAgentId), {
+      collected: row.collectedAmount == null ? null : Number(row.collectedAmount),
+      shipping: row.shippingAmount == null ? null : Number(row.shippingAmount),
+      remitted: row.remittedAmount == null ? null : Number(row.remittedAmount),
+    });
+  }
+  return map;
+}
+
 function ledgerOf(
   couriers: Array<{ id: number; name: string }>,
   cards: MonaOrderCard[],
   remitted: Map<number, number>,
+  adjusts: Map<number, CourierAdjust>,
 ): MonaLedgerLine[] {
   return couriers.map((courier) => {
     const mine = cards.filter((card) => card.courierId === Number(courier.id));
@@ -202,6 +256,10 @@ function ledgerOf(
     const collected = delivered.reduce((sum, card) => sum + card.cashAmount, 0);
     const fee = delivered.length * MONA_COURIER_FEE;
     const paid = remitted.get(courier.id) || 0;
+    const adjust = adjusts.get(Number(courier.id));
+    const invoiceCollected = adjust?.collected ?? collected;
+    const invoiceShipping = adjust?.shipping ?? fee;
+    const invoiceRemitted = adjust?.remitted ?? paid;
     return {
       courierId: courier.id,
       name: courier.name,
@@ -213,6 +271,10 @@ function ledgerOf(
       fee,
       remitted: paid,
       remaining: collected - fee - paid,
+      invoiceCollected,
+      invoiceShipping,
+      invoiceRemitted,
+      invoiceRemaining: invoiceCollected - invoiceShipping - invoiceRemitted,
     };
   });
 }
@@ -223,12 +285,45 @@ export async function loadMonaDesk(viewerCourierId?: number) {
   const rows = await loadAssignedOrders(viewerCourierId);
   const answers = await loadAnswers(rows.map((row) => row.id));
   const cards = rows.map((row) => cardFrom(row, answers));
-  const remitted = await remittedByCourier();
+  const [remitted, adjusts] = await Promise.all([remittedByCourier(), loadMonaAdjusts()]);
   return {
     couriers: visible,
     orders: cards,
-    ledger: ledgerOf(visible, cards, remitted),
+    ledger: ledgerOf(visible, cards, remitted, adjusts),
   };
+}
+
+function moneyAmount(value: number) {
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100) / 100;
+}
+
+export async function saveMonaCourierAdjust(
+  courierId: number,
+  input: { collected: number; shipping: number; remitted: number },
+) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
+  const couriers = await listMonaCourierAgents();
+  if (!couriers.some((row) => row.id === courierId)) {
+    return { ok: false as const, message: "المندوب مش موجود." };
+  }
+  const collected = moneyAmount(input.collected);
+  const shipping = moneyAmount(input.shipping);
+  const remitted = moneyAmount(input.remitted);
+  if (collected == null || shipping == null || remitted == null) {
+    return { ok: false as const, message: "اكتب المبالغ بشكل صحيح." };
+  }
+  await ensureMonaAdjustTable();
+  await prisma.$executeRaw`
+    INSERT INTO CsMonaCourierAdjust (courierAgentId, collectedAmount, shippingAmount, remittedAmount)
+    VALUES (${courierId}, ${collected}, ${shipping}, ${remitted})
+    ON DUPLICATE KEY UPDATE
+      collectedAmount = ${collected},
+      shippingAmount = ${shipping},
+      remittedAmount = ${remitted}
+  `;
+  return { ok: true as const, message: "اتحفظت أرقام الحساب." };
 }
 
 export async function assignMonaOrder(orderNumber: string, courierId: number) {

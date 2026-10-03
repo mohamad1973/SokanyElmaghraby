@@ -694,7 +694,8 @@ function CsHeader() {
                   pathname.startsWith("/cs/temima-scan") ||
                   pathname.startsWith("/cs/couriers") ||
                   pathname === "/cs/courier" ||
-                  pathname.startsWith("/cs/courier/"),
+                  pathname.startsWith("/cs/courier/") ||
+                  pathname.startsWith("/cs/mona-accounts"),
               )}
               aria-expanded={shippingOpen}
               aria-haspopup="menu"
@@ -720,6 +721,11 @@ function CsHeader() {
           {isSupervisor && !isAdmin ? (
             <Link href="/cs/temima" className={navClass(pathname.startsWith("/cs/temima"))}>
               شيت سيد تميمة
+            </Link>
+          ) : null}
+          {isSupervisor && !isAdmin ? (
+            <Link href="/cs/mona-accounts" className={navClass(pathname.startsWith("/cs/mona-accounts"))}>
+              مناديب المشرفة
             </Link>
           ) : null}
           {isSupervisor ? (
@@ -767,7 +773,7 @@ function CsHeader() {
               ref={shippingMenuRef}
               role="menu"
               dir="rtl"
-              className="fixed z-[80] w-44 rounded-xl bg-white p-1 text-sm font-bold text-[#14213D] shadow-lg ring-1 ring-black/10"
+              className="fixed z-[80] w-48 rounded-xl bg-white p-1 text-sm font-bold text-[#14213D] shadow-lg ring-1 ring-black/10"
               style={{ top: shippingPos.top, left: shippingPos.left }}
             >
               <Link
@@ -801,6 +807,14 @@ function CsHeader() {
                 className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
               >
                 المندوب
+              </Link>
+              <Link
+                href="/cs/mona-accounts"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                مناديب المشرفة
               </Link>
             </div>,
             document.body,

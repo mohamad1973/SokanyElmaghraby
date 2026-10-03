@@ -14,7 +14,7 @@ type OrderCard = {
   area: string;
   address: string;
   landmarks: string;
-  items: Array<{ name: string; quantity: number }>;
+  items: Array<{ name: string; quantity: number; price: number; lineTotal: number }>;
   total: string;
   cashAmount: number;
   outcome: Outcome | null;
@@ -34,14 +34,21 @@ type LedgerLine = {
   fee: number;
   remitted: number;
   remaining: number;
+  invoiceCollected: number;
+  invoiceShipping: number;
+  invoiceRemitted: number;
+  invoiceRemaining: number;
 };
 
 type Desk = {
   mode: "supervisor" | "courier";
+  canEditMoney?: boolean;
   couriers: Array<{ id: number; name: string }>;
   orders: OrderCard[];
   ledger: LedgerLine[];
 };
+
+type MoneyDraft = { collected: string; shipping: string; remitted: string };
 
 function egp(value: number) {
   const rounded = Math.round(value * 100) / 100;
@@ -55,14 +62,168 @@ function orderState(order: OrderCard) {
   return "متوزع";
 }
 
-function SupervisorOrderLine({ order }: { order: OrderCard }) {
+function invoiceLines(order: OrderCard) {
+  if (!order.items.length) {
+    return [{ key: `${order.id}-0`, product: "—", quantity: 1, price: order.cashAmount, value: order.cashAmount }];
+  }
+  return order.items.map((item, index) => ({
+    key: `${order.id}-${index}`,
+    product: item.name,
+    quantity: item.quantity,
+    price: item.price,
+    value: item.lineTotal || item.price * item.quantity,
+  }));
+}
+
+function CourierInvoice({
+  line,
+  orders,
+  canEditMoney,
+  draft,
+  onDraft,
+  onSave,
+}: {
+  line: LedgerLine;
+  orders: OrderCard[];
+  canEditMoney: boolean;
+  draft: MoneyDraft;
+  onDraft: (next: MoneyDraft) => void;
+  onSave: () => void;
+}) {
+  const mine = orders.filter((order) => Number(order.courierId) === Number(line.courierId));
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#14213D]">
-      <p className="min-w-0 flex-1 truncate">
-        #{order.wooOrderNumber} · {order.customerName || "—"} · {order.phone || "—"} · {orderState(order)}
-      </p>
-      <p className="shrink-0 font-extrabold">{egp(order.cashAmount)}</p>
-    </div>
+    <article className="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15">
+      <header className="flex items-center justify-between gap-3 bg-[#14213D] px-4 py-3 text-white">
+        <h3 className="text-lg font-extrabold">حساب {line.name}</h3>
+        <p className="text-xs font-bold text-[#FCA311]">
+          مسلّم {line.delivered} · مؤجّل {line.postponed} · رفض {line.refused}
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] border-collapse text-right text-sm text-[#14213D]">
+          <thead className="bg-[#F8F4EA] text-xs font-extrabold">
+            <tr>
+              {["رقم الأوردر", "العميل", "التليفون", "العنوان", "المنتج", "الكمية", "السعر", "القيمة", "الحالة"].map((head) => (
+                <th key={head} className="border-b border-[#14213D]/10 px-2 py-2">
+                  {head}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {mine.length ? (
+              mine.flatMap((order) => {
+                const lines = invoiceLines(order);
+                return lines.map((row, index) => (
+                  <tr key={row.key} className="border-b border-[#14213D]/10">
+                    {index === 0 ? (
+                      <>
+                        <td className="px-2 py-2 font-extrabold" rowSpan={lines.length}>
+                          #{order.wooOrderNumber}
+                        </td>
+                        <td className="px-2 py-2" rowSpan={lines.length}>
+                          {order.customerName || "—"}
+                        </td>
+                        <td className="px-2 py-2" dir="ltr" rowSpan={lines.length}>
+                          {order.phone || "—"}
+                        </td>
+                        <td className="px-2 py-2" rowSpan={lines.length}>
+                          {order.address || "—"}
+                        </td>
+                      </>
+                    ) : null}
+                    <td className="px-2 py-2">{row.product}</td>
+                    <td className="px-2 py-2">{row.quantity}</td>
+                    <td className="px-2 py-2">{egp(row.price)}</td>
+                    <td className="px-2 py-2 font-extrabold">{egp(row.value)}</td>
+                    {index === 0 ? (
+                      <td className="px-2 py-2 font-extrabold" rowSpan={lines.length}>
+                        {orderState(order)}
+                      </td>
+                    ) : null}
+                  </tr>
+                ));
+              })
+            ) : (
+              <tr>
+                <td className="px-3 py-6 text-center font-bold text-[#14213D]/60" colSpan={9}>
+                  مفيش أوردرات عند المندوب.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <footer className="grid gap-2 border-t border-[#14213D]/10 bg-[#F8F4EA] px-4 py-3 text-sm font-extrabold text-[#14213D]">
+        <p className="flex items-center justify-between gap-3">
+          <span>إجمالي قيمة البضاعة</span>
+          <span>{egp(line.goods)} ج.م</span>
+        </p>
+        {canEditMoney ? (
+          <form
+            className="grid gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSave();
+            }}
+          >
+            <label className="flex items-center justify-between gap-3">
+              <span>القيمة المحصلة</span>
+              <input
+                value={draft.collected}
+                onChange={(event) => onDraft({ ...draft, collected: event.target.value })}
+                inputMode="decimal"
+                className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3">
+              <span>إجمالي تكلفة الشحن</span>
+              <input
+                value={draft.shipping}
+                onChange={(event) => onDraft({ ...draft, shipping: event.target.value })}
+                inputMode="decimal"
+                className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3">
+              <span>التوريد النقدي</span>
+              <input
+                value={draft.remitted}
+                onChange={(event) => onDraft({ ...draft, remitted: event.target.value })}
+                inputMode="decimal"
+                className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
+              />
+            </label>
+            <p className="flex items-center justify-between gap-3 text-base">
+              <span>المتبقي</span>
+              <span>{egp(line.invoiceRemaining)} ج.م</span>
+            </p>
+            <button type="submit" className="h-10 rounded-xl bg-[#FCA311] text-sm font-extrabold text-black">
+              حفظ
+            </button>
+          </form>
+        ) : (
+          <>
+            <p className="flex items-center justify-between gap-3">
+              <span>القيمة المحصلة</span>
+              <span>{egp(line.invoiceCollected)} ج.م</span>
+            </p>
+            <p className="flex items-center justify-between gap-3">
+              <span>إجمالي تكلفة الشحن</span>
+              <span>{egp(line.invoiceShipping)} ج.م</span>
+            </p>
+            <p className="flex items-center justify-between gap-3">
+              <span>التوريد النقدي</span>
+              <span>{egp(line.invoiceRemitted)} ج.م</span>
+            </p>
+            <p className="flex items-center justify-between gap-3 text-base">
+              <span>المتبقي</span>
+              <span>{egp(line.invoiceRemaining)} ج.م</span>
+            </p>
+          </>
+        )}
+      </footer>
+    </article>
   );
 }
 
@@ -176,7 +337,7 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
   const [loading, setLoading] = useState(true);
   const [orderNumber, setOrderNumber] = useState("");
   const [courierId, setCourierId] = useState("");
-  const [remitDrafts, setRemitDrafts] = useState<Record<number, string>>({});
+  const [moneyDrafts, setMoneyDrafts] = useState<Record<number, MoneyDraft>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,6 +349,17 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
       return;
     }
     setDesk(data);
+    setMoneyDrafts((current) => {
+      const next = { ...current };
+      for (const line of data.ledger || []) {
+        next[line.courierId] = {
+          collected: egp(line.invoiceCollected),
+          shipping: egp(line.invoiceShipping),
+          remitted: egp(line.invoiceRemitted),
+        };
+      }
+      return next;
+    });
     setMessage("");
   }, [mode]);
 
@@ -213,7 +385,11 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
     <section className="no-print grid gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10 sm:p-4">
       <div>
         <h2 className="text-base font-extrabold text-[#14213D]">مناديب المشرفة</h2>
-        <p className="text-xs font-bold text-[#14213D]/70">أجر 75 جنيه على كل أوردر اتسلم. المتبقي = التحصيل − الأجر − التوريد.</p>
+        {mode === "courier" ? (
+          <p className="text-xs font-bold text-[#14213D]/70">أجر 75 جنيه على كل أوردر اتسلم. المتبقي = التحصيل − الأجر − التوريد.</p>
+        ) : (
+          <p className="text-xs font-bold text-[#14213D]/70">المتبقي = المحصلة − الشحن − التوريد. تعديل الأرقام من حساب الأدمن.</p>
+        )}
       </div>
       {message ? <p className="text-sm font-extrabold text-[#14213D]">{message}</p> : null}
       {mode === "supervisor" ? (
@@ -254,38 +430,30 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
       ) : null}
       {mode === "supervisor"
         ? (desk?.ledger || []).map((line) => (
-            <article key={line.courierId} className="grid gap-2 rounded-2xl bg-[#F8F4EA] p-3 ring-1 ring-[#14213D]/10">
-              <p className="text-base font-extrabold text-[#14213D]">{line.name}</p>
-              {orders
-                .filter((order) => Number(order.courierId) === Number(line.courierId))
-                .map((order) => (
-                  <SupervisorOrderLine key={order.id} order={order} />
-                ))}
-              <p className="text-sm font-bold text-[#14213D]">
-                مسلّم {line.delivered} · مؤجّل {line.postponed} · رفض {line.refused}
-              </p>
-              <p className="text-sm font-extrabold text-[#14213D]">
-                بضاعة {egp(line.goods)} · التحصيل {egp(line.collected)} · الأجر {egp(line.fee)} · التوريد {egp(line.remitted)} · المتبقي {egp(line.remaining)}
-              </p>
-              <form
-                className="flex flex-wrap gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void post({ action: "remit", courierId: line.courierId, amount: Number(remitDrafts[line.courierId] || "") });
-                }}
-              >
-                <input
-                  value={remitDrafts[line.courierId] || ""}
-                  onChange={(event) => setRemitDrafts((current) => ({ ...current, [line.courierId]: event.target.value }))}
-                  inputMode="decimal"
-                  placeholder="مبلغ التوريد"
-                  className="h-10 min-w-0 flex-1 rounded-xl border border-[#14213D]/15 bg-white px-3 text-sm font-bold text-[#14213D]"
-                />
-                <button type="submit" className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black">
-                  تسجيل التوريد
-                </button>
-              </form>
-            </article>
+            <CourierInvoice
+              key={line.courierId}
+              line={line}
+              orders={orders}
+              canEditMoney={Boolean(desk?.canEditMoney)}
+              draft={
+                moneyDrafts[line.courierId] || {
+                  collected: egp(line.invoiceCollected),
+                  shipping: egp(line.invoiceShipping),
+                  remitted: egp(line.invoiceRemitted),
+                }
+              }
+              onDraft={(next) => setMoneyDrafts((current) => ({ ...current, [line.courierId]: next }))}
+              onSave={() => {
+                const draft = moneyDrafts[line.courierId];
+                void post({
+                  action: "adjust",
+                  courierId: line.courierId,
+                  collected: Number(draft?.collected),
+                  shipping: Number(draft?.shipping),
+                  remitted: Number(draft?.remitted),
+                });
+              }}
+            />
           ))
         : null}
       {mode === "courier" && desk?.ledger[0] ? (

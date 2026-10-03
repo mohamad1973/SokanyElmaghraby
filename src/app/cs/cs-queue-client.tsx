@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { MonaCourierPanel } from "./mona/mona-client";
 import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
@@ -1251,8 +1250,6 @@ export function CsQueueClient({
           onLockMinutes={(minutes) => lockCutoff({ minutes })}
         />
       ) : null}
-
-      {canSetTemimaCutoff ? <MonaCourierPanel mode="supervisor" /> : null}
 
       <div className="no-print space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8">

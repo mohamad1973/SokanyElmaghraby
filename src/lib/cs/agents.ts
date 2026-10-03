@@ -386,6 +386,17 @@ async function runEnsureCsTables() {
   `);
 
   await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsMonaCourierAdjust\` (
+      \`courierAgentId\` INT NOT NULL,
+      \`collectedAmount\` DECIMAL(12,2) NULL,
+      \`shippingAmount\` DECIMAL(12,2) NULL,
+      \`remittedAmount\` DECIMAL(12,2) NULL,
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`courierAgentId\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsMonaCourierRemit\` (
       \`id\` INT NOT NULL AUTO_INCREMENT,
       \`courierAgentId\` INT NOT NULL,
