@@ -76,14 +76,18 @@ export function openWeekToClose(weeks: Array<{ weekStart: string; status: string
   return thisSunday;
 }
 
-function clampWeekEnd(start: string, endInput?: string) {
-  const saturday = addDaysYmd(start, 6);
-  const today = cairoTodayYmd();
-  const cap = saturday > today ? today : saturday;
-  if (!endInput) return cap < start ? start : cap;
-  if (endInput < start) return start;
-  if (endInput > saturday) return saturday;
-  return endInput;
+function isYmd(value?: string): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function resolveSettlementRange(weekStartInput: string | undefined, weekEndInput: string | undefined, fallbackStart: string) {
+  const start = isYmd(weekStartInput) ? weekStartInput : fallbackStart;
+  const sunday = sundayOnOrBefore(start);
+  const saturday = addDaysYmd(sunday, 6);
+  let end = isYmd(weekEndInput) ? weekEndInput : isYmd(weekStartInput) ? start : saturday > cairoTodayYmd() ? cairoTodayYmd() : saturday;
+  if (end < start) end = start;
+  if (end > saturday) end = saturday;
+  return { start, end, sunday, saturday, fullWeek: start === sunday && end === saturday };
 }
 
 function money(value: unknown) {
@@ -311,13 +315,15 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   await ensureCsTables();
 
   const weeks = await loadWeeks();
-  const sunday = weekStartInput
-    ? sundayOnOrBefore(weekStartInput)
-    : openWeekToClose(weeks.map((row) => ({
-        weekStart: cairoYmdFromIso(row.weekStart.toISOString()),
-        status: row.status,
-      })));
-  const saturday = addDaysYmd(sunday, 6);
+  const range = resolveSettlementRange(
+    weekStartInput,
+    weekEndInput,
+    openWeekToClose(weeks.map((row) => ({
+      weekStart: cairoYmdFromIso(row.weekStart.toISOString()),
+      status: row.status,
+    }))),
+  );
+  const { sunday, saturday } = range;
   const week = weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday) || null;
 
   const resolvedPostponeIds = new Set<number>();
@@ -396,11 +402,15 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         postponeLineId: line.resolvesLineId,
         sheetDay: carried ? "" : days.get(line.confirmationId) || fallbackSheetDay(order, cutoffs, edits, sunday, saturday),
       };
+    }).filter((row) => {
+      if (row.carried || !row.sheetDay) return range.fullWeek;
+      return row.sheetDay >= range.start && row.sheetDay <= range.end;
     });
     return {
       ok: true as const,
-      weekStart: sunday,
-      weekEnd: cairoYmdFromIso(week.weekEnd.toISOString()) || saturday,
+      weekStart: range.start,
+      weekEnd: range.end,
+      fullWeek: range.fullWeek,
       status: "closed" as const,
       cashDue: Number(week.cashDue),
       cashPaid: Number(week.cashPaid),
@@ -410,10 +420,11 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     };
   }
 
-  const periodEnd = clampWeekEnd(sunday, weekEndInput);
-  const days = await sheetDayById(sunday, periodEnd);
+  const days = await sheetDayById(range.start, range.end);
   const sheetIds = [...days.keys()];
-  const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id));
+  const carryIds = range.fullWeek
+    ? openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id))
+    : [];
   const orderIds = [...sheetIds, ...carryIds];
   const orders = orderIds.length
     ? await prisma.csOrderConfirmation.findMany({
@@ -460,11 +471,11 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       isLarge: saved?.isLarge || false,
       carried: false,
       postponeLineId: null,
-      sheetDay: days.get(order.id) || fallbackSheetDay(order, cutoffs, edits, sunday, periodEnd),
+      sheetDay: days.get(order.id) || fallbackSheetDay(order, cutoffs, edits, range.start, range.end),
     });
   }
 
-  for (const carried of openPostpones) {
+  if (range.fullWeek) for (const carried of openPostpones) {
     const saved = draft.get(carried.confirmationId);
     const order = orders.find((row) => row.id === carried.confirmationId);
     const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
@@ -493,8 +504,9 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
 
   return {
     ok: true as const,
-    weekStart: sunday,
-    weekEnd: periodEnd,
+    weekStart: range.start,
+    weekEnd: range.end,
+    fullWeek: range.fullWeek,
     status: "open" as const,
     cashDue,
     cashPaid: week ? Number(week.cashPaid) : 0,
@@ -561,30 +573,38 @@ export async function saveTemimaWeek(input: {
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
 
-  const sunday = sundayOnOrBefore(input.weekStart);
-  const periodEnd = clampWeekEnd(sunday, input.weekEnd);
-  const week = await upsertOpenWeek(sunday, periodEnd, input.agentId);
+  const range = resolveSettlementRange(input.weekStart, input.weekEnd, sundayOnOrBefore(input.weekStart || cairoTodayYmd()));
+  if (input.close && !range.fullWeek) {
+    return { ok: false as const, message: "قفل الأسبوع للأسبوع كامل من الأحد للسبت، وبالطلب." };
+  }
+  const week = await upsertOpenWeek(range.sunday, range.saturday, input.agentId);
   if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
   if (week.status === "closed") return { ok: false as const, message: "هذا الأسبوع مقفل." };
 
-  const cashDue = input.rows
+  const lineData = input.rows.map((row) => ({
+    weekId: week.id,
+    confirmationId: row.confirmationId,
+    wooOrderNumber: row.wooOrderNumber,
+    disposition: row.disposition,
+    cashAmount: row.cashAmount,
+    isLarge: row.disposition === "collect" ? row.isLarge : false,
+    resolvesLineId: row.carried && row.disposition !== "postpone" ? row.postponeLineId : null,
+  }));
+
+  if (range.fullWeek) {
+    await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id } });
+    if (lineData.length) await prisma.csCarrierWeekLine.createMany({ data: lineData });
+  } else if (lineData.length) {
+    await prisma.csCarrierWeekLine.deleteMany({
+      where: { weekId: week.id, confirmationId: { in: lineData.map((row) => row.confirmationId) } },
+    });
+    await prisma.csCarrierWeekLine.createMany({ data: lineData });
+  }
+
+  const storedLines = await prisma.csCarrierWeekLine.findMany({ where: { weekId: week.id } });
+  const cashDue = storedLines
     .filter((row) => row.disposition === "collect")
     .reduce((sum, row) => sum + Number(row.cashAmount || 0), 0);
-
-  await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id } });
-  if (input.rows.length) {
-    await prisma.csCarrierWeekLine.createMany({
-      data: input.rows.map((row) => ({
-        weekId: week.id,
-        confirmationId: row.confirmationId,
-        wooOrderNumber: row.wooOrderNumber,
-        disposition: row.disposition,
-        cashAmount: row.cashAmount,
-        isLarge: row.disposition === "collect" ? row.isLarge : false,
-        resolvesLineId: row.carried && row.disposition !== "postpone" ? row.postponeLineId : null,
-      })),
-    });
-  }
 
   await prisma.csCarrierWeek.update({
     where: { id: week.id },

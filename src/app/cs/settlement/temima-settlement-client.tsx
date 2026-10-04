@@ -136,6 +136,12 @@ function sumOf(list: SheetRow[], pick: (row: SheetRow) => number) {
   return list.reduce((sum, row) => sum + pick(row), 0);
 }
 
+function dispositionLabel(row: SheetRow) {
+  if (row.disposition === "return") return "مرتجع";
+  if (row.disposition === "postpone") return "مؤجل";
+  return row.carried ? "تم التسليم" : "يُحصّل";
+}
+
 export function TemimaSettlementClient({
   canEdit,
   canEditDeposit = false,
@@ -145,6 +151,7 @@ export function TemimaSettlementClient({
 }) {
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
+  const [fullWeek, setFullWeek] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [rows, setRows] = useState<SheetRow[]>([]);
   const [closedCashDue, setClosedCashDue] = useState<number | null>(null);
@@ -171,6 +178,7 @@ export function TemimaSettlementClient({
       message?: string;
       weekStart?: string;
       weekEnd?: string;
+      fullWeek?: boolean;
       status?: "open" | "closed";
       rows?: SheetRow[];
       cashPaid?: number;
@@ -184,9 +192,10 @@ export function TemimaSettlementClient({
     }
     setWeekStart(data.weekStart || "");
     setWeekEnd(data.weekEnd || "");
+    setFullWeek(data.fullWeek === true);
     setStatus(data.status || "open");
     setRows(data.rows || []);
-    setClosedCashDue(data.status === "closed" ? Number(data.cashDue) || 0 : null);
+    setClosedCashDue(data.status === "closed" && data.fullWeek ? Number(data.cashDue) || 0 : null);
     setCashPaid(data.cashPaid || 0);
     setHistory(data.history || []);
     setMonth(data.month || null);
@@ -308,7 +317,7 @@ export function TemimaSettlementClient({
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
         <label className="text-xs font-bold text-[#14213D]">
-          أسبوع من
+          من
           <input
             type="date"
             value={weekStart}
@@ -321,12 +330,21 @@ export function TemimaSettlementClient({
           <input
             type="date"
             value={weekEnd}
-            disabled={status === "closed"}
             onChange={(e) => void load(weekStart, e.target.value, closeDate)}
             className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
           />
         </label>
-        <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "مقفل" : "مفتوح"}</span>
+        <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "الأسبوع مقفل" : fullWeek ? "أسبوع كامل" : "فترة مفتوحة"}</span>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="h-9 rounded-lg bg-[#14213D] px-3 text-xs font-extrabold text-white"
+        >
+          طباعة
+        </button>
+        {fullWeek ? null : (
+          <p className="text-xs font-bold text-[#14213D]/70">قفل الأسبوع بالطلب، لما تختار من الأحد للسبت.</p>
+        )}
       </div>
 
       <div className="space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
@@ -342,7 +360,7 @@ export function TemimaSettlementClient({
             onClick={() => setSearchScope("week")}
             className={`h-9 rounded-lg px-3 text-xs font-extrabold ${searchScope === "week" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"}`}
           >
-            هذا الأسبوع
+            هذه الفترة
           </button>
           <button
             type="button"
@@ -546,7 +564,7 @@ export function TemimaSettlementClient({
         </label>
         <p className="text-sm font-extrabold text-[#14213D]">المتبقي: {money(Math.max(0, cashDue - cashPaid))} ج</p>
         {canEdit && status !== "closed" ? (
-          <div className="flex gap-2 sm:col-span-3">
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-3">
             <button
               type="button"
               disabled={loading}
@@ -555,14 +573,18 @@ export function TemimaSettlementClient({
             >
               حفظ
             </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void submit("close-week")}
-              className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold"
-            >
-              قفل الأسبوع
-            </button>
+            {fullWeek ? (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void submit("close-week")}
+                className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold"
+              >
+                قفل الأسبوع
+              </button>
+            ) : (
+              <p className="text-xs font-bold text-[#14213D]/70">قفل الأسبوع يظهر لما الفترة تبقى من الأحد للسبت.</p>
+            )}
           </div>
         ) : null}
       </div>
@@ -623,6 +645,103 @@ export function TemimaSettlementClient({
       ) : null}
 
       {message ? <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p> : null}
+
+      <div className="print-only hidden" dir="rtl">
+        <h1 className="mb-2 text-center text-lg font-extrabold">
+          {weekStart && weekStart === weekEnd ? formatSayedSheetHeading(weekStart) : `تصفية سيد تميمة من ${weekStart} إلى ${weekEnd}`}
+        </h1>
+        <table className="w-full border-collapse text-[11px]">
+          <thead>
+            <tr>
+              <th className="border border-black px-1 py-1">أوردر</th>
+              <th className="border border-black px-1 py-1">العميل</th>
+              <th className="border border-black px-1 py-1">موبايل</th>
+              <th className="border border-black px-1 py-1">المنتج</th>
+              <th className="border border-black px-1 py-1">قيمة الشحنات</th>
+              <th className="border border-black px-1 py-1">ديبوزت</th>
+              <th className="border border-black px-1 py-1">المؤجل</th>
+              <th className="border border-black px-1 py-1">الرفض</th>
+              <th className="border border-black px-1 py-1">الصافي</th>
+              <th className="border border-black px-1 py-1">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dayBlocks.map((block) => (
+              <Fragment key={`print-${block.key}`}>
+                <tr>
+                  <td colSpan={10} className="border border-black bg-[#E5E5E5] px-1 py-1 text-center font-extrabold">
+                    {block.title}
+                  </td>
+                </tr>
+                {block.rows.map((row) => (
+                  <tr key={`print-${row.confirmationId}-${row.postponeLineId || 0}`}>
+                    <td className="border border-black px-1 py-1" dir="ltr">{row.wooOrderNumber}</td>
+                    <td className="border border-black px-1 py-1">{row.customerName}</td>
+                    <td className="border border-black px-1 py-1" dir="ltr">{row.phone || ""}</td>
+                    <td className="border border-black px-1 py-1">{row.productNames || ""}</td>
+                    <td className="border border-black px-1 py-1 text-center">{row.carried ? "" : money(shipmentValue(row))}</td>
+                    <td className="border border-black px-1 py-1 text-center">{row.depositAmount ? money(row.depositAmount) : ""}</td>
+                    <td className="border border-black px-1 py-1 text-center">{postponeValue(row) ? money(postponeValue(row)) : ""}</td>
+                    <td className="border border-black px-1 py-1 text-center">{refusalValue(row) ? money(refusalValue(row)) : ""}</td>
+                    <td className="border border-black px-1 py-1 text-center">{netValue(row) ? money(netValue(row)) : ""}</td>
+                    <td className="border border-black px-1 py-1">{dispositionLabel(row)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={4} className="border border-black px-1 py-1 font-extrabold">
+                    {block.key === "carried" ? "تصفية المؤجل السابق" : "تصفية اليوم"}
+                  </td>
+                  <td className="border border-black px-1 py-1 text-center font-extrabold">
+                    {money(sumOf(block.rows, (row) => (row.carried ? 0 : shipmentValue(row))))}
+                  </td>
+                  <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, (row) => row.depositAmount || 0))}</td>
+                  <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, postponeValue))}</td>
+                  <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, refusalValue))}</td>
+                  <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, netValue))}</td>
+                  <td className="border border-black" />
+                </tr>
+              </Fragment>
+            ))}
+          </tbody>
+          {rows.length ? (
+            <tfoot>
+              <tr>
+                <td colSpan={4} className="border border-black px-1 py-1 font-extrabold">المجموع</td>
+                <td className="border border-black px-1 py-1 text-center font-extrabold">{money(shipmentTotal)}</td>
+                <td className="border border-black px-1 py-1 text-center font-extrabold">{money(depositTotal)}</td>
+                <td className="border border-black px-1 py-1 text-center font-extrabold">{money(postponeTotal)}</td>
+                <td className="border border-black px-1 py-1 text-center font-extrabold">{money(refusalTotal)}</td>
+                <td className="border border-black px-1 py-1 text-center font-extrabold">{money(netTotal)}</td>
+                <td className="border border-black" />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          .print-only,
+          .print-only * {
+            visibility: visible !important;
+          }
+          .print-only {
+            display: block !important;
+            position: absolute;
+            inset: 0;
+            padding: 8mm;
+            background: white;
+            color: black;
+          }
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+        }
+      `}</style>
     </div>
   );
 }
