@@ -73,6 +73,7 @@ export type CsQueueItem = {
   courierAgentId?: number | null;
   courierOutcome?: string | null;
   courierRefusalReason?: string | null;
+  settlementDisposition?: "" | "collect" | "return" | "postpone";
 };
 
 function formatOrderNames(item: CsQueueItem) {
@@ -695,6 +696,7 @@ export function CsQueueClient({
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
   const [savingHandId, setSavingHandId] = useState<number | null>(null);
+  const [markingId, setMarkingId] = useState<number | null>(null);
 
   async function lockCutoff(body: { now: true } | { minutes: number }) {
     setCutoffBusy(true);
@@ -885,6 +887,30 @@ export function CsQueueClient({
     router.push(`/cs/orders/${id}`);
   }
 
+  async function markSupervisorResult(id: number, result: "delivered" | "returned" | "postponed") {
+    if (markingId) return;
+    setMarkingId(id);
+    setMessage("");
+    const res = await fetch("/api/cs/courier-dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "result", confirmationId: id, outcome: result }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setMarkingId(null);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تسجيل حالة الأوردر.");
+      return;
+    }
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const settlementDisposition = result === "delivered" ? "collect" : result === "returned" ? "return" : "postpone";
+        return { ...item, settlementDisposition };
+      }),
+    );
+  }
+
   async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima") {
     if (savingShipId) return;
     setSavingShipId(id);
@@ -989,7 +1015,11 @@ export function CsQueueClient({
         setMessage(data.message || "تعذر تجهيز الطباعة.");
         return;
       }
-      setSheetPrintRows(data.items || []);
+      const printed = [...(data.items || [])];
+      if (filters.dateFrom && filters.dateFrom === filters.dateTo) {
+        printed.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+      }
+      setSheetPrintRows(printed);
       setPrintMode("sheet");
       return;
     }
@@ -1705,6 +1735,34 @@ export function CsQueueClient({
                       ) : null}
                     </span>
                     <span className="text-xs text-[#14213D]/55">{day}</span>
+                    {isCourierSupervisor && item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          disabled={markingId === item.id}
+                          onClick={() => void markSupervisorResult(item.id, "delivered")}
+                          className={`rounded-lg px-2 py-1 text-[11px] font-extrabold text-white disabled:opacity-60 ${item.settlementDisposition === "collect" ? "bg-emerald-800 ring-2 ring-emerald-300" : "bg-emerald-700"}`}
+                        >
+                          تم بنجاح
+                        </button>
+                        <button
+                          type="button"
+                          disabled={markingId === item.id}
+                          onClick={() => void markSupervisorResult(item.id, "returned")}
+                          className={`rounded-lg px-2 py-1 text-[11px] font-extrabold text-white disabled:opacity-60 ${item.settlementDisposition === "return" ? "bg-red-800 ring-2 ring-red-300" : "bg-red-700"}`}
+                        >
+                          مرتجع
+                        </button>
+                        <button
+                          type="button"
+                          disabled={markingId === item.id}
+                          onClick={() => void markSupervisorResult(item.id, "postponed")}
+                          className={`rounded-lg px-2 py-1 text-[11px] font-extrabold disabled:opacity-60 ${item.settlementDisposition === "postpone" ? "bg-orange-600 text-black ring-2 ring-orange-300" : "bg-orange-500 text-black"}`}
+                        >
+                          مؤجل
+                        </button>
+                      </div>
+                    ) : null}
                     {item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" && item.confirmedAt ? (
                       <span className="text-[11px] font-bold text-[#14213D]/70">
                         حُفظ {formatCairoOrderDateTime(item.confirmedAt).absolute}

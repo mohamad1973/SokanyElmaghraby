@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { assignMonaOrder, loadMonaDesk, markMonaOutcome, recordMonaRemit, saveMonaCourierAdjust } from "@/lib/cs/mona-courier";
+import { assignMonaOrder, loadMonaDesk, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust } from "@/lib/cs/mona-courier";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function accessOrNull() {
@@ -48,6 +48,15 @@ export async function POST(request: Request) {
     if (!access.supervisor) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     const result = await assignMonaOrder(String(body.orderNumber || ""), Number(body.courierId));
     return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "official") {
+    if (!access.supervisor) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    const result =
+      body.outcome === "delivered" || body.outcome === "refused" || body.outcome === "postponed" ? body.outcome : null;
+    if (!result) return NextResponse.json({ message: "النتيجة ناقصة." }, { status: 400 });
+    const saved = await markMonaSupervisorResult(Number(body.confirmationId), result);
+    return NextResponse.json(saved, { status: saved.ok ? 200 : 400 });
   }
 
   if (body.action === "outcome") {

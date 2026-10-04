@@ -18,6 +18,7 @@ type OrderCard = {
   total: string;
   cashAmount: number;
   outcome: Outcome | null;
+  official: Outcome | null;
   refusalReason: string;
   courierId: number | null;
   courierName: string;
@@ -56,6 +57,13 @@ function egp(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
+function officialLabel(order: OrderCard) {
+  if (order.official === "delivered") return "تم بنجاح";
+  if (order.official === "refused") return "مرتجع";
+  if (order.official === "postponed") return "مؤجل";
+  return "لم يُعلَّم";
+}
+
 function orderState(order: OrderCard) {
   if (order.outcome === "delivered") return "مسلم";
   if (order.outcome === "postponed") return "مؤجّل";
@@ -83,6 +91,7 @@ function CourierInvoice({
   draft,
   onDraft,
   onSave,
+  onOfficial,
 }: {
   line: LedgerLine;
   orders: OrderCard[];
@@ -90,6 +99,7 @@ function CourierInvoice({
   draft: MoneyDraft;
   onDraft: (next: MoneyDraft) => void;
   onSave: () => void;
+  onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed") => void;
 }) {
   const mine = orders.filter((order) => Number(order.courierId) === Number(line.courierId));
   return (
@@ -139,7 +149,19 @@ function CourierInvoice({
                     <td className="px-2 py-2 font-extrabold">{egp(row.value)}</td>
                     {index === 0 ? (
                       <td className="px-2 py-2 font-extrabold" rowSpan={lines.length}>
-                        {orderState(order)}
+                        <div className="grid gap-1">
+                          <span>{onOfficial ? officialLabel(order) : orderState(order)}</span>
+                          {onOfficial && order.outcome ? (
+                            <span className="text-[10px] font-bold text-[#14213D]/70">المندوب: {orderState(order)}</span>
+                          ) : null}
+                          {onOfficial ? (
+                            <div className="flex flex-wrap gap-1">
+                              <button type="button" onClick={() => onOfficial(order.id, "delivered")} className="rounded bg-emerald-700 px-1.5 py-1 text-[10px] font-extrabold text-white">تم بنجاح</button>
+                              <button type="button" onClick={() => onOfficial(order.id, "refused")} className="rounded bg-red-700 px-1.5 py-1 text-[10px] font-extrabold text-white">مرتجع</button>
+                              <button type="button" onClick={() => onOfficial(order.id, "postponed")} className="rounded bg-orange-500 px-1.5 py-1 text-[10px] font-extrabold text-black">مؤجل</button>
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
                     ) : null}
                   </tr>
@@ -512,6 +534,7 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
                   remitted: Number(draft?.remitted),
                 });
               }}
+              onOfficial={(confirmationId, result) => void post({ action: "official", confirmationId, outcome: result })}
             />
           ))
         : null}

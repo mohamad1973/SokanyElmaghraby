@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAccountingRole } from "@/lib/cs/agents";
 import { CS_QUEUE_PAGE_SIZE, listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
 import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function GET(request: Request) {
@@ -19,7 +20,13 @@ export async function GET(request: Request) {
     const from = url.searchParams.get("from") || "";
     const to = url.searchParams.get("to") || "";
     const items = await listVisibleSayedSheet(from, to);
-    return NextResponse.json({ items, total: items.length, hasMore: false, nextCursor: null });
+    const marks = await openSettlementMarks(items.map((item) => item.id));
+    return NextResponse.json({
+      items: items.map((item) => ({ ...item, settlementDisposition: marks.get(item.id) || "" })),
+      total: items.length,
+      hasMore: false,
+      nextCursor: null,
+    });
   }
   const pageRaw = Number(url.searchParams.get("page") || "1");
   const canPrintAll = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);

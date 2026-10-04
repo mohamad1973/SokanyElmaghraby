@@ -18,6 +18,7 @@ type OrderRow = {
   depositPaid: boolean | number | null;
   monaCourierId: number | null;
   monaOutcome: string | null;
+  monaSupervisorResult: string | null;
   monaRefusalReason: string | null;
   courierName: string | null;
 };
@@ -43,6 +44,7 @@ export type MonaOrderCard = {
   total: string;
   cashAmount: number;
   outcome: Outcome | null;
+  official: Outcome | null;
   refusalReason: string;
   courierId: number | null;
   courierName: string;
@@ -105,6 +107,10 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     row.monaOutcome === "delivered" || row.monaOutcome === "refused" || row.monaOutcome === "postponed"
       ? row.monaOutcome
       : null;
+  const official =
+    row.monaSupervisorResult === "delivered" || row.monaSupervisorResult === "refused" || row.monaSupervisorResult === "postponed"
+      ? row.monaSupervisorResult
+      : null;
   return {
     id,
     wooOrderNumber: row.wooOrderNumber,
@@ -132,6 +138,7 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
       depositPaid: Boolean(row.depositPaid),
     }),
     outcome,
+    official,
     refusalReason: String(row.monaRefusalReason || "").trim(),
     courierId,
     courierName: row.courierName || "",
@@ -157,7 +164,7 @@ async function loadAssignedOrders(courierId?: number) {
   const rows = courierId
     ? await prisma.$queryRaw<OrderRow[]>`
         SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
-               c.monaCourierId, c.monaOutcome, c.monaRefusalReason, a.name AS courierName
+               c.monaCourierId, c.monaOutcome, c.monaSupervisorResult, c.monaRefusalReason, a.name AS courierName
         FROM CsOrderConfirmation c
         LEFT JOIN CsAgent a ON a.id = c.monaCourierId
         WHERE c.monaCourierId = ${courierId}
@@ -165,7 +172,7 @@ async function loadAssignedOrders(courierId?: number) {
       `
     : await prisma.$queryRaw<OrderRow[]>`
         SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
-               c.monaCourierId, c.monaOutcome, c.monaRefusalReason, a.name AS courierName
+               c.monaCourierId, c.monaOutcome, c.monaSupervisorResult, c.monaRefusalReason, a.name AS courierName
         FROM CsOrderConfirmation c
         LEFT JOIN CsAgent a ON a.id = c.monaCourierId
         WHERE c.monaCourierId IS NOT NULL
@@ -249,9 +256,9 @@ function ledgerOf(
 ): MonaLedgerLine[] {
   return couriers.map((courier) => {
     const mine = cards.filter((card) => card.courierId === Number(courier.id));
-    const delivered = mine.filter((card) => card.outcome === "delivered");
+    const delivered = mine.filter((card) => card.official === "delivered");
     const goods = mine
-      .filter((card) => card.outcome !== "refused")
+      .filter((card) => card.official !== "refused")
       .reduce((sum, card) => sum + card.cashAmount, 0);
     const collected = delivered.reduce((sum, card) => sum + card.cashAmount, 0);
     const fee = delivered.length * MONA_COURIER_FEE;
@@ -264,8 +271,8 @@ function ledgerOf(
       courierId: courier.id,
       name: courier.name,
       delivered: delivered.length,
-      postponed: mine.filter((card) => card.outcome === "postponed").length,
-      refused: mine.filter((card) => card.outcome === "refused").length,
+      postponed: mine.filter((card) => card.official === "postponed").length,
+      refused: mine.filter((card) => card.official === "refused").length,
       goods,
       collected,
       fee,
@@ -294,7 +301,7 @@ async function loadReturnedPostponed() {
   if (!prisma) return [] as OrderRow[];
   return prisma.$queryRaw<OrderRow[]>`
     SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
-           c.monaCourierId, c.monaOutcome, c.monaRefusalReason, a.name AS courierName
+           c.monaCourierId, c.monaOutcome, c.monaSupervisorResult, c.monaRefusalReason, a.name AS courierName
     FROM CsOrderConfirmation c
     LEFT JOIN CsAgent a ON a.id = c.monaCourierId
     WHERE c.monaOutcome = 'postponed' AND c.monaCourierId IS NULL
@@ -387,7 +394,7 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
     SELECT COUNT(*) AS n
     FROM CsOrderConfirmation
     WHERE monaCourierId = ${courierId}
-      AND (monaOutcome IS NULL OR monaOutcome = '' OR monaOutcome = 'postponed')
+      AND (monaSupervisorResult IS NULL OR monaSupervisorResult = '' OR monaSupervisorResult = 'postponed')
   `;
   if (Number(openRows[0]?.n || 0) >= 2) {
     return { ok: false as const, message: "المندوب عنده أوردرين." };
@@ -444,6 +451,27 @@ export async function markMonaOutcome(input: {
     WHERE id = ${input.confirmationId} AND monaCourierId = ${input.courierId}
   `;
   return { ok: true as const, message: "اتسجل." };
+}
+
+export async function markMonaSupervisorResult(confirmationId: number, result: Outcome) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
+  if (!Number.isInteger(confirmationId)) return { ok: false as const, message: "الأوردر غير موجود." };
+  const rows = await prisma.$queryRaw<Array<{ id: number }>>`
+    SELECT id
+    FROM CsOrderConfirmation
+    WHERE id = ${confirmationId}
+      AND (monaCourierId IS NOT NULL OR monaOutcome = 'postponed')
+      AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
+    LIMIT 1
+  `;
+  if (!rows[0]) return { ok: false as const, message: "الأوردر مش من أوردرات المشرفة." };
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET monaSupervisorResult = ${result}
+    WHERE id = ${confirmationId}
+  `;
+  return { ok: true as const, message: "اتسجل في الحسابات." };
 }
 
 export async function recordMonaRemit(courierId: number, amount: number) {

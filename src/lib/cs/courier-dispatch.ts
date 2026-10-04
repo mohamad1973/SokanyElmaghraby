@@ -5,7 +5,7 @@ import { parseCsRoles } from "@/lib/cs/agents";
 import { orderMatchesAreas, parseCourierAreas, serializeCourierAreas } from "@/lib/cs/courier-areas";
 import { listCsAreasForGovernorate } from "@/lib/cs/egypt-areas";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
-import { cashAmountOf } from "@/lib/cs/temima-settlement";
+import { cashAmountOf, openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { listTemimaSheetEdits, listUnifiedSayedSheetIds } from "@/lib/cs/temima-sheet-edits";
 import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
@@ -42,6 +42,7 @@ export type CourierOrderCard = {
   courierId: number | null;
   courierName: string;
   matches: number[];
+  official: "" | "collect" | "return" | "postpone";
 };
 
 export type CourierRosterRow = {
@@ -113,6 +114,7 @@ function cardFromRow(row: {
     refusalReason: String(row.courierRefusalReason || "").trim(),
     courierId: row.courierAgentId,
     courierName: row.courierAgent?.name || "",
+    official: "",
   };
 }
 
@@ -264,12 +266,15 @@ export async function loadCourierDispatch(viewerId: number, mode: "supervisor" |
     ]),
   ].sort((a, b) => a.localeCompare(b, "ar"));
 
+  const marks = await openSettlementMarks(cards.map((card) => card.id));
+  const withOfficial = cards.map((card) => ({ ...card, official: marks.get(card.id) || "" }));
+
   return {
     mode: "supervisor" as const,
     couriers,
     areaOptions,
-    pool: cards.filter((card) => !card.courierId),
-    assigned: cards.filter((card) => card.courierId),
+    pool: withOfficial.filter((card) => !card.courierId),
+    assigned: withOfficial.filter((card) => card.courierId),
     collected: await listTodayCourierCash(),
   };
 }
@@ -397,17 +402,12 @@ export async function markCourierOutcome(
     },
   });
   if (!order) return { ok: false as const, message: "الأوردر مش من أوردراتك." };
-  const now = new Date();
   if (outcome === "delivered") {
     await prisma.csOrderConfirmation.update({
       where: { id: order.id },
       data: {
         courierOutcome: "delivered",
         courierRefusalReason: null,
-        deliveredToCustomer: true,
-        deliveredToCustomerAt: order.deliveredToCustomerAt || now,
-        handedToCarrier: true,
-        handedToCarrierAt: order.handedToCarrierAt || now,
       },
     });
   } else if (outcome === "postponed") {

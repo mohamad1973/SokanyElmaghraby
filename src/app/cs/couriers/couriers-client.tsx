@@ -22,6 +22,7 @@ type OrderCard = {
   delivered: boolean;
   outcome: "delivered" | "refused" | "postponed" | null;
   refusalReason: string;
+  official?: "" | "collect" | "return" | "postpone";
   courierId: number | null;
   courierName: string;
   matches: number[];
@@ -268,13 +269,14 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
             <p className="text-xs font-extrabold text-[#FCA311]">{order.courierName}</p>
             <OrderDetails order={order} />
             <p className="text-sm font-extrabold text-[#14213D]">نقد: {money(order.cashAmount)} ج.م</p>
-            {order.outcome === "delivered" ? <p className="text-sm font-extrabold text-emerald-800">تم التسليم</p> : null}
-            {order.outcome === "refused" ? <p className="text-sm font-extrabold text-red-800">ملغى</p> : null}
-            {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">تأجيل</p> : null}
+            {order.outcome === "delivered" ? <p className="text-sm font-extrabold text-emerald-800">المندوب: تم التسليم</p> : null}
+            {order.outcome === "refused" ? <p className="text-sm font-extrabold text-red-800">المندوب: رفض{order.refusalReason ? ` — ${order.refusalReason}` : ""}</p> : null}
+            {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">المندوب: مؤجل</p> : null}
             {selected && order.courierId === selected.id ? (
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => void post({ action: "disposition", confirmationId: order.id, courierId: selected.id, outcome: "postponed" })} className="rounded-xl bg-orange-500 px-3 py-2 text-xs font-extrabold text-black">تأجيل</button>
-                <button type="button" onClick={() => void post({ action: "disposition", confirmationId: order.id, courierId: selected.id, outcome: "refused" })} className="rounded-xl bg-red-700 px-3 py-2 text-xs font-extrabold text-white">ملغى</button>
+                <button type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "delivered" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "collect" ? "bg-emerald-900 ring-2 ring-emerald-300" : "bg-emerald-700"}`}>تم بنجاح</button>
+                <button type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "returned" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "return" ? "bg-red-900 ring-2 ring-red-300" : "bg-red-700"}`}>مرتجع</button>
+                <button type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "postponed" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-black ${order.official === "postpone" ? "bg-orange-600 ring-2 ring-orange-300" : "bg-orange-500"}`}>مؤجل</button>
               </div>
             ) : null}
             <button type="button" onClick={() => void post({ action: "unassign", confirmationId: order.id })} className="justify-self-start rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]">إرجاع للتوزيع</button>

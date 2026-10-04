@@ -5,7 +5,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { formatSayedSheetHeading } from "@/lib/cs/temima-sheet";
 
-type Disposition = "collect" | "return" | "postpone";
+type Disposition = "collect" | "return" | "postpone" | "";
 
 type SheetRow = {
   confirmationId: number;
@@ -139,7 +139,8 @@ function sumOf(list: SheetRow[], pick: (row: SheetRow) => number) {
 function dispositionLabel(row: SheetRow) {
   if (row.disposition === "return") return "مرتجع";
   if (row.disposition === "postpone") return "مؤجل";
-  return row.carried ? "تم التسليم" : "يُحصّل";
+  if (row.disposition === "collect") return row.carried ? "تم التسليم" : "يُحصّل";
+  return "";
 }
 
 export function TemimaSettlementClient({
@@ -242,6 +243,16 @@ export function TemimaSettlementClient({
     return inWeek.length ? inWeek : rows;
   }, [rows, searchQuery, searchScope, orderHits]);
   const dayBlocks = useMemo(() => dayBlocksOf(visibleRows), [visibleRows]);
+  const serials = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const block of dayBlocksOf(rows)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(block.key)) continue;
+      block.rows.forEach((row, index) => {
+        map.set(`${row.confirmationId}-${row.postponeLineId || 0}`, index + 1);
+      });
+    }
+    return map;
+  }, [rows]);
 
   const outsideHits = useMemo(() => {
     if (searchScope !== "orders" || searchQuery.trim().length < 2) return [];
@@ -392,6 +403,7 @@ export function TemimaSettlementClient({
         <table className="min-w-full border-separate border-spacing-0 text-sm">
           <thead className="text-right">
             <tr>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">مسلسل</th>
               <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">أوردر</th>
               <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">العميل</th>
               <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">موبايل</th>
@@ -408,7 +420,7 @@ export function TemimaSettlementClient({
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
+                <td colSpan={12} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
                   {rows.length ? "لا توجد نتيجة في هذا الأسبوع." : "لا توجد أوردرات لهذا الأسبوع."}
                 </td>
               </tr>
@@ -416,12 +428,15 @@ export function TemimaSettlementClient({
               dayBlocks.map((block) => (
                 <Fragment key={block.key}>
                   <tr>
-                    <td colSpan={11} className="border border-[#14213D]/25 bg-[#14213D] px-3 py-2 text-center text-sm font-extrabold text-white">
+                    <td colSpan={12} className="border border-[#14213D]/25 bg-[#14213D] px-3 py-2 text-center text-sm font-extrabold text-white">
                       {block.title}
                     </td>
                   </tr>
                   {block.rows.map((row) => (
                     <tr key={`${row.confirmationId}-${row.postponeLineId || 0}`}>
+                      <td className="border border-[#14213D]/25 px-2 py-2 text-center font-extrabold tabular-nums">
+                        {serials.get(`${row.confirmationId}-${row.postponeLineId || 0}`) || ""}
+                      </td>
                       <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
                         {row.wooOrderNumber}
                         {row.carried ? <span className="mr-1 text-[10px] text-amber-700">مؤجل سابق</span> : null}
@@ -487,6 +502,7 @@ export function TemimaSettlementClient({
                           onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition })}
                           className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
                         >
+                          <option value="">لم يُعلَّم</option>
                           <option value="collect">{row.carried ? "تم التسليم" : "يُحصّل"}</option>
                           <option value="return">مرتجع</option>
                           <option value="postpone">مؤجل</option>
@@ -503,7 +519,7 @@ export function TemimaSettlementClient({
                     </tr>
                   ))}
                   <tr>
-                    <td colSpan={4} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
+                    <td colSpan={5} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
                       {block.key === "carried" ? "تصفية المؤجل السابق" : "تصفية اليوم"}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
@@ -530,7 +546,7 @@ export function TemimaSettlementClient({
           {rows.length ? (
             <tfoot>
               <tr>
-                <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={4}>
+                <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={5}>
                   المجموع
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(shipmentTotal)}</td>
@@ -653,6 +669,7 @@ export function TemimaSettlementClient({
         <table className="w-full border-collapse text-[11px]">
           <thead>
             <tr>
+              <th className="border border-black px-1 py-1">مسلسل</th>
               <th className="border border-black px-1 py-1">أوردر</th>
               <th className="border border-black px-1 py-1">العميل</th>
               <th className="border border-black px-1 py-1">موبايل</th>
@@ -669,12 +686,15 @@ export function TemimaSettlementClient({
             {dayBlocks.map((block) => (
               <Fragment key={`print-${block.key}`}>
                 <tr>
-                  <td colSpan={10} className="border border-black bg-[#E5E5E5] px-1 py-1 text-center font-extrabold">
+                  <td colSpan={11} className="border border-black bg-[#E5E5E5] px-1 py-1 text-center font-extrabold">
                     {block.title}
                   </td>
                 </tr>
                 {block.rows.map((row) => (
                   <tr key={`print-${row.confirmationId}-${row.postponeLineId || 0}`}>
+                    <td className="border border-black px-1 py-1 text-center">
+                      {serials.get(`${row.confirmationId}-${row.postponeLineId || 0}`) || ""}
+                    </td>
                     <td className="border border-black px-1 py-1" dir="ltr">{row.wooOrderNumber}</td>
                     <td className="border border-black px-1 py-1">{row.customerName}</td>
                     <td className="border border-black px-1 py-1" dir="ltr">{row.phone || ""}</td>
@@ -688,7 +708,7 @@ export function TemimaSettlementClient({
                   </tr>
                 ))}
                 <tr>
-                  <td colSpan={4} className="border border-black px-1 py-1 font-extrabold">
+                  <td colSpan={5} className="border border-black px-1 py-1 font-extrabold">
                     {block.key === "carried" ? "تصفية المؤجل السابق" : "تصفية اليوم"}
                   </td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">
@@ -706,7 +726,7 @@ export function TemimaSettlementClient({
           {rows.length ? (
             <tfoot>
               <tr>
-                <td colSpan={4} className="border border-black px-1 py-1 font-extrabold">المجموع</td>
+                <td colSpan={5} className="border border-black px-1 py-1 font-extrabold">المجموع</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(shipmentTotal)}</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(depositTotal)}</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(postponeTotal)}</td>

@@ -14,6 +14,11 @@ const FEE_LARGE = 100;
 
 export type TemimaDisposition = "collect" | "return" | "postpone";
 
+function storedDisposition(value: string | null | undefined): TemimaDisposition | "" {
+  if (value === "collect" || value === "return" || value === "postpone") return value;
+  return "";
+}
+
 export type TemimaSheetRow = {
   confirmationId: number;
   wooOrderNumber: string;
@@ -25,7 +30,7 @@ export type TemimaSheetRow = {
   depositAmount: number;
   orderTotal: number;
   fawry: boolean;
-  disposition: TemimaDisposition;
+  disposition: TemimaDisposition | "";
   isLarge: boolean;
   carried: boolean;
   postponeLineId: number | null;
@@ -396,7 +401,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         depositAmount: order ? settlementSplit(order, overrides.get(line.confirmationId) ?? null, false).deposit : 0,
         orderTotal: money(snap.total),
         fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
-        disposition: line.disposition as TemimaDisposition,
+        disposition: storedDisposition(line.disposition),
         isLarge: line.isLarge,
         carried,
         postponeLineId: line.resolvesLineId,
@@ -467,7 +472,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       depositAmount: split.deposit,
       orderTotal: money(snap.total),
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
-      disposition: (saved?.disposition as TemimaDisposition) || "collect",
+      disposition: storedDisposition(saved?.disposition),
       isLarge: saved?.isLarge || false,
       carried: false,
       postponeLineId: null,
@@ -618,6 +623,109 @@ export async function saveTemimaWeek(input: {
   });
 
   return { ok: true as const, cashDue };
+}
+
+export async function openSettlementMarks(ids: number[]) {
+  const prisma = getPrismaClient();
+  const map = new Map<number, TemimaDisposition>();
+  if (!prisma || !ids.length) return map;
+  const safe = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!safe.length) return map;
+  const rows = await prisma.$queryRawUnsafe<Array<{ confirmationId: number; disposition: string }>>(
+    `SELECT l.confirmationId AS confirmationId, l.disposition AS disposition
+     FROM CsCarrierWeekLine l
+     INNER JOIN CsCarrierWeek w ON w.id = l.weekId
+     WHERE w.carrierCompany = 'sayed_temima' AND w.status = 'open'
+       AND l.confirmationId IN (${safe.join(",")})`,
+  );
+  for (const row of rows) {
+    if (row.disposition === "collect" || row.disposition === "return" || row.disposition === "postpone") {
+      map.set(Number(row.confirmationId), row.disposition);
+    }
+  }
+  return map;
+}
+
+export async function applySupervisorOrderResult(input: {
+  confirmationId: number;
+  result: "delivered" | "returned" | "postponed";
+  agentId: number;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  if (!Number.isInteger(input.confirmationId)) return { ok: false as const, message: "الأوردر غير موجود." };
+  await ensureCsTables();
+  const order = await prisma.csOrderConfirmation.findFirst({
+    where: { id: input.confirmationId, status: "CONFIRMED", shippingCompany: TEMIMA_COMPANY },
+    select: {
+      id: true,
+      wooOrderNumber: true,
+      customerSnapshot: true,
+      depositAmount: true,
+      depositPaid: true,
+      depositApprovalStatus: true,
+      ...SHEET_DAY_SELECT,
+    },
+  });
+  if (!order) return { ok: false as const, message: "الأوردر مش على شيت سيد تميمة." };
+
+  const cutoffs = await listTemimaCutoffs();
+  const sheetDay = sayedSheetYmd(order, cutoffs) || cairoTodayYmd();
+  const sunday = sundayOnOrBefore(sheetDay);
+  const saturday = addDaysYmd(sunday, 6);
+  const week = await upsertOpenWeek(sunday, saturday, input.agentId);
+  if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
+  if (week.status === "closed") return { ok: false as const, message: "الأسبوع مقفل." };
+
+  const disposition: TemimaDisposition =
+    input.result === "returned" ? "return" : input.result === "postponed" ? "postpone" : "collect";
+
+  const overrides = await depositOverrides([order.id]);
+  const split = settlementSplit(order, overrides.get(order.id) ?? null, true, true);
+  const existing = await prisma.csCarrierWeekLine.findFirst({
+    where: { weekId: week.id, confirmationId: order.id },
+    select: { isLarge: true },
+  });
+  const closedPostpones = await prisma.csCarrierWeekLine.findMany({
+    where: {
+      confirmationId: order.id,
+      disposition: "postpone",
+      week: { carrierCompany: TEMIMA_COMPANY, status: "closed" },
+    },
+    select: { id: true },
+  });
+  const resolved = closedPostpones.length
+    ? await prisma.csCarrierWeekLine.findMany({
+        where: { resolvesLineId: { in: closedPostpones.map((line) => line.id) } },
+        select: { resolvesLineId: true },
+      })
+    : [];
+  const resolvedIds = new Set(resolved.map((line) => line.resolvesLineId));
+  const openPostponeId = closedPostpones.find((line) => !resolvedIds.has(line.id))?.id ?? null;
+
+  await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id, confirmationId: order.id } });
+  await prisma.csCarrierWeekLine.create({
+    data: {
+      weekId: week.id,
+      confirmationId: order.id,
+      wooOrderNumber: order.wooOrderNumber,
+      disposition,
+      cashAmount: split.net,
+      isLarge: disposition === "collect" ? Boolean(existing?.isLarge) : false,
+      resolvesLineId: disposition !== "postpone" ? openPostponeId : null,
+    },
+  });
+
+  const storedLines = await prisma.csCarrierWeekLine.findMany({ where: { weekId: week.id } });
+  const cashDue = storedLines
+    .filter((row) => row.disposition === "collect")
+    .reduce((sum, row) => sum + Number(row.cashAmount || 0), 0);
+  await prisma.csCarrierWeek.update({
+    where: { id: week.id },
+    data: { cashDue, status: "open", closedAt: null },
+  });
+
+  return { ok: true as const, result: input.result, disposition };
 }
 
 export async function setFawrySettlementDeposit(input: { confirmationId: number; amount: number | null }) {

@@ -4,11 +4,11 @@ import {
   assignCourierOrder,
   loadCourierDispatch,
   markCourierOutcome,
-  markCourierSupervisorDisposition,
   saveCourierAreas,
   saveCourierCashDay,
   unassignCourierOrder,
 } from "@/lib/cs/courier-dispatch";
+import { applySupervisorOrderResult } from "@/lib/cs/temima-settlement";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
@@ -84,15 +84,25 @@ export async function POST(request: Request) {
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
 
-  if (body.action === "disposition") {
+  if (body.action === "disposition" || body.action === "result") {
     const confirmationId = Number(body.confirmationId);
-    const courierId = Number(body.courierId);
-    const outcome = body.outcome === "refused" || body.outcome === "postponed" ? body.outcome : "";
-    if (!confirmationId || !courierId || !outcome) {
+    const result =
+      body.outcome === "delivered"
+        ? "delivered"
+        : body.outcome === "postponed"
+          ? "postponed"
+          : body.outcome === "returned" || body.outcome === "refused"
+            ? "returned"
+            : "";
+    if (!confirmationId || !result) {
       return NextResponse.json({ message: "الطلب ناقص." }, { status: 400 });
     }
-    const result = await markCourierSupervisorDisposition(confirmationId, courierId, outcome);
-    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+    const marked = await applySupervisorOrderResult({
+      confirmationId,
+      result,
+      agentId: access.session.user.csAgentId!,
+    });
+    return NextResponse.json(marked.ok ? marked : { message: marked.message }, { status: marked.ok ? 200 : 400 });
   }
 
   if (body.action === "collect") {

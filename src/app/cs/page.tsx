@@ -7,6 +7,7 @@ import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
@@ -43,7 +44,9 @@ export default async function CsHomePage() {
   let temimaSheetEdits: Awaited<ReturnType<typeof listTemimaSheetEdits>> = [];
   if (isCourierSupervisor) {
     const today = cairoTodayYmd();
-    initialItems = await listUnifiedSayedSheet(today, today);
+    const sheet = await listUnifiedSayedSheet(today, today);
+    const marks = await openSettlementMarks(sheet.map((item) => item.id));
+    initialItems = sheet.map((item) => ({ ...item, settlementDisposition: marks.get(item.id) || "" }));
     temimaSheetEdits = await listTemimaSheetEdits();
   } else {
     const queue = await listCsQueuePage({
