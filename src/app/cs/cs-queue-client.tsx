@@ -812,11 +812,11 @@ export function CsQueueClient({
     }
   }
 
-  // Auto-sync every 30 seconds
+  // Auto-sync every 3 minutes so open desks stay under the database connection cap.
   useEffect(() => {
     const id = window.setInterval(() => {
       void syncOrders({ quiet: true });
-    }, 30000);
+    }, 180000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

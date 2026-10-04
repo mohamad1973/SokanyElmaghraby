@@ -171,7 +171,7 @@ function CsNotificationsBell() {
   useEffect(() => {
     ensureDepositAlertUnlockedOnGesture();
     void load();
-    const id = window.setInterval(() => void load(), 10000);
+    const id = window.setInterval(() => void load(), 60000);
     return () => window.clearInterval(id);
   }, [load]);
 
