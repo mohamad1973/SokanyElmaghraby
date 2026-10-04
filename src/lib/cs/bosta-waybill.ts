@@ -26,6 +26,7 @@ export type BostaWaybillState = {
   message: string | null;
   cod: number | null;
   lastEvent: string | null;
+  governorate: string | null;
 };
 
 function textOf(answers: CsChecklistAnswerInput[], key: string) {
@@ -85,6 +86,7 @@ function present(input: {
   message?: string | null;
   cod?: number | null;
   lastEvent?: string | null;
+  governorate?: string | null;
 }): BostaWaybillState {
   const status = input.bostaStatus ? normalizeBostaStatus(input.bostaStatus) : null;
   const synced =
@@ -101,6 +103,7 @@ function present(input: {
     message: input.message || null,
     cod: input.cod ?? null,
     lastEvent: input.lastEvent || null,
+    governorate: input.governorate || null,
   };
 }
 
@@ -158,10 +161,16 @@ async function writeConfirmation(input: {
   bostaStatus: string | null;
   bostaShippingFee: number | null;
   bostaSyncError: string | null;
+  governorate?: string | null;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return;
-  const snap = { ...(input.snapshot || {}), trackingNumber: input.trackingNumber };
+  const governorate = String(input.governorate || "").trim();
+  const snap = {
+    ...(input.snapshot || {}),
+    trackingNumber: input.trackingNumber,
+    ...(governorate ? { governorate } : {}),
+  };
   await prisma.csOrderConfirmation.update({
     where: { id: input.confirmationId },
     data: {
@@ -172,6 +181,25 @@ async function writeConfirmation(input: {
       bostaSyncError: input.bostaSyncError ? input.bostaSyncError.slice(0, 255) : null,
       customerSnapshot: snap,
     } as never,
+  });
+  if (!governorate) return;
+  await prisma.csChecklistAnswer.upsert({
+    where: {
+      confirmationId_itemKey: {
+        confirmationId: input.confirmationId,
+        itemKey: "governorate_confirm",
+      },
+    },
+    create: {
+      confirmationId: input.confirmationId,
+      itemKey: "governorate_confirm",
+      confirmed: true,
+      value: governorate,
+    },
+    update: {
+      confirmed: true,
+      value: governorate,
+    },
   });
 }
 
@@ -188,9 +216,11 @@ async function persistLinkedDelivery(input: {
     shippingFee: number | null;
     cod: number | null;
     lastEvent: string | null;
+    placeLabel?: string | null;
   };
 }): Promise<BostaWaybillState> {
   const status = normalizeBostaStatus(input.found.status || "created");
+  const governorate = String(input.found.placeLabel || "").trim() || null;
   await writeConfirmation({
     confirmationId: input.confirmationId,
     snapshot: input.snapshot,
@@ -198,6 +228,7 @@ async function persistLinkedDelivery(input: {
     bostaStatus: status,
     bostaShippingFee: input.found.shippingFee,
     bostaSyncError: null,
+    governorate,
   });
   const built = partyFromAnswers({
     answers: input.answers,
@@ -223,6 +254,7 @@ async function persistLinkedDelivery(input: {
     bostaSyncedAt: new Date(),
     cod: input.found.cod,
     lastEvent: input.found.lastEvent,
+    governorate,
   });
 }
 
@@ -248,6 +280,7 @@ export async function attachBostaWaybillByOrderReference(input: {
         shippingFee: details?.shippingFee ?? null,
         cod: details?.cod ?? null,
         lastEvent: details?.lastEvent || null,
+        placeLabel: details?.placeLabel || null,
       },
     });
     return true;
@@ -278,6 +311,7 @@ export async function attachBostaWaybillByOrderReference(input: {
       shippingFee: lookup.details.shippingFee,
       cod: lookup.details.cod,
       lastEvent: lookup.details.lastEvent,
+      placeLabel: lookup.details.placeLabel,
     },
   });
   return true;
@@ -304,6 +338,7 @@ async function linkExistingBostaDelivery(input: {
         shippingFee: byOrder.details.shippingFee,
         cod: byOrder.details.cod,
         lastEvent: byOrder.details.lastEvent,
+        placeLabel: byOrder.details.placeLabel,
       },
     });
   }
@@ -544,6 +579,7 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
   const details = readBostaLiveDetails(live.data);
   const status = normalizeBostaStatus(details.status || readBostaStatus(live.data) || typed.bostaStatus || "");
   const fee = details.shippingFee ?? readBostaShippingFee(live.data) ?? (Number.isFinite(currentFee) ? currentFee : null);
+  const governorate = String(details.placeLabel || "").trim() || null;
   await writeConfirmation({
     confirmationId,
     snapshot: (row.customerSnapshot as Snapshot) || null,
@@ -551,6 +587,7 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
     bostaStatus: status || typed.bostaStatus || null,
     bostaShippingFee: fee,
     bostaSyncError: null,
+    governorate,
   });
   return present({
     trackingNumber: tracking,
@@ -559,6 +596,7 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
     bostaSyncedAt: new Date(),
     cod: details.cod,
     lastEvent: details.lastEvent,
+    governorate,
   });
 }
 
@@ -593,6 +631,7 @@ export async function recordBostaWebhookOnConfirmation(input: {
   const fee = readBostaShippingFee(input.raw);
   const currentFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
   const status = normalizeBostaStatus(input.status || readBostaStatus(input.raw) || "");
+  const governorate = String(readBostaLiveDetails(input.raw).placeLabel || "").trim() || null;
   await writeConfirmation({
     confirmationId: row.id,
     snapshot: (row.customerSnapshot as Snapshot) || null,
@@ -600,5 +639,6 @@ export async function recordBostaWebhookOnConfirmation(input: {
     bostaStatus: status || typed.bostaStatus || null,
     bostaShippingFee: fee ?? (Number.isFinite(currentFee) ? currentFee : null),
     bostaSyncError: null,
+    governorate,
   });
 }

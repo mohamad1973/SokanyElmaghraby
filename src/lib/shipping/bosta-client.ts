@@ -286,6 +286,7 @@ export async function findBostaDeliveryByCustomer(input: {
       shippingFee: full.shippingFee ?? picked.details.shippingFee,
       cod: full.cod ?? picked.details.cod,
       lastEvent: full.lastEvent || picked.details.lastEvent,
+      placeLabel: full.placeLabel || picked.details.placeLabel,
     },
     error: null,
   };
@@ -378,6 +379,7 @@ export async function findBostaDeliveryByOrderReference(input: {
         shippingFee: full.shippingFee ?? picked.details.shippingFee,
         cod: full.cod ?? picked.details.cod,
         lastEvent: full.lastEvent || picked.details.lastEvent,
+        placeLabel: full.placeLabel || picked.details.placeLabel,
       },
       error: null,
     };
@@ -711,6 +713,7 @@ export type BostaLiveDetails = {
   shippingFee: number | null;
   cod: number | null;
   lastEvent: string | null;
+  placeLabel: string | null;
 };
 
 function eventLine(raw: unknown): string | null {
@@ -723,6 +726,34 @@ function eventLine(raw: unknown): string | null {
   const text = [label, place].filter(Boolean).join(" — ");
   if (!text) return null;
   return when ? `${text} · ${when}` : text;
+}
+
+function namedPlace(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    if (!text || /^eg-\d+$/i.test(text) || /^[a-f0-9]{16,}$/i.test(text)) {
+      return findBostaCity(text)?.nameAr || "";
+    }
+    return text;
+  }
+  const record = asRecord(value);
+  if (!record) return "";
+  const nameAr = String(record.nameAr || record.arabicName || "").trim();
+  if (nameAr) return nameAr;
+  const name = String(record.name || record.nameEn || "").trim();
+  if (!name) return "";
+  return findBostaCity(name)?.nameAr || name;
+}
+
+export function readBostaPlaceLabel(raw: unknown): string | null {
+  const root = bostaPayload(raw);
+  if (!root) return null;
+  const drop = asRecord(root.dropOffAddress) || asRecord(root.dropoffAddress);
+  if (!drop) return null;
+  const city = namedPlace(drop.city);
+  const area = namedPlace(drop.district) || namedPlace(drop.zone);
+  if (city && area && compactPlace(city) !== compactPlace(area)) return `${city} - ${area}`;
+  return city || area || null;
 }
 
 export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
@@ -743,6 +774,7 @@ export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
     shippingFee: readBostaShippingFee(raw),
     cod: readAmount(root?.cod),
     lastEvent: last,
+    placeLabel: readBostaPlaceLabel(raw),
   };
 }
 

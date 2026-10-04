@@ -262,6 +262,7 @@ export function CsCallSheet({
           bostaSyncError?: string | null;
           cod?: number | null;
           lastEvent?: string | null;
+          governorate?: string | null;
         };
         if (!res.ok) {
           setBostaError(data.message || data.bostaSyncError || "تعذر جلب بوليصة بوسطة.");
@@ -273,6 +274,19 @@ export function CsCallSheet({
         if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
         if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
         if (data.lastEvent) setBostaLastEvent(data.lastEvent);
+        const governorate = String(data.governorate || "").trim();
+        if (governorate) {
+          setAnswers((prev) => ({
+            ...prev,
+            governorate_confirm: {
+              confirmed: true,
+              value: governorate,
+              note: prev.governorate_confirm?.note || "",
+              yesNo: prev.governorate_confirm?.yesNo || "",
+            },
+          }));
+          setSnapshot((prev) => (prev ? { ...prev, governorate } : prev));
+        }
         setBostaError(data.bostaSyncError || "");
       })
       .catch((error: unknown) => {
