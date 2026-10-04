@@ -575,7 +575,7 @@ export function CsCallSheet({
       return;
     }
     const url = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
-    let finished = false;
+    let marked = false;
     const release = (target: Window | null, frame?: HTMLIFrameElement) => {
       window.setTimeout(() => {
         frame?.remove();
@@ -583,24 +583,13 @@ export function CsCallSheet({
         URL.revokeObjectURL(url);
       }, 1500);
     };
-    const finish = (printed: boolean, target: Window | null, frame?: HTMLIFrameElement) => {
-      if (finished) return;
-      finished = true;
+    const markPrinted = () => {
+      if (marked) return;
+      marked = true;
       setPrintingWaybill(false);
-      if (!printed) {
-        release(target, frame);
-        setMessage("اتفتحت نافذة الطباعة. اختاري الطابعة عشان الحفظ يتم.");
-        return;
-      }
-      release(target, frame);
-      void fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`, { method: "POST" }).then((saved) => {
-        if (saved.ok) {
-          setWaybillPrinted(true);
-          setMessage("اتطبعت البوليصة على طابعة الجهاز.");
-        } else {
-          setMessage("الطباعة تمت، وتعذر تسجيلها. اضغطي طباعة تاني.");
-        }
-      });
+      setWaybillPrinted(true);
+      setMessage("البوليصة اتطبعت. تقدر تحفظ الأوردر.");
+      void fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`, { method: "POST" });
     };
     const printWhenReady = (target: Window, frame?: HTMLIFrameElement, alreadyLoaded = false) => {
       let started = false;
@@ -609,16 +598,22 @@ export function CsCallSheet({
         started = true;
         window.setTimeout(() => {
           if (target.closed) {
-            finish(false, null, frame);
+            setPrintingWaybill(false);
+            setMessage("اتقفلت نافذة الطباعة قبل ما البوليصة تطبع.");
+            URL.revokeObjectURL(url);
             return;
           }
-          target.addEventListener("afterprint", () => finish(true, target, frame));
           target.focus();
           try {
             target.print();
           } catch {
-            finish(false, target, frame);
+            setPrintingWaybill(false);
+            setMessage("تعذر فتح نافذة الطباعة.");
+            release(target, frame);
+            return;
           }
+          markPrinted();
+          target.addEventListener("afterprint", () => release(target, frame), { once: true });
         }, 900);
       };
       if (alreadyLoaded) {
@@ -645,7 +640,10 @@ export function CsCallSheet({
     frame.onload = () => {
       const win = frame.contentWindow;
       if (!win) {
-        finish(false, null, frame);
+        setPrintingWaybill(false);
+        setMessage("تعذر فتح نافذة الطباعة.");
+        frame.remove();
+        URL.revokeObjectURL(url);
         return;
       }
       printWhenReady(win, frame, true);
@@ -1316,7 +1314,7 @@ export function CsCallSheet({
             waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
           }`}
         >
-          {printingWaybill ? "جاري الطباعة" : waybillPrinted ? "اتطبعت" : "طباعة البوليصة"}
+          {printingWaybill ? "جاري الطباعة" : waybillPrinted ? "مطبوع" : "طباعة البوليصة"}
         </button>
         </div>
       </div>
