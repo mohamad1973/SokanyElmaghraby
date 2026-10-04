@@ -1,5 +1,7 @@
 import "server-only";
 
+import { PDFDocument } from "pdf-lib";
+
 import type { AdminOrder } from "@/lib/orders";
 
 import { findBostaCity, mapGovernorateToBostaCity } from "./bosta-zones";
@@ -971,10 +973,33 @@ async function readAwbPdf(response: Response) {
   }
 }
 
+const LABEL_WIDTH = (100 * 72) / 25.4;
+const LABEL_HEIGHT = (150 * 72) / 25.4;
+
+async function fitAwbToLabel(bytes: Uint8Array) {
+  const source = await PDFDocument.load(bytes);
+  const output = await PDFDocument.create();
+  const pageIndexes = source.getPageIndices();
+  const embedded = await output.embedPdf(source, pageIndexes);
+  embedded.forEach((page) => {
+    const target = output.addPage([LABEL_WIDTH, LABEL_HEIGHT]);
+    const scale = Math.min(LABEL_WIDTH / page.width, LABEL_HEIGHT / page.height);
+    const width = page.width * scale;
+    const height = page.height * scale;
+    target.drawPage(page, {
+      x: (LABEL_WIDTH - width) / 2,
+      y: (LABEL_HEIGHT - height) / 2,
+      width,
+      height,
+    });
+  });
+  return new Uint8Array(await output.save());
+}
+
 async function requestBostaAwb(tracking: string, method: "POST" | "GET") {
   const url =
     method === "GET"
-      ? `${bostaBaseUrl}/api/v2/deliveries/mass-awb?trackingNumbers=${encodeURIComponent(tracking)}&requestedAwbType=A4&lang=ar`
+      ? `${bostaBaseUrl}/api/v2/deliveries/mass-awb?trackingNumbers=${encodeURIComponent(tracking)}&requestedAwbType=A6&lang=ar`
       : `${bostaBaseUrl}/api/v2/deliveries/mass-awb`;
   return fetch(url, {
     method,
@@ -982,7 +1007,7 @@ async function requestBostaAwb(tracking: string, method: "POST" | "GET") {
       Authorization: bostaApiKey!,
       ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
     },
-    body: method === "POST" ? JSON.stringify({ trackingNumbers: tracking, requestedAwbType: "A4", lang: "ar" }) : undefined,
+    body: method === "POST" ? JSON.stringify({ trackingNumbers: tracking, requestedAwbType: "A6", lang: "ar" }) : undefined,
     cache: "no-store",
   });
 }
@@ -995,9 +1020,9 @@ export async function fetchBostaAwbPdf(trackingNumber: string) {
   }
   try {
     const posted = await readAwbPdf(await requestBostaAwb(tracking, "POST"));
-    if (posted) return { ok: true as const, bytes: posted };
+    if (posted) return { ok: true as const, bytes: await fitAwbToLabel(posted) };
     const fetched = await readAwbPdf(await requestBostaAwb(tracking, "GET"));
-    if (fetched) return { ok: true as const, bytes: fetched };
+    if (fetched) return { ok: true as const, bytes: await fitAwbToLabel(fetched) };
     return { ok: false as const, message: "بوسطة أنشأت البوليصة من غير ملف للطباعة." };
   } catch {
     return { ok: false as const, message: "تعذر الاتصال ببوسطة لطباعة البوليصة." };
