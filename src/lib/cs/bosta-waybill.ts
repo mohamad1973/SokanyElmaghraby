@@ -12,6 +12,7 @@ import {
   updateCsBostaDelivery,
   type CsBostaParty,
 } from "@/lib/shipping/bosta-client";
+import { effectivePaymentState } from "@/lib/cs/order-window";
 import { bostaStatusLocksEdits, getBostaStatusLabelAr, normalizeBostaStatus } from "@/lib/shipping/bosta-zones";
 
 type Snapshot = Record<string, unknown> | null;
@@ -57,7 +58,13 @@ function partyFromAnswers(input: {
   if (!name || !phone || !address || !governorate) {
     return { ok: false, message: "بيانات البوليصة ناقصة: الاسم أو التليفون أو العنوان أو المحافظة." };
   }
-  const paymentState = String(snap.paymentState || "");
+  const paymentState = effectivePaymentState({
+    paymentMethod: String(snap.paymentMethod || ""),
+    paymentMethodId: snap.paymentMethodId == null ? null : String(snap.paymentMethodId),
+    wooStatus: String(snap.wooStatus || snap.status || ""),
+    datePaid: snap.datePaid == null ? null : String(snap.datePaid),
+    paymentState: snap.paymentState === "paid" || snap.paymentState === "awaiting_payment" || snap.paymentState === "cod" ? snap.paymentState : null,
+  });
   const total = Number(String(snap.total || "").replace(/,/g, ""));
   const cod = paymentState === "paid" ? 0 : Number.isFinite(total) ? total : 0;
   return {

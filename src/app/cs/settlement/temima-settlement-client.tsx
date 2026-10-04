@@ -13,6 +13,8 @@ type SheetRow = {
   productNames: string;
   cashAmount: number;
   depositAmount: number;
+  orderTotal: number;
+  fawry: boolean;
   disposition: Disposition;
   isLarge: boolean;
   carried: boolean;
@@ -38,7 +40,13 @@ type MonthPreview = {
 const money = (n: number) =>
   new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(Math.round(n));
 
-export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
+export function TemimaSettlementClient({
+  canEdit,
+  canEditDeposit = false,
+}: {
+  canEdit: boolean;
+  canEditDeposit?: boolean;
+}) {
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
   const [status, setStatus] = useState<"open" | "closed">("open");
@@ -93,6 +101,26 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
 
   function patchRow(id: number, patch: Partial<SheetRow>) {
     setRows((prev) => prev.map((row) => (row.confirmationId === id ? { ...row, ...patch } : row)));
+  }
+
+  async function saveFawryDeposit(row: SheetRow) {
+    if (!canEditDeposit || status === "closed" || !row.fawry) return;
+    const res = await fetch("/api/cs/settlement/temima", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "fawry-deposit",
+        confirmationId: row.confirmationId,
+        amount: row.depositAmount,
+      }),
+    });
+    const data = (await res.json()) as { message?: string };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر حفظ ديبوزت فوري.");
+      await load(weekStart, weekEnd, closeDate);
+      return;
+    }
+    setMessage("اتحفظ ديبوزت فوري.");
   }
 
   async function submit(action: "save" | "close-week" | "close-month") {
@@ -178,7 +206,43 @@ export function TemimaSettlementClient({ canEdit }: { canEdit: boolean }) {
                   </td>
                   <td className="px-2 py-2">{row.customerName}</td>
                   <td className="px-2 py-2">{row.productNames || "—"}</td>
-                  <td className="px-2 py-2">{row.depositAmount ? money(row.depositAmount) : ""}</td>
+                  <td className="px-2 py-2">
+                    {row.fawry && canEditDeposit && status !== "closed" ? (
+                      <input
+                        type="number"
+                        min={0}
+                        value={row.depositAmount}
+                        onChange={(event) => {
+                          const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
+                          const deposit = Number.isFinite(next) ? Math.max(0, next) : 0;
+                          const capped = Math.min(row.orderTotal || deposit, deposit);
+                          patchRow(row.confirmationId, {
+                            depositAmount: capped,
+                            cashAmount: Math.max(0, (row.orderTotal || 0) - capped),
+                          });
+                        }}
+                        onBlur={(event) => {
+                          const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
+                          const deposit = Number.isFinite(next) ? Math.min(row.orderTotal || 0, Math.max(0, next)) : 0;
+                          const nextRow = {
+                            ...row,
+                            depositAmount: deposit,
+                            cashAmount: Math.max(0, (row.orderTotal || 0) - deposit),
+                          };
+                          patchRow(row.confirmationId, {
+                            depositAmount: nextRow.depositAmount,
+                            cashAmount: nextRow.cashAmount,
+                          });
+                          void saveFawryDeposit(nextRow);
+                        }}
+                        className="h-8 w-24 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+                      />
+                    ) : row.depositAmount ? (
+                      money(row.depositAmount)
+                    ) : (
+                      ""
+                    )}
+                  </td>
                   <td className="px-2 py-2">{money(row.cashAmount)}</td>
                   <td className="px-2 py-2">
                     <select

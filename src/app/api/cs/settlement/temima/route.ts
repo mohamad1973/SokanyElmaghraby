@@ -7,6 +7,7 @@ import {
   getTemimaWeekSheet,
   previewTemimaMonth,
   saveTemimaWeek,
+  setFawrySettlementDeposit,
   type TemimaSheetRow,
 } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
@@ -54,8 +55,10 @@ export async function POST(request: Request) {
   }
 
   let body: {
-    action?: "save" | "close-week" | "close-month";
+    action?: "save" | "close-week" | "close-month" | "fawry-deposit";
     weekStart?: string;
+    confirmationId?: number;
+    amount?: number | null;
     weekEnd?: string;
     cashPaid?: number;
     rows?: TemimaSheetRow[];
@@ -66,6 +69,18 @@ export async function POST(request: Request) {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ message: "طلب غير صالح." }, { status: 400 });
+  }
+
+  if (body.action === "fawry-deposit") {
+    if (!access.viewer.isAdmin && !session.user.csIsAdmin) {
+      return NextResponse.json({ message: "تعديل ديبوزت فوري للأدمن فقط." }, { status: 403 });
+    }
+    const result = await setFawrySettlementDeposit({
+      confirmationId: Number(body.confirmationId),
+      amount: body.amount == null ? null : Number(body.amount),
+    });
+    if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+    return NextResponse.json(result);
   }
 
   if (body.action === "close-month") {

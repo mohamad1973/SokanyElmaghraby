@@ -174,6 +174,10 @@ export function formatCairoOrderDate(iso: string | null | undefined) {
   }).format(date);
 }
 
+export function isFawryMethod(paymentMethod?: string | null, paymentMethodId?: string | null) {
+  return /fawry|فورى|فوري/.test(`${paymentMethod || ""} ${paymentMethodId || ""}`.toLowerCase());
+}
+
 export function isPaidOnlineHighlight(paymentMethod: string, paymentMethodId?: string | null) {
   const s = `${paymentMethod || ""} ${paymentMethodId || ""}`.toLowerCase();
   if (!s.trim()) return false;
@@ -193,10 +197,16 @@ export function sheetCollectedSplit(input: {
   depositAmount?: number | null;
   depositPaid?: boolean | null;
   depositApprovalStatus?: string | null;
+  settlementDepositOverride?: number | null;
 }) {
   const total = Math.max(0, Number(input.total) || 0);
   const status = String(input.wooStatus || "").toLowerCase().trim();
   const cancelled = status === "cancelled" || status === "canceled" || status === "failed" || status === "refunded" || status === "trash";
+  const override = input.settlementDepositOverride;
+  if (override != null && Number.isFinite(Number(override))) {
+    const deposit = Math.min(total, Math.max(0, Number(override)));
+    return { deposit, net: Math.max(0, total - deposit) };
+  }
   if (cancelled && input.paymentState !== "paid") return { deposit: 0, net: 0 };
   if (input.paymentState === "paid") return { deposit: total, net: 0 };
   const approved =
@@ -209,6 +219,7 @@ export function sheetCollectedSplit(input: {
 /**
  * Real payment completion for CS badges/filters — not just payment method.
  * Online + Woo pending (no date_paid) = awaiting; online + paid/processing = paid; COD = cod.
+ * Fawry counts as paid only when Woo recorded a payment date or the order is completed.
  */
 export function resolvePaymentState(input: {
   paymentMethod?: string | null;
@@ -224,6 +235,9 @@ export function resolvePaymentState(input: {
   const status = String(input.wooStatus || "").toLowerCase().trim();
   const datePaid = String(input.datePaid || "").trim();
   if (datePaid && datePaid !== "null") return "paid";
+  if (isFawryMethod(method, methodId)) {
+    return status === "completed" ? "paid" : "awaiting_payment";
+  }
   if (status === "pending" || status === "failed" || status === "cancelled") {
     return "awaiting_payment";
   }
@@ -232,6 +246,20 @@ export function resolvePaymentState(input: {
   }
   // Unknown online status without date_paid → treat as awaiting to avoid false "مدفوع"
   return "awaiting_payment";
+}
+
+export function effectivePaymentState(input: {
+  paymentMethod?: string | null;
+  paymentMethodId?: string | null;
+  wooStatus?: string | null;
+  datePaid?: string | null;
+  paymentState?: CsPaymentState | null;
+}): CsPaymentState {
+  if (isFawryMethod(input.paymentMethod, input.paymentMethodId)) return resolvePaymentState(input);
+  if (input.paymentState === "paid" || input.paymentState === "awaiting_payment" || input.paymentState === "cod") {
+    return input.paymentState;
+  }
+  return resolvePaymentState(input);
 }
 
 export function formatCairoOrderDateTime(iso: string | null | undefined) {

@@ -13,7 +13,7 @@ import {
   formatCairoOrderDate,
   formatCairoOrderDateTime,
   isWithinCairoDateRange,
-  resolvePaymentState,
+  effectivePaymentState,
   sheetCollectedSplit,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
@@ -122,12 +122,12 @@ const dateMaxYmd = () => cairoTodayYmd();
 
 function itemPaymentState(item: CsQueueItem): CsPaymentState {
   const snap = item.customerSnapshot;
-  if (snap?.paymentState) return snap.paymentState;
-  return resolvePaymentState({
+  return effectivePaymentState({
     paymentMethod: snap?.paymentMethod,
     paymentMethodId: snap?.paymentMethodId,
     wooStatus: snap?.wooStatus,
     datePaid: snap?.datePaid,
+    paymentState: snap?.paymentState,
   });
 }
 
