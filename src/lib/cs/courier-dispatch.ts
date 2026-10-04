@@ -231,7 +231,17 @@ async function loadCourierDay(courierId: number, dayYmd?: string) {
   };
 }
 
+async function releasePostponedCouriers() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.csOrderConfirmation.updateMany({
+    where: { courierOutcome: "postponed", courierAgentId: { not: null } },
+    data: { courierAgentId: null, courierAssignedAt: null },
+  });
+}
+
 export async function loadCourierDispatch(viewerId: number, mode: "supervisor" | "courier", dayYmd?: string) {
+  await releasePostponedCouriers();
   if (mode === "courier") return loadCourierDay(viewerId, dayYmd);
   const couriers = await loadCouriers();
   const today = cairoTodayYmd();
@@ -318,7 +328,12 @@ export async function assignCourierOrder(input: { confirmationId?: number; order
   const now = new Date();
   const updated = await prisma.csOrderConfirmation.updateMany({
     where: { id: order.id, courierAgentId: null },
-    data: { courierAgentId: input.courierId, courierAssignedAt: now },
+    data: {
+      courierAgentId: input.courierId,
+      courierAssignedAt: now,
+      courierOutcome: null,
+      courierRefusalReason: null,
+    },
   });
   if (!updated.count) return { ok: false as const, message: "الأوردر اتوزع لمندوب تاني." };
   return { ok: true as const };
@@ -395,12 +410,22 @@ export async function markCourierOutcome(
         handedToCarrierAt: order.handedToCarrierAt || now,
       },
     });
+  } else if (outcome === "postponed") {
+    await prisma.csOrderConfirmation.update({
+      where: { id: order.id },
+      data: {
+        courierOutcome: "postponed",
+        courierRefusalReason: null,
+        courierAgentId: null,
+        courierAssignedAt: null,
+      },
+    });
   } else {
     await prisma.csOrderConfirmation.update({
       where: { id: order.id },
       data: {
         courierOutcome: outcome,
-        courierRefusalReason: outcome === "refused" ? note : null,
+        courierRefusalReason: note,
       },
     });
   }
@@ -421,7 +446,11 @@ export async function markCourierSupervisorDisposition(
   if (!order) return { ok: false as const, message: "الأوردر مش متوزع للمندوب ده." };
   await prisma.csOrderConfirmation.update({
     where: { id: order.id },
-    data: { courierOutcome: outcome, courierRefusalReason: null },
+    data: {
+      courierOutcome: outcome,
+      courierRefusalReason: null,
+      ...(outcome === "postponed" ? { courierAgentId: null, courierAssignedAt: null } : {}),
+    },
   });
   return { ok: true as const };
 }

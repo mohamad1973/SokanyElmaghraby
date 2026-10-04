@@ -279,16 +279,43 @@ function ledgerOf(
   });
 }
 
+async function releasePostponedMona() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET monaCourierId = NULL, monaAssignedAt = NULL
+    WHERE monaOutcome = 'postponed' AND monaCourierId IS NOT NULL
+  `;
+}
+
+async function loadReturnedPostponed() {
+  const prisma = getPrismaClient();
+  if (!prisma) return [] as OrderRow[];
+  return prisma.$queryRaw<OrderRow[]>`
+    SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
+           c.monaCourierId, c.monaOutcome, c.monaRefusalReason, a.name AS courierName
+    FROM CsOrderConfirmation c
+    LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+    WHERE c.monaOutcome = 'postponed' AND c.monaCourierId IS NULL
+    ORDER BY c.id DESC
+  `;
+}
+
 export async function loadMonaDesk(viewerCourierId?: number) {
+  await releasePostponedMona();
   const couriers = await listMonaCourierAgents();
   const visible = viewerCourierId ? couriers.filter((row) => row.id === viewerCourierId) : couriers;
   const rows = await loadAssignedOrders(viewerCourierId);
-  const answers = await loadAnswers(rows.map((row) => row.id));
+  const returnedRows = viewerCourierId ? [] : await loadReturnedPostponed();
+  const answers = await loadAnswers([...rows, ...returnedRows].map((row) => row.id));
   const cards = rows.map((row) => cardFrom(row, answers));
+  const returned = returnedRows.map((row) => cardFrom(row, answers));
   const [remitted, adjusts] = await Promise.all([remittedByCourier(), loadMonaAdjusts()]);
   return {
     couriers: visible,
     orders: cards,
+    returned,
     ledger: ledgerOf(visible, cards, remitted, adjusts),
   };
 }
@@ -367,7 +394,8 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
   }
   const changed = await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
-    SET monaCourierId = ${courierId}, monaAssignedAt = NOW(3)
+    SET monaCourierId = ${courierId}, monaAssignedAt = NOW(3),
+        monaOutcome = NULL, monaRefusalReason = NULL
     WHERE id = ${row.id} AND monaCourierId IS NULL
       AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
   `;
@@ -398,6 +426,17 @@ export async function markMonaOutcome(input: {
   const row = rows[0];
   if (!row) return { ok: false as const, message: "الأوردر مش عندك." };
   if (row.monaOutcome === "delivered") return { ok: false as const, message: "الأوردر اتسلم." };
+  if (input.outcome === "postponed") {
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaOutcome = 'postponed',
+          monaRefusalReason = NULL,
+          monaCourierId = NULL,
+          monaAssignedAt = NULL
+      WHERE id = ${input.confirmationId} AND monaCourierId = ${input.courierId}
+    `;
+    return { ok: true as const, message: "اتسجل." };
+  }
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
     SET monaOutcome = ${input.outcome},

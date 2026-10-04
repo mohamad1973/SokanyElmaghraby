@@ -45,6 +45,7 @@ type Desk = {
   canEditMoney?: boolean;
   couriers: Array<{ id: number; name: string }>;
   orders: OrderCard[];
+  returned?: OrderCard[];
   ledger: LedgerLine[];
 };
 
@@ -331,6 +332,51 @@ function CourierCard({
   );
 }
 
+function ReturnedOrder({
+  order,
+  couriers,
+  onAssign,
+}: {
+  order: OrderCard;
+  couriers: Array<{ id: number; name: string }>;
+  onAssign: (courierId: number) => void;
+}) {
+  const [pick, setPick] = useState("");
+  return (
+    <article className="grid gap-2 rounded-2xl bg-orange-100 p-3 shadow ring-1 ring-orange-500">
+      <p className="text-sm font-extrabold text-orange-800">مؤجل</p>
+      <p className="text-sm font-extrabold text-[#14213D]">
+        #{order.wooOrderNumber} · {order.customerName || "—"}
+      </p>
+      <p className="text-xs font-bold text-[#14213D]" dir="ltr">
+        {order.phone || "—"}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <select
+          value={pick}
+          onChange={(event) => setPick(event.target.value)}
+          className="h-10 min-w-36 rounded-xl border border-orange-300 bg-white px-3 text-sm font-bold text-[#14213D]"
+        >
+          <option value="">مندوب تاني</option>
+          {couriers.map((courier) => (
+            <option key={courier.id} value={courier.id}>
+              {courier.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!pick}
+          onClick={() => onAssign(Number(pick))}
+          className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-50"
+        >
+          توزيع
+        </button>
+      </div>
+    </article>
+  );
+}
+
 export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [message, setMessage] = useState("");
@@ -425,6 +471,19 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
         </form>
       ) : null}
       {loading && !desk ? <p className="text-sm font-bold text-[#14213D]/70">جاري التحميل</p> : null}
+      {mode === "supervisor" && (desk?.returned || []).length ? (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-extrabold text-orange-800">مؤجل — يتوزع على مندوب تاني</h3>
+          {(desk?.returned || []).map((order) => (
+            <ReturnedOrder
+              key={order.id}
+              order={order}
+              couriers={couriers}
+              onAssign={(courier) => void post({ action: "assign", orderNumber: order.wooOrderNumber, courierId: courier })}
+            />
+          ))}
+        </section>
+      ) : null}
       {mode === "supervisor" && desk && !couriers.length ? (
         <p className="text-sm font-bold text-[#14213D]/70">أضف الحساب من المستخدمين بدور مندوب المشرفة.</p>
       ) : null}

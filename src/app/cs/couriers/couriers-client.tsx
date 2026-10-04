@@ -227,9 +227,15 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
       <section className="grid gap-2">
         <h2 className="text-sm font-extrabold text-[#14213D]">{selected ? `أوردرات ${selected.name}` : "اختار المندوب ثم علّم على أوردراته"}</h2>
         {(supervisor?.pool || []).map((order) => (
-          <label key={order.id} className="flex items-start gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+          <label
+            key={order.id}
+            className={`flex items-start gap-3 rounded-2xl p-4 shadow ring-1 ${order.outcome === "postponed" ? "bg-orange-100 ring-orange-500" : "bg-white ring-[#14213D]/10"}`}
+          >
             <input type="checkbox" className="mt-1 size-5 accent-[#FCA311]" disabled={!selected} onChange={() => selected && void post({ action: "assign", confirmationId: order.id, courierId: selected.id })} />
-            <OrderDetails order={order} />
+            <div className="grid gap-1">
+              {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">مؤجل</p> : null}
+              <OrderDetails order={order} />
+            </div>
           </label>
         ))}
       </section>

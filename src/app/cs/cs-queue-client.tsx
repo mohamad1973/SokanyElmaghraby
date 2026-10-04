@@ -1651,20 +1651,24 @@ export function CsQueueClient({
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
             const ship = item.shippingCompany === "sayed_temima" ? "sayed_temima" : "bosta";
             const dup = dupMeta.get(item.id);
+            const returnedPostponed =
+              isCourierSupervisor && !item.courierAgentId && item.courierOutcome === "postponed";
 
             return (
               <div
                 key={item.id}
                 className={`rounded-xl px-3 py-2.5 shadow-sm ring-1 ${
-                  dup ? dup.colorClass : "bg-white"
+                  returnedPostponed ? "bg-orange-100 ring-orange-500" : dup ? dup.colorClass : "bg-white"
                 } ${
-                  isConfirmed
-                    ? "ring-[#FCA311]"
-                    : isPaid
-                      ? "ring-[#14213D]/35"
-                      : isAwaiting
-                        ? "ring-amber-400/70"
-                        : "ring-[#E5E5E5]"
+                  returnedPostponed
+                    ? ""
+                    : isConfirmed
+                      ? "ring-[#FCA311]"
+                      : isPaid
+                        ? "ring-[#14213D]/35"
+                        : isAwaiting
+                          ? "ring-amber-400/70"
+                          : "ring-[#E5E5E5]"
                 }`}
               >
                 <div
@@ -1684,6 +1688,9 @@ export function CsQueueClient({
                 >
                   <div className="flex flex-col gap-0.5">
                     <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] ${meta.className}`}>{meta.label}</span>
+                    {returnedPostponed ? (
+                      <span className="text-xs font-extrabold text-orange-800">مؤجل</span>
+                    ) : null}
                     <span className="flex items-center gap-2 text-base font-extrabold">
                       #{item.wooOrderNumber}
                       {canEditTemimaSheet && sheetDay ? (
