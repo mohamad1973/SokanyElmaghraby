@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cairoTodayYmd } from "@/lib/cs/order-window";
 
@@ -11,6 +11,8 @@ type SheetRow = {
   wooOrderNumber: string;
   customerName: string;
   productNames: string;
+  phone: string;
+  address: string;
   cashAmount: number;
   depositAmount: number;
   orderTotal: number;
@@ -37,8 +39,29 @@ type MonthPreview = {
   shippingTotal: number;
 };
 
+type OrderHit = {
+  id: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+};
+
 const money = (n: number) =>
   new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(Math.round(n));
+
+function rowMatchesQuery(row: SheetRow, raw: string) {
+  const q = raw.trim().toLowerCase();
+  if (!q) return true;
+  const hay = [row.wooOrderNumber, row.customerName, row.productNames, row.phone, row.address].filter(Boolean).join(" ").toLowerCase();
+  if (hay.includes(q)) return true;
+  const digits = q.replace(/\D/g, "");
+  if (digits.length >= 4) {
+    const phone = (row.phone || "").replace(/\D/g, "");
+    if (phone.includes(digits) || phone.slice(-10).includes(digits.slice(-10))) return true;
+    if (String(row.wooOrderNumber).replace(/\D/g, "").includes(digits)) return true;
+  }
+  return false;
+}
 
 export function TemimaSettlementClient({
   canEdit,
@@ -58,6 +81,11 @@ export function TemimaSettlementClient({
   const [month, setMonth] = useState<MonthPreview | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchScope, setSearchScope] = useState<"week" | "orders">("week");
+  const [orderHits, setOrderHits] = useState<OrderHit[]>([]);
+  const [searchingOrders, setSearchingOrders] = useState(false);
+  const searchSeq = useRef(0);
 
   const load = useCallback(async (week?: string, end?: string, monthDate?: string) => {
     const qs = new URLSearchParams();
@@ -91,6 +119,49 @@ export function TemimaSettlementClient({
   useEffect(() => {
     void load(undefined, undefined, closeDate);
   }, [load, closeDate]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (searchScope !== "orders" || query.length < 2) {
+      setOrderHits([]);
+      setSearchingOrders(false);
+      return;
+    }
+    setSearchingOrders(true);
+    const seq = searchSeq.current + 1;
+    searchSeq.current = seq;
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        const res = await fetch(`/api/cs/settlement/temima?q=${encodeURIComponent(query)}`);
+        const data = (await res.json()) as { message?: string; matches?: OrderHit[] };
+        if (seq !== searchSeq.current) return;
+        setSearchingOrders(false);
+        if (!res.ok) {
+          setOrderHits([]);
+          setMessage(data.message || "تعذر البحث في الأوردرات.");
+          return;
+        }
+        setOrderHits(data.matches || []);
+      })();
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, searchScope]);
+
+  const visibleRows = useMemo(() => {
+    const query = searchQuery.trim();
+    if (!query) return rows;
+    if (searchScope === "week") return rows.filter((row) => rowMatchesQuery(row, query));
+    if (!orderHits.length) return rows;
+    const ids = new Set(orderHits.map((hit) => hit.id));
+    const inWeek = rows.filter((row) => ids.has(row.confirmationId));
+    return inWeek.length ? inWeek : rows;
+  }, [rows, searchQuery, searchScope, orderHits]);
+
+  const outsideHits = useMemo(() => {
+    if (searchScope !== "orders" || searchQuery.trim().length < 2) return [];
+    const ids = new Set(rows.map((row) => row.confirmationId));
+    return orderHits.filter((hit) => !ids.has(hit.id));
+  }, [orderHits, rows, searchQuery, searchScope]);
 
   const cashDue = useMemo(
     () => rows.filter((row) => row.disposition === "collect").reduce((sum, row) => sum + row.cashAmount, 0),
@@ -177,6 +248,47 @@ export function TemimaSettlementClient({
         <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "مقفل" : "مفتوح"}</span>
       </div>
 
+      <div className="space-y-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="بحث: موبايل، اسم، عنوان، منتج..."
+            className="h-9 min-w-[16rem] flex-1 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold"
+          />
+          <button
+            type="button"
+            onClick={() => setSearchScope("week")}
+            className={`h-9 rounded-lg px-3 text-xs font-extrabold ${searchScope === "week" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"}`}
+          >
+            هذا الأسبوع
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchScope("orders")}
+            className={`h-9 rounded-lg px-3 text-xs font-extrabold ${searchScope === "orders" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"}`}
+          >
+            كل الأوردرات
+          </button>
+        </div>
+        {searchScope === "orders" && searchQuery.trim().length >= 2 ? (
+          <div className="text-xs font-bold text-[#14213D]/80">
+            {searchingOrders ? "جاري البحث..." : outsideHits.length ? "أوردرات خارج هذا الأسبوع:" : "مفيش أوردرات خارج هذا الأسبوع."}
+            {outsideHits.length ? (
+              <ul className="mt-1 space-y-1">
+                {outsideHits.map((hit) => (
+                  <li key={hit.id}>
+                    <span dir="ltr">{hit.wooOrderNumber}</span>
+                    {hit.customerName ? ` · ${hit.customerName}` : ""}
+                    {hit.phone ? ` · ${hit.phone}` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
         <table className="min-w-full text-sm">
           <thead className="bg-[#E5E5E5] text-right">
@@ -191,14 +303,14 @@ export function TemimaSettlementClient({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
-                  لا توجد أوردرات لهذا الأسبوع.
+                  {rows.length ? "لا توجد نتيجة في هذا الأسبوع." : "لا توجد أوردرات لهذا الأسبوع."}
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
+              visibleRows.map((row) => (
                 <tr key={`${row.confirmationId}-${row.postponeLineId || 0}`} className="border-t border-[#E5E5E5]">
                   <td className="px-2 py-2 font-extrabold" dir="ltr">
                     {row.wooOrderNumber}

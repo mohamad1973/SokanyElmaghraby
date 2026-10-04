@@ -17,6 +17,8 @@ export type TemimaSheetRow = {
   wooOrderNumber: string;
   customerName: string;
   productNames: string;
+  phone: string;
+  address: string;
   cashAmount: number;
   depositAmount: number;
   orderTotal: number;
@@ -111,6 +113,7 @@ function settlementSplit(
   },
   override: number | null,
   freshFawry: boolean,
+  keepCancelledValue = false,
 ) {
   const snap = (row.customerSnapshot || {}) as {
     total?: string;
@@ -143,6 +146,7 @@ function settlementSplit(
     depositPaid: row.depositPaid,
     depositApprovalStatus: row.depositApprovalStatus,
     settlementDepositOverride: override,
+    keepCancelledValue,
   });
 }
 
@@ -165,6 +169,57 @@ async function depositOverrides(ids: number[]) {
 function customerNameOf(snapshot: unknown) {
   const snap = snapshot as { customerName?: string } | null;
   return snap?.customerName || "—";
+}
+
+function snapshotText(snapshot: unknown, key: "phone" | "address" | "addressFull") {
+  const snap = snapshot as Record<string, unknown> | null;
+  const text = String(snap?.[key] || "").trim();
+  return text && text !== "null" ? text : "";
+}
+
+function contactOf(snapshot: unknown) {
+  return {
+    phone: snapshotText(snapshot, "phone"),
+    address: snapshotText(snapshot, "addressFull") || snapshotText(snapshot, "address"),
+  };
+}
+
+export type TemimaOrderSearchHit = {
+  id: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+};
+
+export async function searchTemimaSettlementOrders(rawQuery: string) {
+  const prisma = getPrismaClient();
+  const query = rawQuery.trim().slice(0, 80);
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", matches: [] as TemimaOrderSearchHit[] };
+  if (query.length < 2) return { ok: true as const, matches: [] as TemimaOrderSearchHit[] };
+  await ensureCsTables();
+  const pattern = `%${query.replace(/[\\%_]/g, "")}%`;
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ id: number | bigint; wooOrderNumber: string; customerName: string | null; phone: string | null }>
+  >(
+    `SELECT id, wooOrderNumber,
+      JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.customerName')) AS customerName,
+      JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.phone')) AS phone
+     FROM CsOrderConfirmation
+     WHERE wooOrderNumber LIKE ? OR CAST(customerSnapshot AS CHAR) LIKE ?
+     ORDER BY id DESC
+     LIMIT 20`,
+    pattern,
+    pattern,
+  );
+  return {
+    ok: true as const,
+    matches: rows.map((row) => ({
+      id: Number(row.id),
+      wooOrderNumber: String(row.wooOrderNumber || ""),
+      customerName: String(row.customerName || "").trim() === "null" ? "" : String(row.customerName || "").trim(),
+      phone: String(row.phone || "").trim() === "null" ? "" : String(row.phone || "").trim(),
+    })),
+  };
 }
 
 function productNamesOf(snapshot: unknown) {
@@ -261,6 +316,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         wooOrderNumber: line.wooOrderNumber,
         customerName: customerNameOf(order?.customerSnapshot),
         productNames: productNamesOf(order?.customerSnapshot),
+        ...contactOf(order?.customerSnapshot),
         cashAmount: Number(line.cashAmount),
         depositAmount: order ? settlementSplit(order, overrides.get(line.confirmationId) ?? null, false).deposit : 0,
         orderTotal: money(snap.total),
@@ -315,12 +371,13 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     if (settledIds.has(order.id) || postponeIds.has(order.id)) continue;
     const saved = draft.get(order.id);
     const snap = (order.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-    const split = settlementSplit(order, overrides.get(order.id) ?? null, true);
+    const split = settlementSplit(order, overrides.get(order.id) ?? null, true, true);
     rows.push({
       confirmationId: order.id,
       wooOrderNumber: order.wooOrderNumber,
       customerName: customerNameOf(order.customerSnapshot),
       productNames: productNamesOf(order.customerSnapshot),
+      ...contactOf(order.customerSnapshot),
       cashAmount: split.net,
       depositAmount: split.deposit,
       orderTotal: money(snap.total),
@@ -341,6 +398,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       wooOrderNumber: carried.wooOrderNumber,
       customerName: order ? customerNameOf(order.customerSnapshot) : "—",
       productNames: order ? productNamesOf(order.customerSnapshot) : "—",
+      ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
       cashAmount: carried.cashAmount,
       depositAmount: order ? settlementSplit(order, overrides.get(carried.confirmationId) ?? null, true).deposit : 0,
       orderTotal: money(snap.total),

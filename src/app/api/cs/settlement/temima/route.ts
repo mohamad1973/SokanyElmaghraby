@@ -7,6 +7,7 @@ import {
   getTemimaWeekSheet,
   previewTemimaMonth,
   saveTemimaWeek,
+  searchTemimaSettlementOrders,
   setFawrySettlementDeposit,
   type TemimaSheetRow,
 } from "@/lib/cs/temima-settlement";
@@ -30,6 +31,12 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
+  const query = (url.searchParams.get("q") || "").trim();
+  if (query) {
+    const found = await searchTemimaSettlementOrders(query);
+    if (!found.ok) return NextResponse.json({ message: found.message }, { status: 503 });
+    return NextResponse.json({ matches: found.matches });
+  }
   const week = url.searchParams.get("week") || undefined;
   const weekEnd = url.searchParams.get("weekEnd") || undefined;
   const closeDate = url.searchParams.get("closeDate") || undefined;
