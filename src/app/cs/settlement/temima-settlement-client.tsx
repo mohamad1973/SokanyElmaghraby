@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cairoTodayYmd } from "@/lib/cs/order-window";
+import { formatSayedSheetHeading } from "@/lib/cs/temima-sheet";
 
 type Disposition = "collect" | "return" | "postpone";
 
@@ -21,6 +22,7 @@ type SheetRow = {
   isLarge: boolean;
   carried: boolean;
   postponeLineId: number | null;
+  sheetDay?: string;
 };
 
 type HistoryRow = {
@@ -81,6 +83,57 @@ function refusalValue(row: SheetRow) {
 
 function netValue(row: SheetRow) {
   return row.disposition === "collect" ? rowRemainder(row) : 0;
+}
+
+function orderNumber(row: SheetRow) {
+  return Number(String(row.wooOrderNumber).replace(/\D/g, "")) || 0;
+}
+
+type DayBlock = { key: string; title: string; rows: SheetRow[] };
+
+function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
+  const byDay = new Map<string, SheetRow[]>();
+  const undated: SheetRow[] = [];
+  const carried: SheetRow[] = [];
+  for (const row of visible) {
+    if (row.carried) {
+      carried.push(row);
+      continue;
+    }
+    if (!row.sheetDay) {
+      undated.push(row);
+      continue;
+    }
+    const list = byDay.get(row.sheetDay) || [];
+    list.push(row);
+    byDay.set(row.sheetDay, list);
+  }
+  const blocks: DayBlock[] = [...byDay.keys()]
+    .sort()
+    .map((day) => ({
+      key: day,
+      title: formatSayedSheetHeading(day),
+      rows: (byDay.get(day) || []).sort((a, b) => orderNumber(b) - orderNumber(a)),
+    }));
+  if (undated.length) {
+    blocks.push({
+      key: "undated",
+      title: "بدون يوم شيت",
+      rows: undated.sort((a, b) => orderNumber(b) - orderNumber(a)),
+    });
+  }
+  if (carried.length) {
+    blocks.push({
+      key: "carried",
+      title: "مؤجل من أسابيع سابقة",
+      rows: carried.sort((a, b) => orderNumber(b) - orderNumber(a)),
+    });
+  }
+  return blocks;
+}
+
+function sumOf(list: SheetRow[], pick: (row: SheetRow) => number) {
+  return list.reduce((sum, row) => sum + pick(row), 0);
 }
 
 export function TemimaSettlementClient({
@@ -179,6 +232,7 @@ export function TemimaSettlementClient({
     const inWeek = rows.filter((row) => ids.has(row.confirmationId));
     return inWeek.length ? inWeek : rows;
   }, [rows, searchQuery, searchScope, orderHits]);
+  const dayBlocks = useMemo(() => dayBlocksOf(visibleRows), [visibleRows]);
 
   const outsideHits = useMemo(() => {
     if (searchScope !== "orders" || searchQuery.trim().length < 2) return [];
@@ -316,115 +370,157 @@ export function TemimaSettlementClient({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
-        <table className="min-w-full text-sm">
-          <thead className="bg-[#E5E5E5] text-right">
+      <div className="max-h-[calc(100vh-8rem)] overflow-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+        <table className="min-w-full border-separate border-spacing-0 text-sm">
+          <thead className="text-right">
             <tr>
-              <th className="px-2 py-2">أوردر</th>
-              <th className="px-2 py-2">العميل</th>
-              <th className="px-2 py-2">المنتج</th>
-              <th className="px-2 py-2">قيمة الشحنات</th>
-              <th className="px-2 py-2">ديبوزت</th>
-              <th className="px-2 py-2">المؤجل</th>
-              <th className="px-2 py-2">الرفض</th>
-              <th className="px-2 py-2">الصافي</th>
-              <th className="px-2 py-2">الحالة</th>
-              <th className="px-2 py-2">كبير</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">أوردر</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">العميل</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">موبايل</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">المنتج</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">قيمة الشحنات</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">ديبوزت</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">المؤجل</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">الرفض</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">الصافي</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">الحالة</th>
+              <th className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">كبير</th>
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                <td colSpan={11} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
                   {rows.length ? "لا توجد نتيجة في هذا الأسبوع." : "لا توجد أوردرات لهذا الأسبوع."}
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => (
-                <tr key={`${row.confirmationId}-${row.postponeLineId || 0}`} className="border-t border-[#E5E5E5]">
-                  <td className="px-2 py-2 font-extrabold" dir="ltr">
-                    {row.wooOrderNumber}
-                    {row.carried ? <span className="mr-1 text-[10px] text-amber-700">مؤجل سابق</span> : null}
-                  </td>
-                  <td className="px-2 py-2">{row.customerName}</td>
-                  <td className="px-2 py-2">{row.productNames || "—"}</td>
-                  <td className="px-2 py-2">{row.carried ? "" : money(shipmentValue(row))}</td>
-                  <td className="px-2 py-2">
-                    {row.fawry && canEditDeposit && status !== "closed" ? (
-                      <input
-                        type="number"
-                        min={0}
-                        value={row.depositAmount}
-                        onChange={(event) => {
-                          const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
-                          const deposit = Number.isFinite(next) ? Math.max(0, next) : 0;
-                          const capped = Math.min(row.orderTotal || deposit, deposit);
-                          patchRow(row.confirmationId, {
-                            depositAmount: capped,
-                            cashAmount: Math.max(0, (row.orderTotal || 0) - capped),
-                          });
-                        }}
-                        onBlur={(event) => {
-                          const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
-                          const deposit = Number.isFinite(next) ? Math.min(row.orderTotal || 0, Math.max(0, next)) : 0;
-                          const nextRow = {
-                            ...row,
-                            depositAmount: deposit,
-                            cashAmount: Math.max(0, (row.orderTotal || 0) - deposit),
-                          };
-                          patchRow(row.confirmationId, {
-                            depositAmount: nextRow.depositAmount,
-                            cashAmount: nextRow.cashAmount,
-                          });
-                          void saveFawryDeposit(nextRow);
-                        }}
-                        className="h-8 w-24 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
-                      />
-                    ) : row.depositAmount ? (
-                      money(row.depositAmount)
-                    ) : (
-                      ""
-                    )}
-                  </td>
-                  <td className="px-2 py-2">{postponeValue(row) ? money(postponeValue(row)) : ""}</td>
-                  <td className="px-2 py-2">{refusalValue(row) ? money(refusalValue(row)) : ""}</td>
-                  <td className="px-2 py-2">{netValue(row) ? money(netValue(row)) : ""}</td>
-                  <td className="px-2 py-2">
-                    <select
-                      disabled={locked}
-                      value={row.disposition}
-                      onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition })}
-                      className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
-                    >
-                      <option value="collect">{row.carried ? "تم التسليم" : "يُحصّل"}</option>
-                      <option value="return">مرتجع</option>
-                      <option value="postpone">مؤجل</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-2">
-                    <input
-                      type="checkbox"
-                      disabled={locked || row.disposition !== "collect"}
-                      checked={row.isLarge}
-                      onChange={(e) => patchRow(row.confirmationId, { isLarge: e.target.checked })}
-                    />
-                  </td>
-                </tr>
+              dayBlocks.map((block) => (
+                <Fragment key={block.key}>
+                  <tr>
+                    <td colSpan={11} className="border border-[#14213D]/25 bg-[#14213D] px-3 py-2 text-center text-sm font-extrabold text-white">
+                      {block.title}
+                    </td>
+                  </tr>
+                  {block.rows.map((row) => (
+                    <tr key={`${row.confirmationId}-${row.postponeLineId || 0}`}>
+                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
+                        {row.wooOrderNumber}
+                        {row.carried ? <span className="mr-1 text-[10px] text-amber-700">مؤجل سابق</span> : null}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">{row.customerName}</td>
+                      <td className="whitespace-nowrap border border-[#14213D]/15 px-2 py-2 tabular-nums" dir="ltr">
+                        {row.phone || "—"}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">{row.productNames || "—"}</td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {row.carried ? "" : money(shipmentValue(row))}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {row.fawry && canEditDeposit && status !== "closed" ? (
+                          <input
+                            type="number"
+                            min={0}
+                            value={row.depositAmount}
+                            onChange={(event) => {
+                              const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
+                              const deposit = Number.isFinite(next) ? Math.max(0, next) : 0;
+                              const capped = Math.min(row.orderTotal || deposit, deposit);
+                              patchRow(row.confirmationId, {
+                                depositAmount: capped,
+                                cashAmount: Math.max(0, (row.orderTotal || 0) - capped),
+                              });
+                            }}
+                            onBlur={(event) => {
+                              const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
+                              const deposit = Number.isFinite(next) ? Math.min(row.orderTotal || 0, Math.max(0, next)) : 0;
+                              const nextRow = {
+                                ...row,
+                                depositAmount: deposit,
+                                cashAmount: Math.max(0, (row.orderTotal || 0) - deposit),
+                              };
+                              patchRow(row.confirmationId, {
+                                depositAmount: nextRow.depositAmount,
+                                cashAmount: nextRow.cashAmount,
+                              });
+                              void saveFawryDeposit(nextRow);
+                            }}
+                            className="h-8 w-24 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+                          />
+                        ) : row.depositAmount ? (
+                          money(row.depositAmount)
+                        ) : (
+                          ""
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {postponeValue(row) ? money(postponeValue(row)) : ""}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {refusalValue(row) ? money(refusalValue(row)) : ""}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {netValue(row) ? money(netValue(row)) : ""}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">
+                        <select
+                          disabled={locked}
+                          value={row.disposition}
+                          onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition })}
+                          className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+                        >
+                          <option value="collect">{row.carried ? "تم التسليم" : "يُحصّل"}</option>
+                          <option value="return">مرتجع</option>
+                          <option value="postpone">مؤجل</option>
+                        </select>
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">
+                        <input
+                          type="checkbox"
+                          disabled={locked || row.disposition !== "collect"}
+                          checked={row.isLarge}
+                          onChange={(e) => patchRow(row.confirmationId, { isLarge: e.target.checked })}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={4} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
+                      {block.key === "carried" ? "تصفية المؤجل السابق" : "تصفية اليوم"}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {money(sumOf(block.rows, (row) => (row.carried ? 0 : shipmentValue(row))))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {money(sumOf(block.rows, (row) => row.depositAmount || 0))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {money(sumOf(block.rows, postponeValue))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {money(sumOf(block.rows, refusalValue))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {money(sumOf(block.rows, netValue))}
+                    </td>
+                    <td colSpan={2} className="border border-[#14213D]/15 bg-[#F5F5F0]" />
+                  </tr>
+                </Fragment>
               ))
             )}
           </tbody>
           {rows.length ? (
-            <tfoot className="bg-[#14213D] text-white">
+            <tfoot>
               <tr>
-                <td className="px-2 py-2 font-extrabold" colSpan={3}>
+                <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={4}>
                   المجموع
                 </td>
-                <td className="px-2 py-2 font-extrabold">{money(shipmentTotal)}</td>
-                <td className="px-2 py-2 font-extrabold">{money(depositTotal)}</td>
-                <td className="px-2 py-2 font-extrabold">{money(postponeTotal)}</td>
-                <td className="px-2 py-2 font-extrabold">{money(refusalTotal)}</td>
-                <td className="px-2 py-2 font-extrabold">{money(netTotal)}</td>
-                <td colSpan={2} />
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(shipmentTotal)}</td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(depositTotal)}</td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(postponeTotal)}</td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(refusalTotal)}</td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(netTotal)}</td>
+                <td colSpan={2} className="border border-[#14213D] bg-[#14213D]" />
               </tr>
             </tfoot>
           ) : null}
