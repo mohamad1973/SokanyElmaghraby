@@ -63,6 +63,26 @@ function rowMatchesQuery(row: SheetRow, raw: string) {
   return false;
 }
 
+function rowRemainder(row: SheetRow) {
+  return Math.max(0, Number(row.cashAmount) || 0);
+}
+
+function shipmentValue(row: SheetRow) {
+  return Math.max(0, Number(row.orderTotal) || 0);
+}
+
+function postponeValue(row: SheetRow) {
+  return row.disposition === "postpone" ? rowRemainder(row) : 0;
+}
+
+function refusalValue(row: SheetRow) {
+  return row.disposition === "return" ? rowRemainder(row) : 0;
+}
+
+function netValue(row: SheetRow) {
+  return row.disposition === "collect" ? rowRemainder(row) : 0;
+}
+
 export function TemimaSettlementClient({
   canEdit,
   canEditDeposit = false,
@@ -74,6 +94,7 @@ export function TemimaSettlementClient({
   const [weekEnd, setWeekEnd] = useState("");
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [rows, setRows] = useState<SheetRow[]>([]);
+  const [closedCashDue, setClosedCashDue] = useState<number | null>(null);
   const [cashPaid, setCashPaid] = useState(0);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [closeDate, setCloseDate] = useState(cairoTodayYmd());
@@ -100,6 +121,7 @@ export function TemimaSettlementClient({
       status?: "open" | "closed";
       rows?: SheetRow[];
       cashPaid?: number;
+      cashDue?: number;
       history?: HistoryRow[];
       month?: MonthPreview | null;
     };
@@ -111,6 +133,7 @@ export function TemimaSettlementClient({
     setWeekEnd(data.weekEnd || "");
     setStatus(data.status || "open");
     setRows(data.rows || []);
+    setClosedCashDue(data.status === "closed" ? Number(data.cashDue) || 0 : null);
     setCashPaid(data.cashPaid || 0);
     setHistory(data.history || []);
     setMonth(data.month || null);
@@ -163,11 +186,15 @@ export function TemimaSettlementClient({
     return orderHits.filter((hit) => !ids.has(hit.id));
   }, [orderHits, rows, searchQuery, searchScope]);
 
-  const cashDue = useMemo(
-    () => rows.filter((row) => row.disposition === "collect").reduce((sum, row) => sum + row.cashAmount, 0),
+  const shipmentTotal = useMemo(
+    () => rows.reduce((sum, row) => sum + (row.carried ? 0 : shipmentValue(row)), 0),
     [rows],
   );
   const depositTotal = useMemo(() => rows.reduce((sum, row) => sum + (row.depositAmount || 0), 0), [rows]);
+  const postponeTotal = useMemo(() => rows.reduce((sum, row) => sum + postponeValue(row), 0), [rows]);
+  const refusalTotal = useMemo(() => rows.reduce((sum, row) => sum + refusalValue(row), 0), [rows]);
+  const netTotal = useMemo(() => rows.reduce((sum, row) => sum + netValue(row), 0), [rows]);
+  const cashDue = closedCashDue == null ? netTotal : closedCashDue;
   const locked = !canEdit || status === "closed";
 
   function patchRow(id: number, patch: Partial<SheetRow>) {
@@ -296,7 +323,10 @@ export function TemimaSettlementClient({
               <th className="px-2 py-2">أوردر</th>
               <th className="px-2 py-2">العميل</th>
               <th className="px-2 py-2">المنتج</th>
+              <th className="px-2 py-2">قيمة الشحنات</th>
               <th className="px-2 py-2">ديبوزت</th>
+              <th className="px-2 py-2">المؤجل</th>
+              <th className="px-2 py-2">الرفض</th>
               <th className="px-2 py-2">الصافي</th>
               <th className="px-2 py-2">الحالة</th>
               <th className="px-2 py-2">كبير</th>
@@ -305,7 +335,7 @@ export function TemimaSettlementClient({
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                <td colSpan={10} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
                   {rows.length ? "لا توجد نتيجة في هذا الأسبوع." : "لا توجد أوردرات لهذا الأسبوع."}
                 </td>
               </tr>
@@ -318,6 +348,7 @@ export function TemimaSettlementClient({
                   </td>
                   <td className="px-2 py-2">{row.customerName}</td>
                   <td className="px-2 py-2">{row.productNames || "—"}</td>
+                  <td className="px-2 py-2">{row.carried ? "" : money(shipmentValue(row))}</td>
                   <td className="px-2 py-2">
                     {row.fawry && canEditDeposit && status !== "closed" ? (
                       <input
@@ -355,7 +386,9 @@ export function TemimaSettlementClient({
                       ""
                     )}
                   </td>
-                  <td className="px-2 py-2">{money(row.cashAmount)}</td>
+                  <td className="px-2 py-2">{postponeValue(row) ? money(postponeValue(row)) : ""}</td>
+                  <td className="px-2 py-2">{refusalValue(row) ? money(refusalValue(row)) : ""}</td>
+                  <td className="px-2 py-2">{netValue(row) ? money(netValue(row)) : ""}</td>
                   <td className="px-2 py-2">
                     <select
                       disabled={locked}
@@ -380,12 +413,30 @@ export function TemimaSettlementClient({
               ))
             )}
           </tbody>
+          {rows.length ? (
+            <tfoot className="bg-[#14213D] text-white">
+              <tr>
+                <td className="px-2 py-2 font-extrabold" colSpan={3}>
+                  المجموع
+                </td>
+                <td className="px-2 py-2 font-extrabold">{money(shipmentTotal)}</td>
+                <td className="px-2 py-2 font-extrabold">{money(depositTotal)}</td>
+                <td className="px-2 py-2 font-extrabold">{money(postponeTotal)}</td>
+                <td className="px-2 py-2 font-extrabold">{money(refusalTotal)}</td>
+                <td className="px-2 py-2 font-extrabold">{money(netTotal)}</td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
       </div>
 
       <div className="grid gap-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10 sm:grid-cols-2 lg:grid-cols-4">
+        <p className="text-sm font-extrabold text-[#14213D]">قيمة الشحنات: {money(shipmentTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الديبوزت: {money(depositTotal)} ج</p>
-        <p className="text-sm font-extrabold text-[#14213D]">المستحق نقداً: {money(cashDue)} ج</p>
+        <p className="text-sm font-extrabold text-[#14213D]">المؤجل: {money(postponeTotal)} ج</p>
+        <p className="text-sm font-extrabold text-[#14213D]">الرفض: {money(refusalTotal)} ج</p>
+        <p className="text-sm font-extrabold text-[#14213D]">الصافي المستحق: {money(cashDue)} ج</p>
         <label className="text-sm font-bold">
           المدفوع من تميمة
           <input

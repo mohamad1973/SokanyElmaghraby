@@ -63,6 +63,16 @@ export function defaultSettlementWeekStart() {
   return defaultSettlementRange().start;
 }
 
+/** The week to close first: the previous Sunday–Saturday while it is still open. */
+export function openWeekToClose(weeks: Array<{ weekStart: string; status: string }>) {
+  const today = cairoTodayYmd();
+  const thisSunday = sundayOnOrBefore(today);
+  const previousSunday = addDaysYmd(thisSunday, -7);
+  const previous = weeks.find((row) => row.weekStart === previousSunday);
+  if (!previous || previous.status !== "closed") return previousSunday;
+  return thisSunday;
+}
+
 function clampWeekEnd(start: string, endInput?: string) {
   const saturday = addDaysYmd(start, 6);
   const today = cairoTodayYmd();
@@ -251,9 +261,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
 
-  const sunday = sundayOnOrBefore(weekStartInput || defaultSettlementWeekStart());
-  const saturday = addDaysYmd(sunday, 6);
   const weeks = await loadWeeks();
+  const sunday = weekStartInput
+    ? sundayOnOrBefore(weekStartInput)
+    : openWeekToClose(weeks.map((row) => ({
+        weekStart: cairoYmdFromIso(row.weekStart.toISOString()),
+        status: row.status,
+      })));
+  const saturday = addDaysYmd(sunday, 6);
   const week = weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday) || null;
 
   const resolvedPostponeIds = new Set<number>();
