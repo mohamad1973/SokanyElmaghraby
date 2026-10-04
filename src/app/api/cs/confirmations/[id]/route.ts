@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { saveCsConfirmation, setCsInvoiceNumber, setCsShippingCompany, resolveCsViewer } from "@/lib/cs/confirmations";
+import {
+  saveCsConfirmation,
+  setCsHandedToCarrier,
+  setCsInvoiceNumber,
+  setCsShippingCompany,
+  resolveCsViewer,
+} from "@/lib/cs/confirmations";
 import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -25,6 +31,7 @@ type Body = {
   shippingCompany?: "bosta" | "sayed_temima" | "" | null;
   salesOrderNumber?: string | null;
   invoiceNumber?: string | null;
+  handedToCarrier?: boolean;
   postCancel?: {
     invoice?: "before" | "after" | "";
     systemNo?: string | null;
@@ -74,6 +81,7 @@ export async function PUT(request: Request, context: Context) {
     body.depositToMethod === undefined &&
     body.orderTotalDelta === undefined &&
     body.salesOrderNumber === undefined &&
+    body.handedToCarrier === undefined &&
     !body.postCancel &&
     !body.followUp
   ) {
@@ -107,6 +115,7 @@ export async function PUT(request: Request, context: Context) {
     body.orderTotalDelta === undefined &&
     body.salesOrderNumber === undefined &&
     body.invoiceNumber === undefined &&
+    body.handedToCarrier === undefined &&
     !body.postCancel &&
     !body.followUp
   ) {
@@ -127,6 +136,51 @@ export async function PUT(request: Request, context: Context) {
       return NextResponse.json({ message: result.message }, { status: 400 });
     }
     return NextResponse.json({ ok: true, shippingCompany: result.shippingCompany });
+  }
+
+  if (
+    typeof body.handedToCarrier === "boolean" &&
+    body.shippingCompany === undefined &&
+    !body.answers &&
+    !body.finalize &&
+    !body.failContact &&
+    !body.cancelOrder &&
+    body.trackingNumber === undefined &&
+    body.waybillPrinted === undefined &&
+    body.depositAmount === undefined &&
+    body.depositPaid === undefined &&
+    body.depositPayMethod === undefined &&
+    body.depositFromNumber === undefined &&
+    body.depositInstapayName === undefined &&
+    body.depositToPhone === undefined &&
+    body.depositToMethod === undefined &&
+    body.orderTotalDelta === undefined &&
+    body.salesOrderNumber === undefined &&
+    body.invoiceNumber === undefined &&
+    !body.postCancel &&
+    !body.followUp
+  ) {
+    const viewer = await resolveCsViewer(session.user.csAgentId);
+    const allowed =
+      viewer.isAdmin ||
+      Boolean(session.user.csIsAdmin) ||
+      ((viewer.isSupervisor || Boolean(session.user.csIsSupervisor)) && !viewer.isCourierSupervisor);
+    if (!allowed) {
+      return NextResponse.json({ message: "للأدمن ومشرفة خدمة العملاء فقط." }, { status: 403 });
+    }
+    const result = await setCsHandedToCarrier({
+      id: numericId,
+      handedToCarrier: body.handedToCarrier,
+      agentId: session.user.csAgentId,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ message: result.message }, { status: 400 });
+    }
+    return NextResponse.json({
+      ok: true,
+      handedToCarrier: result.handedToCarrier,
+      handedToCarrierAt: result.handedToCarrierAt,
+    });
   }
 
   const result = await saveCsConfirmation({

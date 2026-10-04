@@ -634,6 +634,7 @@ type Props = {
   canEditTemimaSheet?: boolean;
   canEditInvoice?: boolean;
   canPrintQueue?: boolean;
+  canHandToCarrier?: boolean;
   temimaCutoffs?: TemimaCutoff[];
   temimaSheetEdits?: TemimaSheetEdit[];
   agents?: Array<{ id: number; name: string }>;
@@ -662,6 +663,7 @@ export function CsQueueClient({
   canEditTemimaSheet = false,
   canEditInvoice = false,
   canPrintQueue = false,
+  canHandToCarrier = false,
   temimaCutoffs = [],
   temimaSheetEdits = [],
   agents = [],
@@ -692,6 +694,7 @@ export function CsQueueClient({
   const [sheetEditBusy, setSheetEditBusy] = useState(false);
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
+  const [savingHandId, setSavingHandId] = useState<number | null>(null);
 
   async function lockCutoff(body: { now: true } | { minutes: number }) {
     setCutoffBusy(true);
@@ -903,6 +906,40 @@ export function CsQueueClient({
     setItems((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, shippingCompany: data.shippingCompany || shippingCompany } : item,
+      ),
+    );
+  }
+
+  async function setHanded(id: number, handedToCarrier: boolean) {
+    if (savingHandId) return;
+    setSavingHandId(id);
+    setMessage("");
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, handedToCarrier } : item)));
+    const res = await fetch(`/api/cs/confirmations/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handedToCarrier }),
+    });
+    const data = (await res.json()) as {
+      message?: string;
+      handedToCarrier?: boolean;
+      handedToCarrierAt?: string | null;
+    };
+    setSavingHandId(null);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تسجيل التسليم لشركة الشحن.");
+      router.refresh();
+      return;
+    }
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              handedToCarrier: Boolean(data.handedToCarrier),
+              handedToCarrierAt: data.handedToCarrierAt ?? item.handedToCarrierAt,
+            }
+          : item,
       ),
     );
   }
@@ -1633,9 +1670,13 @@ export function CsQueueClient({
                 <div
                   className={`grid gap-x-2 gap-y-2 text-sm font-bold text-[#14213D] ${
                     isSupervisor && isAccounting
-                      ? "grid-cols-2 sm:grid-cols-7"
+                      ? canHandToCarrier
+                        ? "grid-cols-2 sm:grid-cols-8"
+                        : "grid-cols-2 sm:grid-cols-7"
                       : isSupervisor || isAccounting
-                        ? "grid-cols-2 sm:grid-cols-6"
+                        ? canHandToCarrier
+                          ? "grid-cols-2 sm:grid-cols-7"
+                          : "grid-cols-2 sm:grid-cols-6"
                         : canEditInvoice
                           ? "grid-cols-2 sm:grid-cols-5"
                           : "grid-cols-2 sm:grid-cols-4"
@@ -1776,11 +1817,23 @@ export function CsQueueClient({
                     </div>
                   ) : null}
                   {isSupervisor || isAccounting ? (
-                    <div className="flex min-w-[5.5rem] items-center justify-center self-center rounded-lg bg-[#F5F5F0] px-2 py-1 text-center">
-                      <span className="text-sm font-extrabold leading-tight text-[#14213D]">
+                    <div className="flex w-1/2 min-w-0 items-center justify-center self-center justify-self-center rounded-lg bg-[#F5F5F0] px-2 py-1 text-center">
+                      <span className="truncate text-sm font-extrabold leading-tight text-[#14213D]">
                         {item.assignedAgent?.name || "—"}
                       </span>
                     </div>
+                  ) : null}
+                  {canHandToCarrier ? (
+                    <label className="flex items-center justify-center gap-1 self-center text-[10px] font-bold text-[#14213D]">
+                      <input
+                        type="checkbox"
+                        className="size-3.5 accent-[#FCA311]"
+                        checked={Boolean(item.handedToCarrier)}
+                        disabled={item.status !== "CONFIRMED" || savingHandId === item.id}
+                        onChange={() => void setHanded(item.id, !item.handedToCarrier)}
+                      />
+                      تسليم للشحن
+                    </label>
                   ) : null}
                   {isAccounting || canEditInvoice ? (
                     <div className="flex items-center self-center">

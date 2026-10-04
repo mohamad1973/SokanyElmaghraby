@@ -76,6 +76,7 @@ export default async function CsHomePage() {
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
       canPrintQueue={isSupervisor && !isCourierSupervisor}
+      canHandToCarrier={viewer.isAdmin || (isSupervisor && !isCourierSupervisor)}
       temimaCutoffs={temimaCutoffs}
       temimaSheetEdits={temimaSheetEdits}
       initialHasMore={initialHasMore}

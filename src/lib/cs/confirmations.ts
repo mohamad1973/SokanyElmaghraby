@@ -1565,6 +1565,45 @@ export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: str
   return { ok: true as const, invoiceNumber };
 }
 
+export async function setCsHandedToCarrier(input: {
+  id: number;
+  handedToCarrier: boolean;
+  agentId: number;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const viewer = await resolveCsViewer(input.agentId);
+  const allowed = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
+  if (!allowed) {
+    return { ok: false as const, message: "للأدمن ومشرفة خدمة العملاء فقط." };
+  }
+
+  const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
+  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+  if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
+    return { ok: false as const, message: "التسليم لشركة الشحن بعد تأكيد الأوردر." };
+  }
+
+  const now = new Date();
+  const handedToCarrierAt = input.handedToCarrier
+    ? resolveHandedToCarrierAt(row.handedToCarrierAt, row.confirmedAt, now, await listTemimaCutoffs())
+    : row.handedToCarrierAt;
+  await prisma.csOrderConfirmation.update({
+    where: { id: input.id },
+    data: {
+      handedToCarrier: input.handedToCarrier,
+      handedToCarrierAt,
+    },
+  });
+  return {
+    ok: true as const,
+    handedToCarrier: input.handedToCarrier,
+    handedToCarrierAt: handedToCarrierAt ? handedToCarrierAt.toISOString() : null,
+  };
+}
+
 export async function setCsShippingCompany(input: {
   id: number;
   shippingCompany: "bosta" | "sayed_temima" | null;
