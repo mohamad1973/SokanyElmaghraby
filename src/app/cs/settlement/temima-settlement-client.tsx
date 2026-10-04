@@ -139,7 +139,7 @@ function sumOf(list: SheetRow[], pick: (row: SheetRow) => number) {
 function dispositionLabel(row: SheetRow) {
   if (row.disposition === "return") return "مرتجع";
   if (row.disposition === "postpone") return "مؤجل";
-  if (row.disposition === "collect") return row.carried ? "تم التسليم" : "يُحصّل";
+  if (row.disposition === "collect") return "تم بنجاح";
   return "";
 }
 
@@ -168,6 +168,7 @@ export function TemimaSettlementClient({
   const [orderHits, setOrderHits] = useState<OrderHit[]>([]);
   const [searchingOrders, setSearchingOrders] = useState(false);
   const searchSeq = useRef(0);
+  const editedIds = useRef(new Set<number>());
 
   const load = useCallback(async (week?: string, end?: string, monthDate?: string) => {
     const qs = new URLSearchParams();
@@ -195,6 +196,7 @@ export function TemimaSettlementClient({
     setWeekEnd(data.weekEnd || "");
     setFullWeek(data.fullWeek === true);
     setStatus(data.status || "open");
+    editedIds.current.clear();
     setRows(data.rows || []);
     setClosedCashDue(data.status === "closed" && data.fullWeek ? Number(data.cashDue) || 0 : null);
     setCashPaid(data.cashPaid || 0);
@@ -271,7 +273,8 @@ export function TemimaSettlementClient({
   const cashDue = closedCashDue == null ? netTotal : closedCashDue;
   const locked = !canEdit || status === "closed";
 
-  function patchRow(id: number, patch: Partial<SheetRow>) {
+  function patchRow(id: number, patch: Partial<SheetRow>, edited = false) {
+    if (edited) editedIds.current.add(id);
     setRows((prev) => prev.map((row) => (row.confirmationId === id ? { ...row, ...patch } : row)));
   }
 
@@ -304,7 +307,13 @@ export function TemimaSettlementClient({
       body: JSON.stringify(
         action === "close-month"
           ? { action, closeDate, shippingPaid }
-          : { action, weekStart, weekEnd, cashPaid, rows },
+          : {
+              action,
+              weekStart,
+              weekEnd,
+              cashPaid,
+              rows: rows.filter((row) => editedIds.current.has(row.confirmationId)),
+            },
       ),
     });
     const data = (await res.json()) as { message?: string };
@@ -322,7 +331,9 @@ export function TemimaSettlementClient({
       <div>
         <h1 className="text-2xl font-extrabold text-[#14213D]">تصفية سيد تميمة</h1>
         <p className="text-sm font-bold text-[#14213D]/70">
-          {canEdit ? "تسجيل التصفية من حساب الأدمن أو الشحن." : "متابعة فقط — التسجيل من حساب الأدمن أو الشحن."}
+          {canEdit
+            ? "المطلوب تحصيله من تعليم مشرف المناديب والأسبوع مفتوح. القائمة تعديل من الحسابات لو حابب."
+            : "متابعة فقط. المطلوب تحصيله من تعليم مشرف المناديب."}
         </p>
       </div>
 
@@ -499,11 +510,11 @@ export function TemimaSettlementClient({
                         <select
                           disabled={locked}
                           value={row.disposition}
-                          onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition })}
+                          onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition }, true)}
                           className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
                         >
                           <option value="">لم يُعلَّم</option>
-                          <option value="collect">{row.carried ? "تم التسليم" : "يُحصّل"}</option>
+                          <option value="collect">تم بنجاح</option>
                           <option value="return">مرتجع</option>
                           <option value="postpone">مؤجل</option>
                         </select>
@@ -513,7 +524,7 @@ export function TemimaSettlementClient({
                           type="checkbox"
                           disabled={locked || row.disposition !== "collect"}
                           checked={row.isLarge}
-                          onChange={(e) => patchRow(row.confirmationId, { isLarge: e.target.checked })}
+                          onChange={(e) => patchRow(row.confirmationId, { isLarge: e.target.checked }, true)}
                         />
                       </td>
                     </tr>
@@ -567,6 +578,7 @@ export function TemimaSettlementClient({
         <p className="text-sm font-extrabold text-[#14213D]">المؤجل: {money(postponeTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الرفض: {money(refusalTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الصافي المستحق: {money(cashDue)} ج</p>
+        <p className="text-xs font-bold text-[#14213D]/70 sm:col-span-2 lg:col-span-4">مجموع تم بنجاح. المرتجع والمؤجل مش داخل المطلوب تحصيله.</p>
         <label className="text-sm font-bold">
           المدفوع من تميمة
           <input

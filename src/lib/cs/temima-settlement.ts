@@ -566,6 +566,28 @@ async function upsertOpenWeek(sunday: string, endYmd: string, agentId: number) {
   });
 }
 
+function linePayload(weekId: number, row: TemimaSheetRow) {
+  const disposition = storedDisposition(row.disposition);
+  return {
+    weekId,
+    confirmationId: row.confirmationId,
+    wooOrderNumber: row.wooOrderNumber,
+    disposition,
+    cashAmount: row.cashAmount,
+    isLarge: disposition === "collect" ? row.isLarge : false,
+    resolvesLineId: row.carried && disposition && disposition !== "postpone" ? row.postponeLineId : null,
+  };
+}
+
+function editedLineRows(rows: TemimaSheetRow[]) {
+  const byId = new Map<number, TemimaSheetRow>();
+  for (const row of rows) {
+    if (!Number.isInteger(row.confirmationId) || row.confirmationId <= 0) continue;
+    byId.set(row.confirmationId, row);
+  }
+  return [...byId.values()];
+}
+
 export async function saveTemimaWeek(input: {
   weekStart: string;
   weekEnd?: string;
@@ -586,24 +608,24 @@ export async function saveTemimaWeek(input: {
   if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
   if (week.status === "closed") return { ok: false as const, message: "هذا الأسبوع مقفل." };
 
-  const lineData = input.rows.map((row) => ({
-    weekId: week.id,
-    confirmationId: row.confirmationId,
-    wooOrderNumber: row.wooOrderNumber,
-    disposition: row.disposition,
-    cashAmount: row.cashAmount,
-    isLarge: row.disposition === "collect" ? row.isLarge : false,
-    resolvesLineId: row.carried && row.disposition !== "postpone" ? row.postponeLineId : null,
-  }));
-
-  if (range.fullWeek) {
-    await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id } });
-    if (lineData.length) await prisma.csCarrierWeekLine.createMany({ data: lineData });
-  } else if (lineData.length) {
+  const edited = editedLineRows(input.rows);
+  if (edited.length) {
     await prisma.csCarrierWeekLine.deleteMany({
-      where: { weekId: week.id, confirmationId: { in: lineData.map((row) => row.confirmationId) } },
+      where: { weekId: week.id, confirmationId: { in: edited.map((row) => row.confirmationId) } },
     });
-    await prisma.csCarrierWeekLine.createMany({ data: lineData });
+    const marked = edited.filter((row) => storedDisposition(row.disposition));
+    if (marked.length) {
+      await prisma.csCarrierWeekLine.createMany({ data: marked.map((row) => linePayload(week.id, row)) });
+    }
+  }
+
+  if (input.close) {
+    const live = await getTemimaWeekSheet(range.sunday, range.saturday);
+    if (!live.ok) return live;
+    await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id } });
+    if (live.rows.length) {
+      await prisma.csCarrierWeekLine.createMany({ data: live.rows.map((row) => linePayload(week.id, row)) });
+    }
   }
 
   const storedLines = await prisma.csCarrierWeekLine.findMany({ where: { weekId: week.id } });
