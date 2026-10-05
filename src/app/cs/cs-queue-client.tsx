@@ -76,6 +76,11 @@ export type CsQueueItem = {
   settlementDisposition?: "" | "collect" | "return" | "postpone";
 };
 
+function lineQuantity(quantity: unknown) {
+  const qty = Number(quantity);
+  return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
 function formatOrderNames(item: CsQueueItem) {
   const lines = item.customerSnapshot?.items || [];
   if (!lines.length) return "—";
@@ -83,11 +88,15 @@ function formatOrderNames(item: CsQueueItem) {
     .map((line) => {
       const name = String(line.name || "").trim();
       if (!name) return "";
-      const qty = typeof line.quantity === "number" && line.quantity > 1 ? ` × ${line.quantity}` : "";
-      return `${name}${qty}`;
+      const qty = lineQuantity(line.quantity);
+      return qty > 0 ? `${name} × ${qty}` : name;
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function sheetPieceCount(item: CsQueueItem) {
+  return (item.customerSnapshot?.items || []).reduce((sum, line) => sum + lineQuantity(line.quantity), 0);
 }
 
 function sheetDepositNet(item: CsQueueItem) {
@@ -1994,7 +2003,7 @@ export function CsQueueClient({
           <table className="w-full border-collapse text-[10px]">
             <thead>
               <tr>
-                {["مسلسل", "الرقم", "الاسم", "الموبايل", "العنوان", "المنتجات", "رقم الفاتورة", "ديبوزت", "الصافي"].map(
+                {["مسلسل", "الرقم", "الاسم", "الموبايل", "العنوان", "المنتجات", "عدد القطع", "رقم الفاتورة", "ديبوزت", "الصافي"].map(
                   (h) => (
                     <th key={h} className="border border-black px-1 py-1 text-right">
                       {h}
@@ -2020,6 +2029,7 @@ export function CsQueueClient({
                       {item.customerSnapshot?.addressFull || item.customerSnapshot?.address || ""}
                     </td>
                     <td className="border border-black px-1 py-1 whitespace-pre-line">{formatOrderNames(item)}</td>
+                    <td className="border border-black px-1 py-1 text-center">{sheetPieceCount(item)}</td>
                     <td className="border border-black px-1 py-1" dir="ltr">
                       {item.invoiceNumber || ""}
                     </td>
@@ -2031,7 +2041,7 @@ export function CsQueueClient({
             </tbody>
             <tfoot>
               <tr>
-                <td className="border border-black px-1 py-1 font-bold" colSpan={7}>
+                <td className="border border-black px-1 py-1 font-bold" colSpan={8}>
                   المجموع
                 </td>
                 <td className="border border-black px-1 py-1 font-bold">
