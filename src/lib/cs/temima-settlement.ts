@@ -653,14 +653,12 @@ export async function openSettlementMarks(ids: number[]) {
   if (!prisma || !ids.length) return map;
   const safe = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
   if (!safe.length) return map;
+  await ensureCsTables();
   const rows = await prisma.$queryRawUnsafe<Array<{ confirmationId: number; disposition: string }>>(
-    `SELECT l.confirmationId AS confirmationId, l.disposition AS disposition
-     FROM CsCarrierWeekLine l
-     INNER JOIN CsCarrierWeek w ON w.id = l.weekId
-     WHERE w.carrierCompany = 'sayed_temima'
-       AND l.disposition IN ('collect', 'return', 'postpone')
-       AND l.confirmationId IN (${safe.join(",")})
-     ORDER BY w.weekStart ASC, l.id ASC`,
+    `SELECT id AS confirmationId, temimaSupervisorResult AS disposition
+     FROM CsOrderConfirmation
+     WHERE temimaSupervisorResult IN ('collect', 'return', 'postpone')
+       AND id IN (${safe.join(",")})`,
   );
   for (const row of rows) {
     if (row.disposition === "collect" || row.disposition === "return" || row.disposition === "postpone") {
@@ -748,6 +746,11 @@ export async function applySupervisorOrderResult(input: {
     where: { id: week.id },
     data: { cashDue, status: "open", closedAt: null },
   });
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET temimaSupervisorResult = ${disposition}
+    WHERE id = ${order.id}
+  `;
 
   return { ok: true as const, result: input.result, disposition };
 }

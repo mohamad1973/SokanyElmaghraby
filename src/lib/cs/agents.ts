@@ -488,6 +488,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaOutcome` VARCHAR(16) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaRefusalReason` TEXT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaSupervisorResult` VARCHAR(16) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `temimaSupervisorResult` VARCHAR(16) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `settlementDepositOverride` DECIMAL(12,2) NULL",
   ];
 

@@ -348,6 +348,11 @@ export async function assignCourierOrder(input: { confirmationId?: number; order
       week: { carrierCompany: TEMIMA, status: "open" },
     },
   });
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET temimaSupervisorResult = NULL
+    WHERE id = ${order.id} AND temimaSupervisorResult = 'postpone'
+  `;
   return { ok: true as const };
 }
 
