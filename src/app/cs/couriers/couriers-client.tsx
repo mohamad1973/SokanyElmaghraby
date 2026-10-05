@@ -39,6 +39,13 @@ type SupervisorData = {
 };
 type CourierData = { mode: "courier"; orders: OrderCard[] };
 
+function officialActions(official: OrderCard["official"]) {
+  if (official === "collect") return ["delivered"] as const;
+  if (official === "return") return ["returned"] as const;
+  if (official === "postpone") return ["delivered", "returned"] as const;
+  return ["delivered", "returned", "postponed"] as const;
+}
+
 function OrderDetails({ order }: { order: OrderCard }) {
   return (
     <div className="grid gap-1 text-sm text-[#14213D]">
@@ -274,9 +281,15 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
             {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">المندوب: مؤجل</p> : null}
             {selected && order.courierId === selected.id ? (
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "delivered" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "collect" ? "bg-emerald-900 ring-2 ring-emerald-300" : "bg-emerald-700"}`}>تم بنجاح</button>
-                <button type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "returned" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "return" ? "bg-red-900 ring-2 ring-red-300" : "bg-red-700"}`}>مرتجع</button>
-                <button type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "postponed" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-black ${order.official === "postpone" ? "bg-orange-600 ring-2 ring-orange-300" : "bg-orange-500"}`}>مؤجل</button>
+                {officialActions(order.official).map((action) =>
+                  action === "delivered" ? (
+                    <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "delivered" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "collect" ? "bg-emerald-900 ring-2 ring-emerald-300" : "bg-emerald-700"}`}>تم بنجاح</button>
+                  ) : action === "returned" ? (
+                    <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "returned" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "return" ? "bg-red-900 ring-2 ring-red-300" : "bg-red-700"}`}>الغاء</button>
+                  ) : (
+                    <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "postponed" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-black ${order.official === "postpone" ? "bg-orange-600 ring-2 ring-orange-300" : "bg-orange-500"}`}>مؤجل</button>
+                  ),
+                )}
               </div>
             ) : null}
             <button type="button" onClick={() => void post({ action: "unassign", confirmationId: order.id })} className="justify-self-start rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]">إرجاع للتوزيع</button>

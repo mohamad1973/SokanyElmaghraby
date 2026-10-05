@@ -657,8 +657,10 @@ export async function openSettlementMarks(ids: number[]) {
     `SELECT l.confirmationId AS confirmationId, l.disposition AS disposition
      FROM CsCarrierWeekLine l
      INNER JOIN CsCarrierWeek w ON w.id = l.weekId
-     WHERE w.carrierCompany = 'sayed_temima' AND w.status = 'open'
-       AND l.confirmationId IN (${safe.join(",")})`,
+     WHERE w.carrierCompany = 'sayed_temima'
+       AND l.disposition IN ('collect', 'return', 'postpone')
+       AND l.confirmationId IN (${safe.join(",")})
+     ORDER BY w.weekStart ASC, l.id ASC`,
   );
   for (const row of rows) {
     if (row.disposition === "collect" || row.disposition === "return" || row.disposition === "postpone") {

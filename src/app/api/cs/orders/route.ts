@@ -51,5 +51,9 @@ export async function GET(request: Request) {
     all: canPrintAll && url.searchParams.get("all") === "1",
   });
 
-  return NextResponse.json(page);
+  const marks = await openSettlementMarks(page.items.map((item) => item.id));
+  return NextResponse.json({
+    ...page,
+    items: page.items.map((item) => ({ ...item, settlementDisposition: marks.get(item.id) || "" })),
+  });
 }

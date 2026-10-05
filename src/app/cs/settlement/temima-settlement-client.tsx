@@ -137,7 +137,7 @@ function sumOf(list: SheetRow[], pick: (row: SheetRow) => number) {
 }
 
 function dispositionLabel(row: SheetRow) {
-  if (row.disposition === "return") return "مرتجع";
+  if (row.disposition === "return") return "الغاء";
   if (row.disposition === "postpone") return "مؤجل";
   if (row.disposition === "collect") return "تم بنجاح";
   return "";
@@ -515,7 +515,7 @@ export function TemimaSettlementClient({
                         >
                           <option value="">لم يُعلَّم</option>
                           <option value="collect">تم بنجاح</option>
-                          <option value="return">مرتجع</option>
+                          <option value="return">الغاء</option>
                           <option value="postpone">مؤجل</option>
                         </select>
                       </td>
@@ -578,7 +578,7 @@ export function TemimaSettlementClient({
         <p className="text-sm font-extrabold text-[#14213D]">المؤجل: {money(postponeTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الرفض: {money(refusalTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الصافي المستحق: {money(cashDue)} ج</p>
-        <p className="text-xs font-bold text-[#14213D]/70 sm:col-span-2 lg:col-span-4">مجموع تم بنجاح. المرتجع والمؤجل مش داخل المطلوب تحصيله.</p>
+        <p className="text-xs font-bold text-[#14213D]/70 sm:col-span-2 lg:col-span-4">مجموع تم بنجاح. الالغاء والمؤجل مش داخل المطلوب تحصيله.</p>
         <label className="text-sm font-bold">
           المدفوع من تميمة
           <input

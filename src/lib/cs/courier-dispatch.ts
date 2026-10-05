@@ -341,6 +341,13 @@ export async function assignCourierOrder(input: { confirmationId?: number; order
     },
   });
   if (!updated.count) return { ok: false as const, message: "الأوردر اتوزع لمندوب تاني." };
+  await prisma.csCarrierWeekLine.deleteMany({
+    where: {
+      confirmationId: order.id,
+      disposition: "postpone",
+      week: { carrierCompany: TEMIMA, status: "open" },
+    },
+  });
   return { ok: true as const };
 }
 

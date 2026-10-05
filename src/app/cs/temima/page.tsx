@@ -6,6 +6,7 @@ import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "../cs-queue-client";
@@ -21,12 +22,17 @@ export default async function CsTemimaSheetPage() {
   if (!viewer.isAdmin && !viewer.isSupervisor && !viewer.isCourierSupervisor) redirect("/cs");
 
   const today = cairoTodayYmd();
-  const [items, temimaSheetEdits, couriers, temimaCutoffs] = await Promise.all([
+  const [sheet, temimaSheetEdits, couriers, temimaCutoffs] = await Promise.all([
     listUnifiedSayedSheet(today, today),
     listTemimaSheetEdits(),
     listCourierAgents(),
     listTemimaCutoffs(),
   ]);
+  const marks = await openSettlementMarks(sheet.map((item) => item.id));
+  const items = sheet.map((item) => ({
+    ...item,
+    settlementDisposition: (marks.get(item.id) || "") as "" | "collect" | "return" | "postpone",
+  }));
 
   return (
     <CsQueueClient
@@ -36,6 +42,8 @@ export default async function CsTemimaSheetPage() {
       agents={[]}
       couriers={couriers}
       isCourierSupervisor
+      showOfficialMarks
+      canPressOfficial={viewer.isCourierSupervisor || viewer.isAdmin}
       canOpenOrders={viewer.isAdmin}
       canEditTemimaSheet={viewer.isAdmin}
       canEditInvoice={viewer.isAdmin || viewer.isSupervisor}

@@ -46,7 +46,10 @@ export default async function CsHomePage() {
     const today = cairoTodayYmd();
     const sheet = await listUnifiedSayedSheet(today, today);
     const marks = await openSettlementMarks(sheet.map((item) => item.id));
-    initialItems = sheet.map((item) => ({ ...item, settlementDisposition: marks.get(item.id) || "" }));
+    initialItems = sheet.map((item) => ({
+      ...item,
+      settlementDisposition: (marks.get(item.id) || "") as "" | "collect" | "return" | "postpone",
+    }));
     temimaSheetEdits = await listTemimaSheetEdits();
   } else {
     const queue = await listCsQueuePage({
@@ -57,7 +60,11 @@ export default async function CsHomePage() {
       dateTo: cairoTodayYmd(),
       limit: 200,
     });
-    initialItems = queue.items;
+    const marks = await openSettlementMarks(queue.items.map((item) => item.id));
+    initialItems = queue.items.map((item) => ({
+      ...item,
+      settlementDisposition: (marks.get(item.id) || "") as "" | "collect" | "return" | "postpone",
+    }));
     temimaSheetEdits = isSupervisor ? await listTemimaSheetEdits() : [];
     initialHasMore = queue.hasMore;
     initialTotal = queue.total;
@@ -76,6 +83,8 @@ export default async function CsHomePage() {
       agents={agents}
       couriers={couriers}
       isCourierSupervisor={isCourierSupervisor}
+      showOfficialMarks={isCourierSupervisor || viewer.isAdmin || isAccounting}
+      canPressOfficial={isCourierSupervisor || viewer.isAdmin}
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
       canPrintQueue={isSupervisor && !isCourierSupervisor}
