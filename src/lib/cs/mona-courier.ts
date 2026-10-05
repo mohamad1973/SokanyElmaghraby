@@ -4,9 +4,11 @@ import { Prisma } from "@prisma/client";
 
 import { parseCsRoles } from "@/lib/cs/agents";
 import { getPrismaClient } from "@/lib/db";
+import { cairoYmdFromIso } from "@/lib/cs/order-window";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 
 export const MONA_COURIER_FEE = 75;
+export const MONA_LARGE_FEE = 100;
 
 type Outcome = "delivered" | "refused" | "postponed";
 
@@ -17,9 +19,11 @@ type OrderRow = {
   depositAmount: unknown;
   depositPaid: boolean | number | null;
   monaCourierId: number | null;
+  monaAssignedAt: Date | string | null;
   monaOutcome: string | null;
   monaSupervisorResult: string | null;
   monaRefusalReason: string | null;
+  monaIsLarge: boolean | number | null;
   courierName: string | null;
 };
 
@@ -48,6 +52,11 @@ export type MonaOrderCard = {
   refusalReason: string;
   courierId: number | null;
   courierName: string;
+  assignedDay: string;
+  orderTotal: number;
+  depositAmount: number;
+  productNames: string;
+  isLarge: boolean;
 };
 
 export type MonaLedgerLine = {
@@ -142,7 +151,55 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     refusalReason: String(row.monaRefusalReason || "").trim(),
     courierId,
     courierName: row.courierName || "",
+    assignedDay: assignedDayOf(row.monaAssignedAt),
+    orderTotal: moneyNumber(snap.total),
+    depositAmount: row.depositPaid ? moneyNumber(row.depositAmount) : 0,
+    productNames: (snap.items || [])
+      .map((item) => String(item.name || "").trim())
+      .filter(Boolean)
+      .join("، "),
+    isLarge: official === "delivered" && Boolean(row.monaIsLarge),
   };
+}
+
+function moneyNumber(value: unknown) {
+  const amount = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function assignedDayOf(value: Date | string | null | undefined) {
+  if (!value) return "";
+  const iso = value instanceof Date ? value.toISOString() : String(value);
+  return cairoYmdFromIso(iso);
+}
+
+const ORDER_COLUMNS = `c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
+               c.monaCourierId, c.monaAssignedAt, c.monaOutcome, c.monaSupervisorResult,
+               c.monaRefusalReason, c.monaIsLarge, a.name AS courierName`;
+
+let monaLargeColumnReady: Promise<void> | null = null;
+
+async function ensureMonaLargeColumn() {
+  if (!monaLargeColumnReady) {
+    monaLargeColumnReady = addMonaLargeColumn().catch((error) => {
+      monaLargeColumnReady = null;
+      throw error;
+    });
+  }
+  await monaLargeColumnReady;
+}
+
+async function addMonaLargeColumn() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  try {
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `monaIsLarge` BOOLEAN NOT NULL DEFAULT false",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate column|already exists|1060/i.test(message)) throw error;
+  }
 }
 
 export async function listMonaCourierAgents() {
@@ -161,23 +218,23 @@ export async function listMonaCourierAgents() {
 async function loadAssignedOrders(courierId?: number) {
   const prisma = getPrismaClient();
   if (!prisma) return [] as OrderRow[];
+  await ensureMonaLargeColumn();
   const rows = courierId
-    ? await prisma.$queryRaw<OrderRow[]>`
-        SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
-               c.monaCourierId, c.monaOutcome, c.monaSupervisorResult, c.monaRefusalReason, a.name AS courierName
-        FROM CsOrderConfirmation c
-        LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-        WHERE c.monaCourierId = ${courierId}
-        ORDER BY c.monaAssignedAt DESC, c.id DESC
-      `
-    : await prisma.$queryRaw<OrderRow[]>`
-        SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
-               c.monaCourierId, c.monaOutcome, c.monaSupervisorResult, c.monaRefusalReason, a.name AS courierName
-        FROM CsOrderConfirmation c
-        LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-        WHERE c.monaCourierId IS NOT NULL
-        ORDER BY c.monaAssignedAt DESC, c.id DESC
-      `;
+    ? await prisma.$queryRawUnsafe<OrderRow[]>(
+        `SELECT ${ORDER_COLUMNS}
+         FROM CsOrderConfirmation c
+         LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+         WHERE c.monaCourierId = ?
+         ORDER BY c.monaAssignedAt DESC, c.id DESC`,
+        courierId,
+      )
+    : await prisma.$queryRawUnsafe<OrderRow[]>(
+        `SELECT ${ORDER_COLUMNS}
+         FROM CsOrderConfirmation c
+         LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+         WHERE c.monaCourierId IS NOT NULL
+         ORDER BY c.monaAssignedAt DESC, c.id DESC`,
+      );
   return rows;
 }
 
@@ -261,7 +318,7 @@ function ledgerOf(
       .filter((card) => card.official !== "refused")
       .reduce((sum, card) => sum + card.cashAmount, 0);
     const collected = delivered.reduce((sum, card) => sum + card.cashAmount, 0);
-    const fee = delivered.length * MONA_COURIER_FEE;
+    const fee = delivered.reduce((sum, card) => sum + (card.isLarge ? MONA_LARGE_FEE : MONA_COURIER_FEE), 0);
     const paid = remitted.get(courier.id) || 0;
     const adjust = adjusts.get(Number(courier.id));
     const invoiceCollected = adjust?.collected ?? collected;
@@ -299,14 +356,13 @@ async function releasePostponedMona() {
 async function loadReturnedPostponed() {
   const prisma = getPrismaClient();
   if (!prisma) return [] as OrderRow[];
-  return prisma.$queryRaw<OrderRow[]>`
-    SELECT c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
-           c.monaCourierId, c.monaOutcome, c.monaSupervisorResult, c.monaRefusalReason, a.name AS courierName
-    FROM CsOrderConfirmation c
-    LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-    WHERE c.monaOutcome = 'postponed' AND c.monaCourierId IS NULL
-    ORDER BY c.id DESC
-  `;
+  return prisma.$queryRawUnsafe<OrderRow[]>(
+    `SELECT ${ORDER_COLUMNS}
+     FROM CsOrderConfirmation c
+     LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+     WHERE c.monaOutcome = 'postponed' AND c.monaCourierId IS NULL
+     ORDER BY c.id DESC`,
+  );
 }
 
 export async function loadMonaDesk(viewerCourierId?: number) {
@@ -453,10 +509,11 @@ export async function markMonaOutcome(input: {
   return { ok: true as const, message: "اتسجل." };
 }
 
-export async function markMonaSupervisorResult(confirmationId: number, result: Outcome) {
+export async function markMonaSupervisorResult(confirmationId: number, result: Outcome | null) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
   if (!Number.isInteger(confirmationId)) return { ok: false as const, message: "الأوردر غير موجود." };
+  await ensureMonaLargeColumn();
   const rows = await prisma.$queryRaw<Array<{ id: number }>>`
     SELECT id
     FROM CsOrderConfirmation
@@ -466,11 +523,35 @@ export async function markMonaSupervisorResult(confirmationId: number, result: O
     LIMIT 1
   `;
   if (!rows[0]) return { ok: false as const, message: "الأوردر مش من أوردرات المشرفة." };
+  if (!result) {
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaSupervisorResult = NULL, monaIsLarge = false
+      WHERE id = ${confirmationId}
+    `;
+    return { ok: true as const, message: "اتسجل في الحسابات." };
+  }
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
-    SET monaSupervisorResult = ${result}
+    SET monaSupervisorResult = ${result},
+        monaIsLarge = IF(${result} = 'delivered', monaIsLarge, false)
     WHERE id = ${confirmationId}
   `;
+  return { ok: true as const, message: "اتسجل في الحسابات." };
+}
+
+export async function markMonaLarge(confirmationId: number, isLarge: boolean) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
+  await ensureMonaLargeColumn();
+  const changed = await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET monaIsLarge = ${isLarge}
+    WHERE id = ${confirmationId}
+      AND monaSupervisorResult = 'delivered'
+      AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
+  `;
+  if (!Number(changed)) return { ok: false as const, message: "كبير يتسجل مع تم بنجاح فقط." };
   return { ok: true as const, message: "اتسجل في الحسابات." };
 }
 

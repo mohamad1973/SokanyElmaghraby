@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { assignMonaOrder, loadMonaDesk, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust } from "@/lib/cs/mona-courier";
+import { assignMonaOrder, loadMonaDesk, markMonaLarge, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust } from "@/lib/cs/mona-courier";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function accessOrNull() {
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     confirmationId?: number;
     outcome?: string;
     reason?: string;
+    isLarge?: boolean;
     amount?: number;
     collected?: number;
     shipping?: number;
@@ -53,9 +54,19 @@ export async function POST(request: Request) {
   if (body.action === "official") {
     if (!access.supervisor) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     const result =
-      body.outcome === "delivered" || body.outcome === "refused" || body.outcome === "postponed" ? body.outcome : null;
-    if (!result) return NextResponse.json({ message: "النتيجة ناقصة." }, { status: 400 });
+      body.outcome === "delivered" || body.outcome === "refused" || body.outcome === "postponed"
+        ? body.outcome
+        : body.outcome === "" || body.outcome === "clear"
+          ? null
+          : undefined;
+    if (result === undefined) return NextResponse.json({ message: "النتيجة ناقصة." }, { status: 400 });
     const saved = await markMonaSupervisorResult(Number(body.confirmationId), result);
+    return NextResponse.json(saved, { status: saved.ok ? 200 : 400 });
+  }
+
+  if (body.action === "large") {
+    if (!access.supervisor) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    const saved = await markMonaLarge(Number(body.confirmationId), Boolean(body.isLarge));
     return NextResponse.json(saved, { status: saved.ok ? 200 : 400 });
   }
 

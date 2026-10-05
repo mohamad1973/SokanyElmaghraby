@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 type Outcome = "delivered" | "refused" | "postponed";
 
@@ -22,6 +22,11 @@ type OrderCard = {
   refusalReason: string;
   courierId: number | null;
   courierName: string;
+  assignedDay: string;
+  orderTotal: number;
+  depositAmount: number;
+  productNames: string;
+  isLarge: boolean;
 };
 
 type LedgerLine = {
@@ -57,13 +62,6 @@ function egp(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-function officialLabel(order: OrderCard) {
-  if (order.official === "delivered") return "تم بنجاح";
-  if (order.official === "refused") return "مرتجع";
-  if (order.official === "postponed") return "مؤجل";
-  return "لم يُعلَّم";
-}
-
 function orderState(order: OrderCard) {
   if (order.outcome === "delivered") return "مسلم";
   if (order.outcome === "postponed") return "مؤجّل";
@@ -71,17 +69,71 @@ function orderState(order: OrderCard) {
   return "متوزع";
 }
 
-function invoiceLines(order: OrderCard) {
-  if (!order.items.length) {
-    return [{ key: `${order.id}-0`, product: "—", quantity: 1, price: order.cashAmount, value: order.cashAmount }];
+function orderNumber(order: OrderCard) {
+  return Number(String(order.wooOrderNumber).replace(/\D/g, "")) || 0;
+}
+
+function monaDayHeading(ymd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "بدون يوم";
+  const [year, month, day] = ymd.split("-").map((part) => Number(part));
+  const weekdays = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    weekday: "short",
+  }).format(new Date(Date.UTC(year, month - 1, day, 12, 0, 0)));
+  const weekday = weekdays[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short)] || "";
+  return `يوم ${weekday} ${day}-${month}`;
+}
+
+function dayBlocksOf(orders: OrderCard[]) {
+  const byDay = new Map<string, OrderCard[]>();
+  const undated: OrderCard[] = [];
+  for (const order of orders) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(order.assignedDay)) {
+      undated.push(order);
+      continue;
+    }
+    const list = byDay.get(order.assignedDay) || [];
+    list.push(order);
+    byDay.set(order.assignedDay, list);
   }
-  return order.items.map((item, index) => ({
-    key: `${order.id}-${index}`,
-    product: item.name,
-    quantity: item.quantity,
-    price: item.price,
-    value: item.lineTotal || item.price * item.quantity,
+  const blocks = [...byDay.keys()].sort().map((day) => ({
+    key: day,
+    title: monaDayHeading(day),
+    rows: (byDay.get(day) || []).sort((a, b) => orderNumber(b) - orderNumber(a)),
   }));
+  if (undated.length) {
+    blocks.push({
+      key: "undated",
+      title: "بدون يوم",
+      rows: undated.sort((a, b) => orderNumber(b) - orderNumber(a)),
+    });
+  }
+  return blocks;
+}
+
+function shipmentValue(order: OrderCard) {
+  return Math.max(0, Number(order.orderTotal) || 0);
+}
+
+function remainder(order: OrderCard) {
+  return Math.max(0, Number(order.cashAmount) || 0);
+}
+
+function postponeValue(order: OrderCard) {
+  return order.official === "postponed" ? remainder(order) : 0;
+}
+
+function refusalValue(order: OrderCard) {
+  return order.official === "refused" ? remainder(order) : 0;
+}
+
+function netValue(order: OrderCard) {
+  return order.official === "delivered" ? remainder(order) : 0;
+}
+
+function sumOf(list: OrderCard[], pick: (order: OrderCard) => number) {
+  return list.reduce((sum, order) => sum + pick(order), 0);
 }
 
 function CourierInvoice({
@@ -92,6 +144,7 @@ function CourierInvoice({
   onDraft,
   onSave,
   onOfficial,
+  onLarge,
 }: {
   line: LedgerLine;
   orders: OrderCard[];
@@ -99,9 +152,17 @@ function CourierInvoice({
   draft: MoneyDraft;
   onDraft: (next: MoneyDraft) => void;
   onSave: () => void;
-  onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed") => void;
+  onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
+  onLarge?: (confirmationId: number, isLarge: boolean) => void;
 }) {
   const mine = orders.filter((order) => Number(order.courierId) === Number(line.courierId));
+  const dayBlocks = dayBlocksOf(mine);
+  const serials = new Map<number, number>();
+  for (const block of dayBlocks) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(block.key)) continue;
+    block.rows.forEach((order, index) => serials.set(order.id, index + 1));
+  }
+  const moneyCell = (value: number) => (value ? egp(value) : "");
   return (
     <article className="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15">
       <header className="flex items-center justify-between gap-3 bg-[#14213D] px-4 py-3 text-white">
@@ -110,71 +171,139 @@ function CourierInvoice({
           مسلّم {line.delivered} · مؤجّل {line.postponed} · رفض {line.refused}
         </p>
       </header>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse text-right text-sm text-[#14213D]">
-          <thead className="bg-[#F8F4EA] text-xs font-extrabold">
+      <div className="max-h-[calc(100vh-8rem)] overflow-auto">
+        <table className="min-w-full border-separate border-spacing-0 text-sm">
+          <thead className="text-right">
             <tr>
-              {["رقم الأوردر", "العميل", "التليفون", "العنوان", "المنتج", "الكمية", "السعر", "القيمة", "الحالة"].map((head) => (
-                <th key={head} className="border-b border-[#14213D]/10 px-2 py-2">
-                  {head}
-                </th>
-              ))}
+              {["مسلسل", "أوردر", "العميل", "موبايل", "المنتج", "قيمة الشحنات", "ديبوزت", "المؤجل", "الرفض", "الصافي", "الحالة", "كبير"].map(
+                (head) => (
+                  <th key={head} className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">
+                    {head}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
-            {mine.length ? (
-              mine.flatMap((order) => {
-                const lines = invoiceLines(order);
-                return lines.map((row, index) => (
-                  <tr key={row.key} className="border-b border-[#14213D]/10">
-                    {index === 0 ? (
-                      <>
-                        <td className="px-2 py-2 font-extrabold" rowSpan={lines.length}>
-                          #{order.wooOrderNumber}
-                        </td>
-                        <td className="px-2 py-2" rowSpan={lines.length}>
-                          {order.customerName || "—"}
-                        </td>
-                        <td className="px-2 py-2" dir="ltr" rowSpan={lines.length}>
-                          {order.phone || "—"}
-                        </td>
-                        <td className="px-2 py-2" rowSpan={lines.length}>
-                          {order.address || "—"}
-                        </td>
-                      </>
-                    ) : null}
-                    <td className="px-2 py-2">{row.product}</td>
-                    <td className="px-2 py-2">{row.quantity}</td>
-                    <td className="px-2 py-2">{egp(row.price)}</td>
-                    <td className="px-2 py-2 font-extrabold">{egp(row.value)}</td>
-                    {index === 0 ? (
-                      <td className="px-2 py-2 font-extrabold" rowSpan={lines.length}>
-                        <div className="grid gap-1">
-                          <span>{onOfficial ? officialLabel(order) : orderState(order)}</span>
-                          {onOfficial && order.outcome ? (
-                            <span className="text-[10px] font-bold text-[#14213D]/70">المندوب: {orderState(order)}</span>
-                          ) : null}
-                          {onOfficial ? (
-                            <div className="flex flex-wrap gap-1">
-                              <button type="button" onClick={() => onOfficial(order.id, "delivered")} className="rounded bg-emerald-700 px-1.5 py-1 text-[10px] font-extrabold text-white">تم بنجاح</button>
-                              <button type="button" onClick={() => onOfficial(order.id, "refused")} className="rounded bg-red-700 px-1.5 py-1 text-[10px] font-extrabold text-white">مرتجع</button>
-                              <button type="button" onClick={() => onOfficial(order.id, "postponed")} className="rounded bg-orange-500 px-1.5 py-1 text-[10px] font-extrabold text-black">مؤجل</button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </td>
-                    ) : null}
-                  </tr>
-                ));
-              })
-            ) : (
+            {mine.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-center font-bold text-[#14213D]/60" colSpan={9}>
+                <td colSpan={12} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
                   مفيش أوردرات عند المندوب.
                 </td>
               </tr>
+            ) : (
+              dayBlocks.map((block) => (
+                <Fragment key={block.key}>
+                  <tr>
+                    <td colSpan={12} className="border border-[#14213D]/25 bg-[#14213D] px-3 py-2 text-center text-sm font-extrabold text-white">
+                      {block.title}
+                    </td>
+                  </tr>
+                  {block.rows.map((order) => (
+                    <tr key={order.id}>
+                      <td className="border border-[#14213D]/25 px-2 py-2 text-center font-extrabold tabular-nums">
+                        {serials.get(order.id) || ""}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
+                        {order.wooOrderNumber}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">{order.customerName || "—"}</td>
+                      <td className="whitespace-nowrap border border-[#14213D]/15 px-2 py-2 tabular-nums" dir="ltr">
+                        {order.phone || "—"}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">{order.productNames || "—"}</td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {moneyCell(shipmentValue(order))}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {moneyCell(order.depositAmount)}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {moneyCell(postponeValue(order))}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {moneyCell(refusalValue(order))}
+                      </td>
+                      <td className="whitespace-nowrap border border-[#14213D]/25 px-2 py-2 text-center tabular-nums">
+                        {moneyCell(netValue(order))}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2">
+                        <select
+                          value={order.official || ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (!onOfficial) return;
+                            if (value === "delivered" || value === "refused" || value === "postponed") onOfficial(order.id, value);
+                            else onOfficial(order.id, null);
+                          }}
+                          className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+                        >
+                          <option value="">لم يُعلَّم</option>
+                          <option value="delivered">تم بنجاح</option>
+                          <option value="refused">الغاء</option>
+                          <option value="postponed">مؤجل</option>
+                        </select>
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          disabled={order.official !== "delivered"}
+                          checked={order.isLarge}
+                          onChange={(event) => onLarge?.(order.id, event.target.checked)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={5} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
+                      تصفية اليوم
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {egp(sumOf(block.rows, shipmentValue))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {egp(sumOf(block.rows, (order) => order.depositAmount || 0))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {egp(sumOf(block.rows, postponeValue))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {egp(sumOf(block.rows, refusalValue))}
+                    </td>
+                    <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
+                      {egp(sumOf(block.rows, netValue))}
+                    </td>
+                    <td colSpan={2} className="border border-[#14213D]/15 bg-[#F5F5F0]" />
+                  </tr>
+                </Fragment>
+              ))
             )}
           </tbody>
+          {mine.length ? (
+            <tfoot>
+              <tr>
+                <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={5}>
+                  المجموع
+                </td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                  {egp(sumOf(mine, shipmentValue))}
+                </td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                  {egp(sumOf(mine, (order) => order.depositAmount || 0))}
+                </td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                  {egp(sumOf(mine, postponeValue))}
+                </td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                  {egp(sumOf(mine, refusalValue))}
+                </td>
+                <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                  {egp(sumOf(mine, netValue))}
+                </td>
+                <td colSpan={2} className="border border-[#14213D] bg-[#14213D]" />
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
       </div>
       <footer className="grid gap-2 border-t border-[#14213D]/10 bg-[#F8F4EA] px-4 py-3 text-sm font-extrabold text-[#14213D]">
@@ -534,7 +663,10 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
                   remitted: Number(draft?.remitted),
                 });
               }}
-              onOfficial={(confirmationId, result) => void post({ action: "official", confirmationId, outcome: result })}
+              onOfficial={(confirmationId, result) =>
+                void post({ action: "official", confirmationId, outcome: result || "clear" })
+              }
+              onLarge={(confirmationId, isLarge) => void post({ action: "large", confirmationId, isLarge })}
             />
           ))
         : null}
