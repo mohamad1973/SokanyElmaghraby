@@ -135,9 +135,56 @@ function roleFromLegacy(agent: { isSupervisor?: boolean; username?: string | nul
 let ensureCsTablesPromise: Promise<void> | null = null;
 let bootstrapCsAdminPromise: Promise<void> | null = null;
 
+async function ensureCsSpeedIndexes(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+  const wanted = [
+    {
+      name: "CsOrderConfirmation_confirmedAt_idx",
+      sql: "CREATE INDEX `CsOrderConfirmation_confirmedAt_idx` ON `CsOrderConfirmation` (`confirmedAt`)",
+    },
+    {
+      name: "CsOrderConfirmation_handedToCarrierAt_idx",
+      sql: "CREATE INDEX `CsOrderConfirmation_handedToCarrierAt_idx` ON `CsOrderConfirmation` (`handedToCarrierAt`)",
+    },
+    {
+      name: "CsOrderConfirmation_ship_status_confirmed_idx",
+      sql: "CREATE INDEX `CsOrderConfirmation_ship_status_confirmed_idx` ON `CsOrderConfirmation` (`shippingCompany`, `status`, `confirmedAt`)",
+    },
+  ];
+  const present = await prisma.$queryRawUnsafe<Array<{ INDEX_NAME: string }>>(
+    `SELECT INDEX_NAME FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsOrderConfirmation'
+       AND INDEX_NAME IN (${wanted.map(() => "?").join(", ")})`,
+    ...wanted.map((index) => index.name),
+  );
+  const have = new Set(present.map((row) => row.INDEX_NAME));
+  for (const index of wanted) {
+    if (have.has(index.name)) continue;
+    try {
+      await prisma.$executeRawUnsafe(index.sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Duplicate|already exists|1061/i.test(message)) {
+        console.warn("[cs] speed index:", message.slice(0, 200));
+      }
+    }
+  }
+}
+
 async function runEnsureCsTables() {
   const prisma = getPrismaClient();
   if (!prisma) return;
+
+  const ready = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT 1 AS n FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'CsOrderConfirmation'
+       AND COLUMN_NAME = 'temimaSupervisorResult'
+     LIMIT 1`,
+  );
+  if (ready.length) {
+    await ensureCsSpeedIndexes(prisma);
+    return;
+  }
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsAgent\` (
@@ -547,6 +594,8 @@ async function runEnsureCsTables() {
   } catch {
     // ignore
   }
+
+  await ensureCsSpeedIndexes(prisma);
 }
 
 /** Idempotent schema migration for CS tables — safe to call before every CS query. */

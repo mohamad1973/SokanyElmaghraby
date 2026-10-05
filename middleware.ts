@@ -9,6 +9,8 @@ const secret = process.env.NEXTAUTH_SECRET || "sokany-local-dev-secret-change-be
 const intlMiddleware = createMiddleware(routing);
 const LOCALE_COOKIE = "NEXT_LOCALE";
 const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const LOCALE_MODE_COOKIE = "sokany-locale-mode";
+const LOCALE_MODE_MAX_AGE = 60;
 
 type SiteLocaleMode = "bilingual" | "ar-only";
 
@@ -60,23 +62,38 @@ function nextWithLocale(req: NextRequest, locale: AppLocale) {
   return applyLocaleCookie(NextResponse.next({ request: { headers: requestHeaders } }), locale);
 }
 
-async function getSiteLocaleMode(req: NextRequest): Promise<SiteLocaleMode> {
+function readLocaleModeCookie(req: NextRequest): SiteLocaleMode | null {
+  const value = req.cookies.get(LOCALE_MODE_COOKIE)?.value;
+  return value === "ar-only" || value === "bilingual" ? value : null;
+}
+
+function rememberLocaleMode(response: NextResponse, mode: SiteLocaleMode) {
+  response.cookies.set(LOCALE_MODE_COOKIE, mode, {
+    path: "/",
+    maxAge: LOCALE_MODE_MAX_AGE,
+    sameSite: "lax",
+  });
+  return response;
+}
+
+async function getSiteLocaleMode(req: NextRequest): Promise<{ mode: SiteLocaleMode; remember: boolean }> {
+  const cached = readLocaleModeCookie(req);
+  if (cached) return { mode: cached, remember: false };
   try {
     const url = new URL("/api/public/locale-mode", req.nextUrl.origin);
     const response = await fetch(url, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(800),
-      next: { revalidate: 30 },
     });
 
     if (!response.ok) {
-      return "bilingual";
+      return { mode: "bilingual", remember: false };
     }
 
     const data = (await response.json()) as { mode?: string };
-    return data.mode === "ar-only" ? "ar-only" : "bilingual";
+    return { mode: data.mode === "ar-only" ? "ar-only" : "bilingual", remember: true };
   } catch {
-    return "bilingual";
+    return { mode: "bilingual", remember: false };
   }
 }
 
@@ -159,14 +176,19 @@ export async function middleware(req: NextRequest) {
   const isStorefrontPath = !pathWithoutLocale.startsWith("/admin");
 
   // Storefront Arabic-only mode: strip /en and ignore EN cookie preference.
+  let rememberLocaleModeOnResponse = false;
+  let resolvedLocaleMode: SiteLocaleMode = "bilingual";
   if (isStorefrontPath && (urlLocale === "en" || preferredLocale === "en")) {
     const localeMode = await getSiteLocaleMode(req);
+    rememberLocaleModeOnResponse = localeMode.remember;
+    resolvedLocaleMode = localeMode.mode;
 
-    if (localeMode === "ar-only") {
+    if (localeMode.mode === "ar-only") {
       if (urlLocale === "en") {
         const url = req.nextUrl.clone();
         url.pathname = withLocalePrefix(pathWithoutLocale, "ar");
-        return applyLocaleCookie(NextResponse.redirect(url), "ar");
+        const redirect = applyLocaleCookie(NextResponse.redirect(url), "ar");
+        return rememberLocaleModeOnResponse ? rememberLocaleMode(redirect, resolvedLocaleMode) : redirect;
       }
       // Prefer EN cookie on an Arabic URL: stay Arabic and clear EN below.
     } else if (
@@ -176,7 +198,8 @@ export async function middleware(req: NextRequest) {
     ) {
       const url = req.nextUrl.clone();
       url.pathname = withLocalePrefix(pathWithoutLocale, "en");
-      return applyLocaleCookie(NextResponse.redirect(url), "en");
+      const redirect = applyLocaleCookie(NextResponse.redirect(url), "en");
+      return rememberLocaleModeOnResponse ? rememberLocaleMode(redirect, resolvedLocaleMode) : redirect;
     }
   } else if (
     preferredLocale === "en" &&
@@ -218,7 +241,8 @@ export async function middleware(req: NextRequest) {
   const responseLocale =
     isStorefrontPath && preferredLocale === "en" && urlLocale === "ar" ? "ar" : urlLocale;
 
-  return applyLocaleCookie(intlMiddleware(localizedRequest), responseLocale);
+  const response = applyLocaleCookie(intlMiddleware(localizedRequest), responseLocale);
+  return rememberLocaleModeOnResponse ? rememberLocaleMode(response, resolvedLocaleMode) : response;
 }
 
 export const config = {

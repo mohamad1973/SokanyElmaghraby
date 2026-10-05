@@ -4,9 +4,26 @@ import { getPrismaClient } from "@/lib/db";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
+let freezeTablesReady: Promise<void> | null = null;
+
 export async function ensureTemimaFreezeTables() {
+  if (!freezeTablesReady) {
+    freezeTablesReady = createTemimaFreezeTables().catch((error) => {
+      freezeTablesReady = null;
+      throw error;
+    });
+  }
+  await freezeTablesReady;
+}
+
+async function createTemimaFreezeTables() {
   const prisma = getPrismaClient();
   if (!prisma) return;
+  const ready = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT 1 AS n FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsTemimaSheetFreeze' LIMIT 1`,
+  );
+  if (ready.length) return;
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsTemimaSheetFreezeDay\` (
       \`dayYmd\` VARCHAR(10) NOT NULL,
@@ -32,6 +49,18 @@ export async function hasTemimaFreezeDay(dayYmd: string) {
     dayYmd,
   );
   return rows.length > 0;
+}
+
+export async function listTemimaFreezePairs(dateFrom: string, dateTo: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dateFrom) || !DAY.test(dateTo)) return [];
+  await ensureTemimaFreezeTables();
+  const rows = await prisma.$queryRawUnsafe<Array<{ dayYmd: string; confirmationId: number | bigint }>>(
+    "SELECT dayYmd, confirmationId FROM CsTemimaSheetFreeze WHERE dayYmd >= ? AND dayYmd <= ?",
+    dateFrom,
+    dateTo,
+  );
+  return rows.map((row) => ({ dayYmd: String(row.dayYmd), confirmationId: Number(row.confirmationId) }));
 }
 
 export async function listTemimaFreezeIds(dayYmd: string) {
@@ -146,9 +175,26 @@ export async function clearTemimaPrepareHold(dayYmd: string) {
   await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetPrepareHold WHERE dayYmd = ?", dayYmd);
 }
 
+let prepareHoldReady: Promise<void> | null = null;
+
 async function ensureTemimaPrepareHoldTable() {
+  if (!prepareHoldReady) {
+    prepareHoldReady = createTemimaPrepareHoldTable().catch((error) => {
+      prepareHoldReady = null;
+      throw error;
+    });
+  }
+  await prepareHoldReady;
+}
+
+async function createTemimaPrepareHoldTable() {
   const prisma = getPrismaClient();
   if (!prisma) return;
+  const ready = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT 1 AS n FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsTemimaSheetPrepareHold' LIMIT 1`,
+  );
+  if (ready.length) return;
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`CsTemimaSheetPrepareHold\` (
       \`dayYmd\` VARCHAR(10) NOT NULL,

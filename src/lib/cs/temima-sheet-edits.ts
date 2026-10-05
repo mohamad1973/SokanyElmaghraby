@@ -10,7 +10,7 @@ import {
   hasTemimaFreezeDay,
   hasTemimaPrepareHold,
   listEarliestFreezeDays,
-  listTemimaFreezeIds,
+  listTemimaFreezePairs,
   listTemimaFrozenDays,
   removeTemimaFreezeExcept,
   removeTemimaFreezeId,
@@ -118,7 +118,7 @@ export async function mergeIncludedConfirmations<T extends { id: number }>(items
   if (!missing.length) return { items, edits };
   const rows = await prisma.csOrderConfirmation.findMany({
     where: { id: { in: missing } },
-    include: { assignedAgent: true, answers: true },
+    include: { assignedAgent: true },
   });
   const extra = rows.map((row) => serializeCsQueueItem(row)) as unknown as T[];
   return { items: [...items, ...extra], edits };
@@ -335,11 +335,8 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
   await ensureClosedDaysFrozen(dateFrom, dateTo);
   const days = eachSheetDay(dateFrom, dateTo);
   const frozen = await listTemimaFrozenDays(dateFrom, dateTo);
-  const frozenIds = new Set<number>();
-  for (const day of days) {
-    if (!frozen.has(day)) continue;
-    for (const id of await listTemimaFreezeIds(day)) frozenIds.add(id);
-  }
+  const pairs = await listTemimaFreezePairs(dateFrom, dateTo);
+  const frozenIds = new Set(pairs.filter((pair) => frozen.has(pair.dayYmd)).map((pair) => pair.confirmationId));
   if (days.length && days.every((day) => frozen.has(day))) {
     return idsOwnedInsideRange([...frozenIds], dateFrom, dateTo);
   }
@@ -368,13 +365,89 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
   return idsOwnedInsideRange([...frozenIds, ...openIds], dateFrom, dateTo);
 }
 
+async function loadSayedSheetCandidates(dateFrom: string, dateTo: string, edits: TemimaSheetEdit[]) {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  const from = cairoYmdBounds(dateFrom);
+  const to = cairoYmdBounds(dateTo);
+  if (!from || !to) return [];
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: {
+      status: "CONFIRMED",
+      shippingCompany: "sayed_temima",
+      OR: [
+        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
+        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
+      ],
+    },
+    select: SHEET_PICK,
+    orderBy: { id: "desc" },
+    take: 5000,
+  });
+  const have = new Set(rows.map((row) => row.id));
+  const includeIds = [
+    ...new Set(
+      edits
+        .filter((row) => row.kind === "include" && row.dayYmd >= dateFrom && row.dayYmd <= dateTo && !have.has(row.confirmationId))
+        .map((row) => row.confirmationId),
+    ),
+  ];
+  if (!includeIds.length) return rows;
+  const extra = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: includeIds } },
+    select: SHEET_PICK,
+  });
+  return [...rows, ...extra];
+}
+
+/** Settlement day assignment in one pass. The first day in the range keeps the order. */
+export async function sayedSheetDayMap(dateFrom: string, dateTo: string) {
+  const map = new Map<number, string>();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return map;
+  await restoreTodayEditsOnce();
+  await ensureClosedDaysFrozen(dateFrom, dateTo);
+  const days = eachSheetDay(dateFrom, dateTo).slice(0, 8);
+  if (!days.length) return map;
+  const spanTo = days[days.length - 1];
+  const [frozen, pairs, cutoffs, edits] = await Promise.all([
+    listTemimaFrozenDays(dateFrom, spanTo),
+    listTemimaFreezePairs(dateFrom, spanTo),
+    listTemimaCutoffs(),
+    listTemimaSheetEdits(),
+  ]);
+  const openDays = days.filter((day) => !frozen.has(day));
+  const candidates = openDays.length ? await loadSayedSheetCandidates(dateFrom, spanTo, edits) : [];
+  const earliest = await listEarliestFreezeDays([
+    ...pairs.map((pair) => pair.confirmationId),
+    ...candidates.map((row) => row.id),
+  ]);
+  for (const day of days) {
+    if (frozen.has(day)) {
+      for (const pair of pairs) {
+        if (pair.dayYmd !== day || map.has(pair.confirmationId)) continue;
+        const owner = earliest.get(pair.confirmationId);
+        if (!owner || owner === day) map.set(pair.confirmationId, day);
+      }
+      continue;
+    }
+    for (const row of candidates) {
+      if (map.has(row.id)) continue;
+      if (!onUnifiedSayedSheet(row, day, day, cutoffs, edits)) continue;
+      const owner = earliest.get(row.id);
+      if (owner && owner !== day) continue;
+      map.set(row.id, day);
+    }
+  }
+  return map;
+}
+
 export async function listUnifiedSayedSheet(dateFrom: string, dateTo: string) {
   const prisma = getPrismaClient();
   const ids = await listUnifiedSayedSheetIds(dateFrom, dateTo);
   if (!prisma || !ids.length) return [];
   const rows = await prisma.csOrderConfirmation.findMany({
     where: { id: { in: ids } },
-    include: { assignedAgent: true, answers: true },
+    include: { assignedAgent: true },
   });
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids.flatMap((id) => {
@@ -399,7 +472,7 @@ export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
         { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
       ],
     },
-    include: { assignedAgent: true, answers: true },
+    include: { assignedAgent: true },
     take: 2000,
   });
   const edits = await listTemimaSheetEdits();
@@ -414,7 +487,7 @@ export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
   const extra = missing.length
     ? await prisma.csOrderConfirmation.findMany({
         where: { id: { in: missing } },
-        include: { assignedAgent: true, answers: true },
+        include: { assignedAgent: true },
       })
     : [];
   return [...rows, ...extra].map((row) => serializeCsQueueItem(row));
@@ -476,7 +549,7 @@ export async function includeTemimaOrders(dayYmd: string, confirmationIds: numbe
   if (!ids.length) return { ok: false as const, message: "اختر أوردر من النتائج." };
   const rows = await prisma.csOrderConfirmation.findMany({
     where: { id: { in: ids } },
-    include: { assignedAgent: true, answers: true },
+    include: { assignedAgent: true },
   });
   if (!rows.length) return { ok: false as const, message: "مش موجود في الأوردرات." };
   const owners = await listEarliestFreezeDays(rows.map((row) => row.id));

@@ -8,7 +8,7 @@ export async function GET() {
   const settings = await getThemeSettings();
   const mode = settings.localeMode === "ar-only" ? "ar-only" : "bilingual";
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     { mode },
     {
       headers: {
@@ -16,4 +16,10 @@ export async function GET() {
       },
     },
   );
+  response.cookies.set("sokany-locale-mode", mode, {
+    path: "/",
+    maxAge: 60,
+    sameSite: "lax",
+  });
+  return response;
 }

@@ -254,7 +254,7 @@ async function importWooOrdersForCs(
   return { imported, kept: kept.length };
 }
 
-export async function syncRecentOrdersForCs(_options?: { perPage?: number }) {
+async function runSyncRecentOrdersForCs(_options?: { perPage?: number }) {
   const prisma = getPrismaClient();
   if (!prisma) {
     return { ok: false as const, message: "قاعدة البيانات غير متصلة.", imported: 0, totalFetched: 0 };
@@ -327,6 +327,18 @@ export async function syncRecentOrdersForCs(_options?: { perPage?: number }) {
   }
 
   return { ok: true as const, imported, totalFetched };
+}
+
+let csSyncInFlight: ReturnType<typeof runSyncRecentOrdersForCs> | null = null;
+
+export function syncRecentOrdersForCs(options?: { perPage?: number }) {
+  if (!csSyncInFlight) {
+    const run = runSyncRecentOrdersForCs(options).finally(() => {
+      csSyncInFlight = null;
+    });
+    csSyncInFlight = run;
+  }
+  return csSyncInFlight;
 }
 
 async function linkMissingBostaWaybills(
@@ -428,7 +440,7 @@ async function loadConfirmationsByIds(prisma: NonNullable<ReturnType<typeof getP
     if (!chunk.length) continue;
     const part = await prisma.csOrderConfirmation.findMany({
       where: { id: { in: chunk } },
-      include: { assignedAgent: true, answers: true },
+      include: { assignedAgent: true },
     });
     rows.push(...part);
   }
@@ -783,7 +795,7 @@ export async function listCsConfirmations(status?: string) {
   await ensureCsTables();
   const rows = await prisma.csOrderConfirmation.findMany({
     where: status && status !== "all" ? { status } : undefined,
-    include: { assignedAgent: true, answers: true },
+    include: { assignedAgent: true },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
@@ -929,7 +941,12 @@ export function serializeCsQueueItem(row: {
           paidOnlineHighlight,
           wooStatus: raw.wooStatus || raw.status,
           trackingNumber,
-          items: raw.items || [],
+          items: (raw.items || []).map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+            total: item.total,
+            sku: item.sku,
+          })),
         }
       : null,
     startedAt: row.startedAt

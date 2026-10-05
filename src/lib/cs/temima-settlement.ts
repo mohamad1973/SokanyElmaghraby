@@ -3,7 +3,7 @@ import "server-only";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { effectivePaymentState, isFawryMethod, resolvePaymentState, sheetCollectedSplit } from "@/lib/cs/order-window";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
-import { listTemimaSheetEdits, listUnifiedSayedSheetIds } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { getPrismaClient } from "@/lib/db";
@@ -215,16 +215,7 @@ const SHEET_DAY_SELECT = {
 } as const;
 
 async function sheetDayById(from: string, to: string) {
-  const map = new Map<number, string>();
-  let cursor = from;
-  for (let guard = 0; cursor && cursor <= to && guard < 8; guard += 1) {
-    const ids = await listUnifiedSayedSheetIds(cursor, cursor);
-    for (const id of ids) if (!map.has(id)) map.set(id, cursor);
-    const next = addDaysYmd(cursor, 1);
-    if (!next || next === cursor) break;
-    cursor = next;
-  }
-  return map;
+  return sayedSheetDayMap(from, to);
 }
 
 function fallbackSheetDay(

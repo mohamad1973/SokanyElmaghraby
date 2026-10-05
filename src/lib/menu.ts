@@ -64,10 +64,17 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-export async function getHeaderMenu(): Promise<MenuNode[]> {
-  const { getSelectedMenuCategories } = await import("./category-menu-selection");
+let headerMenuCache: { at: number; value: MenuNode[] } | null = null;
+const HEADER_MENU_CACHE_MS = 60_000;
 
-  return getSelectedMenuCategories(await getWordPressCategoryTree());
+export async function getHeaderMenu(): Promise<MenuNode[]> {
+  if (headerMenuCache && Date.now() - headerMenuCache.at < HEADER_MENU_CACHE_MS) {
+    return headerMenuCache.value;
+  }
+  const { getSelectedMenuCategories } = await import("./category-menu-selection");
+  const value = await getSelectedMenuCategories(await getWordPressCategoryTree());
+  headerMenuCache = { at: Date.now(), value };
+  return value;
 }
 
 export async function getWordPressCategoryTree(): Promise<WooCategoryNode[]> {

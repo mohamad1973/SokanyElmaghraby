@@ -1243,7 +1243,26 @@ function parseStoredSettings(settings: unknown) {
   }
 }
 
+let themeTableReady: Promise<void> | null = null;
+let themeCache: { at: number; value: ThemeSettings } | null = null;
+const THEME_CACHE_MS = 60_000;
+
 async function ensureThemeSettingsTable(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+  if (!themeTableReady) {
+    themeTableReady = createThemeSettingsTable(prisma).catch((error) => {
+      themeTableReady = null;
+      throw error;
+    });
+  }
+  await themeTableReady;
+}
+
+async function createThemeSettingsTable(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+  const ready = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT 1 AS n FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ThemeSettings' LIMIT 1`,
+  );
+  if (ready.length) return;
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`ThemeSettings\` (
       \`id\` VARCHAR(64) NOT NULL,
@@ -1261,6 +1280,7 @@ async function ensureThemeSettingsTable(prisma: NonNullable<ReturnType<typeof ge
 }
 
 export async function getThemeSettings(): Promise<ThemeSettings> {
+  if (themeCache && Date.now() - themeCache.at < THEME_CACHE_MS) return themeCache.value;
   const prisma = getPrismaClient();
 
   if (!prisma) {
@@ -1277,7 +1297,9 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
       LIMIT 1
     `;
 
-    return mergeSettings(parseStoredSettings(rows[0]?.settings));
+    const value = mergeSettings(parseStoredSettings(rows[0]?.settings));
+    themeCache = { at: Date.now(), value };
+    return value;
   } catch {
     return defaultThemeSettings;
   }
@@ -1292,6 +1314,7 @@ export async function updateThemeSettings(settings: ThemeSettings): Promise<Them
   }
 
   await ensureThemeSettingsTable(prisma);
+  themeCache = null;
   await prisma.$executeRaw`
     INSERT INTO ThemeSettings (id, settings)
     VALUES ('site', ${JSON.stringify(mergedSettings)})
@@ -1300,6 +1323,7 @@ export async function updateThemeSettings(settings: ThemeSettings): Promise<Them
       updatedAt = CURRENT_TIMESTAMP(3)
   `;
 
+  themeCache = { at: Date.now(), value: mergedSettings };
   return mergedSettings;
 }
 
