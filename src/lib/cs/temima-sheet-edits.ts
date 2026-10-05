@@ -2,15 +2,17 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
-import { addCairoYmdDays, cairoYmdBounds } from "@/lib/cs/order-window";
+import { addCairoYmdDays, cairoClock, cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import {
   addTemimaFreezeIds,
   clearTemimaPrepareHold,
   hasTemimaFreezeDay,
   hasTemimaPrepareHold,
+  listEarliestFreezeDays,
   listTemimaFreezeIds,
   listTemimaFrozenDays,
+  removeTemimaFreezeExcept,
   removeTemimaFreezeId,
   saveTemimaFreeze,
 } from "@/lib/cs/temima-sheet-freeze";
@@ -141,6 +143,115 @@ function eachSheetDay(dateFrom: string, dateTo: string) {
   return days;
 }
 
+async function idsOwnedInsideRange(ids: number[], dateFrom: string, dateTo: string) {
+  const unique = [...new Set(ids)];
+  const owners = await listEarliestFreezeDays(unique);
+  if (!owners.size) return unique.sort((a, b) => b - a);
+  return unique
+    .filter((id) => {
+      const owner = owners.get(id);
+      if (!owner) return true;
+      return owner >= dateFrom && owner <= dateTo;
+    })
+    .sort((a, b) => b - a);
+}
+
+let restoredTodayYmd = "";
+let restoringToday: Promise<void> | null = null;
+
+function cairoIso(value: Date | string | null | undefined) {
+  if (!value) return "";
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function touchedToday(value: Date | string | null | undefined, start: Date, end: Date) {
+  if (!value) return false;
+  const time = new Date(cairoIso(value)).getTime();
+  return time >= start.getTime() && time < end.getTime();
+}
+
+async function pinOrderToSaveDay(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  confirmationId: number,
+  saveDay: string,
+  today: string,
+) {
+  await prisma.csTemimaSheetEdit.upsert({
+    where: { dayYmd_confirmationId: { dayYmd: saveDay, confirmationId } },
+    create: { dayYmd: saveDay, confirmationId, kind: "include" },
+    update: { kind: "include" },
+  });
+  await prisma.csTemimaSheetEdit.upsert({
+    where: { dayYmd_confirmationId: { dayYmd: today, confirmationId } },
+    create: { dayYmd: today, confirmationId, kind: "exclude" },
+    update: { kind: "exclude" },
+  });
+  await removeTemimaFreezeId(today, confirmationId);
+  if (await hasTemimaFreezeDay(saveDay)) await addTemimaFreezeIds(saveDay, [confirmationId]);
+}
+
+async function restoreTodayEditsToClosedSheetDay() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const today = cairoTodayYmd();
+  const bounds = cairoYmdBounds(today);
+  if (!bounds) return;
+  const itemAdds = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | bigint }>>(
+    "SELECT DISTINCT confirmationId FROM CsOrderItemAdd WHERE status = 'approved' AND decidedAt >= ? AND decidedAt < ?",
+    bounds.start,
+    bounds.endExclusive,
+  );
+  const itemIds = [...new Set(itemAdds.map((row) => Number(row.confirmationId)).filter((id) => id > 0))];
+  const [edited, edits] = await Promise.all([
+    prisma.csOrderConfirmation.findMany({
+      where: {
+        shippingCompany: "sayed_temima",
+        status: "CONFIRMED",
+        confirmedAt: { not: null, lt: bounds.start },
+        OR: [
+          { confirmationEditedAt: { gte: bounds.start, lt: bounds.endExclusive } },
+          { handedToCarrierAt: { gte: bounds.start, lt: bounds.endExclusive } },
+          ...(itemIds.length ? [{ id: { in: itemIds } }] : []),
+        ],
+      },
+      select: { id: true, confirmedAt: true, confirmationEditedAt: true, handedToCarrierAt: true },
+    }),
+    listTemimaSheetEdits(),
+  ]);
+  for (const row of edited) {
+    const clock = cairoClock(cairoIso(row.confirmedAt));
+    if (!clock || clock.ymd >= today) continue;
+    const moved = edits.some(
+      (edit) =>
+        edit.confirmationId === row.id &&
+        ((edit.dayYmd === clock.ymd && edit.kind === "exclude") ||
+          (edit.dayYmd === today && edit.kind === "include")),
+    );
+    if (moved) continue;
+    const touched =
+      itemIds.includes(row.id) ||
+      touchedToday(row.confirmationEditedAt, bounds.start, bounds.endExclusive) ||
+      touchedToday(row.handedToCarrierAt, bounds.start, bounds.endExclusive);
+    if (!touched) continue;
+    await pinOrderToSaveDay(prisma, row.id, clock.ymd, today);
+  }
+}
+
+function restoreTodayEditsOnce() {
+  const today = cairoTodayYmd();
+  if (restoredTodayYmd === today) return Promise.resolve();
+  if (!restoringToday) {
+    restoringToday = restoreTodayEditsToClosedSheetDay()
+      .then(() => {
+        restoredTodayYmd = cairoTodayYmd();
+      })
+      .finally(() => {
+        restoringToday = null;
+      });
+  }
+  return restoringToday;
+}
+
 async function liveUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
@@ -176,10 +287,10 @@ async function liveUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
         select: SHEET_PICK,
       })
     : [];
-  return [...rows, ...extra]
+  const ids = [...rows, ...extra]
     .filter((row) => onUnifiedSayedSheet(row, dateFrom, dateTo, cutoffs, edits))
-    .sort((a, b) => b.id - a.id)
     .map((row) => row.id);
+  return idsOwnedInsideRange(ids, dateFrom, dateTo);
 }
 
 /** A closed day is snapshotted once. Later saves, edits, and handoffs do not change it. */
@@ -220,6 +331,7 @@ export async function freezePreparedTemimaDay(dayYmd: string) {
 
 export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
+  await restoreTodayEditsOnce();
   await ensureClosedDaysFrozen(dateFrom, dateTo);
   const days = eachSheetDay(dateFrom, dateTo);
   const frozen = await listTemimaFrozenDays(dateFrom, dateTo);
@@ -229,12 +341,12 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
     for (const id of await listTemimaFreezeIds(day)) frozenIds.add(id);
   }
   if (days.length && days.every((day) => frozen.has(day))) {
-    return [...frozenIds].sort((a, b) => b - a);
+    return idsOwnedInsideRange([...frozenIds], dateFrom, dateTo);
   }
   const liveIds = await liveUnifiedSayedSheetIds(dateFrom, dateTo);
   if (!frozen.size) return liveIds;
   const prisma = getPrismaClient();
-  if (!prisma || !liveIds.length) return [...frozenIds].sort((a, b) => b - a);
+  if (!prisma || !liveIds.length) return idsOwnedInsideRange([...frozenIds], dateFrom, dateTo);
   const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
   const rows = await prisma.csOrderConfirmation.findMany({
     where: { id: { in: liveIds } },
@@ -253,7 +365,7 @@ export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string)
       openIds.add(row.id);
     }
   }
-  return [...new Set([...frozenIds, ...openIds])].sort((a, b) => b - a);
+  return idsOwnedInsideRange([...frozenIds, ...openIds], dateFrom, dateTo);
 }
 
 export async function listUnifiedSayedSheet(dateFrom: string, dateTo: string) {
@@ -313,6 +425,49 @@ export async function listVisibleSayedSheet(dateFrom: string, dateTo: string) {
   return listUnifiedSayedSheet(dateFrom, dateTo);
 }
 
+export async function closedPreviousSayedSheetDay(order: {
+  id: number;
+  confirmedAt?: Date | string | null;
+  shippingCompany?: string | null;
+  status?: string | null;
+}) {
+  if (order.shippingCompany !== "sayed_temima") return null;
+  if (order.status && order.status !== "CONFIRMED") return null;
+  const today = cairoTodayYmd();
+  const owners = await listEarliestFreezeDays([order.id]);
+  const frozen = owners.get(order.id);
+  if (frozen && frozen < today) return frozen;
+  const clock = cairoClock(cairoIso(order.confirmedAt));
+  if (!clock || clock.ymd >= today) return null;
+  return clock.ymd;
+}
+
+export async function placeSayedOrderOnChosenDay(
+  confirmationId: number,
+  choice: "previous" | "today",
+  closedDay: string,
+) {
+  const prisma = getPrismaClient();
+  if (!prisma || !/^\d{4}-\d{2}-\d{2}$/.test(closedDay)) return;
+  const today = cairoTodayYmd();
+  if (choice === "previous") {
+    await pinOrderToSaveDay(prisma, confirmationId, closedDay, today);
+    return;
+  }
+  await removeTemimaFreezeExcept(confirmationId, today);
+  await prisma.csTemimaSheetEdit.upsert({
+    where: { dayYmd_confirmationId: { dayYmd: closedDay, confirmationId } },
+    create: { dayYmd: closedDay, confirmationId, kind: "exclude" },
+    update: { kind: "exclude" },
+  });
+  await prisma.csTemimaSheetEdit.upsert({
+    where: { dayYmd_confirmationId: { dayYmd: today, confirmationId } },
+    create: { dayYmd: today, confirmationId, kind: "include" },
+    update: { kind: "include" },
+  });
+  if (await hasTemimaFreezeDay(today)) await addTemimaFreezeIds(today, [confirmationId]);
+}
+
 export async function includeTemimaOrders(dayYmd: string, confirmationIds: number[]) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
@@ -324,20 +479,29 @@ export async function includeTemimaOrders(dayYmd: string, confirmationIds: numbe
     include: { assignedAgent: true, answers: true },
   });
   if (!rows.length) return { ok: false as const, message: "مش موجود في الأوردرات." };
-  for (const row of rows) {
+  const owners = await listEarliestFreezeDays(rows.map((row) => row.id));
+  const allowed = rows.filter((row) => {
+    const owner = owners.get(row.id);
+    return !owner || owner === dayYmd;
+  });
+  if (!allowed.length) {
+    return { ok: false as const, message: "الأوردر على شيت يوم مقفول، وما ينفعش يظهر في يوم تاني." };
+  }
+  for (const row of allowed) {
     await prisma.csTemimaSheetEdit.upsert({
       where: { dayYmd_confirmationId: { dayYmd, confirmationId: row.id } },
       create: { dayYmd, confirmationId: row.id, kind: "include" },
       update: { kind: "include" },
     });
   }
-  if (await hasTemimaFreezeDay(dayYmd)) await addTemimaFreezeIds(dayYmd, rows.map((row) => row.id));
-  const edits = rows.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
+  if (await hasTemimaFreezeDay(dayYmd)) await addTemimaFreezeIds(dayYmd, allowed.map((row) => row.id));
+  const edits = allowed.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
+  const skipped = rows.length - allowed.length;
   return {
     ok: true as const,
     edits,
-    items: rows.map((row) => serializeCsQueueItem(row)),
-    message: `اتضاف ${rows.length}.`,
+    items: allowed.map((row) => serializeCsQueueItem(row)),
+    message: skipped ? `اتضاف ${allowed.length}. والباقي على يوم مقفول.` : `اتضاف ${allowed.length}.`,
   };
 }
 

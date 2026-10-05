@@ -42,6 +42,7 @@ type Body = {
     deliveredToCustomer?: boolean;
     customerFollowUp?: boolean;
   };
+  sheetDayChoice?: "previous" | "today";
 };
 
 export async function PUT(request: Request, context: Context) {
@@ -204,12 +205,20 @@ export async function PUT(request: Request, context: Context) {
     salesOrderNumber: body.salesOrderNumber,
     postCancel: body.postCancel,
     followUp: body.followUp,
+    sheetDayChoice: body.sheetDayChoice,
   });
 
   if (!result.ok) {
+    const needsSheetDayChoice = "needsSheetDayChoice" in result && result.needsSheetDayChoice;
     return NextResponse.json(
-      { message: result.message, missing: result.missing },
-      { status: 400 },
+      {
+        message: result.message,
+        missing: result.missing,
+        needsSheetDayChoice: needsSheetDayChoice || undefined,
+        closedDayYmd: "closedDayYmd" in result ? result.closedDayYmd : undefined,
+        closedDayLabel: "closedDayLabel" in result ? result.closedDayLabel : undefined,
+      },
+      { status: needsSheetDayChoice ? 409 : 400 },
     );
   }
 

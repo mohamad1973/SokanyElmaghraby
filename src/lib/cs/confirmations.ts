@@ -1189,6 +1189,7 @@ export async function saveCsConfirmation(input: {
     deliveredToCustomer?: boolean;
     customerFollowUp?: boolean;
   };
+  sheetDayChoice?: "previous" | "today";
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", missing: [] as string[] };
@@ -1199,6 +1200,44 @@ export async function saveCsConfirmation(input: {
     include: { answers: true },
   });
   if (!row) return { ok: false as const, message: "الطلب غير موجود.", missing: [] };
+
+  const sheetChoice =
+    input.sheetDayChoice === "previous" || input.sheetDayChoice === "today" ? input.sheetDayChoice : null;
+  let closedSheetDay = "";
+  const leavingSheet = Boolean(input.failContact || input.cancelOrder || input.postCancel?.refundPaid);
+  if (
+    !leavingSheet &&
+    row.status === CS_CONFIRMATION_STATUS.CONFIRMED &&
+    row.confirmedAt &&
+    row.shippingCompany === "sayed_temima"
+  ) {
+    const { closedPreviousSayedSheetDay } = await import("@/lib/cs/temima-sheet-edits");
+    const day = await closedPreviousSayedSheetDay({
+      id: row.id,
+      confirmedAt: row.confirmedAt,
+      shippingCompany: row.shippingCompany,
+      status: row.status,
+    });
+    if (day && !sheetChoice) {
+      const { formatSayedSheetHeading } = await import("@/lib/cs/temima-sheet");
+      const label = formatSayedSheetHeading(day);
+      return {
+        ok: false as const,
+        message: `الشيت كان مقفول على الأوردر في ${label}. هل تريد التعديل في اليوم السابق أم إظهاره في اليوم الحالي؟`,
+        missing: [] as string[],
+        needsSheetDayChoice: true as const,
+        closedDayYmd: day,
+        closedDayLabel: label,
+      };
+    }
+    closedSheetDay = day || "";
+  }
+  const savedOrderId = row.id;
+  async function applySheetChoice() {
+    if (!closedSheetDay || !sheetChoice) return;
+    const { placeSayedOrderOnChosenDay } = await import("@/lib/cs/temima-sheet-edits");
+    await placeSayedOrderOnChosenDay(savedOrderId, sheetChoice, closedSheetDay);
+  }
 
   const snap = ((row.customerSnapshot as Record<string, unknown> | null) || {}) as Record<string, unknown>;
   const typed = row as {
@@ -1389,6 +1428,7 @@ export async function saveCsConfirmation(input: {
           bostaShippingFee: Number.isFinite(followFee) ? followFee : null,
           allowCreate: true,
         });
+    if (!post?.refundPaid) await applySheetChoice();
     return {
       ok: true as const,
       status: post?.refundPaid ? CS_CONFIRMATION_STATUS.CANCELLED : CS_CONFIRMATION_STATUS.CONFIRMED,
@@ -1415,6 +1455,7 @@ export async function saveCsConfirmation(input: {
         assignedAgentId: input.agentId,
       } as never,
     });
+    await applySheetChoice();
     return { ok: true as const, status: row.status, missing: [] as string[] };
   }
 
@@ -1536,6 +1577,7 @@ export async function saveCsConfirmation(input: {
     allowCreate: true,
   });
 
+  await applySheetChoice();
   return {
     ok: true as const,
     status: CS_CONFIRMATION_STATUS.CONFIRMED,

@@ -86,6 +86,30 @@ export async function addTemimaFreezeIds(dayYmd: string, confirmationIds: number
   );
 }
 
+export async function listEarliestFreezeDays(confirmationIds: number[]) {
+  const prisma = getPrismaClient();
+  const ids = [...new Set(confirmationIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!prisma || !ids.length) return new Map<number, string>();
+  await ensureTemimaFreezeTables();
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | bigint; dayYmd: string }>>(
+    `SELECT confirmationId, MIN(dayYmd) AS dayYmd FROM CsTemimaSheetFreeze WHERE confirmationId IN (${placeholders}) GROUP BY confirmationId`,
+    ...ids,
+  );
+  return new Map(rows.map((row) => [Number(row.confirmationId), String(row.dayYmd)]));
+}
+
+export async function removeTemimaFreezeExcept(confirmationId: number, keepDay: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0 || !DAY.test(keepDay)) return;
+  await ensureTemimaFreezeTables();
+  await prisma.$executeRawUnsafe(
+    "DELETE FROM CsTemimaSheetFreeze WHERE confirmationId = ? AND dayYmd <> ?",
+    confirmationId,
+    keepDay,
+  );
+}
+
 export async function removeTemimaFreezeId(dayYmd: string, confirmationId: number) {
   const prisma = getPrismaClient();
   if (!prisma || !DAY.test(dayYmd) || !Number.isInteger(confirmationId) || confirmationId <= 0) return;

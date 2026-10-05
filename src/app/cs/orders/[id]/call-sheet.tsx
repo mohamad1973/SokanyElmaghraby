@@ -367,6 +367,12 @@ export function CsCallSheet({
   >([]);
   const [itemBusy, setItemBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sheetDayPrompt, setSheetDayPrompt] = useState<{
+    message: string;
+    finalize: boolean;
+    failContact: boolean;
+    cancelOrder: boolean;
+  } | null>(null);
   const [allowPartialPay, setAllowPartialPay] = useState(() => {
     const amount = Number(initialDepositAmount);
     return Number.isFinite(amount) && amount > 0;
@@ -425,10 +431,16 @@ export function CsCallSheet({
     setAnswers((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
-  async function save(finalize: boolean, failContact = false, cancelOrder = false) {
+  async function save(
+    finalize: boolean,
+    failContact = false,
+    cancelOrder = false,
+    sheetDayChoice?: "previous" | "today",
+  ) {
     if (saving) return;
     setSaving(true);
     setMessage("");
+    if (sheetDayChoice) setSheetDayPrompt(null);
     if (finalize && !failContact && !cancelOrder && !confirmed) {
       if (!lockedShipping) {
         setSaving(false);
@@ -493,11 +505,13 @@ export function CsCallSheet({
             ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
             : undefined,
         followUp: showFollowUp ? fu : undefined,
+        sheetDayChoice,
       }),
     });
     const data = (await res.json()) as {
       message?: string;
       missing?: string[];
+      needsSheetDayChoice?: boolean;
       bostaMessage?: string | null;
       trackingNumber?: string | null;
       bostaStatus?: string | null;
@@ -508,6 +522,16 @@ export function CsCallSheet({
       lastEvent?: string | null;
     };
     setSaving(false);
+
+    if (data.needsSheetDayChoice) {
+      setSheetDayPrompt({
+        message: data.message || "الشيت كان مقفول على الأوردر في يوم سابق.",
+        finalize,
+        failContact,
+        cancelOrder,
+      });
+      return;
+    }
 
     if (!res.ok) {
       setMissing(data.missing || []);
@@ -734,6 +758,43 @@ export function CsCallSheet({
 
   return (
     <div className="flex flex-col gap-3 p-3" dir="rtl">
+      {sheetDayPrompt ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 text-[#14213D] shadow-lg">
+            <p className="text-sm font-extrabold leading-6">{sheetDayPrompt.message}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  void save(sheetDayPrompt.finalize, sheetDayPrompt.failContact, sheetDayPrompt.cancelOrder, "previous")
+                }
+                className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+              >
+                التعديل في اليوم السابق
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  void save(sheetDayPrompt.finalize, sheetDayPrompt.failContact, sheetDayPrompt.cancelOrder, "today")
+                }
+                className="rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black disabled:opacity-60"
+              >
+                إظهاره في اليوم الحالي
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setSheetDayPrompt(null)}
+                className="rounded-xl bg-white px-3 py-2 text-xs font-extrabold text-[#14213D] ring-1 ring-[#E5E5E5] disabled:opacity-60"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <Link href="/cs" className="text-sm font-bold text-[#14213D] underline">
