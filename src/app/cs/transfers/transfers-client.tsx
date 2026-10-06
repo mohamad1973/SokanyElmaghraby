@@ -328,21 +328,33 @@ export function CsTransfersClient() {
 
   async function submitWarehouses(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = new FormData(event.currentTarget);
     setMessage("");
     setWarehouseLoading(true);
-    const res = await fetch("/api/cs/transfers/warehouses", {
-      method: "POST",
-      body: new FormData(event.currentTarget),
-    });
-    const data = (await res.json()) as WarehouseReport & { message?: string };
-    setWarehouseLoading(false);
-    if (!res.ok) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch("/api/cs/transfers/warehouses", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+      });
+      const data = (await res.json().catch(() => null)) as (WarehouseReport & { message?: string }) | null;
+      if (!res.ok || !data) {
+        setWarehouseReport(null);
+        setMessage(data?.message || "تعذر قراءة ملفات المخازن.");
+        return;
+      }
+      setWarehouseReport(data);
+      setMessage(`تم بناء المصفوفة: ${data.rows?.length || 0} صنف أونلاينه عند حد الطلب وفيه كمية في مخزن تاني.`);
+    } catch (error) {
       setWarehouseReport(null);
-      setMessage(data.message || "تعذر قراءة ملفات المخازن.");
-      return;
+      const aborted = error instanceof Error && error.name === "AbortError";
+      setMessage(aborted ? "قراءة الشيت طولت. حدّث الصفحة وحاول تاني." : "تعذر قراءة ملفات المخازن.");
+    } finally {
+      window.clearTimeout(timer);
+      setWarehouseLoading(false);
     }
-    setWarehouseReport(data);
-    setMessage(`تم بناء المصفوفة: ${data.rows?.length || 0} صنف أونلاينه عند حد الطلب وفيه كمية في مخزن تاني.`);
   }
 
   function downloadCsv() {
