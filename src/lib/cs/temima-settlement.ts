@@ -570,6 +570,25 @@ function linePayload(weekId: number, row: TemimaSheetRow) {
   };
 }
 
+export async function markTemimaLarge(confirmationId: number, isLarge: boolean) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  if (!Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: false as const, message: "الأوردر غير موجود." };
+  }
+  await ensureCsTables();
+  const changed = await prisma.csCarrierWeekLine.updateMany({
+    where: {
+      confirmationId,
+      disposition: "collect",
+      week: { carrierCompany: TEMIMA_COMPANY, status: "open" },
+    },
+    data: { isLarge },
+  });
+  if (!changed.count) return { ok: false as const, message: "كبير يتسجل مع تم بنجاح فقط." };
+  return { ok: true as const, isLarge };
+}
+
 function editedLineRows(rows: TemimaSheetRow[]) {
   const byId = new Map<number, TemimaSheetRow>();
   for (const row of rows) {

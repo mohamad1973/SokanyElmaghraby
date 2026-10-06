@@ -278,6 +278,38 @@ export function TemimaSettlementClient({
     setRows((prev) => prev.map((row) => (row.confirmationId === id ? { ...row, ...patch } : row)));
   }
 
+  async function setLarge(row: SheetRow, isLarge: boolean) {
+    if (locked) return;
+    if (row.disposition !== "collect") {
+      setMessage("كبير يتسجل مع تم بنجاح فقط.");
+      return;
+    }
+    const lineKey = row.postponeLineId || 0;
+    setRows((prev) =>
+      prev.map((item) =>
+        item.confirmationId === row.confirmationId && (item.postponeLineId || 0) === lineKey ? { ...item, isLarge } : item,
+      ),
+    );
+    const res = await fetch("/api/cs/settlement/temima", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "large", confirmationId: row.confirmationId, isLarge }),
+    });
+    const data = (await res.json()) as { message?: string };
+    if (!res.ok) {
+      setRows((prev) =>
+        prev.map((item) =>
+          item.confirmationId === row.confirmationId && (item.postponeLineId || 0) === lineKey
+            ? { ...item, isLarge: row.isLarge }
+            : item,
+        ),
+      );
+      setMessage(data.message || "تعذر حفظ كبير.");
+      return;
+    }
+    setMessage(isLarge ? "اتسجل كبير." : "اتشال كبير.");
+  }
+
   async function saveFawryDeposit(row: SheetRow) {
     if (!canEditDeposit || status === "closed" || !row.fawry) return;
     const res = await fetch("/api/cs/settlement/temima", {
@@ -519,13 +551,16 @@ export function TemimaSettlementClient({
                           <option value="postpone">مؤجل</option>
                         </select>
                       </td>
-                      <td className="border border-[#14213D]/15 px-2 py-2">
-                        <input
-                          type="checkbox"
-                          disabled={locked || row.disposition !== "collect"}
-                          checked={row.isLarge}
-                          onChange={(e) => patchRow(row.confirmationId, { isLarge: e.target.checked }, true)}
-                        />
+                      <td className="border border-[#14213D]/15 p-0 text-center">
+                        <label className={`flex min-h-10 items-center justify-center px-2 py-2 ${locked ? "" : "cursor-pointer"}`}>
+                          <input
+                            type="checkbox"
+                            className="size-5 accent-[#FCA311]"
+                            disabled={locked}
+                            checked={row.isLarge}
+                            onChange={(event) => void setLarge(row, event.target.checked)}
+                          />
+                        </label>
                       </td>
                     </tr>
                   ))}

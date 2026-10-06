@@ -5,6 +5,7 @@ import { resolveCsViewer } from "@/lib/cs/confirmations";
 import {
   closeTemimaMonth,
   getTemimaWeekSheet,
+  markTemimaLarge,
   previewTemimaMonth,
   saveTemimaWeek,
   searchTemimaSettlementOrders,
@@ -62,7 +63,8 @@ export async function POST(request: Request) {
   }
 
   let body: {
-    action?: "save" | "close-week" | "close-month" | "fawry-deposit";
+    action?: "save" | "close-week" | "close-month" | "fawry-deposit" | "large";
+    isLarge?: boolean;
     weekStart?: string;
     confirmationId?: number;
     amount?: number | null;
@@ -76,6 +78,12 @@ export async function POST(request: Request) {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ message: "طلب غير صالح." }, { status: 400 });
+  }
+
+  if (body.action === "large") {
+    const saved = await markTemimaLarge(Number(body.confirmationId), Boolean(body.isLarge));
+    if (!saved.ok) return NextResponse.json({ message: saved.message }, { status: 400 });
+    return NextResponse.json(saved);
   }
 
   if (body.action === "fawry-deposit") {
