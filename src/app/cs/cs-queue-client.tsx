@@ -1216,32 +1216,6 @@ export function CsQueueClient({
     setMessage("اتحفظ المسلسل.");
   }
 
-  async function prepareSheetDay() {
-    if (!sheetDay || sheetEditBusy) return;
-    setSheetEditBusy(true);
-    setMessage("");
-    const res = await fetch("/api/cs/temima-sheet-edit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "prepare", dayYmd: sheetDay }),
-    });
-    const data = (await res.json()) as { message?: string; dayYmd?: string; minutes?: number; frozen?: boolean };
-    setSheetEditBusy(false);
-    if (!res.ok || !data.dayYmd || data.minutes == null) {
-      setMessage(data.message || "تعذر تجهيز اليوم.");
-      return;
-    }
-    if (!data.frozen) {
-      setCutoffs((prev) => {
-        const next = prev.filter((row) => row.dayYmd !== data.dayYmd);
-        next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
-        return next;
-      });
-      await loadSayedSheet(applied);
-    }
-    setMessage(data.message || (data.frozen ? "الشيت متجمد من وقت القفل." : "اليوم اتجهز. أضف أوردرات الورق ثم اقفل."));
-  }
-
   async function freezeSheetDay() {
     if (!sheetDay || sheetEditBusy) return;
     setSheetEditBusy(true);
@@ -1608,14 +1582,6 @@ export function CsQueueClient({
               className="h-9 w-9 rounded-xl bg-[#14213D] text-lg font-extrabold text-white"
             >
               +
-            </button>
-            <button
-              type="button"
-              disabled={sheetEditBusy}
-              onClick={() => void prepareSheetDay()}
-              className="h-9 rounded-xl bg-[#14213D] px-3 text-xs font-extrabold text-white disabled:opacity-60"
-            >
-              {sheetEditBusy ? "جاري التحميل" : "تجهيز اليوم"}
             </button>
             <button
               type="button"

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { prepareTemimaDay } from "@/lib/cs/temima-cutoff";
 import { excludeTemimaOrder, freezePreparedTemimaDay, includeTemimaOrders, searchTemimaSheetOrders } from "@/lib/cs/temima-sheet-edits";
 import { setTemimaSheetSerial } from "@/lib/cs/temima-sheet-freeze";
 import { requireCsSession } from "@/lib/session-guards";
@@ -22,10 +21,6 @@ export async function POST(request: Request) {
     serial?: number;
   } | null;
   const dayYmd = String(body?.dayYmd || "");
-  if (body?.action === "prepare") {
-    const result = await prepareTemimaDay(dayYmd);
-    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
-  }
   if (body?.action === "freeze") {
     const result = await freezePreparedTemimaDay(dayYmd);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
