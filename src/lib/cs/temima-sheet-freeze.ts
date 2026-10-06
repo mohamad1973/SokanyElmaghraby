@@ -14,6 +14,7 @@ export async function ensureTemimaFreezeTables() {
     });
   }
   await freezeTablesReady;
+  await ensureTemimaSerialColumn();
 }
 
 async function createTemimaFreezeTables() {
@@ -91,14 +92,58 @@ export async function saveTemimaFreeze(dayYmd: string, confirmationIds: number[]
   await ensureTemimaFreezeTables();
   const ids = [...new Set(confirmationIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (ids.length) {
-    const placeholders = ids.map(() => "(?, ?)").join(", ");
-    const params = ids.flatMap((id) => [dayYmd, id]);
-    await prisma.$executeRawUnsafe(
-      `INSERT IGNORE INTO CsTemimaSheetFreeze (dayYmd, confirmationId) VALUES ${placeholders}`,
-      ...params,
-    );
+    const orders = await prisma.csOrderConfirmation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, wooOrderNumber: true },
+    });
+    const ordered = [...orders].sort((a, b) => wooSerialKey(b.wooOrderNumber) - wooSerialKey(a.wooOrderNumber));
+    if (ordered.length) {
+      const placeholders = ordered.map(() => "(?, ?, ?)").join(", ");
+      const params = ordered.flatMap((row, index) => [dayYmd, row.id, index + 1]);
+      await prisma.$executeRawUnsafe(
+        `INSERT IGNORE INTO CsTemimaSheetFreeze (dayYmd, confirmationId, serial) VALUES ${placeholders}`,
+        ...params,
+      );
+    }
   }
   await prisma.$executeRawUnsafe("INSERT IGNORE INTO CsTemimaSheetFreezeDay (dayYmd) VALUES (?)", dayYmd);
+}
+
+function wooSerialKey(value: string) {
+  return Number(String(value).replace(/\D/g, "")) || 0;
+}
+
+let serialColumnReady: Promise<void> | null = null;
+
+async function ensureTemimaSerialColumn() {
+  if (!serialColumnReady) {
+    serialColumnReady = addTemimaSerialColumn().catch((error) => {
+      serialColumnReady = null;
+      throw error;
+    });
+  }
+  await serialColumnReady;
+}
+
+async function addTemimaSerialColumn() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  try {
+    await prisma.$executeRawUnsafe("ALTER TABLE `CsTemimaSheetFreeze` ADD COLUMN `serial` INT NULL");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate column|already exists|1060/i.test(message)) throw error;
+  }
+}
+
+async function nextTemimaSerial(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return 0;
+  const rows = await prisma.$queryRawUnsafe<Array<{ maxSerial: number | null }>>(
+    "SELECT MAX(serial) AS maxSerial FROM CsTemimaSheetFreeze WHERE dayYmd = ?",
+    dayYmd,
+  );
+  return Number(rows[0]?.maxSerial) || 0;
 }
 
 export async function addTemimaFreezeIds(dayYmd: string, confirmationIds: number[]) {
@@ -107,12 +152,105 @@ export async function addTemimaFreezeIds(dayYmd: string, confirmationIds: number
   const ids = [...new Set(confirmationIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (!ids.length) return;
   await ensureTemimaFreezeTables();
-  const placeholders = ids.map(() => "(?, ?)").join(", ");
-  const params = ids.flatMap((id) => [dayYmd, id]);
-  await prisma.$executeRawUnsafe(
-    `INSERT IGNORE INTO CsTemimaSheetFreeze (dayYmd, confirmationId) VALUES ${placeholders}`,
-    ...params,
+  const existing = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | bigint; serial: number | null }>>(
+    `SELECT confirmationId, serial FROM CsTemimaSheetFreeze WHERE dayYmd = ? AND confirmationId IN (${ids.map(() => "?").join(", ")})`,
+    dayYmd,
+    ...ids,
   );
+  const have = new Map(existing.map((row) => [Number(row.confirmationId), row.serial == null ? null : Number(row.serial)]));
+  let next = await nextTemimaSerial(dayYmd);
+  for (const id of ids) {
+    if (have.get(id) != null) continue;
+    next += 1;
+    if (have.has(id)) {
+      await prisma.$executeRawUnsafe(
+        "UPDATE CsTemimaSheetFreeze SET serial = ? WHERE dayYmd = ? AND confirmationId = ? AND serial IS NULL",
+        next,
+        dayYmd,
+        id,
+      );
+    } else {
+      await prisma.$executeRawUnsafe(
+        "INSERT IGNORE INTO CsTemimaSheetFreeze (dayYmd, confirmationId, serial) VALUES (?, ?, ?)",
+        dayYmd,
+        id,
+        next,
+      );
+    }
+  }
+}
+
+async function fillMissingTemimaSerials(dateFrom: string, dateTo: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const rows = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | bigint; dayYmd: string; serial: number | null }>>(
+    "SELECT confirmationId, dayYmd, serial FROM CsTemimaSheetFreeze WHERE dayYmd >= ? AND dayYmd <= ?",
+    dateFrom,
+    dateTo,
+  );
+  const byDay = new Map<string, Array<{ id: number; serial: number | null }>>();
+  for (const row of rows) {
+    const list = byDay.get(String(row.dayYmd)) || [];
+    list.push({ id: Number(row.confirmationId), serial: row.serial == null ? null : Number(row.serial) });
+    byDay.set(String(row.dayYmd), list);
+  }
+  for (const [day, list] of byDay) {
+    if (!list.length || list.some((row) => row.serial != null)) continue;
+    const orders = await prisma.csOrderConfirmation.findMany({
+      where: { id: { in: list.map((row) => row.id) } },
+      select: { id: true, wooOrderNumber: true },
+    });
+    const ordered = [...orders].sort((a, b) => wooSerialKey(b.wooOrderNumber) - wooSerialKey(a.wooOrderNumber));
+    for (let index = 0; index < ordered.length; index += 1) {
+      await prisma.$executeRawUnsafe(
+        "UPDATE CsTemimaSheetFreeze SET serial = ? WHERE dayYmd = ? AND confirmationId = ? AND serial IS NULL",
+        index + 1,
+        day,
+        ordered[index].id,
+      );
+    }
+  }
+}
+
+export async function listTemimaSheetSerials(dateFrom: string, dateTo: string) {
+  const map = new Map<number, number>();
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dateFrom) || !DAY.test(dateTo)) return map;
+  await ensureTemimaFreezeTables();
+  await fillMissingTemimaSerials(dateFrom, dateTo);
+  const rows = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | bigint; serial: number | null }>>(
+    "SELECT confirmationId, serial FROM CsTemimaSheetFreeze WHERE dayYmd >= ? AND dayYmd <= ? AND serial IS NOT NULL ORDER BY dayYmd ASC",
+    dateFrom,
+    dateTo,
+  );
+  for (const row of rows) {
+    const id = Number(row.confirmationId);
+    if (!map.has(id)) map.set(id, Number(row.serial));
+  }
+  return map;
+}
+
+export async function setTemimaSheetSerial(dayYmd: string, confirmationId: number, serial: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  if (!DAY.test(dayYmd) || !Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: false as const, message: "الأوردر غير موجود." };
+  }
+  if (!Number.isInteger(serial) || serial <= 0 || serial > 9999) {
+    return { ok: false as const, message: "المسلسل غير صحيح." };
+  }
+  await ensureTemimaFreezeTables();
+  if (!(await hasTemimaFreezeDay(dayYmd))) {
+    return { ok: false as const, message: "المسلسل يتثبت بعد قفل الشيت." };
+  }
+  const changed = await prisma.$executeRawUnsafe(
+    "UPDATE CsTemimaSheetFreeze SET serial = ? WHERE dayYmd = ? AND confirmationId = ?",
+    serial,
+    dayYmd,
+    confirmationId,
+  );
+  if (!Number(changed)) return { ok: false as const, message: "الأوردر مش على الشيت المقفول." };
+  return { ok: true as const, serial };
 }
 
 export async function listEarliestFreezeDays(confirmationIds: number[]) {

@@ -74,6 +74,7 @@ export type CsQueueItem = {
   courierOutcome?: string | null;
   courierRefusalReason?: string | null;
   settlementDisposition?: "" | "collect" | "return" | "postpone";
+  sheetSerial?: number | null;
 };
 
 function lineQuantity(quantity: unknown) {
@@ -282,6 +283,10 @@ function applyCourierSupervisorSheet(
       return Math.max(max, parseWooOrderNumber(item.wooOrderNumber));
     }, 0);
     rows = rows.filter((item) => !item.courierAgentId && parseWooOrderNumber(item.wooOrderNumber) > last);
+  }
+  const frozenDay = Boolean(f.dateFrom) && f.dateFrom === f.dateTo && rows.some((row) => row.sheetSerial && row.sheetSerial > 0);
+  if (frozenDay) {
+    return rows.sort((a, b) => (a.sheetSerial || 0) - (b.sheetSerial || 0));
   }
   return rows.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
 }
@@ -1036,7 +1041,9 @@ export function CsQueueClient({
         return;
       }
       const printed = [...(data.items || [])];
-      if (filters.dateFrom && filters.dateFrom === filters.dateTo) {
+      if (filters.dateFrom && filters.dateFrom === filters.dateTo && printed.some((item) => item.sheetSerial && item.sheetSerial > 0)) {
+        printed.sort((a, b) => (a.sheetSerial || 0) - (b.sheetSerial || 0));
+      } else if (filters.dateFrom && filters.dateFrom === filters.dateTo) {
         printed.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
       }
       setSheetPrintRows(printed);
@@ -1075,6 +1082,14 @@ export function CsQueueClient({
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
+  const liveSheetSerial = useMemo(() => {
+    const ordered = [...items].sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+    const map = new Map<number, number>();
+    ordered.forEach((item, index) => {
+      if (!(item.sheetSerial && item.sheetSerial > 0)) map.set(item.id, index + 1);
+    });
+    return map;
+  }, [items]);
   const sheetDayTotal = isCourierSupervisor
     ? filtered.reduce((sum, item) => sum + parseOrderTotal(item.customerSnapshot?.total), 0)
     : 0;
@@ -1180,6 +1195,25 @@ export function CsQueueClient({
     }
     rememberEdits([data.edit]);
     setItems((prev) => prev.filter((item) => item.id !== confirmationId));
+  }
+
+  async function saveSheetSerial(confirmationId: number, serial: number) {
+    if (!sheetDay || sheetEditBusy || !canEditTemimaSheet) return;
+    setSheetEditBusy(true);
+    setMessage("");
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "serial", dayYmd: sheetDay, confirmationId, serial }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setSheetEditBusy(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر حفظ المسلسل.");
+      return;
+    }
+    setItems((prev) => prev.map((item) => (item.id === confirmationId ? { ...item, sheetSerial: serial } : item)));
+    setMessage("اتحفظ المسلسل.");
   }
 
   async function prepareSheetDay() {
@@ -1743,6 +1777,28 @@ export function CsQueueClient({
                     ) : null}
                     <span className="flex items-center gap-2 text-base font-extrabold">
                       #{item.wooOrderNumber}
+                      {isCourierSupervisor ? (
+                        canEditTemimaSheet && sheetDay && item.sheetSerial ? (
+                          <input
+                            key={`${item.id}-${item.sheetSerial}`}
+                            type="number"
+                            min={1}
+                            defaultValue={item.sheetSerial}
+                            aria-label="مسلسل الشيت"
+                            onBlur={(event) => {
+                              const next = Number(event.target.value);
+                              if (!Number.isInteger(next) || next <= 0 || next === item.sheetSerial) return;
+                              void saveSheetSerial(item.id, next);
+                            }}
+                            disabled={sheetEditBusy}
+                            className="h-7 w-14 rounded border border-[#E5E5E5] bg-[#F5F5F0] px-1 text-center text-xs font-extrabold"
+                          />
+                        ) : (
+                          <span className="rounded bg-[#14213D] px-1.5 py-0.5 text-[11px] font-extrabold text-white">
+                            مسلسل {item.sheetSerial && item.sheetSerial > 0 ? item.sheetSerial : liveSheetSerial.get(item.id) || ""}
+                          </span>
+                        )
+                      ) : null}
                       {canEditTemimaSheet && sheetDay ? (
                         <button
                           type="button"
@@ -2018,7 +2074,7 @@ export function CsQueueClient({
                 const money = sheetDepositNet(item);
                 return (
                   <tr key={item.id} className={dup ? dup.colorClass : undefined}>
-                    <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
+                    <td className="border border-black px-1 py-1 text-center">{item.sheetSerial && item.sheetSerial > 0 ? item.sheetSerial : index + 1}</td>
                     <td className="border border-black px-1 py-1">#{item.wooOrderNumber}</td>
                     <td className="border border-black px-1 py-1">{item.customerSnapshot?.customerName}</td>
                     <td className="border border-black px-1 py-1" dir="ltr">

@@ -85,6 +85,11 @@ function netValue(row: SheetRow) {
   return row.disposition === "collect" ? rowRemainder(row) : 0;
 }
 
+function shippingFee(row: SheetRow) {
+  if (row.disposition !== "collect") return 0;
+  return row.isLarge ? 100 : 75;
+}
+
 function orderNumber(row: SheetRow) {
   return Number(String(row.wooOrderNumber).replace(/\D/g, "")) || 0;
 }
@@ -270,6 +275,7 @@ export function TemimaSettlementClient({
   const postponeTotal = useMemo(() => rows.reduce((sum, row) => sum + postponeValue(row), 0), [rows]);
   const refusalTotal = useMemo(() => rows.reduce((sum, row) => sum + refusalValue(row), 0), [rows]);
   const netTotal = useMemo(() => rows.reduce((sum, row) => sum + netValue(row), 0), [rows]);
+  const shippingTotal = useMemo(() => rows.reduce((sum, row) => sum + shippingFee(row), 0), [rows]);
   const cashDue = closedCashDue == null ? netTotal : closedCashDue;
   const locked = !canEdit || status === "closed";
 
@@ -583,7 +589,9 @@ export function TemimaSettlementClient({
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
                       {money(sumOf(block.rows, netValue))}
                     </td>
-                    <td colSpan={2} className="border border-[#14213D]/15 bg-[#F5F5F0]" />
+                    <td colSpan={2} className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums text-[#14213D]">
+                      شحن اليوم {money(sumOf(block.rows, shippingFee))}
+                    </td>
                   </tr>
                 </Fragment>
               ))
@@ -600,7 +608,9 @@ export function TemimaSettlementClient({
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(postponeTotal)}</td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(refusalTotal)}</td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(netTotal)}</td>
-                <td colSpan={2} className="border border-[#14213D] bg-[#14213D]" />
+                <td colSpan={2} className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                  شحن الأسبوع {money(shippingTotal)}
+                </td>
               </tr>
             </tfoot>
           ) : null}
@@ -691,7 +701,7 @@ export function TemimaSettlementClient({
         </div>
         {month ? (
           <p className="text-sm font-bold text-[#14213D]">
-            {month.weeks.length} أسبوع · {month.deliveredOrders} أوردر مسلّم · شحن {money(month.shippingTotal)} ج
+            {month.weeks.length} أسبوع · {month.deliveredOrders} أوردر مسلّم · إجمالي شحن الشهر {money(month.shippingTotal)} ج
           </p>
         ) : null}
       </div>
@@ -765,7 +775,9 @@ export function TemimaSettlementClient({
                   <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, postponeValue))}</td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, refusalValue))}</td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, netValue))}</td>
-                  <td className="border border-black" />
+                  <td className="border border-black px-1 py-1 text-center font-extrabold">
+                    شحن اليوم {money(sumOf(block.rows, shippingFee))}
+                  </td>
                 </tr>
               </Fragment>
             ))}
@@ -779,11 +791,14 @@ export function TemimaSettlementClient({
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(postponeTotal)}</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(refusalTotal)}</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(netTotal)}</td>
-                <td className="border border-black" />
+                <td className="border border-black px-1 py-1 text-center font-extrabold">شحن الأسبوع {money(shippingTotal)}</td>
               </tr>
             </tfoot>
           ) : null}
         </table>
+        {month ? (
+          <p className="mt-2 text-center text-sm font-extrabold">إجمالي شحن الشهر {money(month.shippingTotal)} ج</p>
+        ) : null}
       </div>
 
       <style jsx global>{`

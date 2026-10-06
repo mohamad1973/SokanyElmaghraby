@@ -12,6 +12,7 @@ import {
   listEarliestFreezeDays,
   listTemimaFreezePairs,
   listTemimaFrozenDays,
+  listTemimaSheetSerials,
   removeTemimaFreezeExcept,
   removeTemimaFreezeId,
   saveTemimaFreeze,
@@ -450,9 +451,12 @@ export async function listUnifiedSayedSheet(dateFrom: string, dateTo: string) {
     include: { assignedAgent: true },
   });
   const byId = new Map(rows.map((row) => [row.id, row]));
+  const serials = await listTemimaSheetSerials(dateFrom, dateTo);
   return ids.flatMap((id) => {
     const row = byId.get(id);
-    return row ? [serializeCsQueueItem(row)] : [];
+    if (!row) return [];
+    const serial = serials.get(id);
+    return [{ ...serializeCsQueueItem(row), sheetSerial: serial && serial > 0 ? serial : null }];
   });
 }
 
