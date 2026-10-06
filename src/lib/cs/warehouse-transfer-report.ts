@@ -1,5 +1,3 @@
-import { extractModelFromTitle, extractSkFromTitle } from "@/lib/product-display-code";
-
 export type BalanceRow = {
   code: string;
   name: string;
@@ -16,44 +14,17 @@ export type ParsedBalanceFile = {
 export type CatalogProduct = {
   id: number;
   name: string;
-  sku: string;
-  model: string;
-  threshold: number;
-  systemRecommends: boolean;
 };
 
-export type TransferMatrixRow = {
-  code: string;
-  name: string;
+export type WarehouseBalance = {
   productId: number;
-  onlineQty: number;
-  threshold: number;
-  tenthQty: number;
-  tenthHomeQty: number;
-  systemRecommends: boolean;
+  onlineQty: number | null;
+  tenthQty: number | null;
+  tenthHomeQty: number | null;
 };
 
-export type UnmatchedBalance = {
-  warehouse: string;
-  code: string;
-  name: string;
-  qty: number;
-  reason: string;
-};
-
-const ITEM_CODE_HEADER = "رمزالصنف";
+const ITEM_NAME_HEADER = "اسمالصنف";
 const ACTUAL_QTY_HEADER = "الرصيدالفعلي";
-
-const NAME_HEADERS = new Set([
-  "اسم",
-  "الاسم",
-  "الصنف",
-  "اسمالصنف",
-  "البيان",
-  "description",
-  "name",
-  "الوصف",
-]);
 
 function normHeader(value: string) {
   return value.trim().toLowerCase().replace(/[\s_\-./\\|]+/g, "");
@@ -75,23 +46,15 @@ function parseQty(value: unknown) {
   return Math.max(0, Math.round(amount));
 }
 
-function codeKeys(code: string) {
-  const compact = code.trim().toUpperCase().replace(/[\s_\-]+/g, "");
-  if (!compact) return [];
-  const keys = new Set<string>([compact]);
-  const stripped = compact.replace(/^SK/, "");
-  if (stripped) keys.add(stripped);
-  const fromTitle = extractModelFromTitle(code) || extractSkFromTitle(code);
-  if (fromTitle) keys.add(fromTitle.toUpperCase().replace(/[\s_\-]+/g, ""));
-  const digits = compact.replace(/\D/g, "");
-  if (digits.length >= 3 && digits.length <= 8 && digits.length >= compact.replace(/\D/g, "").length) {
-    keys.add(digits);
-  }
-  return [...keys];
-}
-
-export function sheetCodeKey(code: string) {
-  return code.trim().toUpperCase().replace(/\s+/g, "");
+export function normStockName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\u0640/g, "")
+    .replace(/[\s_\-./\\|]+/g, "");
 }
 
 type CellSpan = { start: number; end: number };
@@ -142,46 +105,32 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
     .map((row) => (Array.isArray(row) ? row : []))
     .filter((row) => row.some((cell) => cellText(cell)));
   let headerIndex = -1;
-  let codeSpan: CellSpan | null = null;
-  let qtySpan: CellSpan | null = null;
   let nameSpan: CellSpan | null = null;
+  let qtySpan: CellSpan | null = null;
   for (let index = 0; index < grid.length; index += 1) {
     const cells = grid[index].map((cell) => cellText(cell));
-    const code = findHeaderSpan(cells, ITEM_CODE_HEADER, new Set());
-    if (!code) continue;
-    const qty = findHeaderSpan(cells, ACTUAL_QTY_HEADER, blockedIndexes([code]));
+    const name = findHeaderSpan(cells, ITEM_NAME_HEADER, new Set());
+    if (!name) continue;
+    const qty = findHeaderSpan(cells, ACTUAL_QTY_HEADER, blockedIndexes([name]));
     if (!qty) continue;
     headerIndex = index;
-    codeSpan = code;
+    nameSpan = name;
     qtySpan = qty;
-    const nameBlocked = blockedIndexes([code, qty]);
-    nameSpan =
-      findHeaderSpan(cells, "اسمالصنف", nameBlocked) ||
-      (() => {
-        const nameIndex = cells.findIndex(
-          (cell, cellIndex) => !nameBlocked.has(cellIndex) && NAME_HEADERS.has(normHeader(cell)),
-        );
-        return nameIndex >= 0 ? { start: nameIndex, end: nameIndex } : null;
-      })();
     break;
   }
-  if (headerIndex < 0 || !codeSpan || !qtySpan) {
+  if (headerIndex < 0 || !nameSpan || !qtySpan) {
     return {
       ok: false,
-      message: "مش لاقي كلمة رمز الصنف أو الرصيد الفعلي في الملف.",
+      message: "مش لاقي كلمة اسم الصنف أو الرصيد الفعلي في الملف.",
     };
   }
   const items: BalanceRow[] = [];
   const zeros: BalanceRow[] = [];
   for (const row of grid.slice(headerIndex + 1)) {
-    const code = spanText(row, codeSpan);
+    const name = spanText(row, nameSpan);
     const qty = parseQty(spanText(row, qtySpan));
-    if (!code || qty == null || normHeader(code).includes(ITEM_CODE_HEADER)) continue;
-    const entry = {
-      code,
-      name: nameSpan ? spanText(row, nameSpan) : "",
-      qty,
-    };
+    if (!name || qty == null || normHeader(name).includes(ITEM_NAME_HEADER)) continue;
+    const entry = { code: name, name, qty };
     if (qty === 0) zeros.push(entry);
     else items.push(entry);
   }
@@ -193,111 +142,51 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
     file: {
       items,
       zeros,
-      codeHeader: spanText(grid[headerIndex], codeSpan),
+      codeHeader: spanText(grid[headerIndex], nameSpan),
       qtyHeader: spanText(grid[headerIndex], qtySpan),
     },
   };
 }
 
-const AMBIGUOUS = Symbol("ambiguous");
-
-function indexProducts(products: CatalogProduct[]) {
-  const map = new Map<string, CatalogProduct | typeof AMBIGUOUS>();
-  const add = (key: string, product: CatalogProduct) => {
-    if (!key) return;
-    const existing = map.get(key);
-    if (!existing) map.set(key, product);
-    else if (existing !== AMBIGUOUS && existing.id !== product.id) map.set(key, AMBIGUOUS);
-  };
-  for (const product of products) {
-    for (const key of [...codeKeys(product.model), ...codeKeys(product.sku), ...codeKeys(product.name)]) {
-      add(key, product);
-    }
-  }
-  return map;
+function matchByName(products: CatalogProduct[], rawName: string) {
+  const key = normStockName(rawName);
+  if (!key) return null;
+  const exact = products.filter((product) => normStockName(product.name) === key);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const partial = products.filter((product) => {
+    const name = normStockName(product.name);
+    const shorter = Math.min(key.length, name.length);
+    if (shorter < 6) return false;
+    return name.includes(key) || key.includes(name);
+  });
+  return partial.length === 1 ? partial[0] : null;
 }
 
-function matchProduct(map: Map<string, CatalogProduct | typeof AMBIGUOUS>, row: BalanceRow) {
-  for (const key of [...codeKeys(row.code), ...codeKeys(row.name)]) {
-    const hit = map.get(key);
-    if (hit && hit !== AMBIGUOUS) return hit;
-  }
-  return null;
-}
-
-function groupBalances(rows: BalanceRow[]) {
-  const grouped = new Map<string, { code: string; name: string; qty: number }>();
-  for (const row of rows) {
-    const key = sheetCodeKey(row.code);
-    if (!key) continue;
-    const current = grouped.get(key);
-    if (!current) {
-      grouped.set(key, { code: row.code.trim(), name: row.name.trim(), qty: row.qty });
-      continue;
-    }
-    current.qty += row.qty;
-    if (!current.name && row.name.trim()) current.name = row.name.trim();
-  }
-  return grouped;
-}
-
-export function buildWarehouseTransferReport(input: {
+export function assignWarehouseBalances(input: {
   products: CatalogProduct[];
   online: BalanceRow[];
-  onlineZeros?: BalanceRow[];
   tenth: BalanceRow[];
   tenthHome: BalanceRow[];
 }) {
-  const index = indexProducts(input.products);
-  const onlineGroups = groupBalances([...(input.online || []), ...(input.onlineZeros || [])]);
-  const onlineKeys = new Set(onlineGroups.keys());
-  const tenthGroups = groupBalances(input.tenth.filter((row) => onlineKeys.has(sheetCodeKey(row.code))));
-  const tenthHomeGroups = groupBalances(input.tenthHome.filter((row) => onlineKeys.has(sheetCodeKey(row.code))));
-  const unmatched: UnmatchedBalance[] = [];
-  const rows: TransferMatrixRow[] = [];
-
-  for (const [key, entry] of onlineGroups) {
-    const product = matchProduct(index, { code: entry.code, name: entry.name, qty: entry.qty });
-    const tenthQty = tenthGroups.get(key)?.qty ?? 0;
-    const tenthHomeQty = tenthHomeGroups.get(key)?.qty ?? 0;
-    if (!product) {
-      unmatched.push({
-        warehouse: "أونلاين",
-        code: entry.code,
-        name: entry.name,
-        qty: entry.qty,
-        reason: "مش مطابق لصنف على الموقع",
-      });
-      continue;
+  const totals = new Map<number, WarehouseBalance>();
+  const ensure = (productId: number) => {
+    const current = totals.get(productId);
+    if (current) return current;
+    const created: WarehouseBalance = { productId, onlineQty: null, tenthQty: null, tenthHomeQty: null };
+    totals.set(productId, created);
+    return created;
+  };
+  const apply = (rows: BalanceRow[], field: "onlineQty" | "tenthQty" | "tenthHomeQty") => {
+    for (const row of rows) {
+      const product = matchByName(input.products, row.name || row.code);
+      if (!product) continue;
+      const bucket = ensure(product.id);
+      bucket[field] = (bucket[field] ?? 0) + row.qty;
     }
-    if (product.threshold <= 0) {
-      unmatched.push({
-        warehouse: "أونلاين",
-        code: entry.code,
-        name: product.name || entry.name,
-        qty: entry.qty,
-        reason: "لم يُحفظ له حد طلب",
-      });
-      continue;
-    }
-    if (entry.qty > product.threshold) continue;
-    if (tenthQty <= 0 && tenthHomeQty <= 0) continue;
-    rows.push({
-      code: entry.code,
-      name: product.name || entry.name,
-      productId: product.id,
-      onlineQty: entry.qty,
-      threshold: product.threshold,
-      tenthQty,
-      tenthHomeQty,
-      systemRecommends: product.systemRecommends,
-    });
-  }
-
-  rows.sort((a, b) => {
-    if (a.systemRecommends !== b.systemRecommends) return a.systemRecommends ? -1 : 1;
-    return a.onlineQty - b.onlineQty || a.name.localeCompare(b.name, "ar");
-  });
-
-  return { rows, unmatched };
+  };
+  apply(input.online, "onlineQty");
+  apply(input.tenth, "tenthQty");
+  apply(input.tenthHome, "tenthHomeQty");
+  return [...totals.values()];
 }

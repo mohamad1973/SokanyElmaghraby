@@ -88,30 +88,16 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "warehouses", label: "تحويل المخازن" },
 ];
 
-type WarehouseRow = {
-  code: string;
-  name: string;
+type WarehouseBalance = {
   productId: number;
-  onlineQty: number;
-  threshold: number;
-  tenthQty: number;
-  tenthHomeQty: number;
-  systemRecommends: boolean;
+  onlineQty: number | null;
+  tenthQty: number | null;
+  tenthHomeQty: number | null;
 };
 
-type WarehouseUnmatched = {
-  warehouse: string;
-  code: string;
-  name: string;
-  qty: number;
-  reason: string;
-};
-
-type WarehouseReport = {
-  columns: { online: string; tenth: string; tenthHome: string };
-  rows: WarehouseRow[];
-  unmatched: WarehouseUnmatched[];
-};
+function warehouseQty(value: number | null | undefined) {
+  return value == null ? "—" : value;
+}
 
 const RETURN_REASONS = [
   "رفض استلام",
@@ -142,7 +128,7 @@ export function CsTransfersClient() {
   const [categoryId, setCategoryId] = useState("");
   const [draftThresholds, setDraftThresholds] = useState<Record<number, string>>({});
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
-  const [warehouseReport, setWarehouseReport] = useState<WarehouseReport | null>(null);
+  const [warehouseBalances, setWarehouseBalances] = useState<WarehouseBalance[]>([]);
   const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [returnForm, setReturnForm] = useState({
     wooOrderNumber: "",
@@ -248,7 +234,11 @@ export function CsTransfersClient() {
     () => visibleProducts.filter((product) => product.isAtOrBelowThreshold).length,
     [visibleProducts],
   );
-  const matrixRows = warehouseReport?.rows || [];
+  const balanceByProduct = useMemo(() => {
+    const map = new Map<number, WarehouseBalance>();
+    for (const row of warehouseBalances) map.set(row.productId, row);
+    return map;
+  }, [warehouseBalances]);
 
   async function saveThreshold(productId: number) {
     const threshold = Number(draftThresholds[productId]);
@@ -339,16 +329,16 @@ export function CsTransfersClient() {
         body: form,
         signal: controller.signal,
       });
-      const data = (await res.json().catch(() => null)) as (WarehouseReport & { message?: string }) | null;
-      if (!res.ok || !data) {
-        setWarehouseReport(null);
+      const data = (await res.json().catch(() => null)) as { balances?: WarehouseBalance[]; message?: string } | null;
+      if (!res.ok || !data?.balances) {
+        setWarehouseBalances([]);
         setMessage(data?.message || "تعذر قراءة ملفات المخازن.");
         return;
       }
-      setWarehouseReport(data);
-      setMessage(`تم بناء المصفوفة: ${data.rows?.length || 0} صنف أونلاينه عند حد الطلب وفيه كمية في مخزن تاني.`);
+      setWarehouseBalances(data.balances);
+      setMessage(`تم تعبئة أعمدة المخازن لـ ${data.balances.length} صنف مطابق بالاسم.`);
     } catch (error) {
-      setWarehouseReport(null);
+      setWarehouseBalances([]);
       const aborted = error instanceof Error && error.name === "AbortError";
       setMessage(aborted ? "قراءة الشيت طولت. حدّث الصفحة وحاول تاني." : "تعذر قراءة ملفات المخازن.");
     } finally {
@@ -876,7 +866,7 @@ export function CsTransfersClient() {
               <input name="tenth" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" required className="text-xs font-bold" />
             </label>
             <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
-              مخزن العاشر المنزلي
+              مخزن منزلي
               <input name="tenthHome" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" required className="text-xs font-bold" />
             </label>
             <button
@@ -884,94 +874,93 @@ export function CsTransfersClient() {
               disabled={warehouseLoading}
               className="self-end rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
             >
-              {warehouseLoading ? "جاري…" : "اعمل التقرير"}
+              {warehouseLoading ? "جاري…" : "املأ الأعمدة"}
             </button>
             <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
-              الملف إكسيل أو PDF. كلمتا رمز الصنف والرصيد الفعلي ممكن يكونوا في أي مكان في الملف، وهم أساس المقارنة. المصفوفة تعرض الصنف لما رصيده في الأونلاين يبلغ حد الطلب وفيه كمية في مخزن تاني، وموظف التحويلات يختار التحويل. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
+              الملف إكسيل أو PDF. من كل شيت يتقرأ اسم الصنف والرصيد الفعلي من أي مكان في الملف. لو الاسم مشابه لاسم المنتج في المخزون، الرصيد ينزل في عمود المخزن. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
             </p>
           </form>
 
-          {warehouseReport ? (
-            <>
-              <p className="text-xs font-bold text-[#14213D]/60">
-                الأعمدة: أونلاين {warehouseReport.columns.online} · العاشر {warehouseReport.columns.tenth} · العاشر منزلي{" "}
-                {warehouseReport.columns.tenthHome}
-              </p>
-              <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
-                    <tr>
-                      <th className="px-3 py-2">رمز الصنف</th>
-                      <th className="px-3 py-2">الصنف</th>
-                      <th className="px-3 py-2">أونلاين</th>
-                      <th className="px-3 py-2">حد الطلب</th>
-                      <th className="px-3 py-2">العاشر</th>
-                      <th className="px-3 py-2">العاشر منزلي</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matrixRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-3 py-8 text-center text-[#14213D]/60">
-                          مفيش صنف أونلاينه عند حد الطلب وفيه كمية في مخزن تاني.
+          <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+            <table className="min-w-full text-sm">
+              <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
+                <tr>
+                  <th className="px-3 py-2">المنتج</th>
+                  <th className="px-3 py-2">مخزن أونلاين</th>
+                  <th className="px-3 py-2">مخزن العاشر</th>
+                  <th className="px-3 py-2">مخزن منزلي</th>
+                  <th className="px-3 py-2">الموديل</th>
+                  <th className="px-3 py-2">الكمية</th>
+                  <th className="px-3 py-2">حد الطلب</th>
+                  <th className="px-3 py-2">الحالة</th>
+                  <th className="px-3 py-2">حفظ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-[#14213D]/60">
+                      {loading ? "جاري التحميل…" : "لا توجد أصناف مطابقة."}
+                    </td>
+                  </tr>
+                ) : (
+                  visibleProducts.map((p) => {
+                    const balance = balanceByProduct.get(p.id);
+                    return (
+                      <tr
+                        key={p.id}
+                        className={`border-t border-[#E5E5E5] ${p.isAtOrBelowThreshold ? "bg-amber-50" : ""}`}
+                      >
+                        <td className="px-3 py-2 font-bold">
+                          <div>{p.name}</div>
+                          <div className="text-[11px] font-normal text-[#14213D]/50" dir="ltr">
+                            {p.sku}
+                          </div>
                         </td>
-                      </tr>
-                    ) : (
-                      matrixRows.map((row) => (
-                        <tr
-                          key={`${row.productId}-${row.code}`}
-                          className={`border-t border-[#E5E5E5] ${row.systemRecommends ? "bg-amber-50" : ""}`}
-                        >
-                          <td className="px-3 py-2 font-bold" dir="ltr">
-                            {row.code}
-                          </td>
-                          <td className="px-3 py-2 font-bold">
-                            {row.name}
-                            {row.systemRecommends ? (
-                              <span className="mr-2 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] text-black">
-                                توصية النظام
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2 font-extrabold">{row.onlineQty}</td>
-                          <td className="px-3 py-2">{row.threshold}</td>
-                          <td className="px-3 py-2">{row.tenthQty}</td>
-                          <td className="px-3 py-2">{row.tenthHomeQty}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
-                <p className="px-3 py-2 text-sm font-extrabold text-[#14213D]">لم تُطابق ({warehouseReport.unmatched.length})</p>
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
-                    <tr>
-                      <th className="px-3 py-2">المخزن</th>
-                      <th className="px-3 py-2">الكود</th>
-                      <th className="px-3 py-2">الاسم</th>
-                      <th className="px-3 py-2">الرصيد</th>
-                      <th className="px-3 py-2">السبب</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {warehouseReport.unmatched.slice(0, 80).map((row, index) => (
-                      <tr key={`${row.warehouse}-${row.code}-${index}`} className="border-t border-[#E5E5E5]">
-                        <td className="px-3 py-2">{row.warehouse}</td>
+                        <td className="px-3 py-2 font-extrabold">{warehouseQty(balance?.onlineQty)}</td>
+                        <td className="px-3 py-2 font-extrabold">{warehouseQty(balance?.tenthQty)}</td>
+                        <td className="px-3 py-2 font-extrabold">{warehouseQty(balance?.tenthHomeQty)}</td>
                         <td className="px-3 py-2 font-bold" dir="ltr">
-                          {row.code}
+                          {p.model}
                         </td>
-                        <td className="px-3 py-2">{row.name || "—"}</td>
-                        <td className="px-3 py-2">{row.qty}</td>
-                        <td className="px-3 py-2">{row.reason}</td>
+                        <td className="px-3 py-2 font-extrabold">{p.stockQuantity}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min={0}
+                            value={draftThresholds[p.id] ?? String(p.threshold)}
+                            onChange={(e) =>
+                              setDraftThresholds((prev) => ({ ...prev, [p.id]: e.target.value }))
+                            }
+                            className="w-20 rounded-lg border border-[#E5E5E5] px-2 py-1 text-center font-bold"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          {p.isAtOrBelowThreshold ? (
+                            <span className="rounded bg-amber-500 px-2 py-0.5 text-[11px] font-extrabold text-black">
+                              تحت الحد
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[#14213D]/55">طبيعي</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            disabled={savingId === p.id}
+                            onClick={() => void saveThreshold(p.id)}
+                            className="rounded-lg bg-[#14213D] px-2 py-1 text-xs font-bold text-white disabled:opacity-60"
+                          >
+                            {savingId === p.id ? "…" : "حفظ"}
+                          </button>
+                        </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : null}
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </>
       ) : null}
     </div>

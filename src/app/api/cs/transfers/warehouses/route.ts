@@ -3,9 +3,8 @@ import * as XLSX from "xlsx";
 
 import { canAccessTransfers } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { getTransfersAnalytics } from "@/lib/cs/transfers-analytics";
 import { rowsFromPdf } from "@/lib/cs/pdf-balance-grid";
-import { parseBalanceGrid, buildWarehouseTransferReport } from "@/lib/cs/warehouse-transfer-report";
+import { assignWarehouseBalances, parseBalanceGrid } from "@/lib/cs/warehouse-transfer-report";
 import { getReorderProducts } from "@/lib/reorder-report";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -76,37 +75,15 @@ export async function POST(request: Request) {
 
   try {
     const stock = await getReorderProducts({ bypassCache: true });
-    let recommended = new Set<number>();
-    try {
-      const analytics = await getTransfersAnalytics();
-      recommended = new Set(analytics.orderMore.map((row) => row.productId));
-    } catch {
-      recommended = new Set();
-    }
-    const report = buildWarehouseTransferReport({
-      products: stock.products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        sku: product.sku,
-        model: product.model,
-        threshold: product.threshold,
-        systemRecommends: recommended.has(product.id) || product.isAtOrBelowThreshold,
-      })),
-      online: onlineFile.items,
-      onlineZeros: onlineFile.zeros,
-      tenth: tenthFile.items,
-      tenthHome: tenthHomeFile.items,
+    const balances = assignWarehouseBalances({
+      products: stock.products.map((product) => ({ id: product.id, name: product.name })),
+      online: [...onlineFile.items, ...onlineFile.zeros],
+      tenth: [...tenthFile.items, ...tenthFile.zeros],
+      tenthHome: [...tenthHomeFile.items, ...tenthHomeFile.zeros],
     });
-    return NextResponse.json({
-      columns: {
-        online: `${onlineFile.codeHeader} / ${onlineFile.qtyHeader}`,
-        tenth: `${tenthFile.codeHeader} / ${tenthFile.qtyHeader}`,
-        tenthHome: `${tenthHomeFile.codeHeader} / ${tenthHomeFile.qtyHeader}`,
-      },
-      ...report,
-    });
+    return NextResponse.json({ balances });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "تعذر بناء تقرير التحويل.";
+    const message = error instanceof Error ? error.message : "تعذر قراءة أرصدة المخازن.";
     return NextResponse.json({ message }, { status: 502 });
   }
 }

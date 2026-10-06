@@ -1,11 +1,11 @@
 import { extractTextItems, type StructuredTextItem } from "unpdf";
 
 const EMPTY_PDF_MESSAGE = "الشيت PDF مش فيه نص مقروء. ارفع شيت مُصدَّر، مش صورة.";
-const CODE_HEADER = "رمزالصنف";
 const QTY_HEADER = "الرصيدالفعلي";
 const NAME_HEADER = "اسمالصنف";
+const CODE_HEADER = "رمزالصنف";
 
-const OUTPUT_HEADER = ["اسم الصنف", "رمز الصنف", "الرصيد الفعلي"];
+const OUTPUT_HEADER = ["اسم الصنف", "الرصيد الفعلي"];
 
 export async function rowsFromPdf(data: Uint8Array): Promise<string[][]> {
   let pages: StructuredTextItem[][];
@@ -72,9 +72,9 @@ export function rowsFromTextPages(pages: StructuredTextItem[][]) {
 }
 
 type ColumnAnchors = {
-  code: { x0: number; x1: number };
+  name: { x0: number; x1: number };
   qty: { x0: number; x1: number };
-  name: { x0: number; x1: number } | null;
+  ignore: Array<{ x0: number; x1: number }>;
 };
 
 function normPhrase(value: string) {
@@ -83,13 +83,13 @@ function normPhrase(value: string) {
 
 function anchorsFromLine(line: StructuredTextItem[]): ColumnAnchors | null {
   const ordered = [...line].sort((a, b) => a.x - b.x);
-  const code = findPhrase(ordered, CODE_HEADER);
-  if (!code) return null;
-  const blocked = new Set(code.indexes);
+  const name = findPhrase(ordered, NAME_HEADER);
+  if (!name) return null;
+  const blocked = new Set(name.indexes);
   const qty = findPhrase(ordered, QTY_HEADER, blocked);
   if (!qty) return null;
-  const name = findPhrase(ordered, NAME_HEADER, new Set([...blocked, ...qty.indexes]));
-  return { code: code.box, qty: qty.box, name: name?.box ?? null };
+  const code = findPhrase(ordered, CODE_HEADER, new Set([...blocked, ...qty.indexes]));
+  return { name: name.box, qty: qty.box, ignore: code ? [code.box] : [] };
 }
 
 function findPhrase(items: StructuredTextItem[], target: string, blocked = new Set<number>()) {
@@ -125,17 +125,17 @@ function findPhrase(items: StructuredTextItem[], target: string, blocked = new S
 }
 
 function rowFromLine(line: StructuredTextItem[], anchors: ColumnAnchors) {
-  const cells = ["", "", ""];
+  const cells = ["", ""];
   const columns = [
-    { slot: 1, box: anchors.code },
-    { slot: 2, box: anchors.qty },
-    ...(anchors.name ? [{ slot: 0, box: anchors.name }] : []),
+    { slot: 0, box: anchors.name },
+    { slot: 1, box: anchors.qty },
+    ...anchors.ignore.map((box) => ({ slot: -1, box })),
   ];
   for (const item of [...line].sort((a, b) => a.x - b.x)) {
     const text = item.str.trim();
     if (!text) continue;
     const slot = nearestColumn(item, columns);
-    if (slot == null) continue;
+    if (slot == null || slot < 0) continue;
     cells[slot] = cells[slot] ? `${cells[slot]} ${text}` : text;
   }
   return cells;
@@ -164,11 +164,11 @@ function nearestColumn(
 }
 
 function hasBalance(row: string[]) {
-  return Boolean(row[1].trim()) && leadingNumber(row[2]) != null;
+  return Boolean(row[0].trim()) && leadingNumber(row[1]) != null;
 }
 
 function isHeaderRow(row: string[]) {
-  return normPhrase(row[1]).includes(CODE_HEADER) || normPhrase(row[2]).includes(QTY_HEADER);
+  return normPhrase(row[0]).includes(NAME_HEADER) || normPhrase(row[1]).includes(QTY_HEADER);
 }
 
 function leadingNumber(value: string) {
