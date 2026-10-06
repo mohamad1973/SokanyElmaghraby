@@ -92,42 +92,92 @@ export function sheetCodeKey(code: string) {
   return code.trim().toUpperCase().replace(/\s+/g, "");
 }
 
+type CellSpan = { start: number; end: number };
+
+function findHeaderSpan(cells: string[], target: string, blocked: Set<number>) {
+  const candidates: Array<CellSpan & { rank: number }> = [];
+  for (let width = 1; width <= 2; width += 1) {
+    for (let start = 0; start <= cells.length - width; start += 1) {
+      const end = start + width - 1;
+      if (Array.from({ length: width }, (_, offset) => start + offset).some((index) => blocked.has(index))) continue;
+      const slice = cells.slice(start, start + width);
+      if (slice.every((part) => !normHeader(part))) continue;
+      const forward = normHeader(slice.join(""));
+      const backward = normHeader([...slice].reverse().join(""));
+      let rank = 0;
+      if (forward === target) rank = 4;
+      else if (width === 2 && backward === target) rank = 3;
+      else if (forward.includes(target)) rank = 2;
+      else if (width === 2 && backward.includes(target)) rank = 1;
+      else continue;
+      candidates.push({ start, end, rank });
+    }
+  }
+  candidates.sort(
+    (a, b) => b.rank - a.rank || a.end - a.start - (b.end - b.start) || a.start - b.start,
+  );
+  const found = candidates[0];
+  return found ? { start: found.start, end: found.end } : null;
+}
+
+function spanText(row: unknown[], span: CellSpan) {
+  return Array.from({ length: span.end - span.start + 1 }, (_, offset) => cellText(row[span.start + offset]))
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+}
+
+function blockedIndexes(spans: CellSpan[]) {
+  const blocked = new Set<number>();
+  for (const span of spans) {
+    for (let index = span.start; index <= span.end; index += 1) blocked.add(index);
+  }
+  return blocked;
+}
+
 export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBalanceFile } | { ok: false; message: string } {
   const grid = rows
     .map((row) => (Array.isArray(row) ? row : []))
     .filter((row) => row.some((cell) => cellText(cell)));
   let headerIndex = -1;
-  let codeIndex = -1;
-  let qtyIndex = -1;
-  let nameIndex = -1;
-  const scanLimit = Math.min(grid.length, 15);
-  for (let index = 0; index < scanLimit; index += 1) {
-    const cells = grid[index].map((cell) => normHeader(cellText(cell)));
-    const code = cells.findIndex((cell) => cell === ITEM_CODE_HEADER);
-    const qty = cells.findIndex((cell) => cell === ACTUAL_QTY_HEADER);
-    if (code >= 0 && qty >= 0) {
-      headerIndex = index;
-      codeIndex = code;
-      qtyIndex = qty;
-      nameIndex = cells.findIndex((cell) => NAME_HEADERS.has(cell));
-      break;
-    }
+  let codeSpan: CellSpan | null = null;
+  let qtySpan: CellSpan | null = null;
+  let nameSpan: CellSpan | null = null;
+  for (let index = 0; index < grid.length; index += 1) {
+    const cells = grid[index].map((cell) => cellText(cell));
+    const code = findHeaderSpan(cells, ITEM_CODE_HEADER, new Set());
+    if (!code) continue;
+    const qty = findHeaderSpan(cells, ACTUAL_QTY_HEADER, blockedIndexes([code]));
+    if (!qty) continue;
+    headerIndex = index;
+    codeSpan = code;
+    qtySpan = qty;
+    const nameBlocked = blockedIndexes([code, qty]);
+    nameSpan =
+      findHeaderSpan(cells, "اسمالصنف", nameBlocked) ||
+      (() => {
+        const nameIndex = cells.findIndex(
+          (cell, cellIndex) => !nameBlocked.has(cellIndex) && NAME_HEADERS.has(normHeader(cell)),
+        );
+        return nameIndex >= 0 ? { start: nameIndex, end: nameIndex } : null;
+      })();
+    break;
   }
-  if (headerIndex < 0) {
+  if (headerIndex < 0 || !codeSpan || !qtySpan) {
     return {
       ok: false,
-      message: "مش لاقي عمود رمز الصنف، أو عمود الرصيد الفعلي، في أول صفوف الملف.",
+      message: "مش لاقي كلمة رمز الصنف أو الرصيد الفعلي في الملف.",
     };
   }
   const items: BalanceRow[] = [];
   const zeros: BalanceRow[] = [];
   for (const row of grid.slice(headerIndex + 1)) {
-    const code = cellText(row[codeIndex]);
-    const qty = parseQty(row[qtyIndex]);
-    if (!code || qty == null) continue;
+    const code = spanText(row, codeSpan);
+    const qty = parseQty(spanText(row, qtySpan));
+    if (!code || qty == null || normHeader(code).includes(ITEM_CODE_HEADER)) continue;
     const entry = {
       code,
-      name: nameIndex >= 0 ? cellText(row[nameIndex]) : "",
+      name: nameSpan ? spanText(row, nameSpan) : "",
       qty,
     };
     if (qty === 0) zeros.push(entry);
@@ -141,8 +191,8 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
     file: {
       items,
       zeros,
-      codeHeader: cellText(grid[headerIndex][codeIndex]),
-      qtyHeader: cellText(grid[headerIndex][qtyIndex]),
+      codeHeader: spanText(grid[headerIndex], codeSpan),
+      qtyHeader: spanText(grid[headerIndex], qtySpan),
     },
   };
 }
