@@ -22,17 +22,14 @@ export type CatalogProduct = {
   systemRecommends: boolean;
 };
 
-export type TransferSuggestion = {
-  productId: number;
+export type TransferMatrixRow = {
+  code: string;
   name: string;
-  model: string;
-  sku: string;
+  productId: number;
   onlineQty: number;
   threshold: number;
   tenthQty: number;
   tenthHomeQty: number;
-  suggestedQty: number;
-  source: "العاشر" | "العاشر منزلي";
   systemRecommends: boolean;
 };
 
@@ -44,34 +41,8 @@ export type UnmatchedBalance = {
   reason: string;
 };
 
-const CODE_HEADERS = new Set([
-  "موديل",
-  "الموديل",
-  "كود",
-  "الكود",
-  "كودالصنف",
-  "كودالموديل",
-  "sku",
-  "model",
-  "itemcode",
-  "code",
-  "barcode",
-  "الباركود",
-]);
-
-const QTY_HEADERS = new Set([
-  "رصيد",
-  "الرصيد",
-  "كمية",
-  "الكمية",
-  "qty",
-  "quantity",
-  "balance",
-  "المخزون",
-  "العدد",
-  "onhand",
-  "المتاح",
-]);
+const ITEM_CODE_HEADER = "رمزالصنف";
+const ACTUAL_QTY_HEADER = "الرصيدالفعلي";
 
 const NAME_HEADERS = new Set([
   "اسم",
@@ -117,6 +88,10 @@ function codeKeys(code: string) {
   return [...keys];
 }
 
+export function sheetCodeKey(code: string) {
+  return code.trim().toUpperCase().replace(/\s+/g, "");
+}
+
 export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBalanceFile } | { ok: false; message: string } {
   const grid = rows
     .map((row) => (Array.isArray(row) ? row : []))
@@ -128,8 +103,8 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
   const scanLimit = Math.min(grid.length, 15);
   for (let index = 0; index < scanLimit; index += 1) {
     const cells = grid[index].map((cell) => normHeader(cellText(cell)));
-    const code = cells.findIndex((cell) => CODE_HEADERS.has(cell));
-    const qty = cells.findIndex((cell) => QTY_HEADERS.has(cell));
+    const code = cells.findIndex((cell) => cell === ITEM_CODE_HEADER);
+    const qty = cells.findIndex((cell) => cell === ACTUAL_QTY_HEADER);
     if (code >= 0 && qty >= 0) {
       headerIndex = index;
       codeIndex = code;
@@ -141,7 +116,7 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
   if (headerIndex < 0) {
     return {
       ok: false,
-      message: "مش لاقي عمود الموديل أو الكود، وعمود الرصيد، في أول صفوف الملف.",
+      message: "مش لاقي عمود رمز الصنف، أو عمود الرصيد الفعلي، في أول صفوف الملف.",
     };
   }
   const items: BalanceRow[] = [];
@@ -172,13 +147,6 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
   };
 }
 
-type ProductBucket = {
-  product: CatalogProduct;
-  onlineQty: number | null;
-  tenthQty: number;
-  tenthHomeQty: number;
-};
-
 const AMBIGUOUS = Symbol("ambiguous");
 
 function indexProducts(products: CatalogProduct[]) {
@@ -205,6 +173,22 @@ function matchProduct(map: Map<string, CatalogProduct | typeof AMBIGUOUS>, row: 
   return null;
 }
 
+function groupBalances(rows: BalanceRow[]) {
+  const grouped = new Map<string, { code: string; name: string; qty: number }>();
+  for (const row of rows) {
+    const key = sheetCodeKey(row.code);
+    if (!key) continue;
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, { code: row.code.trim(), name: row.name.trim(), qty: row.qty });
+      continue;
+    }
+    current.qty += row.qty;
+    if (!current.name && row.name.trim()) current.name = row.name.trim();
+  }
+  return grouped;
+}
+
 export function buildWarehouseTransferReport(input: {
   products: CatalogProduct[];
   online: BalanceRow[];
@@ -213,97 +197,55 @@ export function buildWarehouseTransferReport(input: {
   tenthHome: BalanceRow[];
 }) {
   const index = indexProducts(input.products);
-  const buckets = new Map<number, ProductBucket>();
+  const onlineGroups = groupBalances([...(input.online || []), ...(input.onlineZeros || [])]);
+  const onlineKeys = new Set(onlineGroups.keys());
+  const tenthGroups = groupBalances(input.tenth.filter((row) => onlineKeys.has(sheetCodeKey(row.code))));
+  const tenthHomeGroups = groupBalances(input.tenthHome.filter((row) => onlineKeys.has(sheetCodeKey(row.code))));
   const unmatched: UnmatchedBalance[] = [];
-  const ensure = (product: CatalogProduct) => {
-    const current = buckets.get(product.id);
-    if (current) return current;
-    const created: ProductBucket = { product, onlineQty: null, tenthQty: 0, tenthHomeQty: 0 };
-    buckets.set(product.id, created);
-    return created;
-  };
+  const rows: TransferMatrixRow[] = [];
 
-  const consume = (warehouse: string, rows: BalanceRow[], apply: (bucket: ProductBucket, row: BalanceRow) => void) => {
-    for (const row of rows) {
-      const product = matchProduct(index, row);
-      if (!product) {
-        unmatched.push({
-          warehouse,
-          code: row.code,
-          name: row.name,
-          qty: row.qty,
-          reason: "مش مطابق لصنف على الموقع",
-        });
-        continue;
-      }
-      apply(ensure(product), row);
-    }
-  };
-
-  consume("أونلاين", input.online, (bucket, row) => {
-    bucket.onlineQty = (bucket.onlineQty ?? 0) + row.qty;
-  });
-  for (const row of input.onlineZeros || []) {
-    const product = matchProduct(index, row);
-    if (!product) continue;
-    const bucket = ensure(product);
-    if (bucket.onlineQty == null) bucket.onlineQty = 0;
-  }
-  consume("العاشر", input.tenth, (bucket, row) => {
-    bucket.tenthQty += row.qty;
-  });
-  consume("العاشر منزلي", input.tenthHome, (bucket, row) => {
-    bucket.tenthHomeQty += row.qty;
-  });
-
-  const suggestions: TransferSuggestion[] = [];
-  for (const bucket of buckets.values()) {
-    const { product } = bucket;
-    if (product.threshold <= 0) {
-      const qty = bucket.onlineQty ?? 0;
-      if (qty <= 0 && bucket.tenthQty <= 0 && bucket.tenthHomeQty <= 0) continue;
+  for (const [key, entry] of onlineGroups) {
+    const product = matchProduct(index, { code: entry.code, name: entry.name, qty: entry.qty });
+    const tenthQty = tenthGroups.get(key)?.qty ?? 0;
+    const tenthHomeQty = tenthHomeGroups.get(key)?.qty ?? 0;
+    if (!product) {
       unmatched.push({
         warehouse: "أونلاين",
-        code: product.model || product.sku,
-        name: product.name,
-        qty: qty || bucket.tenthQty || bucket.tenthHomeQty,
+        code: entry.code,
+        name: entry.name,
+        qty: entry.qty,
+        reason: "مش مطابق لصنف على الموقع",
+      });
+      continue;
+    }
+    if (product.threshold <= 0) {
+      unmatched.push({
+        warehouse: "أونلاين",
+        code: entry.code,
+        name: product.name || entry.name,
+        qty: entry.qty,
         reason: "لم يُحفظ له حد طلب",
       });
       continue;
     }
-    if (bucket.onlineQty == null) {
-      unmatched.push({
-        warehouse: "أونلاين",
-        code: product.model || product.sku,
-        name: product.name,
-        qty: 0,
-        reason: "مش موجود في ملف الأونلاين",
-      });
-      continue;
-    }
-    if (bucket.onlineQty > product.threshold) continue;
-    if (bucket.tenthQty <= 0 && bucket.tenthHomeQty <= 0) continue;
-    const source = bucket.tenthQty >= bucket.tenthHomeQty ? "العاشر" : "العاشر منزلي";
-    const sourceQty = source === "العاشر" ? bucket.tenthQty : bucket.tenthHomeQty;
-    suggestions.push({
+    if (entry.qty > product.threshold) continue;
+    if (tenthQty <= 0 && tenthHomeQty <= 0) continue;
+    rows.push({
+      code: entry.code,
+      name: product.name || entry.name,
       productId: product.id,
-      name: product.name,
-      model: product.model,
-      sku: product.sku,
-      onlineQty: bucket.onlineQty,
+      onlineQty: entry.qty,
       threshold: product.threshold,
-      tenthQty: bucket.tenthQty,
-      tenthHomeQty: bucket.tenthHomeQty,
-      suggestedQty: Math.min(Math.max(0, product.threshold - bucket.onlineQty), sourceQty),
-      source,
+      tenthQty,
+      tenthHomeQty,
       systemRecommends: product.systemRecommends,
     });
   }
 
-  suggestions.sort((a, b) => {
+  rows.sort((a, b) => {
     if (a.systemRecommends !== b.systemRecommends) return a.systemRecommends ? -1 : 1;
-    return b.suggestedQty - a.suggestedQty || a.name.localeCompare(b.name, "ar");
+    return a.onlineQty - b.onlineQty || a.name.localeCompare(b.name, "ar");
   });
 
-  return { suggestions, unmatched };
+  return { rows, unmatched };
 }

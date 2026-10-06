@@ -88,17 +88,14 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "warehouses", label: "تحويل المخازن" },
 ];
 
-type WarehouseSuggestion = {
-  productId: number;
+type WarehouseRow = {
+  code: string;
   name: string;
-  model: string;
-  sku: string;
+  productId: number;
   onlineQty: number;
   threshold: number;
   tenthQty: number;
   tenthHomeQty: number;
-  suggestedQty: number;
-  source: string;
   systemRecommends: boolean;
 };
 
@@ -112,7 +109,7 @@ type WarehouseUnmatched = {
 
 type WarehouseReport = {
   columns: { online: string; tenth: string; tenthHome: string };
-  suggestions: WarehouseSuggestion[];
+  rows: WarehouseRow[];
   unmatched: WarehouseUnmatched[];
 };
 
@@ -251,13 +248,7 @@ export function CsTransfersClient() {
     () => visibleProducts.filter((product) => product.isAtOrBelowThreshold).length,
     [visibleProducts],
   );
-  const visibleSuggestions = useMemo(
-    () =>
-      hideZero
-        ? (warehouseReport?.suggestions || []).filter((row) => row.onlineQty > 0)
-        : warehouseReport?.suggestions || [],
-    [warehouseReport, hideZero],
-  );
+  const matrixRows = warehouseReport?.rows || [];
 
   async function saveThreshold(productId: number) {
     const threshold = Number(draftThresholds[productId]);
@@ -351,7 +342,7 @@ export function CsTransfersClient() {
       return;
     }
     setWarehouseReport(data);
-    setMessage(`تم بناء التقرير: ${data.suggestions?.length || 0} صنف يمكن تحويله.`);
+    setMessage(`تم بناء المصفوفة: ${data.rows?.length || 0} صنف أونلاينه عند حد الطلب وفيه كمية في مخزن تاني.`);
   }
 
   function downloadCsv() {
@@ -883,17 +874,8 @@ export function CsTransfersClient() {
             >
               {warehouseLoading ? "جاري…" : "اعمل التقرير"}
             </button>
-            <label className="flex items-center gap-2 text-sm font-bold text-[#14213D] md:col-span-4">
-              <input
-                type="checkbox"
-                checked={hideZero}
-                onChange={(e) => setHideZero(e.target.checked)}
-                className="accent-[#FCA311]"
-              />
-              إخفاء الكمية صفر، بما فيها مخزن الأونلاين
-            </label>
             <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
-              الملف إكسيل أو PDF، وفيه عمود موديل أو كود، وعمود رصيد. الشيت PDF لازم يكون مُصدَّر بنص مش صورة. الصنف يظهر لما رصيد الأونلاين يوصل حد الطلب وفي العاشر أو العاشر المنزلي كمية. شيل العلامة عشان تشوف أصناف الأونلاين الصفرية.
+              الملف إكسيل أو PDF، وفيه عمود رمز الصنف وعمود الرصيد الفعلي. الأساس رمز الصنف في مخزن الأونلاين. المصفوفة تعرض الصنف لما رصيده في الأونلاين يبلغ حد الطلب وفيه كمية في مخزن تاني، وموظف التحويلات يختار التحويل. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
             </p>
           </form>
 
@@ -907,29 +889,30 @@ export function CsTransfersClient() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
                     <tr>
+                      <th className="px-3 py-2">رمز الصنف</th>
                       <th className="px-3 py-2">الصنف</th>
-                      <th className="px-3 py-2">الموديل</th>
                       <th className="px-3 py-2">أونلاين</th>
                       <th className="px-3 py-2">حد الطلب</th>
                       <th className="px-3 py-2">العاشر</th>
                       <th className="px-3 py-2">العاشر منزلي</th>
-                      <th className="px-3 py-2">المقترح</th>
-                      <th className="px-3 py-2">من</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleSuggestions.length === 0 ? (
+                    {matrixRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-8 text-center text-[#14213D]/60">
-                          مفيش صنف أونلاينه عند الحد ومصدره فيه كمية.
+                        <td colSpan={6} className="px-3 py-8 text-center text-[#14213D]/60">
+                          مفيش صنف أونلاينه عند حد الطلب وفيه كمية في مخزن تاني.
                         </td>
                       </tr>
                     ) : (
-                      visibleSuggestions.map((row) => (
+                      matrixRows.map((row) => (
                         <tr
-                          key={row.productId}
+                          key={`${row.productId}-${row.code}`}
                           className={`border-t border-[#E5E5E5] ${row.systemRecommends ? "bg-amber-50" : ""}`}
                         >
+                          <td className="px-3 py-2 font-bold" dir="ltr">
+                            {row.code}
+                          </td>
                           <td className="px-3 py-2 font-bold">
                             {row.name}
                             {row.systemRecommends ? (
@@ -938,15 +921,10 @@ export function CsTransfersClient() {
                               </span>
                             ) : null}
                           </td>
-                          <td className="px-3 py-2 font-bold" dir="ltr">
-                            {row.model}
-                          </td>
                           <td className="px-3 py-2 font-extrabold">{row.onlineQty}</td>
                           <td className="px-3 py-2">{row.threshold}</td>
                           <td className="px-3 py-2">{row.tenthQty}</td>
                           <td className="px-3 py-2">{row.tenthHomeQty}</td>
-                          <td className="px-3 py-2 font-extrabold">{row.suggestedQty}</td>
-                          <td className="px-3 py-2 font-bold">{row.source}</td>
                         </tr>
                       ))
                     )}
