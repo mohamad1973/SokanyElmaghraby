@@ -446,15 +446,6 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
   if (row.monaCourierId === courierId) {
     return { ok: true as const, message: "الأوردر موجود عند المندوب." };
   }
-  const openRows = await prisma.$queryRaw<Array<{ n: bigint | number }>>`
-    SELECT COUNT(*) AS n
-    FROM CsOrderConfirmation
-    WHERE monaCourierId = ${courierId}
-      AND (monaSupervisorResult IS NULL OR monaSupervisorResult = '' OR monaSupervisorResult = 'postponed')
-  `;
-  if (Number(openRows[0]?.n || 0) >= 2) {
-    return { ok: false as const, message: "المندوب عنده أوردرين." };
-  }
   const changed = await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
     SET monaCourierId = ${courierId}, monaAssignedAt = NOW(3),
