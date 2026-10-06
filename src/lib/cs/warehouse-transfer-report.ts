@@ -1,3 +1,5 @@
+import { extractModelFromTitle, extractSkFromTitle } from "@/lib/product-display-code";
+
 export type BalanceRow = {
   code: string;
   name: string;
@@ -14,6 +16,7 @@ export type ParsedBalanceFile = {
 export type CatalogProduct = {
   id: number;
   name: string;
+  model: string;
 };
 
 export type WarehouseBalance = {
@@ -148,19 +151,56 @@ export function parseBalanceGrid(rows: unknown[][]): { ok: true; file: ParsedBal
   };
 }
 
+function compactToken(value: string) {
+  return value.trim().toUpperCase().replace(/[\s_\-]+/g, "");
+}
+
+function modelTokens(product: CatalogProduct) {
+  const tokens = new Set<string>();
+  const add = (value: string | null | undefined) => {
+    const token = compactToken(value || "");
+    if (token.length >= 4 && !token.startsWith("TOOLIANO")) tokens.add(token);
+  };
+  add(product.model);
+  add(extractSkFromTitle(product.name));
+  add(extractModelFromTitle(product.name));
+  return [...tokens];
+}
+
+function codeAppears(rawName: string, token: string) {
+  const compact = rawName.toUpperCase().replace(/[\s_\-]+/g, "");
+  let from = 0;
+  while (from <= compact.length - token.length) {
+    const at = compact.indexOf(token, from);
+    if (at < 0) return false;
+    const before = at > 0 ? compact[at - 1] : "";
+    const after = compact[at + token.length] ?? "";
+    if (!/[0-9A-Z]/.test(before) && !/[0-9A-Z]/.test(after)) return true;
+    from = at + 1;
+  }
+  return false;
+}
+
+function matchByModel(products: CatalogProduct[], rawName: string) {
+  const hits = products.filter((product) => modelTokens(product).some((token) => codeAppears(rawName, token)));
+  return hits.length === 1 ? hits[0] : null;
+}
+
 function matchByName(products: CatalogProduct[], rawName: string) {
   const key = normStockName(rawName);
-  if (!key) return null;
-  const exact = products.filter((product) => normStockName(product.name) === key);
+  const exact = key ? products.filter((product) => normStockName(product.name) === key) : [];
   if (exact.length === 1) return exact[0];
-  if (exact.length > 1) return null;
-  const partial = products.filter((product) => {
-    const name = normStockName(product.name);
-    const shorter = Math.min(key.length, name.length);
-    if (shorter < 6) return false;
-    return name.includes(key) || key.includes(name);
-  });
-  return partial.length === 1 ? partial[0] : null;
+  const partial = key
+    ? products.filter((product) => {
+        const name = normStockName(product.name);
+        const shorter = Math.min(key.length, name.length);
+        if (shorter < 6) return false;
+        return name.includes(key) || key.includes(name);
+      })
+    : [];
+  if (exact.length === 0 && partial.length === 1) return partial[0];
+  const pool = exact.length > 1 ? exact : partial.length > 1 ? partial : products;
+  return matchByModel(pool, rawName);
 }
 
 export function assignWarehouseBalances(input: {

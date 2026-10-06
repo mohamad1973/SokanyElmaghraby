@@ -99,6 +99,21 @@ function warehouseQty(value: number | null | undefined) {
   return value == null ? "—" : value;
 }
 
+type TransferSource = "tenth" | "tenthHome";
+
+type TransferDraft = {
+  qty: string;
+  source: TransferSource;
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 const RETURN_REASONS = [
   "رفض استلام",
   "عنوان خاطئ",
@@ -129,6 +144,7 @@ export function CsTransfersClient() {
   const [draftThresholds, setDraftThresholds] = useState<Record<number, string>>({});
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [warehouseBalances, setWarehouseBalances] = useState<WarehouseBalance[]>([]);
+  const [transferDrafts, setTransferDrafts] = useState<Record<number, TransferDraft>>({});
   const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [returnForm, setReturnForm] = useState({
     wooOrderNumber: "",
@@ -240,6 +256,92 @@ export function CsTransfersClient() {
     return map;
   }, [warehouseBalances]);
 
+  function rememberTransfer(productId: number, patch: Partial<TransferDraft>) {
+    setTransferDrafts((prev) => ({
+      ...prev,
+      [productId]: {
+        qty: patch.qty ?? prev[productId]?.qty ?? "",
+        source: patch.source ?? prev[productId]?.source ?? "tenth",
+      },
+    }));
+  }
+
+  function printTransferReport() {
+    const lines = visibleProducts.flatMap((product) => {
+      const draft = transferDrafts[product.id];
+      const qty = Number(draft?.qty);
+      if (!draft || !Number.isFinite(qty) || qty <= 0) return [];
+      const balance = balanceByProduct.get(product.id);
+      const source = draft.source === "tenthHome" ? "tenthHome" : "tenth";
+      return [
+        {
+          name: product.name,
+          model: product.model,
+          sourceLabel: source === "tenthHome" ? "مخزن منزلي" : "مخزن العاشر",
+          qty,
+          online: warehouseQty(balance?.onlineQty),
+          sourceQty: warehouseQty(source === "tenthHome" ? balance?.tenthHomeQty : balance?.tenthQty),
+        },
+      ];
+    });
+    if (!lines.length) {
+      setMessage("اكتب كمية تحويل أكبر من صفر لصنف واحد على الأقل.");
+      return;
+    }
+    const printWindow = window.open("", "_blank", "width=1200,height=800");
+    if (!printWindow) {
+      setMessage("اسمح بالنوافذ المنبثقة لطباعة التقرير.");
+      return;
+    }
+    const rows = lines
+      .map(
+        (line) => `<tr>
+          <td>${escapeHtml(line.name)}</td>
+          <td>${escapeHtml(line.model)}</td>
+          <td>${escapeHtml(line.sourceLabel)}</td>
+          <td>${line.qty}</td>
+          <td>${line.online}</td>
+          <td>${line.sourceQty}</td>
+        </tr>`,
+      )
+      .join("");
+    printWindow.document.write(`<!doctype html>
+      <html lang="ar" dir="rtl">
+        <head>
+          <meta charset="utf-8" />
+          <title>تقرير تحويل المخازن</title>
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; margin: 24px; color: #111; }
+            h1 { margin: 0 0 8px; font-size: 22px; }
+            .meta { margin: 0 0 16px; font-size: 13px; color: #444; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: right; vertical-align: top; }
+            th { background: #14213d; color: #fff; }
+          </style>
+        </head>
+        <body>
+          <h1>تقرير تحويل المخازن — توليانو</h1>
+          <p class="meta">الأصناف المطلوب تحويلها إلى مخزن أونلاين: ${lines.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>المنتج</th>
+                <th>الموديل</th>
+                <th>من مخزن</th>
+                <th>الكمية</th>
+                <th>رصيد أونلاين</th>
+                <th>رصيد المخزن المصدر</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
   async function saveThreshold(productId: number) {
     const threshold = Number(draftThresholds[productId]);
     if (!Number.isFinite(threshold) || threshold < 0) {
@@ -336,7 +438,7 @@ export function CsTransfersClient() {
         return;
       }
       setWarehouseBalances(data.balances);
-      setMessage(`تم تعبئة أعمدة المخازن لـ ${data.balances.length} صنف مطابق بالاسم.`);
+      setMessage(`تم تعبئة أعمدة المخازن لـ ${data.balances.length} صنف مطابق.`);
     } catch (error) {
       setWarehouseBalances([]);
       const aborted = error instanceof Error && error.name === "AbortError";
@@ -877,7 +979,7 @@ export function CsTransfersClient() {
               {warehouseLoading ? "جاري…" : "املأ الأعمدة"}
             </button>
             <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
-              الملف إكسيل أو PDF. من كل شيت يتقرأ اسم الصنف والرصيد الفعلي من أي مكان في الملف. لو الاسم مشابه لاسم المنتج في المخزون، الرصيد ينزل في عمود المخزن. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
+              الملف إكسيل أو PDF. من كل شيت يتقرأ اسم الصنف والرصيد الفعلي من أي مكان في الملف. لو الاسم مشابه لاسم المنتج، أو الموديل ظاهر في اسم الصنف لصنف واحد، الرصيد ينزل في عمود المخزن. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
             </p>
           </form>
 
@@ -889,6 +991,7 @@ export function CsTransfersClient() {
                   <th className="px-3 py-2">مخزن أونلاين</th>
                   <th className="px-3 py-2">مخزن العاشر</th>
                   <th className="px-3 py-2">مخزن منزلي</th>
+                  <th className="px-3 py-2">تحويل لأونلاين</th>
                   <th className="px-3 py-2">الموديل</th>
                   <th className="px-3 py-2">الكمية</th>
                   <th className="px-3 py-2">حد الطلب</th>
@@ -899,7 +1002,7 @@ export function CsTransfersClient() {
               <tbody>
                 {visibleProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-[#14213D]/60">
+                    <td colSpan={10} className="px-3 py-8 text-center text-[#14213D]/60">
                       {loading ? "جاري التحميل…" : "لا توجد أصناف مطابقة."}
                     </td>
                   </tr>
@@ -920,6 +1023,29 @@ export function CsTransfersClient() {
                         <td className="px-3 py-2 font-extrabold">{warehouseQty(balance?.onlineQty)}</td>
                         <td className="px-3 py-2 font-extrabold">{warehouseQty(balance?.tenthQty)}</td>
                         <td className="px-3 py-2 font-extrabold">{warehouseQty(balance?.tenthHomeQty)}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              value={transferDrafts[p.id]?.qty ?? ""}
+                              onChange={(event) => rememberTransfer(p.id, { qty: event.target.value })}
+                              className="w-20 rounded-lg border border-[#E5E5E5] px-2 py-1 text-center font-bold"
+                            />
+                            <select
+                              value={transferDrafts[p.id]?.source ?? "tenth"}
+                              onChange={(event) =>
+                                rememberTransfer(p.id, {
+                                  source: event.target.value === "tenthHome" ? "tenthHome" : "tenth",
+                                })
+                              }
+                              className="rounded-lg border border-[#E5E5E5] px-2 py-1 text-xs font-bold"
+                            >
+                              <option value="tenth">مخزن العاشر</option>
+                              <option value="tenthHome">مخزن منزلي</option>
+                            </select>
+                          </div>
+                        </td>
                         <td className="px-3 py-2 font-bold" dir="ltr">
                           {p.model}
                         </td>
@@ -961,6 +1087,13 @@ export function CsTransfersClient() {
               </tbody>
             </table>
           </div>
+          <button
+            type="button"
+            onClick={printTransferReport}
+            className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black"
+          >
+            اطبع تقرير التحويل
+          </button>
         </>
       ) : null}
     </div>

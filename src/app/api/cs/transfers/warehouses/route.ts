@@ -76,7 +76,11 @@ export async function POST(request: Request) {
   try {
     const stock = await getReorderProducts({ bypassCache: true });
     const balances = assignWarehouseBalances({
-      products: stock.products.map((product) => ({ id: product.id, name: product.name })),
+      products: stock.products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        model: product.model,
+      })),
       online: [...onlineFile.items, ...onlineFile.zeros],
       tenth: [...tenthFile.items, ...tenthFile.zeros],
       tenthHome: [...tenthHomeFile.items, ...tenthHomeFile.zeros],
