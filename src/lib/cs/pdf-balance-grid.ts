@@ -1,6 +1,11 @@
 import { extractTextItems, type StructuredTextItem } from "unpdf";
 
 const EMPTY_PDF_MESSAGE = "الشيت PDF مش فيه نص مقروء. ارفع شيت مُصدَّر، مش صورة.";
+const CODE_HEADER = "رمزالصنف";
+const QTY_HEADER = "الرصيدالفعلي";
+const NAME_HEADER = "اسمالصنف";
+
+const OUTPUT_HEADER = ["اسم الصنف", "رمز الصنف", "الرصيد الفعلي"];
 
 export async function rowsFromPdf(data: Uint8Array): Promise<string[][]> {
   let pages: StructuredTextItem[][];
@@ -11,6 +16,9 @@ export async function rowsFromPdf(data: Uint8Array): Promise<string[][]> {
     throw new Error("تعذر قراءة ملف PDF.");
   }
 
+  const aligned = rowsFromTextPages(pages);
+  if (aligned.length) return aligned;
+
   const rows: string[][] = [];
   let sawText = false;
   for (const page of pages) {
@@ -19,8 +27,159 @@ export async function rowsFromPdf(data: Uint8Array): Promise<string[][]> {
     sawText = true;
     rows.push(...rowsFromPage(texts));
   }
+  if (!sawText && !pages.some((page) => page.length)) throw new Error(EMPTY_PDF_MESSAGE);
   if (!sawText) throw new Error(EMPTY_PDF_MESSAGE);
   return rows;
+}
+
+export function rowsFromTextPages(pages: StructuredTextItem[][]) {
+  const rows: string[][] = [];
+  let sawBalance = false;
+  let carryAnchors: ColumnAnchors | null = null;
+  for (const page of pages) {
+    const texts = page.filter((item) => item.str.trim());
+    if (!texts.length) continue;
+    const lines = clusterLines(texts);
+    const candidates = lines
+      .map((line, index) => ({ index, anchors: anchorsFromLine(line) }))
+      .filter((entry): entry is { index: number; anchors: ColumnAnchors } => Boolean(entry.anchors));
+    if (!candidates.length) {
+      if (!carryAnchors) continue;
+      const body = lines
+        .map((line) => rowFromLine(line, carryAnchors as ColumnAnchors))
+        .filter((row) => row.some(Boolean) && !isHeaderRow(row));
+      if (!body.some(hasBalance)) continue;
+      if (!sawBalance) rows.push(OUTPUT_HEADER);
+      sawBalance = true;
+      rows.push(...body);
+      continue;
+    }
+    for (let cursor = 0; cursor < candidates.length; cursor += 1) {
+      const current = candidates[cursor];
+      const nextIndex = candidates[cursor + 1]?.index ?? lines.length;
+      const body = lines
+        .slice(current.index + 1, nextIndex)
+        .map((line) => rowFromLine(line, current.anchors))
+        .filter((row) => row.some(Boolean) && !isHeaderRow(row));
+      if (!body.some(hasBalance)) continue;
+      if (!sawBalance) rows.push(OUTPUT_HEADER);
+      sawBalance = true;
+      carryAnchors = current.anchors;
+      rows.push(...body);
+    }
+  }
+  return sawBalance ? rows : [];
+}
+
+type ColumnAnchors = {
+  code: { x0: number; x1: number };
+  qty: { x0: number; x1: number };
+  name: { x0: number; x1: number } | null;
+};
+
+function normPhrase(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_\-./\\|]+/g, "");
+}
+
+function anchorsFromLine(line: StructuredTextItem[]): ColumnAnchors | null {
+  const ordered = [...line].sort((a, b) => a.x - b.x);
+  const code = findPhrase(ordered, CODE_HEADER);
+  if (!code) return null;
+  const blocked = new Set(code.indexes);
+  const qty = findPhrase(ordered, QTY_HEADER, blocked);
+  if (!qty) return null;
+  const name = findPhrase(ordered, NAME_HEADER, new Set([...blocked, ...qty.indexes]));
+  return { code: code.box, qty: qty.box, name: name?.box ?? null };
+}
+
+function findPhrase(items: StructuredTextItem[], target: string, blocked = new Set<number>()) {
+  const candidates: Array<{ start: number; end: number; rank: number }> = [];
+  for (let width = 1; width <= 4; width += 1) {
+    for (let start = 0; start <= items.length - width; start += 1) {
+      const indexes = Array.from({ length: width }, (_, offset) => start + offset);
+      if (indexes.some((index) => blocked.has(index))) continue;
+      const slice = indexes.map((index) => items[index].str.trim()).filter(Boolean);
+      if (!slice.length) continue;
+      const forward = normPhrase(slice.join(""));
+      const backward = normPhrase([...slice].reverse().join(""));
+      let rank = 0;
+      if (forward === target) rank = 4;
+      else if (backward === target) rank = 3;
+      else if (forward.includes(target)) rank = 2;
+      else if (backward.includes(target)) rank = 1;
+      else continue;
+      candidates.push({ start, end: start + width - 1, rank });
+    }
+  }
+  candidates.sort((a, b) => b.rank - a.rank || a.end - a.start - (b.end - b.start) || a.start - b.start);
+  const found = candidates[0];
+  if (!found) return null;
+  const chosen = items.slice(found.start, found.end + 1);
+  return {
+    indexes: Array.from({ length: found.end - found.start + 1 }, (_, offset) => found.start + offset),
+    box: {
+      x0: Math.min(...chosen.map((item) => item.x)),
+      x1: Math.max(...chosen.map((item) => item.x + Math.max(item.width, 1))),
+    },
+  };
+}
+
+function rowFromLine(line: StructuredTextItem[], anchors: ColumnAnchors) {
+  const cells = ["", "", ""];
+  const columns = [
+    { slot: 1, box: anchors.code },
+    { slot: 2, box: anchors.qty },
+    ...(anchors.name ? [{ slot: 0, box: anchors.name }] : []),
+  ];
+  for (const item of [...line].sort((a, b) => a.x - b.x)) {
+    const text = item.str.trim();
+    if (!text) continue;
+    const slot = nearestColumn(item, columns);
+    if (slot == null) continue;
+    cells[slot] = cells[slot] ? `${cells[slot]} ${text}` : text;
+  }
+  return cells;
+}
+
+function nearestColumn(
+  item: StructuredTextItem,
+  columns: Array<{ slot: number; box: { x0: number; x1: number } }>,
+) {
+  const center = item.x + Math.max(item.width, 1) / 2;
+  const ranked = columns
+    .map((column) => {
+      const mid = (column.box.x0 + column.box.x1) / 2;
+      return { slot: column.slot, mid, dist: Math.abs(center - mid), half: (column.box.x1 - column.box.x0) / 2 };
+    })
+    .sort((a, b) => a.mid - b.mid);
+  let best = ranked[0];
+  for (const column of ranked) {
+    if (column.dist < best.dist) best = column;
+  }
+  const index = ranked.findIndex((column) => column.slot === best.slot);
+  const left = index > 0 ? best.mid - ranked[index - 1].mid : Number.POSITIVE_INFINITY;
+  const right = index < ranked.length - 1 ? ranked[index + 1].mid - best.mid : Number.POSITIVE_INFINITY;
+  const limit = Math.max(Math.min(left, right) / 2, best.half + 8);
+  return best.dist <= limit ? best.slot : null;
+}
+
+function hasBalance(row: string[]) {
+  return Boolean(row[1].trim()) && leadingNumber(row[2]) != null;
+}
+
+function isHeaderRow(row: string[]) {
+  return normPhrase(row[1]).includes(CODE_HEADER) || normPhrase(row[2]).includes(QTY_HEADER);
+}
+
+function leadingNumber(value: string) {
+  const text = value
+    .replace(/,/g, "")
+    .replace(/(\d)\s+(?=\d)/g, "$1")
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  const match = text.match(/\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const amount = Number(match[0]);
+  return Number.isFinite(amount) ? amount : null;
 }
 
 function rowsFromPage(items: StructuredTextItem[]): string[][] {

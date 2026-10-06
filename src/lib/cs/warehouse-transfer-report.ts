@@ -66,9 +66,11 @@ function cellText(value: unknown) {
 function parseQty(value: unknown) {
   const text = cellText(value)
     .replace(/,/g, "")
+    .replace(/(\d)\s+(?=\d)/g, "$1")
     .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
-  if (!text || text === "-") return null;
-  const amount = Number(text);
+  const match = text.match(/\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const amount = Number(match[0]);
   if (!Number.isFinite(amount)) return null;
   return Math.max(0, Math.round(amount));
 }
