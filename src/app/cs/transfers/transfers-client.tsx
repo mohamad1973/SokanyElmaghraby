@@ -866,15 +866,15 @@ export function CsTransfersClient() {
           >
             <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
               مخزن الأونلاين
-              <input name="online" type="file" accept=".xlsx,.xls,.csv" required className="text-xs font-bold" />
+              <input name="online" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" required className="text-xs font-bold" />
             </label>
             <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
               مخزن العاشر
-              <input name="tenth" type="file" accept=".xlsx,.xls,.csv" required className="text-xs font-bold" />
+              <input name="tenth" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" required className="text-xs font-bold" />
             </label>
             <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
               مخزن العاشر المنزلي
-              <input name="tenthHome" type="file" accept=".xlsx,.xls,.csv" required className="text-xs font-bold" />
+              <input name="tenthHome" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" required className="text-xs font-bold" />
             </label>
             <button
               type="submit"
@@ -893,7 +893,7 @@ export function CsTransfersClient() {
               إخفاء الكمية صفر، بما فيها مخزن الأونلاين
             </label>
             <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
-              الملف لازم يكون فيه عمود موديل أو كود، وعمود رصيد. الصنف يظهر لما رصيد الأونلاين يوصل حد الطلب وفي العاشر أو العاشر المنزلي كمية. شيل العلامة عشان تشوف أصناف الأونلاين الصفرية.
+              الملف إكسيل أو PDF، وفيه عمود موديل أو كود، وعمود رصيد. الشيت PDF لازم يكون مُصدَّر بنص مش صورة. الصنف يظهر لما رصيد الأونلاين يوصل حد الطلب وفي العاشر أو العاشر المنزلي كمية. شيل العلامة عشان تشوف أصناف الأونلاين الصفرية.
             </p>
           </form>
 

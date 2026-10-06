@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { canAccessTransfers } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { getTransfersAnalytics } from "@/lib/cs/transfers-analytics";
+import { rowsFromPdf } from "@/lib/cs/pdf-balance-grid";
 import { parseBalanceGrid, buildWarehouseTransferReport } from "@/lib/cs/warehouse-transfer-report";
 import { getReorderProducts } from "@/lib/reorder-report";
 import { requireCsSession } from "@/lib/session-guards";
@@ -18,8 +19,13 @@ async function requireTransfersAccess() {
   return session;
 }
 
+function isPdfFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
 async function rowsFromFile(file: File) {
   const buffer = Buffer.from(await file.arrayBuffer());
+  if (isPdfFile(file)) return rowsFromPdf(new Uint8Array(buffer));
   const book = XLSX.read(buffer, { type: "buffer" });
   const sheet = book.Sheets[book.SheetNames[0]];
   if (!sheet) return [];
@@ -47,9 +53,14 @@ export async function POST(request: Request) {
       ["العاشر", tenth],
       ["العاشر المنزلي", tenthHome],
     ].map(async ([label, file]) => {
-      const grid = await rowsFromFile(file as File);
-      const result = parseBalanceGrid(grid);
-      return { label: String(label), result };
+      try {
+        const grid = await rowsFromFile(file as File);
+        const result = parseBalanceGrid(grid);
+        return { label: String(label), result };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "تعذر قراءة الملف.";
+        return { label: String(label), result: { ok: false as const, message } };
+      }
     }),
   );
   const failed = parsed.find((entry) => !entry.result.ok);
