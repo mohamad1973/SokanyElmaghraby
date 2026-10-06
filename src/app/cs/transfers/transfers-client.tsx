@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type TabId = "stock" | "motion" | "returns" | "tips" | "warehouses";
@@ -88,6 +88,18 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "warehouses", label: "تحويل المخازن" },
 ];
 
+type SavedWarehouseSheet = {
+  warehouse: "online" | "tenth" | "tenthHome";
+  fileName: string;
+  updatedAt: string;
+};
+
+const SHEET_LABELS: Record<SavedWarehouseSheet["warehouse"], string> = {
+  online: "أونلاين",
+  tenth: "العاشر",
+  tenthHome: "منزلي",
+};
+
 type WarehouseBalance = {
   productId: number;
   onlineQty: number | null;
@@ -144,6 +156,8 @@ export function CsTransfersClient() {
   const [draftThresholds, setDraftThresholds] = useState<Record<number, string>>({});
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [warehouseBalances, setWarehouseBalances] = useState<WarehouseBalance[]>([]);
+  const [savedSheets, setSavedSheets] = useState<SavedWarehouseSheet[]>([]);
+  const sheetLoadTicket = useRef(0);
   const [transferDrafts, setTransferDrafts] = useState<Record<number, TransferDraft>>({});
   const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [returnForm, setReturnForm] = useState({
@@ -241,6 +255,25 @@ export function CsTransfersClient() {
   useEffect(() => {
     if (tab !== "stock" && !analytics) void loadAnalytics();
   }, [tab, analytics, loadAnalytics]);
+
+  useEffect(() => {
+    if (tab !== "warehouses") return;
+    const ticket = ++sheetLoadTicket.current;
+    void (async () => {
+      try {
+        const res = await fetch("/api/cs/transfers/warehouses");
+        const data = (await res.json().catch(() => null)) as {
+          balances?: WarehouseBalance[];
+          sheets?: SavedWarehouseSheet[];
+        } | null;
+        if (ticket !== sheetLoadTicket.current || !res.ok || !data) return;
+        setWarehouseBalances(data.balances || []);
+        setSavedSheets(data.sheets || []);
+      } catch {
+        if (ticket === sheetLoadTicket.current) setMessage("تعذر تحميل الشيتات المحفوظة.");
+      }
+    })();
+  }, [tab]);
 
   const visibleProducts = useMemo(
     () => (hideZero ? products.filter((product) => product.stockQuantity > 0) : products),
@@ -421,6 +454,7 @@ export function CsTransfersClient() {
   async function submitWarehouses(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const ticket = ++sheetLoadTicket.current;
     setMessage("");
     setWarehouseLoading(true);
     const controller = new AbortController();
@@ -431,16 +465,21 @@ export function CsTransfersClient() {
         body: form,
         signal: controller.signal,
       });
-      const data = (await res.json().catch(() => null)) as { balances?: WarehouseBalance[]; message?: string } | null;
+      const data = (await res.json().catch(() => null)) as {
+        balances?: WarehouseBalance[];
+        sheets?: SavedWarehouseSheet[];
+        message?: string;
+      } | null;
+      if (ticket !== sheetLoadTicket.current) return;
       if (!res.ok || !data?.balances) {
-        setWarehouseBalances([]);
         setMessage(data?.message || "تعذر قراءة ملفات المخازن.");
         return;
       }
       setWarehouseBalances(data.balances);
-      setMessage(`تم تعبئة أعمدة المخازن لـ ${data.balances.length} صنف مطابق.`);
+      setSavedSheets(data.sheets || []);
+      setMessage(`تم حفظ الشيتات وتعبئة أعمدة المخازن لـ ${data.balances.length} صنف مطابق.`);
     } catch (error) {
-      setWarehouseBalances([]);
+      if (ticket !== sheetLoadTicket.current) return;
       const aborted = error instanceof Error && error.name === "AbortError";
       setMessage(aborted ? "قراءة الشيت طولت. حدّث الصفحة وحاول تاني." : "تعذر قراءة ملفات المخازن.");
     } finally {
@@ -979,8 +1018,18 @@ export function CsTransfersClient() {
               {warehouseLoading ? "جاري…" : "املأ الأعمدة"}
             </button>
             <p className="md:col-span-4 text-xs font-bold text-[#14213D]/60">
-              الملف إكسيل أو PDF. من كل شيت يتقرأ اسم الصنف والرصيد الفعلي من أي مكان في الملف. لو الاسم مشابه لاسم المنتج، أو الموديل ظاهر في اسم الصنف لصنف واحد، الرصيد ينزل في عمود المخزن. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
+              الملف إكسيل أو PDF. من كل شيت يتقرأ اسم الصنف والرصيد الفعلي من أي مكان في الملف. لو الاسم مشابه لاسم المنتج، أو الموديل ظاهر في اسم الصنف لصنف واحد، الرصيد ينزل في عمود المخزن. الشيتات المحفوظة تفضل لحد ما ترفع غيرها. الشيت PDF لازم يكون مُصدَّر بنص مش صورة.
             </p>
+            {savedSheets.length ? (
+              <p className="md:col-span-4 text-xs font-extrabold text-[#14213D]">
+                الشيتات المحفوظة:{" "}
+                {savedSheets
+                  .map((sheet) => `${SHEET_LABELS[sheet.warehouse]} ${sheet.fileName}`)
+                  .join(" · ")}
+                {" — "}
+                {new Date(savedSheets[0].updatedAt).toLocaleString("ar-EG")}
+              </p>
+            ) : null}
           </form>
 
           <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">

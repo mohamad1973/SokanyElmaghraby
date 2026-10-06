@@ -4,9 +4,15 @@ import * as XLSX from "xlsx";
 import { canAccessTransfers } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { rowsFromPdf } from "@/lib/cs/pdf-balance-grid";
-import { assignWarehouseBalances, parseBalanceGrid } from "@/lib/cs/warehouse-transfer-report";
+import { assignWarehouseBalances, parseBalanceGrid, type BalanceRow } from "@/lib/cs/warehouse-transfer-report";
 import { getReorderProducts } from "@/lib/reorder-report";
 import { requireCsSession } from "@/lib/session-guards";
+import {
+  loadWarehouseSheets,
+  saveWarehouseSheets,
+  type StoredSheetRow,
+  type WarehouseSheetKey,
+} from "@/lib/cs/warehouse-sheets";
 
 export const maxDuration = 60;
 
@@ -29,6 +35,52 @@ async function rowsFromFile(file: File) {
   const sheet = book.Sheets[book.SheetNames[0]];
   if (!sheet) return [];
   return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
+}
+
+function sheetRows(file: { items: BalanceRow[]; zeros: BalanceRow[] }): StoredSheetRow[] {
+  return [...file.items, ...file.zeros].map((row) => ({ name: row.name || row.code, qty: row.qty }));
+}
+
+function balanceRows(rows: StoredSheetRow[]): BalanceRow[] {
+  return rows.map((row) => ({ code: row.name, name: row.name, qty: row.qty }));
+}
+
+async function balancesFromStored(
+  sheets: Array<{ warehouse: WarehouseSheetKey; rows: StoredSheetRow[] }>,
+) {
+  const byKey = new Map(sheets.map((sheet) => [sheet.warehouse, sheet.rows]));
+  const stock = await getReorderProducts();
+  return assignWarehouseBalances({
+    products: stock.products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      model: product.model,
+    })),
+    online: balanceRows(byKey.get("online") || []),
+    tenth: balanceRows(byKey.get("tenth") || []),
+    tenthHome: balanceRows(byKey.get("tenthHome") || []),
+  });
+}
+
+export async function GET() {
+  const session = await requireTransfersAccess();
+  if (!session) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+  try {
+    const sheets = await loadWarehouseSheets();
+    if (sheets.length < 3) return NextResponse.json({ balances: [], sheets: [] });
+    const balances = await balancesFromStored(sheets);
+    return NextResponse.json({
+      balances,
+      sheets: sheets.map((sheet) => ({
+        warehouse: sheet.warehouse,
+        fileName: sheet.fileName,
+        updatedAt: sheet.updatedAt,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "تعذر قراءة الشيتات المحفوظة.";
+    return NextResponse.json({ message }, { status: 502 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -75,17 +127,30 @@ export async function POST(request: Request) {
 
   try {
     const stock = await getReorderProducts({ bypassCache: true });
+    const stored = [
+      { warehouse: "online" as const, fileName: online.name, rows: sheetRows(onlineFile) },
+      { warehouse: "tenth" as const, fileName: tenth.name, rows: sheetRows(tenthFile) },
+      { warehouse: "tenthHome" as const, fileName: tenthHome.name, rows: sheetRows(tenthHomeFile) },
+    ];
     const balances = assignWarehouseBalances({
       products: stock.products.map((product) => ({
         id: product.id,
         name: product.name,
         model: product.model,
       })),
-      online: [...onlineFile.items, ...onlineFile.zeros],
-      tenth: [...tenthFile.items, ...tenthFile.zeros],
-      tenthHome: [...tenthHomeFile.items, ...tenthHomeFile.zeros],
+      online: balanceRows(stored[0].rows),
+      tenth: balanceRows(stored[1].rows),
+      tenthHome: balanceRows(stored[2].rows),
     });
-    return NextResponse.json({ balances });
+    const updatedAt = await saveWarehouseSheets(stored);
+    return NextResponse.json({
+      balances,
+      sheets: stored.map((sheet) => ({
+        warehouse: sheet.warehouse,
+        fileName: sheet.fileName.trim().slice(0, 255) || "sheet",
+        updatedAt,
+      })),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر قراءة أرصدة المخازن.";
     return NextResponse.json({ message }, { status: 502 });
