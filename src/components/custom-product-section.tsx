@@ -45,7 +45,7 @@ function SideBanner({ section, desktopColumns }: { section: CustomHomeSection; d
         alt={section.title}
         fill
         sizes={`(min-width: 1024px) ${Math.ceil(100 / (desktopColumns + 1))}vw, (min-width: 640px) 100vw, 100vw`}
-        className="object-cover"
+        className="object-contain"
         unoptimized
       />
     </div>
@@ -92,7 +92,7 @@ export function CustomProductSection({ section, products }: CustomProductSection
         }
       />
 
-      <div dir="ltr" className="flex flex-col lg:flex-row" style={{ gap: productsGap }}>
+      <div dir="ltr" className="flex flex-col overflow-hidden lg:flex-row" style={{ gap: productsGap }}>
         {hasSideBanner ? (
           <div
             className={`w-full shrink-0 lg:w-[var(--side-banner-width)] lg:basis-[var(--side-banner-width)] ${section.sideBanner.showOnMobile ? "" : "hidden sm:block"} ${sideBannerOrder}`}

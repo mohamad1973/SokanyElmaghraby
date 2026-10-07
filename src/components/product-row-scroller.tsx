@@ -118,8 +118,8 @@ export function ProductRowScroller({
       {productsWithImages.map((product) => (
         <div
           key={product.id}
-          className="shrink-0 snap-start"
-          style={{ flexBasis: itemBasis }}
+          className="min-w-0 max-w-full shrink-0 snap-start overflow-hidden"
+          style={{ flexBasis: itemBasis, width: itemBasis, maxWidth: itemBasis }}
         >
           <ProductCard product={product} />
         </div>

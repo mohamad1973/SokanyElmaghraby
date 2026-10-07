@@ -153,6 +153,13 @@ function mapStockQuantity(product: Pick<WooProduct, "manage_stock" | "stock_quan
   return Number.isFinite(qty) ? Math.max(0, qty) : undefined;
 }
 
+function displayPrice(value?: string | null) {
+  if (!value) return "";
+  const numeric = Number(String(value).replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return "0";
+  return String(Math.round(numeric));
+}
+
 function mapProduct(product: WooProduct): Product {
   const images = product.images?.map((image) => image.src).filter((src): src is string => Boolean(src)) || [];
 
@@ -161,9 +168,9 @@ function mapProduct(product: WooProduct): Product {
     name: product.name,
     slug: product.slug,
     sku: product.sku || `TOOLIANO-${product.id}`,
-    price: product.price || product.sale_price || product.regular_price || "0",
-    regularPrice: product.regular_price,
-    salePrice: product.sale_price,
+    price: displayPrice(product.price || product.sale_price || product.regular_price) || "0",
+    regularPrice: product.regular_price ? displayPrice(product.regular_price) : undefined,
+    salePrice: product.sale_price ? displayPrice(product.sale_price) : undefined,
     image: images[0] || "/product-placeholder.svg",
     images,
     category: product.categories?.[0]?.name || "منتجات توليانو",
@@ -193,12 +200,10 @@ function formatStorePrice(value?: string, minorUnit = 0) {
   const numericValue = Number(value) / 10 ** minorUnit;
 
   if (Number.isNaN(numericValue)) {
-    return value;
+    return "0";
   }
 
-  return new Intl.NumberFormat("ar-EG", {
-    maximumFractionDigits: minorUnit,
-  }).format(numericValue);
+  return String(Math.round(numericValue));
 }
 
 function mapStoreProduct(product: StoreApiProduct): Product {

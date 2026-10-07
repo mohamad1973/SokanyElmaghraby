@@ -21,7 +21,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <article
-      className="group h-[24rem] overflow-hidden bg-[#f2f2f2] shadow-sm transition hover:-translate-y-1 hover:shadow-xl sm:h-[29rem] lg:h-[32rem]"
+      className="group h-[24rem] min-w-0 overflow-hidden bg-[#f2f2f2] shadow-sm transition hover:-translate-y-1 hover:shadow-xl sm:h-[29rem] lg:h-[32rem]"
       style={{
         borderColor: "rgba(0, 0, 0, 0.10)",
         borderRadius: "var(--product-card-border-radius)",
