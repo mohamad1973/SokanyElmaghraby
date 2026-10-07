@@ -174,6 +174,7 @@ export function TemimaSettlementClient({
   const [searchingOrders, setSearchingOrders] = useState(false);
   const searchSeq = useRef(0);
   const editedIds = useRef(new Set<number>());
+  const largePending = useRef(new Set<string>());
 
   const load = useCallback(async (week?: string, end?: string, monthDate?: string) => {
     const qs = new URLSearchParams();
@@ -291,29 +292,36 @@ export function TemimaSettlementClient({
       return;
     }
     const lineKey = row.postponeLineId || 0;
+    const pendingKey = `${row.confirmationId}:${lineKey}`;
+    if (largePending.current.has(pendingKey)) return;
+    largePending.current.add(pendingKey);
     setRows((prev) =>
       prev.map((item) =>
         item.confirmationId === row.confirmationId && (item.postponeLineId || 0) === lineKey ? { ...item, isLarge } : item,
       ),
     );
-    const res = await fetch("/api/cs/settlement/temima", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "large", confirmationId: row.confirmationId, isLarge }),
-    });
-    const data = (await res.json()) as { message?: string };
-    if (!res.ok) {
-      setRows((prev) =>
-        prev.map((item) =>
-          item.confirmationId === row.confirmationId && (item.postponeLineId || 0) === lineKey
-            ? { ...item, isLarge: row.isLarge }
-            : item,
-        ),
-      );
-      setMessage(data.message || "تعذر حفظ كبير.");
-      return;
+    try {
+      const res = await fetch("/api/cs/settlement/temima", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "large", confirmationId: row.confirmationId, isLarge }),
+      });
+      const data = (await res.json()) as { message?: string };
+      if (!res.ok) {
+        setRows((prev) =>
+          prev.map((item) =>
+            item.confirmationId === row.confirmationId && (item.postponeLineId || 0) === lineKey
+              ? { ...item, isLarge: row.isLarge }
+              : item,
+          ),
+        );
+        setMessage(data.message || "تعذر حفظ كبير.");
+        return;
+      }
+      setMessage(isLarge ? "اتسجل كبير." : "اتشال كبير.");
+    } finally {
+      largePending.current.delete(pendingKey);
     }
-    setMessage(isLarge ? "اتسجل كبير." : "اتشال كبير.");
   }
 
   async function saveFawryDeposit(row: SheetRow) {
@@ -557,16 +565,23 @@ export function TemimaSettlementClient({
                           <option value="postpone">مؤجل</option>
                         </select>
                       </td>
-                      <td className="border border-[#14213D]/15 p-0 text-center">
-                        <label className={`flex min-h-10 items-center justify-center px-2 py-2 ${locked ? "" : "cursor-pointer"}`}>
+                      <td
+                        className={`border border-[#14213D]/15 p-0 text-center ${locked ? "" : "cursor-pointer"}`}
+                        onClick={() => {
+                          if (locked) return;
+                          void setLarge(row, !row.isLarge);
+                        }}
+                      >
+                        <div className="flex min-h-10 items-center justify-center px-2 py-2">
                           <input
                             type="checkbox"
-                            className="size-5 accent-[#FCA311]"
+                            className="pointer-events-none size-5 accent-[#FCA311]"
+                            tabIndex={-1}
+                            readOnly
                             disabled={locked}
                             checked={row.isLarge}
-                            onChange={(event) => void setLarge(row, event.target.checked)}
                           />
-                        </label>
+                        </div>
                       </td>
                     </tr>
                   ))}
