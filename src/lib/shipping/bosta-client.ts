@@ -4,7 +4,12 @@ import { PDFDocument } from "pdf-lib";
 
 import type { AdminOrder } from "@/lib/orders";
 
-import { findBostaCity, mapGovernorateToBostaCity } from "./bosta-zones";
+import {
+  findBostaCity,
+  getBostaStatusLabelAr,
+  mapGovernorateToBostaCity,
+  type BostaTrackEvent,
+} from "./bosta-zones";
 
 const bostaApiKey = process.env.BOSTA_API_KEY;
 
@@ -287,6 +292,7 @@ export async function findBostaDeliveryByCustomer(input: {
       cod: full.cod ?? picked.details.cod,
       lastEvent: full.lastEvent || picked.details.lastEvent,
       placeLabel: full.placeLabel || picked.details.placeLabel,
+      events: full.events.length ? full.events : picked.details.events,
     },
     error: null,
   };
@@ -380,6 +386,7 @@ export async function findBostaDeliveryByOrderReference(input: {
         cod: full.cod ?? picked.details.cod,
         lastEvent: full.lastEvent || picked.details.lastEvent,
         placeLabel: full.placeLabel || picked.details.placeLabel,
+        events: full.events.length ? full.events : picked.details.events,
       },
       error: null,
     };
@@ -714,6 +721,7 @@ export type BostaLiveDetails = {
   cod: number | null;
   lastEvent: string | null;
   placeLabel: string | null;
+  events: BostaTrackEvent[];
 };
 
 function eventLine(raw: unknown): string | null {
@@ -726,6 +734,46 @@ function eventLine(raw: unknown): string | null {
   const text = [label, place].filter(Boolean).join(" — ");
   if (!text) return null;
   return when ? `${text} · ${when}` : text;
+}
+
+function eventStatus(event: Record<string, unknown>) {
+  const state = asRecord(event.state);
+  const code = state?.code ?? event.code;
+  if (typeof code === "number" || (typeof code === "string" && /^\d+$/.test(code.trim()))) {
+    return String(code).trim();
+  }
+  const value = state?.value ?? (typeof event.state === "string" || typeof event.state === "number" ? event.state : "");
+  return String(value || event.msg || event.message || "").trim();
+}
+
+function eventPlace(event: Record<string, unknown>) {
+  const hub = namedPlace(event.hub) || namedPlace(event.warehouse);
+  const reasonRaw = event.exceptionReason ?? event.reason;
+  const reason = typeof reasonRaw === "string" ? reasonRaw.trim() : namedPlace(reasonRaw);
+  if (hub && reason && hub !== reason) return `${hub} — ${reason}`;
+  return hub || reason || "";
+}
+
+function eventTime(event: Record<string, unknown>) {
+  return String(event.timestamp || event.date || event.time || event.createdAt || "").trim();
+}
+
+export function readBostaTransitEvents(raw: unknown): BostaTrackEvent[] {
+  const root = bostaPayload(raw);
+  const events = root?.TransitEvents || root?.timeline || root?.history || root?.trackingEvents;
+  const list = Array.isArray(events) ? events : [];
+  const parsed = list.flatMap((item) => {
+    const event = asRecord(item);
+    if (!event) return [];
+    const status = eventStatus(event);
+    const place = eventPlace(event);
+    const at = eventTime(event);
+    if (!status && !place) return [];
+    return [{ status, label: status ? getBostaStatusLabelAr(status) : place, place, at }];
+  });
+  const dated = parsed.length > 0 && parsed.every((item) => item.at && !Number.isNaN(Date.parse(item.at)));
+  if (!dated) return parsed;
+  return [...parsed].sort((left, right) => Date.parse(left.at) - Date.parse(right.at));
 }
 
 function namedPlace(value: unknown): string {
@@ -775,6 +823,7 @@ export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
     cod: readAmount(root?.cod),
     lastEvent: last,
     placeLabel: readBostaPlaceLabel(raw),
+    events: readBostaTransitEvents(raw),
   };
 }
 

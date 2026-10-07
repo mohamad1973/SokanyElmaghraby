@@ -13,7 +13,12 @@ import {
   type CsBostaParty,
 } from "@/lib/shipping/bosta-client";
 import { effectivePaymentState } from "@/lib/cs/order-window";
-import { bostaStatusLocksEdits, getBostaStatusLabelAr, normalizeBostaStatus } from "@/lib/shipping/bosta-zones";
+import {
+  bostaStatusLocksEdits,
+  getBostaStatusLabelAr,
+  normalizeBostaStatus,
+  type BostaTrackEvent,
+} from "@/lib/shipping/bosta-zones";
 
 type Snapshot = Record<string, unknown> | null;
 
@@ -28,6 +33,7 @@ export type BostaWaybillState = {
   cod: number | null;
   lastEvent: string | null;
   governorate: string | null;
+  events: BostaTrackEvent[];
 };
 
 function textOf(answers: CsChecklistAnswerInput[], key: string) {
@@ -94,6 +100,7 @@ function present(input: {
   cod?: number | null;
   lastEvent?: string | null;
   governorate?: string | null;
+  events?: BostaTrackEvent[];
 }): BostaWaybillState {
   const status = input.bostaStatus ? normalizeBostaStatus(input.bostaStatus) : null;
   const synced =
@@ -111,6 +118,7 @@ function present(input: {
     cod: input.cod ?? null,
     lastEvent: input.lastEvent || null,
     governorate: input.governorate || null,
+    events: input.events || [],
   };
 }
 
@@ -224,6 +232,7 @@ async function persistLinkedDelivery(input: {
     cod: number | null;
     lastEvent: string | null;
     placeLabel?: string | null;
+    events?: BostaTrackEvent[];
   };
 }): Promise<BostaWaybillState> {
   const status = normalizeBostaStatus(input.found.status || "created");
@@ -262,6 +271,7 @@ async function persistLinkedDelivery(input: {
     cod: input.found.cod,
     lastEvent: input.found.lastEvent,
     governorate,
+    events: input.found.events,
   });
 }
 
@@ -288,6 +298,7 @@ export async function attachBostaWaybillByOrderReference(input: {
         cod: details?.cod ?? null,
         lastEvent: details?.lastEvent || null,
         placeLabel: details?.placeLabel || null,
+        events: details?.events,
       },
     });
     return true;
@@ -319,6 +330,7 @@ export async function attachBostaWaybillByOrderReference(input: {
       cod: lookup.details.cod,
       lastEvent: lookup.details.lastEvent,
       placeLabel: lookup.details.placeLabel,
+      events: lookup.details.events,
     },
   });
   return true;
@@ -346,6 +358,7 @@ async function linkExistingBostaDelivery(input: {
         cod: byOrder.details.cod,
         lastEvent: byOrder.details.lastEvent,
         placeLabel: byOrder.details.placeLabel,
+        events: byOrder.details.events,
       },
     });
   }
@@ -523,6 +536,7 @@ export async function syncCsBostaWaybill(input: {
     bostaSyncedAt: new Date(),
     cod: details.cod,
     lastEvent: details.lastEvent,
+    events: details.events,
   });
 }
 
@@ -604,6 +618,7 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
     cod: details.cod,
     lastEvent: details.lastEvent,
     governorate,
+    events: details.events,
   });
 }
 

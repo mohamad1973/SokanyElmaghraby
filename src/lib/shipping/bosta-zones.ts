@@ -150,3 +150,73 @@ export function getBostaStatusLabelAr(status: string) {
   const key = normalizeBostaStatus(status);
   return BOSTA_STATUS_LABELS[key] || BOSTA_STATUS_LABELS[status] || status;
 }
+
+export type BostaTrackEvent = {
+  status: string;
+  label: string;
+  place: string;
+  at: string;
+};
+
+export const BOSTA_TRACK_STAGES = [
+  "تم إنشاء البوليصة",
+  "في انتظار الاستلام",
+  "بانتظار خط السير",
+  "اتحدد المندوب",
+  "المندوب استلم الشحنة",
+  "في الطريق",
+  "خرجت للتسليم",
+  "تم التسليم للعميل",
+] as const;
+
+const BOSTA_STAGE_STATUSES = [
+  ["created", "pending"],
+  ["10", "pickup_requested", "waiting_for_pickup", "awaiting_pickup"],
+  ["20", "waiting_for_route"],
+  ["21", "route_assigned", "assigned"],
+  ["24", "picked_up", "received_at_warehouse"],
+  ["30", "in_transit"],
+  ["41", "out_for_delivery"],
+  ["45", "delivered"],
+];
+
+const BOSTA_EXCEPTION_STATUSES = new Set([
+  "46",
+  "47",
+  "48",
+  "49",
+  "returned",
+  "returned_to_business",
+  "exception",
+  "failed",
+  "cancelled",
+  "canceled",
+  "terminated",
+]);
+
+export function bostaTrackStageIndex(status: string | null | undefined) {
+  const key = normalizeBostaStatus(status);
+  if (!key) return -1;
+  return BOSTA_STAGE_STATUSES.findIndex((group) => group.includes(key));
+}
+
+export function bostaStatusIsException(status: string | null | undefined) {
+  return BOSTA_EXCEPTION_STATUSES.has(normalizeBostaStatus(status));
+}
+
+export function bostaTrackMarker(status: string | null | undefined, events: { status: string }[]) {
+  const currentIndex = bostaTrackStageIndex(status);
+  const exception = bostaStatusIsException(status);
+  let reached = -1;
+  for (const event of events) {
+    if (bostaStatusIsException(event.status)) continue;
+    const index = bostaTrackStageIndex(event.status);
+    if (index > reached) reached = index;
+  }
+  if (!exception && currentIndex > reached) reached = currentIndex;
+  return {
+    exception,
+    active: exception ? -1 : currentIndex >= 0 ? currentIndex : reached,
+    reached: exception ? reached : currentIndex >= 0 ? currentIndex : reached,
+  };
+}

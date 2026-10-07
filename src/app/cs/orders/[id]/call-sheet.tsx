@@ -11,7 +11,13 @@ import {
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { formatCairoOrderDateTime, resolvePaymentState } from "@/lib/cs/order-window";
-import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
+import {
+  BOSTA_TRACK_STAGES,
+  bostaTrackMarker,
+  getBostaStatusLabelAr,
+  normalizeBostaStatus,
+  type BostaTrackEvent,
+} from "@/lib/shipping/bosta-zones";
 
 /** Order total at/above this (EGP) shows the optional deposit card. */
 const CS_DEPOSIT_THRESHOLD = 5000;
@@ -191,6 +197,133 @@ function buildInitial(answers: Props["initialAnswers"], snapshot: Snapshot | nul
   return map;
 }
 
+function formatTrackAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ar-EG", {
+    timeZone: "Africa/Cairo",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function currentTrackEvent(status: string, events: BostaTrackEvent[]) {
+  const key = normalizeBostaStatus(status);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (normalizeBostaStatus(events[index]?.status) === key) return events[index];
+  }
+  return events.length ? events[events.length - 1] : null;
+}
+
+function BostaTrackLine({
+  status,
+  events,
+  trackingNumber,
+  hideEvents,
+}: {
+  status: string;
+  events: BostaTrackEvent[];
+  trackingNumber: string;
+  hideEvents: boolean;
+}) {
+  const shownEvents = hideEvents ? [] : events;
+  const marker = bostaTrackMarker(status, shownEvents);
+  const spot = shownEvents.length ? currentTrackEvent(status, shownEvents) : null;
+  const liveLabel = status ? getBostaStatusLabelAr(status) : "";
+  const spotText = spot
+    ? [spot.place, spot.at ? formatTrackAt(spot.at) : ""].filter(Boolean).join(" · ")
+    : "";
+
+  return (
+    <section className="rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-extrabold text-[#14213D]">تتبع بوسطة</p>
+        {trackingNumber.trim() ? (
+          <p className="text-xs font-bold text-[#14213D]/70" dir="ltr">
+            {trackingNumber.trim()}
+          </p>
+        ) : null}
+      </div>
+      {!trackingNumber.trim() ? (
+        <p className="mt-2 text-sm font-bold text-[#14213D]/70">لسه مفيش بوليصة</p>
+      ) : (
+        <>
+          <div className="relative mt-3 overflow-x-auto pb-1">
+          <div className="pointer-events-none absolute inset-x-8 top-3.5 h-0.5 bg-[#14213D]/15" />
+          <ol className="relative flex gap-1">
+            {BOSTA_TRACK_STAGES.map((label, index) => {
+              const done = marker.exception
+                ? marker.reached >= 0 && index <= marker.reached
+                : marker.active >= 0 && index < marker.active;
+              const current = index === marker.active;
+              return (
+                <li key={label} className="flex min-w-24 flex-1 flex-col items-center text-center">
+                  <span
+                    className={`relative z-10 grid size-7 place-items-center rounded-full text-[11px] font-extrabold ${
+                      current
+                        ? "bg-[#FCA311] text-black ring-2 ring-[#14213D]"
+                        : done
+                          ? "bg-[#14213D] text-white"
+                          : "bg-[#E5E5E5] text-[#14213D]/40"
+                    }`}
+                  >
+                    {done ? "✓" : index + 1}
+                  </span>
+                  <span
+                    className={`mt-1 text-[10px] font-extrabold leading-4 ${
+                      current || done ? "text-[#14213D]" : "text-[#14213D]/40"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                  {current ? (
+                    <span className="mt-1 text-[10px] font-bold leading-4 text-[#14213D]">
+                      الآن
+                      {liveLabel && liveLabel !== label ? ` · ${liveLabel}` : ""}
+                      {spotText ? ` · ${spotText}` : ""}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+            {marker.exception ? (
+              <li className="flex min-w-28 flex-1 flex-col items-center text-center">
+                <span className="relative z-10 grid size-7 place-items-center rounded-full bg-red-700 text-[11px] font-extrabold text-white ring-2 ring-red-900">
+                  !
+                </span>
+                <span className="mt-1 text-[10px] font-extrabold leading-4 text-red-800">{liveLabel}</span>
+                <span className="mt-1 text-[10px] font-bold leading-4 text-red-800">
+                  الآن{spotText ? ` · ${spotText}` : ""}
+                </span>
+              </li>
+            ) : null}
+          </ol>
+          </div>
+          {!hideEvents && events.length ? (
+            <ol className="mt-3 grid gap-1 border-t border-[#14213D]/10 pt-2 text-xs font-bold text-[#14213D]">
+              {events.map((event, index) => (
+                <li key={`${event.at}-${event.status}-${index}`} className="flex flex-wrap justify-between gap-2">
+                  <span>
+                    {event.label}
+                    {event.place ? ` — ${event.place}` : ""}
+                  </span>
+                  {event.at ? (
+                    <span className="text-[#14213D]/60" dir="ltr">
+                      {formatTrackAt(event.at)}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function CsCallSheet({
   confirmationId,
   status,
@@ -247,6 +380,7 @@ export function CsCallSheet({
   const [bostaError, setBostaError] = useState(initialBostaError || "");
   const [bostaCod, setBostaCod] = useState<number | null>(null);
   const [bostaLastEvent, setBostaLastEvent] = useState("");
+  const [bostaEvents, setBostaEvents] = useState<BostaTrackEvent[]>([]);
 
   useEffect(() => {
     if (lockedShipping !== "bosta") return;
@@ -263,8 +397,10 @@ export function CsCallSheet({
           cod?: number | null;
           lastEvent?: string | null;
           governorate?: string | null;
+          events?: BostaTrackEvent[];
         };
         if (!res.ok) {
+          setBostaEvents([]);
           setBostaError(data.message || data.bostaSyncError || "تعذر جلب بوليصة بوسطة.");
           return;
         }
@@ -274,6 +410,7 @@ export function CsCallSheet({
         if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
         if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
         if (data.lastEvent) setBostaLastEvent(data.lastEvent);
+        setBostaEvents(Array.isArray(data.events) ? data.events : []);
         const governorate = String(data.governorate || "").trim();
         if (governorate) {
           setAnswers((prev) => ({
@@ -289,8 +426,9 @@ export function CsCallSheet({
         }
         setBostaError(data.bostaSyncError || "");
       })
-      .catch((error: unknown) => {
+        .catch((error: unknown) => {
         if (ac.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
+        setBostaEvents([]);
         setBostaError("تعذر الاتصال لجلب بوليصة بوسطة.");
       });
     return () => ac.abort();
@@ -1530,6 +1668,14 @@ export function CsCallSheet({
         </div>
       </section>
       </div>
+      {lockedShipping === "bosta" ? (
+        <BostaTrackLine
+          status={bostaStatus}
+          events={bostaEvents}
+          trackingNumber={trackingNumber}
+          hideEvents={Boolean(bostaError)}
+        />
+      ) : null}
     </div>
   );
 }
