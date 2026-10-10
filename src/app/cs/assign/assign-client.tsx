@@ -44,6 +44,10 @@ export function CsAssignClient({
   const [ruleMode, setRuleMode] = useState<"shipping" | "paid">("shipping");
   const [shipBostaAgent, setShipBostaAgent] = useState("");
   const [shipTemimaAgent, setShipTemimaAgent] = useState("");
+  const [shipBostaFrom, setShipBostaFrom] = useState("");
+  const [shipBostaTo, setShipBostaTo] = useState("");
+  const [shipTemimaFrom, setShipTemimaFrom] = useState("");
+  const [shipTemimaTo, setShipTemimaTo] = useState("");
   const [paidAgent, setPaidAgent] = useState("");
   const [unpaidAgent, setUnpaidAgent] = useState("");
 
@@ -207,6 +211,11 @@ export function CsAssignClient({
     if (showPendingAfterLast) await loadPending();
   }
 
+  function optionalOrder(value: string) {
+    const digits = value.replace(/\D/g, "");
+    return digits ? Number(digits) : null;
+  }
+
   async function runRules() {
     setLoading(true);
     setMessage("");
@@ -214,12 +223,65 @@ export function CsAssignClient({
       agentId?: number;
       shippingCompany?: "bosta" | "sayed_temima";
       paidOnline?: boolean;
+      orderFrom?: number | null;
+      orderTo?: number | null;
     }> = [];
 
     if (ruleMode === "shipping") {
-      if (shipBostaAgent) rules.push({ agentId: Number(shipBostaAgent), shippingCompany: "bosta" });
+      const bostaFrom = optionalOrder(shipBostaFrom);
+      const bostaTo = optionalOrder(shipBostaTo);
+      const temimaFrom = optionalOrder(shipTemimaFrom);
+      const temimaTo = optionalOrder(shipTemimaTo);
+      if ((bostaFrom || bostaTo) && !shipBostaAgent) {
+        setLoading(false);
+        setMessage("اختاري مسؤول بوسطة مع رقم الأوردر.");
+        return;
+      }
+      if ((temimaFrom || temimaTo) && !shipTemimaAgent) {
+        setLoading(false);
+        setMessage("اختاري مسؤول سيد تميمة مع رقم الأوردر.");
+        return;
+      }
+      if (bostaTo && !bostaFrom) {
+        setLoading(false);
+        setMessage("اكتبي رقم بداية بوسطة قبل رقم النهاية.");
+        return;
+      }
+      if (temimaTo && !temimaFrom) {
+        setLoading(false);
+        setMessage("اكتبي رقم بداية تميمة قبل رقم النهاية.");
+        return;
+      }
+      if (bostaFrom && bostaTo && bostaTo < bostaFrom) {
+        setLoading(false);
+        setMessage("رقم نهاية بوسطة لازم يكون بعد رقم البداية.");
+        return;
+      }
+      if (temimaFrom && temimaTo && temimaTo < temimaFrom) {
+        setLoading(false);
+        setMessage("رقم نهاية تميمة لازم يكون بعد رقم البداية.");
+        return;
+      }
+      if (!shipBostaAgent && !shipTemimaAgent) {
+        setLoading(false);
+        setMessage("اختاري مسؤول لشركة واحدة على الأقل.");
+        return;
+      }
+      if (shipBostaAgent) {
+        rules.push({
+          agentId: Number(shipBostaAgent),
+          shippingCompany: "bosta",
+          orderFrom: bostaFrom,
+          orderTo: bostaTo,
+        });
+      }
       if (shipTemimaAgent) {
-        rules.push({ agentId: Number(shipTemimaAgent), shippingCompany: "sayed_temima" });
+        rules.push({
+          agentId: Number(shipTemimaAgent),
+          shippingCompany: "sayed_temima",
+          orderFrom: temimaFrom,
+          orderTo: temimaTo,
+        });
       }
     } else {
       if (paidAgent) rules.push({ agentId: Number(paidAgent), paidOnline: true });
@@ -229,12 +291,32 @@ export function CsAssignClient({
     const res = await fetch("/api/cs/assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "rules", ruleMode, rules }),
+      body: JSON.stringify({
+        mode: "rules",
+        ruleMode,
+        rules,
+        fromYmd: appliedFrom,
+        toYmd: appliedTo,
+      }),
     });
-    const data = (await res.json()) as { message?: string; updated?: number };
+    const data = (await res.json()) as {
+      message?: string;
+      updated?: number;
+      bosta?: number;
+      temima?: number;
+      unscoped?: number;
+    };
     setLoading(false);
     if (!res.ok) {
       setMessage(data.message || "تعذر تطبيق القواعد.");
+      return;
+    }
+    if (ruleMode === "shipping") {
+      setMessage(
+        `تميمة ${data.temima ?? 0} · بوسطة ${data.bosta ?? 0} · من غير شركة شحن ${data.unscoped ?? 0}.`,
+      );
+      await loadAssignments(appliedFrom, appliedTo);
+      if (showPendingAfterLast) await loadPending();
       return;
     }
     setMessage(`تم تطبيق القواعد على ${data.updated ?? 0} أوردر.`);
@@ -275,7 +357,7 @@ export function CsAssignClient({
             رجوع للقائمة
           </Link>
           <h1 className="mt-2 text-2xl font-extrabold text-[#14213D]">توزيع الأوردرات على مسئولى خدمة العملاء</h1>
-          <p className="text-sm text-[#14213D]/70">نطاق أرقام · تقسيم عادل · قواعد شحن/دفع · مراجعة يوم التوزيع</p>
+          <p className="text-sm text-[#14213D]/70">نطاق أرقام · تقسيم عادل · شركة الشحن من رقم أو من يوم ليوم</p>
         </div>
       </div>
 
@@ -432,37 +514,51 @@ export function CsAssignClient({
           </select>
 
           {ruleMode === "shipping" ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm font-bold">
-                بوسطة →
-                <select
-                  value={shipBostaAgent}
-                  onChange={(e) => setShipBostaAgent(e.target.value)}
-                  className={FILTER_CONTROL}
-                >
-                  <option value="">—</option>
-                  {agents.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-bold">
-                سيد تميمة →
-                <select
-                  value={shipTemimaAgent}
-                  onChange={(e) => setShipTemimaAgent(e.target.value)}
-                  className={FILTER_CONTROL}
-                >
-                  <option value="">—</option>
-                  {agents.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div className="grid gap-3">
+              <p className="text-xs font-bold text-[#14213D]/70">
+                الأرقام فاضية: يتوزّع غير الموزّع في أيام الفلتر فوق. «إلى» فاضي: من الرقم المختار وكل اللي بعده لنفس الشركة.
+              </p>
+              {(
+                [
+                  ["بوسطة", shipBostaAgent, setShipBostaAgent, shipBostaFrom, setShipBostaFrom, shipBostaTo, setShipBostaTo],
+                  ["سيد تميمة", shipTemimaAgent, setShipTemimaAgent, shipTemimaFrom, setShipTemimaFrom, shipTemimaTo, setShipTemimaTo],
+                ] as const
+              ).map(([label, agent, setAgent, from, setFrom, to, setTo]) => (
+                <div key={label} className="grid gap-2 sm:grid-cols-3">
+                  <label className="grid gap-1 text-sm font-bold">
+                    {label} →
+                    <select value={agent} onChange={(e) => setAgent(e.target.value)} className={FILTER_CONTROL}>
+                      <option value="">—</option>
+                      {agents.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-bold">
+                    من أوردر
+                    <input
+                      value={from}
+                      onChange={(e) => setFrom(e.target.value.replace(/\D/g, ""))}
+                      inputMode="numeric"
+                      className={FILTER_CONTROL}
+                      dir="ltr"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-bold">
+                    إلى أوردر
+                    <input
+                      value={to}
+                      onChange={(e) => setTo(e.target.value.replace(/\D/g, ""))}
+                      inputMode="numeric"
+                      placeholder="فاضي = اللي بعده"
+                      className={FILTER_CONTROL}
+                      dir="ltr"
+                    />
+                  </label>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  assignByShippingCompany,
   createAssignment,
   deleteAssignment,
   fairSplitAssign,
@@ -64,7 +65,11 @@ export async function POST(request: Request) {
       paidOnline?: boolean;
       governorate?: string;
       area?: string;
+      orderFrom?: number | null;
+      orderTo?: number | null;
     }>;
+    fromYmd?: string;
+    toYmd?: string;
   } = {};
 
   try {
@@ -88,6 +93,31 @@ export async function POST(request: Request) {
       ok: true,
       assigned: result.assigned,
       perAgent: result.perAgent,
+      ranges: result.ranges,
+    });
+  }
+
+  if (mode === "rules" && body.ruleMode === "shipping") {
+    const rules = (body.rules || [])
+      .filter((rule) => rule.agentId && (rule.shippingCompany === "bosta" || rule.shippingCompany === "sayed_temima"))
+      .map((rule) => ({
+        agentId: Number(rule.agentId),
+        shippingCompany: rule.shippingCompany as "bosta" | "sayed_temima",
+        orderFrom: rule.orderFrom && Number(rule.orderFrom) > 0 ? Number(rule.orderFrom) : null,
+        orderTo: rule.orderTo && Number(rule.orderTo) > 0 ? Number(rule.orderTo) : null,
+      }));
+    const result = await assignByShippingCompany({
+      createdById: session.user.csAgentId,
+      fromYmd: String(body.fromYmd || ""),
+      toYmd: String(body.toYmd || ""),
+      rules,
+    });
+    if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+    return NextResponse.json({
+      ok: true,
+      bosta: result.bosta,
+      temima: result.temima,
+      unscoped: result.unscoped,
       ranges: result.ranges,
     });
   }

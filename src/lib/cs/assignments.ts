@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds, isWithinCairoDateRange } from "@/lib/cs/order-window";
 import { getPrismaClient } from "@/lib/db";
 
 export function parseWooOrderNumber(value: string | number | null | undefined) {
@@ -460,4 +460,169 @@ export async function ruleBasedAssign(input: {
   }
 
   return { ok: true as const, updated };
+}
+
+type ShippingAssignRule = {
+  agentId: number;
+  shippingCompany: "bosta" | "sayed_temima";
+  orderFrom: number | null;
+  orderTo: number | null;
+};
+
+function orderInShippingWindow(
+  orderNum: number,
+  dateIso: string,
+  rule: ShippingAssignRule,
+  fromYmd: string,
+  toYmd: string,
+) {
+  if (rule.orderFrom) {
+    if (orderNum < rule.orderFrom) return false;
+    if (rule.orderTo && orderNum > rule.orderTo) return false;
+    return orderNum > 0;
+  }
+  return isWithinCairoDateRange(dateIso, fromYmd, toYmd);
+}
+
+function segmentsWithoutForeignOrders(
+  orders: Array<{ id: number; num: number }>,
+  occupied: Set<number>,
+) {
+  const sorted = [...orders].filter((order) => order.num > 0).sort((a, b) => a.num - b.num);
+  const chosen = new Set(sorted.map((order) => order.num));
+  const segments: Array<{ from: number; to: number; ids: number[] }> = [];
+  if (!sorted.length) return segments;
+  let from = sorted[0].num;
+  let ids = [sorted[0].id];
+  let prev = sorted[0].num;
+  for (let index = 1; index < sorted.length; index += 1) {
+    const next = sorted[index];
+    let blocked = false;
+    for (const num of occupied) {
+      if (num > prev && num < next.num && !chosen.has(num)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) {
+      segments.push({ from, to: prev, ids });
+      from = next.num;
+      ids = [next.id];
+    } else {
+      ids.push(next.id);
+    }
+    prev = next.num;
+  }
+  segments.push({ from, to: prev, ids });
+  return segments;
+}
+
+export async function assignByShippingCompany(input: {
+  createdById: number;
+  fromYmd: string;
+  toYmd: string;
+  rules: ShippingAssignRule[];
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const rules = input.rules.filter((rule) => rule.agentId > 0 && (rule.shippingCompany === "bosta" || rule.shippingCompany === "sayed_temima"));
+  if (!rules.length) return { ok: false as const, message: "اختاري مسؤول لشركة شحن واحدة على الأقل." };
+  for (const rule of rules) {
+    if (rule.orderTo && !rule.orderFrom) {
+      return { ok: false as const, message: "اكتبي رقم «من» قبل رقم «إلى»." };
+    }
+    if (rule.orderFrom && rule.orderTo && rule.orderTo < rule.orderFrom) {
+      return { ok: false as const, message: "رقم «إلى» لازم يكون بعد رقم «من»." };
+    }
+  }
+  const needsDays = rules.some((rule) => !rule.orderFrom);
+  if (needsDays && (!cairoYmdBounds(input.fromYmd) || !cairoYmdBounds(input.toYmd) || input.fromYmd > input.toYmd)) {
+    return { ok: false as const, message: "حددي أيام التوزيع، أو اكتبي رقم أوردر البداية." };
+  }
+
+  const agents = await prisma.csAgent.findMany({
+    where: { id: { in: [...new Set(rules.map((rule) => rule.agentId))] }, isActive: true },
+  });
+  if (agents.length !== new Set(rules.map((rule) => rule.agentId)).size) {
+    return { ok: false as const, message: "أحد المسؤولين غير موجود أو غير نشط." };
+  }
+
+  const openRows = await prisma.$queryRaw<
+    Array<{
+      id: number;
+      wooOrderNumber: string;
+      shippingCompany: string | null;
+      createdAt: Date;
+      dateCreated: string | null;
+    }>
+  >`
+    SELECT id, wooOrderNumber, shippingCompany, createdAt,
+      JSON_UNQUOTE(JSON_EXTRACT(customerSnapshot, '$.dateCreated')) AS dateCreated
+    FROM CsOrderConfirmation
+    WHERE assignedAgentId IS NULL
+  `;
+
+  const open = openRows.map((row) => ({
+    id: Number(row.id),
+    num: parseWooOrderNumber(row.wooOrderNumber),
+    shippingCompany: String(row.shippingCompany || "").trim(),
+    dateIso: row.dateCreated || row.createdAt.toISOString(),
+  }));
+
+  const taken = new Set<number>();
+  const counts = { bosta: 0, temima: 0 };
+  const ranges: Array<{ agentId: number; shippingCompany: string; from: number; to: number; count: number }> = [];
+
+  for (const rule of rules) {
+    const matched = open.filter((row) => {
+      if (taken.has(row.id) || row.shippingCompany !== rule.shippingCompany) return false;
+      return orderInShippingWindow(row.num, row.dateIso, rule, input.fromYmd, input.toYmd);
+    });
+    if (!matched.length) continue;
+    const nums = matched.map((row) => row.num).filter((num) => num > 0);
+    if (!nums.length) continue;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const existing = await prisma.$queryRaw<Array<{ orderNum: bigint | number }>>`
+      SELECT CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) AS orderNum
+      FROM CsOrderConfirmation
+      WHERE CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${min} AND ${max}
+    `;
+    const occupied = new Set(existing.map((row) => Number(row.orderNum)));
+    const segments = segmentsWithoutForeignOrders(matched, occupied);
+    for (const segment of segments) {
+      const updated = await prisma.csOrderConfirmation.updateMany({
+        where: { id: { in: segment.ids }, assignedAgentId: null },
+        data: { assignedAgentId: rule.agentId },
+      });
+      if (!updated.count) continue;
+      await prisma.csOrderAssignment.create({
+        data: {
+          agentId: rule.agentId,
+          wooOrderNumberFrom: segment.from,
+          wooOrderNumberTo: segment.to,
+          createdById: input.createdById,
+        },
+      });
+      for (const id of segment.ids) taken.add(id);
+      if (rule.shippingCompany === "bosta") counts.bosta += updated.count;
+      else counts.temima += updated.count;
+      ranges.push({
+        agentId: rule.agentId,
+        shippingCompany: rule.shippingCompany,
+        from: segment.from,
+        to: segment.to,
+        count: updated.count,
+      });
+    }
+  }
+
+  const unscoped = open.filter((row) => {
+    if (row.shippingCompany || taken.has(row.id)) return false;
+    return rules.some((rule) => orderInShippingWindow(row.num, row.dateIso, rule, input.fromYmd, input.toYmd));
+  }).length;
+
+  return { ok: true as const, ...counts, unscoped, ranges };
 }
