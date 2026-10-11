@@ -59,6 +59,13 @@ export type MonaOrderCard = {
   isLarge: boolean;
 };
 
+export type MonaDayAccount = {
+  courierId: number;
+  dayYmd: string;
+  collected: number | null;
+  remitted: number | null;
+};
+
 export type MonaLedgerLine = {
   courierId: number;
   name: string;
@@ -309,6 +316,75 @@ async function loadMonaAdjusts() {
   return map;
 }
 
+async function ensureMonaDayTable() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsMonaDayAccount\` (
+      \`courierAgentId\` INT NOT NULL,
+      \`dayYmd\` VARCHAR(10) NOT NULL,
+      \`collectedAmount\` DECIMAL(12,2) NULL,
+      \`remittedAmount\` DECIMAL(12,2) NULL,
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`courierAgentId\`, \`dayYmd\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+}
+
+export async function loadMonaDayAccounts(): Promise<MonaDayAccount[]> {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  await ensureMonaDayTable();
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ courierAgentId: number; dayYmd: string; collectedAmount: unknown; remittedAmount: unknown }>
+  >(`SELECT courierAgentId, dayYmd, collectedAmount, remittedAmount FROM CsMonaDayAccount`);
+  return rows.map((row) => ({
+    courierId: Number(row.courierAgentId),
+    dayYmd: String(row.dayYmd || ""),
+    collected: row.collectedAmount == null ? null : Number(row.collectedAmount),
+    remitted: row.remittedAmount == null ? null : Number(row.remittedAmount),
+  }));
+}
+
+function optionalMoney(value: unknown) {
+  if (value == null || value === "") return null;
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return undefined;
+  return Math.round(amount * 100) / 100;
+}
+
+export async function saveMonaDayAccount(
+  courierId: number,
+  dayYmd: string,
+  input: { collected: unknown; remitted: unknown },
+) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return { ok: false as const, message: "اليوم غير معروف." };
+  const couriers = await listMonaCourierAgents();
+  if (!couriers.some((row) => row.id === courierId)) {
+    return { ok: false as const, message: "المندوب مش موجود." };
+  }
+  const collected = optionalMoney(input.collected);
+  const remitted = optionalMoney(input.remitted);
+  if (collected === undefined || remitted === undefined) {
+    return { ok: false as const, message: "اكتب المبالغ بشكل صحيح." };
+  }
+  await ensureMonaDayTable();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO CsMonaDayAccount (courierAgentId, dayYmd, collectedAmount, remittedAmount)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       collectedAmount = VALUES(collectedAmount),
+       remittedAmount = VALUES(remittedAmount)`,
+    courierId,
+    dayYmd,
+    collected,
+    remitted,
+  );
+  return { ok: true as const, message: "اتحفظ حساب اليوم." };
+}
+
 function ledgerOf(
   couriers: Array<{ id: number; name: string }>,
   cards: MonaOrderCard[],
@@ -378,12 +454,18 @@ export async function loadMonaDesk(viewerCourierId?: number) {
   const answers = await loadAnswers([...rows, ...returnedRows].map((row) => row.id));
   const cards = rows.map((row) => cardFrom(row, answers));
   const returned = returnedRows.map((row) => cardFrom(row, answers));
-  const [remitted, adjusts] = await Promise.all([remittedByCourier(), loadMonaAdjusts()]);
+  const [remitted, adjusts, dayAccounts] = await Promise.all([
+    remittedByCourier(),
+    loadMonaAdjusts(),
+    loadMonaDayAccounts(),
+  ]);
+  const visibleIds = new Set(visible.map((row) => row.id));
   return {
     couriers: visible,
     orders: cards,
     returned,
     ledger: ledgerOf(visible, cards, remitted, adjusts),
+    dayAccounts: dayAccounts.filter((row) => visibleIds.has(row.courierId)),
   };
 }
 

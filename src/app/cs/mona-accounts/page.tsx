@@ -4,7 +4,7 @@ import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
-import { MonaCourierPanel } from "../mona/mona-client";
+import { MonaAccountsHome } from "../mona/mona-client";
 
 export default async function MonaAccountsPage() {
   const session = await requireCsSession();
@@ -13,5 +13,5 @@ export default async function MonaAccountsPage() {
   const viewer = await resolveCsViewer(session.user.csAgentId);
   const allowed = (viewer.isSupervisor || viewer.isAdmin) && !viewer.isCourierSupervisor;
   if (!allowed) redirect("/cs");
-  return <MonaCourierPanel mode="supervisor" />;
+  return <MonaAccountsHome />;
 }

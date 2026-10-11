@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 type Outcome = "delivered" | "refused" | "postponed";
@@ -46,6 +47,13 @@ type LedgerLine = {
   invoiceRemaining: number;
 };
 
+type DayAccount = {
+  courierId: number;
+  dayYmd: string;
+  collected: number | null;
+  remitted: number | null;
+};
+
 type Desk = {
   mode: "supervisor" | "courier";
   canEditMoney?: boolean;
@@ -53,9 +61,13 @@ type Desk = {
   orders: OrderCard[];
   returned?: OrderCard[];
   ledger: LedgerLine[];
+  dayAccounts?: DayAccount[];
 };
 
-type MoneyDraft = { collected: string; shipping: string; remitted: string };
+type DayDraft = { collected: string; remitted: string };
+
+const MONA_DAY_FEE = 75;
+const MONA_DAY_LARGE_FEE = 100;
 
 function egp(value: number) {
   const rounded = Math.round(value * 100) / 100;
@@ -137,22 +149,136 @@ function sumOf(list: OrderCard[], pick: (order: OrderCard) => number) {
   return list.reduce((sum, order) => sum + pick(order), 0);
 }
 
+function dayShipping(rows: OrderCard[]) {
+  return rows.reduce((sum, order) => {
+    if (order.official !== "delivered") return sum;
+    return sum + (order.isLarge ? MONA_DAY_LARGE_FEE : MONA_DAY_FEE);
+  }, 0);
+}
+
+function dayRemaining(collected: string, remitted: string, shipping: number) {
+  if (collected.trim() === "") return null;
+  const paidIn = Number(collected);
+  const handed = remitted.trim() === "" ? 0 : Number(remitted);
+  if (!Number.isFinite(paidIn) || !Number.isFinite(handed)) return null;
+  return paidIn - shipping - handed;
+}
+
+function moneyText(value: number | null) {
+  return value == null || Number.isNaN(value) ? "" : egp(value);
+}
+
+function cairoToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function DayAccountBox({
+  rows,
+  draft,
+  canEdit,
+  onDraft,
+  onSave,
+}: {
+  rows: OrderCard[];
+  draft: DayDraft;
+  canEdit: boolean;
+  onDraft: (next: DayDraft) => void;
+  onSave: () => void;
+}) {
+  const goods = sumOf(rows, shipmentValue);
+  const shipping = dayShipping(rows);
+  const remaining = dayRemaining(draft.collected, draft.remitted, shipping);
+  return (
+    <div className="grid gap-2 bg-[#F8F4EA] px-3 py-3 text-sm font-extrabold text-[#14213D]">
+      <p className="flex items-center justify-between gap-3">
+        <span>إجمالي قيمة البضاعة</span>
+        <span>{egp(goods)} ج.م</span>
+      </p>
+      {canEdit ? (
+        <form
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave();
+          }}
+        >
+          <label className="flex items-center justify-between gap-3">
+            <span>القيمة المحصلة</span>
+            <input
+              value={draft.collected}
+              onChange={(event) => onDraft({ ...draft, collected: event.target.value })}
+              inputMode="decimal"
+              className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
+            />
+          </label>
+          <p className="flex items-center justify-between gap-3">
+            <span>إجمالي تكلفة الشحن</span>
+            <span>{egp(shipping)} ج.م</span>
+          </p>
+          <label className="flex items-center justify-between gap-3">
+            <span>التوريد النقدي</span>
+            <input
+              value={draft.remitted}
+              onChange={(event) => onDraft({ ...draft, remitted: event.target.value })}
+              inputMode="decimal"
+              className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
+            />
+          </label>
+          <p className="flex items-center justify-between gap-3 text-base">
+            <span>المتبقي</span>
+            <span>{remaining == null ? "—" : `${egp(remaining)} ج.م`}</span>
+          </p>
+          <button type="submit" className="h-10 rounded-xl bg-[#FCA311] text-sm font-extrabold text-black">
+            حفظ اليوم
+          </button>
+        </form>
+      ) : (
+        <>
+          <p className="flex items-center justify-between gap-3">
+            <span>القيمة المحصلة</span>
+            <span>{draft.collected.trim() === "" ? "—" : `${draft.collected} ج.م`}</span>
+          </p>
+          <p className="flex items-center justify-between gap-3">
+            <span>إجمالي تكلفة الشحن</span>
+            <span>{egp(shipping)} ج.م</span>
+          </p>
+          <p className="flex items-center justify-between gap-3">
+            <span>التوريد النقدي</span>
+            <span>{draft.remitted.trim() === "" ? "—" : `${draft.remitted} ج.م`}</span>
+          </p>
+          <p className="flex items-center justify-between gap-3 text-base">
+            <span>المتبقي</span>
+            <span>{remaining == null ? "—" : `${egp(remaining)} ج.م`}</span>
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CourierInvoice({
   line,
   orders,
   canEditMoney,
-  draft,
+  dayAccounts,
+  drafts,
   onDraft,
-  onSave,
+  onSaveDay,
   onOfficial,
   onLarge,
 }: {
   line: LedgerLine;
   orders: OrderCard[];
   canEditMoney: boolean;
-  draft: MoneyDraft;
-  onDraft: (next: MoneyDraft) => void;
-  onSave: () => void;
+  dayAccounts: DayAccount[];
+  drafts: Record<string, DayDraft>;
+  onDraft: (dayYmd: string, next: DayDraft) => void;
+  onSaveDay: (dayYmd: string) => void;
   onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
   onLarge?: (confirmationId: number, isLarge: boolean) => void;
 }) {
@@ -276,6 +402,24 @@ function CourierInvoice({
                     </td>
                     <td colSpan={2} className="border border-[#14213D]/15 bg-[#F5F5F0]" />
                   </tr>
+                  {/^\d{4}-\d{2}-\d{2}$/.test(block.key) ? (
+                    <tr>
+                      <td colSpan={12} className="border border-[#14213D]/25 p-0">
+                        <DayAccountBox
+                          rows={block.rows}
+                          canEdit={canEditMoney}
+                          draft={
+                            drafts[block.key] || {
+                              collected: moneyText(dayAccounts.find((row) => row.dayYmd === block.key)?.collected ?? null),
+                              remitted: moneyText(dayAccounts.find((row) => row.dayYmd === block.key)?.remitted ?? null),
+                            }
+                          }
+                          onDraft={(next) => onDraft(block.key, next)}
+                          onSave={() => onSaveDay(block.key)}
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
                 </Fragment>
               ))
             )}
@@ -307,75 +451,6 @@ function CourierInvoice({
           ) : null}
         </table>
       </div>
-      <footer className="grid gap-2 border-t border-[#14213D]/10 bg-[#F8F4EA] px-4 py-3 text-sm font-extrabold text-[#14213D]">
-        <p className="flex items-center justify-between gap-3">
-          <span>إجمالي قيمة البضاعة</span>
-          <span>{egp(line.goods)} ج.م</span>
-        </p>
-        {canEditMoney ? (
-          <form
-            className="grid gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSave();
-            }}
-          >
-            <label className="flex items-center justify-between gap-3">
-              <span>القيمة المحصلة</span>
-              <input
-                value={draft.collected}
-                onChange={(event) => onDraft({ ...draft, collected: event.target.value })}
-                inputMode="decimal"
-                className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span>إجمالي تكلفة الشحن</span>
-              <input
-                value={draft.shipping}
-                onChange={(event) => onDraft({ ...draft, shipping: event.target.value })}
-                inputMode="decimal"
-                className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3">
-              <span>التوريد النقدي</span>
-              <input
-                value={draft.remitted}
-                onChange={(event) => onDraft({ ...draft, remitted: event.target.value })}
-                inputMode="decimal"
-                className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
-              />
-            </label>
-            <p className="flex items-center justify-between gap-3 text-base">
-              <span>المتبقي</span>
-              <span>{egp(line.invoiceRemaining)} ج.م</span>
-            </p>
-            <button type="submit" className="h-10 rounded-xl bg-[#FCA311] text-sm font-extrabold text-black">
-              حفظ
-            </button>
-          </form>
-        ) : (
-          <>
-            <p className="flex items-center justify-between gap-3">
-              <span>القيمة المحصلة</span>
-              <span>{egp(line.invoiceCollected)} ج.م</span>
-            </p>
-            <p className="flex items-center justify-between gap-3">
-              <span>إجمالي تكلفة الشحن</span>
-              <span>{egp(line.invoiceShipping)} ج.م</span>
-            </p>
-            <p className="flex items-center justify-between gap-3">
-              <span>التوريد النقدي</span>
-              <span>{egp(line.invoiceRemitted)} ج.م</span>
-            </p>
-            <p className="flex items-center justify-between gap-3 text-base">
-              <span>المتبقي</span>
-              <span>{egp(line.invoiceRemaining)} ج.م</span>
-            </p>
-          </>
-        )}
-      </footer>
     </article>
   );
 }
@@ -529,17 +604,59 @@ function ReturnedOrder({
   );
 }
 
-export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
+function reportRows(orders: OrderCard[], accounts: DayAccount[], from: string, to: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return [];
+  const start = from <= to ? from : to;
+  const end = from <= to ? to : from;
+  const days = new Set<string>();
+  for (const order of orders) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(order.assignedDay)) days.add(order.assignedDay);
+  }
+  for (const account of accounts) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(account.dayYmd)) days.add(account.dayYmd);
+  }
+  return [...days]
+    .filter((day) => day >= start && day <= end)
+    .sort()
+    .map((day) => {
+      const rows = orders.filter((order) => order.assignedDay === day);
+      const saved = accounts.find((row) => row.dayYmd === day);
+      const shipping = dayShipping(rows);
+      const collected = saved?.collected ?? null;
+      const remitted = saved?.remitted ?? null;
+      return {
+        day,
+        goods: sumOf(rows, shipmentValue),
+        collected,
+        shipping,
+        remitted,
+        remaining: (collected || 0) - shipping - (remitted || 0),
+      };
+    });
+}
+
+export function MonaCourierPanel({
+  mode,
+  focusCourierId,
+}: {
+  mode: "supervisor" | "courier";
+  focusCourierId?: number;
+}) {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [orderNumber, setOrderNumber] = useState("");
-  const [courierId, setCourierId] = useState("");
-  const [moneyDrafts, setMoneyDrafts] = useState<Record<number, MoneyDraft>>({});
+  const [tab, setTab] = useState<"sheet" | "report">("sheet");
+  const [fromDay, setFromDay] = useState("");
+  const [toDay, setToDay] = useState("");
+  const [dayDrafts, setDayDrafts] = useState<Record<string, DayDraft>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(mode === "courier" ? "/api/cs/mona-couriers?scope=own" : "/api/cs/mona-couriers");
+    const query = new URLSearchParams();
+    if (mode === "courier") query.set("scope", "own");
+    else if (focusCourierId) query.set("courierId", String(focusCourierId));
+    const res = await fetch(`/api/cs/mona-couriers${query.size ? `?${query}` : ""}`);
     const data = (await res.json()) as Desk | { message?: string };
     setLoading(false);
     if (!res.ok || !("orders" in data)) {
@@ -547,19 +664,21 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
       return;
     }
     setDesk(data);
-    setMoneyDrafts((current) => {
-      const next = { ...current };
-      for (const line of data.ledger || []) {
-        next[line.courierId] = {
-          collected: egp(line.invoiceCollected),
-          shipping: egp(line.invoiceShipping),
-          remitted: egp(line.invoiceRemitted),
+    const today = cairoToday();
+    setFromDay((current) => current || `${today.slice(0, 8)}01`);
+    setToDay((current) => current || today);
+    setDayDrafts(() => {
+      const next: Record<string, DayDraft> = {};
+      for (const row of data.dayAccounts || []) {
+        next[row.dayYmd] = {
+          collected: moneyText(row.collected),
+          remitted: moneyText(row.remitted),
         };
       }
       return next;
     });
     setMessage("");
-  }, [mode]);
+  }, [mode, focusCourierId]);
 
   useEffect(() => {
     void load();
@@ -597,24 +716,69 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
 
   const couriers = desk?.couriers || [];
   const orders = desk?.orders || [];
+  const focused = couriers.find((courier) => courier.id === focusCourierId) || couriers[0];
+  const focusedOrders = focused ? orders.filter((order) => Number(order.courierId) === Number(focused.id)) : [];
+  const focusedAccounts = (desk?.dayAccounts || []).filter((row) => !focused || row.courierId === focused.id);
+  const report = reportRows(focusedOrders, focusedAccounts, fromDay, toDay);
+  const reportTotal = report.reduce(
+    (sum, row) => ({
+      goods: sum.goods + row.goods,
+      collected: sum.collected + (row.collected || 0),
+      shipping: sum.shipping + row.shipping,
+      remitted: sum.remitted + (row.remitted || 0),
+      remaining: sum.remaining + row.remaining,
+    }),
+    { goods: 0, collected: 0, shipping: 0, remitted: 0, remaining: 0 },
+  );
 
   return (
     <section className="no-print grid gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10 sm:p-4">
-      <div>
-        <h2 className="text-base font-extrabold text-[#14213D]">مناديب المشرفة</h2>
-        {mode === "courier" ? (
-          <p className="text-xs font-bold text-[#14213D]/70">أجر 75 جنيه على كل أوردر اتسلم. المتبقي = التحصيل − الأجر − التوريد.</p>
-        ) : (
-          <p className="text-xs font-bold text-[#14213D]/70">المتبقي = المحصلة − الشحن − التوريد. تعديل الأرقام من حساب الأدمن.</p>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-extrabold text-[#14213D]">
+            {mode === "courier" ? "مناديب المشرفة" : focused ? `حساب ${focused.name}` : "حساب المندوب"}
+          </h2>
+          {mode === "courier" ? (
+            <p className="text-xs font-bold text-[#14213D]/70">أجر 75 جنيه على كل أوردر اتسلم. المتبقي = التحصيل − الأجر − التوريد.</p>
+          ) : (
+            <p className="text-xs font-bold text-[#14213D]/70">كل يوم حساب لوحده. المتبقي = المحصلة − الشحن − التوريد.</p>
+          )}
+        </div>
+        {mode === "supervisor" ? (
+          <Link href="/cs/mona-accounts" className="text-sm font-extrabold text-[#14213D] underline">
+            كل المناديب
+          </Link>
+        ) : null}
       </div>
-      {message ? <p className="text-sm font-extrabold text-[#14213D]">{message}</p> : null}
       {mode === "supervisor" ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setTab("sheet")}
+            className={`rounded-xl px-4 py-2 text-sm font-extrabold ${tab === "sheet" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"}`}
+          >
+            الحساب
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("report")}
+            className={`rounded-xl px-4 py-2 text-sm font-extrabold ${tab === "report" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"}`}
+          >
+            التقرير
+          </button>
+        </div>
+      ) : null}
+      {message ? <p className="text-sm font-extrabold text-[#14213D]">{message}</p> : null}
+      {loading && !desk ? <p className="text-sm font-bold text-[#14213D]/70">جاري التحميل</p> : null}
+      {mode === "supervisor" && desk && !focused ? (
+        <p className="text-sm font-bold text-[#14213D]/70">المندوب مش موجود.</p>
+      ) : null}
+      {mode === "supervisor" && tab === "sheet" && focused ? (
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void post({ action: "assign", orderNumber, courierId: Number(courierId) });
+            void post({ action: "assign", orderNumber, courierId: focused.id });
           }}
         >
           <input
@@ -624,77 +788,128 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
             placeholder="رقم الأوردر"
             className="h-11 min-w-0 flex-1 rounded-xl border border-[#14213D]/15 px-3 text-sm font-bold text-[#14213D]"
           />
-          <select
-            value={courierId}
-            onChange={(event) => setCourierId(event.target.value)}
-            className="h-11 min-w-36 rounded-xl border border-[#14213D]/15 bg-white px-3 text-sm font-bold text-[#14213D]"
-          >
-            <option value="">اسم المندوب</option>
-            {couriers.map((courier) => (
-              <option key={courier.id} value={courier.id}>
-                {courier.name}
-              </option>
-            ))}
-          </select>
           <button type="submit" className="rounded-xl bg-[#14213D] px-4 py-2 text-sm font-extrabold text-white">
             إضافة
           </button>
         </form>
       ) : null}
-      {loading && !desk ? <p className="text-sm font-bold text-[#14213D]/70">جاري التحميل</p> : null}
-      {mode === "supervisor" && (desk?.returned || []).length ? (
-        <section className="grid gap-2">
-          <h3 className="text-sm font-extrabold text-orange-800">مؤجل — يتوزع على مندوب تاني</h3>
-          {(desk?.returned || []).map((order) => (
-            <ReturnedOrder
-              key={order.id}
-              order={order}
-              couriers={couriers}
-              onAssign={(courier) => void post({ action: "assign", orderNumber: order.wooOrderNumber, courierId: courier })}
-            />
-          ))}
-        </section>
-      ) : null}
-      {mode === "supervisor" && desk && !couriers.length ? (
-        <p className="text-sm font-bold text-[#14213D]/70">أضف الحساب من المستخدمين بدور مندوب المشرفة.</p>
-      ) : null}
-      {mode === "supervisor"
-        ? (desk?.ledger || []).map((line) => (
-            <CourierInvoice
-              key={line.courierId}
-              line={line}
-              orders={orders}
-              canEditMoney={Boolean(desk?.canEditMoney)}
-              draft={
-                moneyDrafts[line.courierId] || {
-                  collected: egp(line.invoiceCollected),
-                  shipping: egp(line.invoiceShipping),
-                  remitted: egp(line.invoiceRemitted),
-                }
-              }
-              onDraft={(next) => setMoneyDrafts((current) => ({ ...current, [line.courierId]: next }))}
-              onSave={() => {
-                const draft = moneyDrafts[line.courierId];
-                void post({
-                  action: "adjust",
-                  courierId: line.courierId,
-                  collected: Number(draft?.collected),
-                  shipping: Number(draft?.shipping),
-                  remitted: Number(draft?.remitted),
-                });
-              }}
-              onOfficial={(confirmationId, result) => {
-                const previous = orders.find((order) => order.id === confirmationId);
-                rememberOfficial(confirmationId, result, previous?.isLarge);
-                void post({ action: "official", confirmationId, outcome: result || "clear" }).then((ok) => {
-                  if (ok || !previous) return;
-                  rememberOfficial(confirmationId, previous.official, previous.isLarge);
-                });
-              }}
-              onLarge={(confirmationId, isLarge) => void post({ action: "large", confirmationId, isLarge })}
-            />
-          ))
+      {mode === "supervisor" && tab === "sheet"
+        ? (desk?.ledger || [])
+            .filter((line) => !focused || line.courierId === focused.id)
+            .map((line) => (
+              <CourierInvoice
+                key={line.courierId}
+                line={line}
+                orders={orders}
+                canEditMoney={Boolean(desk?.canEditMoney)}
+                dayAccounts={focusedAccounts}
+                drafts={dayDrafts}
+                onDraft={(dayYmd, next) => setDayDrafts((current) => ({ ...current, [dayYmd]: next }))}
+                onSaveDay={(dayYmd) => {
+                  const draft = dayDrafts[dayYmd] || { collected: "", remitted: "" };
+                  void post({
+                    action: "day",
+                    courierId: line.courierId,
+                    dayYmd,
+                    collected: draft.collected.trim() === "" ? null : Number(draft.collected),
+                    remitted: draft.remitted.trim() === "" ? null : Number(draft.remitted),
+                  });
+                }}
+                onOfficial={(confirmationId, result) => {
+                  const previous = orders.find((order) => order.id === confirmationId);
+                  rememberOfficial(confirmationId, result, previous?.isLarge);
+                  void post({ action: "official", confirmationId, outcome: result || "clear" }).then((ok) => {
+                    if (ok || !previous) return;
+                    rememberOfficial(confirmationId, previous.official, previous.isLarge);
+                  });
+                }}
+                onLarge={(confirmationId, isLarge) => void post({ action: "large", confirmationId, isLarge })}
+              />
+            ))
         : null}
+      {mode === "supervisor" && tab === "report" && focused ? (
+        <div className="grid gap-3">
+          <form className="flex flex-wrap items-end gap-2">
+            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+              من
+              <input
+                type="date"
+                value={fromDay}
+                onChange={(event) => setFromDay(event.target.value)}
+                className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+              إلى
+              <input
+                type="date"
+                value={toDay}
+                onChange={(event) => setToDay(event.target.value)}
+                className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
+              />
+            </label>
+          </form>
+          <div className="overflow-auto">
+            <table className="min-w-full border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr>
+                  {["اليوم", "قيمة البضاعة", "المحصلة", "الشحن", "التوريد", "المتبقي"].map((head) => (
+                    <th key={head} className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2 text-right">
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {report.length ? (
+                  report.map((row) => (
+                    <tr key={row.day}>
+                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold">{monaDayHeading(row.day)}</td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 text-center tabular-nums">{egp(row.goods)}</td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 text-center tabular-nums">
+                        {row.collected == null ? "—" : egp(row.collected)}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 text-center tabular-nums">{egp(row.shipping)}</td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 text-center tabular-nums">
+                        {row.remitted == null ? "—" : egp(row.remitted)}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 text-center tabular-nums">{egp(row.remaining)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="border border-[#14213D]/15 px-3 py-6 text-center font-bold text-[#14213D]/60">
+                      مفيش أيام في الفترة دي.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              {report.length ? (
+                <tfoot>
+                  <tr>
+                    <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white">إجمالي الفترة</td>
+                    <td className="border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                      {egp(reportTotal.goods)}
+                    </td>
+                    <td className="border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                      {egp(reportTotal.collected)}
+                    </td>
+                    <td className="border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                      {egp(reportTotal.shipping)}
+                    </td>
+                    <td className="border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                      {egp(reportTotal.remitted)}
+                    </td>
+                    <td className="border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
+                      {egp(reportTotal.remaining)}
+                    </td>
+                  </tr>
+                </tfoot>
+              ) : null}
+            </table>
+          </div>
+        </div>
+      ) : null}
       {mode === "courier" && desk?.ledger[0] ? (
         <p className="text-sm font-extrabold text-[#14213D]">
           مسلّم {desk.ledger[0].delivered} · مؤجّل {desk.ledger[0].postponed} · رفض {desk.ledger[0].refused} · التحصيل{" "}
@@ -710,6 +925,78 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
       ) : null}
       {mode === "courier" && desk && !orders.length ? (
         <p className="text-sm font-bold text-[#14213D]/70">مفيش أوردرات عندك.</p>
+      ) : null}
+    </section>
+  );
+}
+
+export function MonaAccountsHome() {
+  const [desk, setDesk] = useState<Desk | null>(null);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch("/api/cs/mona-couriers");
+    const data = (await res.json()) as Desk | { message?: string };
+    setLoading(false);
+    if (!res.ok || !("couriers" in data)) {
+      setMessage(("message" in data && data.message) || "تعذر تحميل المناديب.");
+      return;
+    }
+    setDesk(data);
+    setMessage("");
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function post(body: Record<string, unknown>) {
+    const res = await fetch("/api/cs/mona-couriers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json().catch(() => null)) as { message?: string } | null;
+    setMessage(data?.message || (res.ok ? "تم." : "تعذر التنفيذ."));
+    if (res.ok) await load();
+  }
+
+  const couriers = desk?.couriers || [];
+
+  return (
+    <section className="no-print grid gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10 sm:p-4">
+      <h2 className="text-base font-extrabold text-[#14213D]">مناديب المشرفة</h2>
+      {message ? <p className="text-sm font-extrabold text-[#14213D]">{message}</p> : null}
+      {loading && !desk ? <p className="text-sm font-bold text-[#14213D]/70">جاري التحميل</p> : null}
+      {desk && !couriers.length ? (
+        <p className="text-sm font-bold text-[#14213D]/70">أضف الحساب من المستخدمين بدور مندوب المشرفة.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {couriers.map((courier) => (
+            <Link
+              key={courier.id}
+              href={`/cs/mona-accounts/${courier.id}`}
+              className="rounded-2xl bg-[#14213D] px-4 py-5 text-lg font-extrabold text-white"
+            >
+              حساب {courier.name}
+            </Link>
+          ))}
+        </div>
+      )}
+      {(desk?.returned || []).length ? (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-extrabold text-orange-800">مؤجل — يتوزع على مندوب تاني</h3>
+          {(desk?.returned || []).map((order) => (
+            <ReturnedOrder
+              key={order.id}
+              order={order}
+              couriers={couriers}
+              onAssign={(courier) => void post({ action: "assign", orderNumber: order.wooOrderNumber, courierId: courier })}
+            />
+          ))}
+        </section>
       ) : null}
     </section>
   );

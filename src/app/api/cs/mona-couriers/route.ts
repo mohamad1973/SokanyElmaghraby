@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { assignMonaOrder, loadMonaDesk, markMonaLarge, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust } from "@/lib/cs/mona-courier";
+import { assignMonaOrder, loadMonaDesk, markMonaLarge, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust, saveMonaDayAccount } from "@/lib/cs/mona-courier";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function accessOrNull() {
@@ -18,8 +18,11 @@ async function accessOrNull() {
 export async function GET(request: Request) {
   const access = await accessOrNull();
   if (!access) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
-  const own = new URL(request.url).searchParams.get("scope") === "own" || !access.supervisor;
-  const desk = await loadMonaDesk(own ? access.session.user.csAgentId! : undefined);
+  const url = new URL(request.url);
+  const own = url.searchParams.get("scope") === "own" || !access.supervisor;
+  const requested = Number(url.searchParams.get("courierId"));
+  const focus = !own && Number.isInteger(requested) && requested > 0 ? requested : undefined;
+  const desk = await loadMonaDesk(own ? access.session.user.csAgentId! : focus);
   return NextResponse.json({
     mode: access.supervisor ? "supervisor" : "courier",
     canEditMoney: Boolean(access.supervisor && access.viewer.isAdmin),
@@ -39,9 +42,10 @@ export async function POST(request: Request) {
     reason?: string;
     isLarge?: boolean;
     amount?: number;
-    collected?: number;
+    collected?: number | null;
     shipping?: number;
-    remitted?: number;
+    remitted?: number | null;
+    dayYmd?: string;
   } | null;
   if (!body?.action) return NextResponse.json({ message: "الطلب ناقص." }, { status: 400 });
 
@@ -89,6 +93,15 @@ export async function POST(request: Request) {
     if (!access.viewer.isAdmin) return NextResponse.json({ message: "التوريد من حساب الأدمن." }, { status: 403 });
     const result = await recordMonaRemit(Number(body.courierId), Number(body.amount));
     return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "day") {
+    if (!access.viewer.isAdmin) return NextResponse.json({ message: "التعديل من حساب الأدمن." }, { status: 403 });
+    const saved = await saveMonaDayAccount(Number(body.courierId), String(body.dayYmd || ""), {
+      collected: body.collected,
+      remitted: body.remitted,
+    });
+    return NextResponse.json(saved, { status: saved.ok ? 200 : 400 });
   }
 
   if (body.action === "adjust") {
