@@ -129,7 +129,8 @@ function refusalValue(order: OrderCard) {
 }
 
 function netValue(order: OrderCard) {
-  return order.official === "delivered" ? remainder(order) : 0;
+  if (order.official !== "delivered") return 0;
+  return Math.max(0, (Number(order.orderTotal) || 0) - (Number(order.depositAmount) || 0));
 }
 
 function sumOf(list: OrderCard[], pick: (order: OrderCard) => number) {
@@ -412,7 +413,7 @@ function CourierCard({
   canAct,
 }: {
   order: OrderCard;
-  onPost: (body: Record<string, unknown>) => Promise<void>;
+  onPost: (body: Record<string, unknown>) => Promise<boolean>;
   canAct: boolean;
 }) {
   const [reason, setReason] = useState("");
@@ -573,6 +574,25 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
     const data = (await res.json().catch(() => null)) as { message?: string } | null;
     setMessage(data?.message || (res.ok ? "تم." : "تعذر التنفيذ."));
     if (res.ok) await load();
+    return res.ok;
+  }
+
+  function rememberOfficial(confirmationId: number, result: Outcome | null, isLarge?: boolean) {
+    setDesk((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        orders: current.orders.map((order) =>
+          order.id === confirmationId
+            ? {
+                ...order,
+                official: result,
+                isLarge: result === "delivered" ? (isLarge ?? order.isLarge) : false,
+              }
+            : order,
+        ),
+      };
+    });
   }
 
   const couriers = desk?.couriers || [];
@@ -663,9 +683,14 @@ export function MonaCourierPanel({ mode }: { mode: "supervisor" | "courier" }) {
                   remitted: Number(draft?.remitted),
                 });
               }}
-              onOfficial={(confirmationId, result) =>
-                void post({ action: "official", confirmationId, outcome: result || "clear" })
-              }
+              onOfficial={(confirmationId, result) => {
+                const previous = orders.find((order) => order.id === confirmationId);
+                rememberOfficial(confirmationId, result, previous?.isLarge);
+                void post({ action: "official", confirmationId, outcome: result || "clear" }).then((ok) => {
+                  if (ok || !previous) return;
+                  rememberOfficial(confirmationId, previous.official, previous.isLarge);
+                });
+              }}
               onLarge={(confirmationId, isLarge) => void post({ action: "large", confirmationId, isLarge })}
             />
           ))

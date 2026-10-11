@@ -167,6 +167,10 @@ function moneyNumber(value: unknown) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function monaSheetNet(card: { orderTotal: number; depositAmount: number }) {
+  return Math.max(0, card.orderTotal - card.depositAmount);
+}
+
 function assignedDayOf(value: Date | string | null | undefined) {
   if (!value) return "";
   const iso = value instanceof Date ? value.toISOString() : String(value);
@@ -317,11 +321,11 @@ function ledgerOf(
     const goods = mine
       .filter((card) => card.official !== "refused")
       .reduce((sum, card) => sum + card.cashAmount, 0);
-    const collected = delivered.reduce((sum, card) => sum + card.cashAmount, 0);
+    const collected = delivered.reduce((sum, card) => sum + monaSheetNet(card), 0);
     const fee = delivered.reduce((sum, card) => sum + (card.isLarge ? MONA_LARGE_FEE : MONA_COURIER_FEE), 0);
     const paid = remitted.get(courier.id) || 0;
     const adjust = adjusts.get(Number(courier.id));
-    const invoiceCollected = adjust?.collected ?? collected;
+    const invoiceCollected = collected;
     const invoiceShipping = adjust?.shipping ?? fee;
     const invoiceRemitted = adjust?.remitted ?? paid;
     return {
@@ -510,7 +514,6 @@ export async function markMonaSupervisorResult(confirmationId: number, result: O
     FROM CsOrderConfirmation
     WHERE id = ${confirmationId}
       AND (monaCourierId IS NOT NULL OR monaOutcome = 'postponed')
-      AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
     LIMIT 1
   `;
   if (!rows[0]) return { ok: false as const, message: "الأوردر مش من أوردرات المشرفة." };
@@ -540,7 +543,7 @@ export async function markMonaLarge(confirmationId: number, isLarge: boolean) {
     SET monaIsLarge = ${isLarge}
     WHERE id = ${confirmationId}
       AND monaSupervisorResult = 'delivered'
-      AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
+      AND (monaCourierId IS NOT NULL OR monaOutcome = 'postponed')
   `;
   if (!Number(changed)) return { ok: false as const, message: "كبير يتسجل مع تم بنجاح فقط." };
   return { ok: true as const, message: "اتسجل في الحسابات." };
