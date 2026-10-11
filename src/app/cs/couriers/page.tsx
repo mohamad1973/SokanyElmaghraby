@@ -13,5 +13,5 @@ export default async function CsCouriersPage() {
   const viewer = await resolveCsViewer(session.user.csAgentId);
   const asSupervisor = viewer.isCourierSupervisor || viewer.isAdmin;
   if (!asSupervisor && !viewer.isCourier) redirect("/cs");
-  return <CouriersClient mode={asSupervisor ? "supervisor" : "courier"} />;
+  return <CouriersClient mode={asSupervisor ? "supervisor" : "courier"} canEditClosedWeek={viewer.isAdmin} />;
 }

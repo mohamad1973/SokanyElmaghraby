@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { isAccountingRole } from "@/lib/cs/agents";
 import { CS_QUEUE_PAGE_SIZE, listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
 import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
-import { openSettlementMarks } from "@/lib/cs/temima-settlement";
+import { closedTemimaWeekIds, openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function GET(request: Request) {
@@ -20,9 +20,14 @@ export async function GET(request: Request) {
     const from = url.searchParams.get("from") || "";
     const to = url.searchParams.get("to") || "";
     const items = await listVisibleSayedSheet(from, to);
-    const marks = await openSettlementMarks(items.map((item) => item.id));
+    const ids = items.map((item) => item.id);
+    const [marks, closedWeeks] = await Promise.all([openSettlementMarks(ids), closedTemimaWeekIds(ids)]);
     return NextResponse.json({
-      items: items.map((item) => ({ ...item, settlementDisposition: marks.get(item.id) || "" })),
+      items: items.map((item) => ({
+        ...item,
+        settlementDisposition: marks.get(item.id) || "",
+        temimaWeekClosed: closedWeeks.has(item.id),
+      })),
       total: items.length,
       hasMore: false,
       nextCursor: null,
@@ -51,9 +56,14 @@ export async function GET(request: Request) {
     all: canPrintAll && url.searchParams.get("all") === "1",
   });
 
-  const marks = await openSettlementMarks(page.items.map((item) => item.id));
+  const ids = page.items.map((item) => item.id);
+  const [marks, closedWeeks] = await Promise.all([openSettlementMarks(ids), closedTemimaWeekIds(ids)]);
   return NextResponse.json({
     ...page,
-    items: page.items.map((item) => ({ ...item, settlementDisposition: marks.get(item.id) || "" })),
+    items: page.items.map((item) => ({
+      ...item,
+      settlementDisposition: marks.get(item.id) || "",
+      temimaWeekClosed: closedWeeks.has(item.id),
+    })),
   });
 }

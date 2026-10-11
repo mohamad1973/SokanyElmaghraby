@@ -678,10 +678,43 @@ export async function openSettlementMarks(ids: number[]) {
   return map;
 }
 
+export async function closedTemimaWeekIds(ids: number[]) {
+  const prisma = getPrismaClient();
+  const closed = new Set<number>();
+  if (!prisma || !ids.length) return closed;
+  const safe = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!safe.length) return closed;
+  await ensureCsTables();
+  const cutoffs = await listTemimaCutoffs();
+  const orders = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: safe } },
+    select: { id: true, ...SHEET_DAY_SELECT },
+  });
+  const sundayById = new Map<number, string>();
+  for (const order of orders) {
+    const day = sayedSheetYmd(order, cutoffs);
+    if (day) sundayById.set(order.id, sundayOnOrBefore(day));
+  }
+  const starts = [...new Set(sundayById.values())]
+    .map((ymd) => cairoYmdBounds(ymd)?.start)
+    .filter((value): value is Date => Boolean(value));
+  if (!starts.length) return closed;
+  const weeks = await prisma.csCarrierWeek.findMany({
+    where: { carrierCompany: TEMIMA_COMPANY, status: "closed", weekStart: { in: starts } },
+    select: { weekStart: true },
+  });
+  const closedSundays = new Set(weeks.map((week) => cairoYmdFromIso(week.weekStart.toISOString())));
+  for (const [id, sunday] of sundayById) {
+    if (closedSundays.has(sunday)) closed.add(id);
+  }
+  return closed;
+}
+
 export async function applySupervisorOrderResult(input: {
   confirmationId: number;
   result: "delivered" | "returned" | "postponed";
   agentId: number;
+  allowClosed?: boolean;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
@@ -707,7 +740,8 @@ export async function applySupervisorOrderResult(input: {
   const saturday = addDaysYmd(sunday, 6);
   const week = await upsertOpenWeek(sunday, saturday, input.agentId);
   if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
-  if (week.status === "closed") return { ok: false as const, message: "الأسبوع مقفل." };
+  const weekClosed = week.status === "closed";
+  if (weekClosed && !input.allowClosed) return { ok: false as const, message: "الأسبوع مقفل." };
 
   const disposition: TemimaDisposition =
     input.result === "returned" ? "return" : input.result === "postponed" ? "postpone" : "collect";
@@ -754,7 +788,7 @@ export async function applySupervisorOrderResult(input: {
     .reduce((sum, row) => sum + Number(row.cashAmount || 0), 0);
   await prisma.csCarrierWeek.update({
     where: { id: week.id },
-    data: { cashDue, status: "open", closedAt: null },
+    data: weekClosed ? { cashDue } : { cashDue, status: "open", closedAt: null },
   });
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation

@@ -74,6 +74,7 @@ export type CsQueueItem = {
   courierOutcome?: string | null;
   courierRefusalReason?: string | null;
   settlementDisposition?: "" | "collect" | "return" | "postpone";
+  temimaWeekClosed?: boolean;
   sheetSerial?: number | null;
 };
 
@@ -646,6 +647,7 @@ type Props = {
   isCourierSupervisor?: boolean;
   showOfficialMarks?: boolean;
   canPressOfficial?: boolean;
+  canEditClosedWeek?: boolean;
   canOpenOrders?: boolean;
   canSetTemimaCutoff?: boolean;
   canEditTemimaSheet?: boolean;
@@ -679,6 +681,13 @@ function officialActions(disposition: "" | "collect" | "return" | "postpone" | u
   return all;
 }
 
+function currentStatusAction(disposition: "" | "collect" | "return" | "postpone" | undefined) {
+  if (disposition === "collect") return "delivered" as const;
+  if (disposition === "return") return "returned" as const;
+  if (disposition === "postpone") return "postponed" as const;
+  return "" as const;
+}
+
 export function CsQueueClient({
   initialItems,
   isSupervisor,
@@ -686,6 +695,7 @@ export function CsQueueClient({
   isCourierSupervisor,
   showOfficialMarks = false,
   canPressOfficial = false,
+  canEditClosedWeek = false,
   canOpenOrders = true,
   canSetTemimaCutoff = false,
   canEditTemimaSheet = false,
@@ -938,6 +948,24 @@ export function CsQueueClient({
         return { ...item, settlementDisposition };
       }),
     );
+  }
+
+  function askStatusEdit(id: number, weekClosed: boolean) {
+    if (editingStatusId === id) return;
+    if (weekClosed && !canEditClosedWeek) return;
+    if (!window.confirm("هل تريد التعديل؟")) return;
+    setEditingStatusId(id);
+  }
+
+  function pressStatus(
+    id: number,
+    action: "delivered" | "returned" | "postponed",
+    disposition: CsQueueItem["settlementDisposition"],
+    weekClosed: boolean,
+  ) {
+    if (weekClosed && !canEditClosedWeek) return;
+    if (editingStatusId !== id && currentStatusAction(disposition) === action) return;
+    void markSupervisorResult(id, action);
   }
 
   async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima") {
@@ -1782,51 +1810,42 @@ export function CsQueueClient({
                     </span>
                     <span className="text-xs text-[#14213D]/55">{day}</span>
                     {showOfficialMarks && item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" ? (
-                      <div className="mt-1 grid gap-1">
-                        {canPressOfficial && item.settlementDisposition ? (
-                          <button
-                            type="button"
-                            onClick={() => setEditingStatusId((current) => (current === item.id ? null : item.id))}
-                            className="w-fit rounded-lg border border-[#14213D]/20 bg-white px-2 py-1 text-[11px] font-extrabold text-[#14213D]"
-                          >
-                            {editingStatusId === item.id ? "إغلاق التعديل" : "تعديل الحالة"}
-                          </button>
-                        ) : null}
-                        <div className="flex flex-wrap gap-1">
-                        {officialActions(item.settlementDisposition, editingStatusId === item.id).map((action) =>
-                          action === "delivered" ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {officialActions(item.settlementDisposition, editingStatusId === item.id).map((action) => {
+                          const weekClosed = Boolean(item.temimaWeekClosed);
+                          const label = action === "delivered" ? "تم بنجاح" : action === "returned" ? "الغاء" : "مؤجل";
+                          const selected =
+                            (action === "delivered" && item.settlementDisposition === "collect") ||
+                            (action === "returned" && item.settlementDisposition === "return") ||
+                            (action === "postponed" && item.settlementDisposition === "postpone");
+                          const tone =
+                            action === "delivered"
+                              ? selected
+                                ? "bg-emerald-800 text-white ring-2 ring-emerald-300"
+                                : "bg-emerald-700 text-white"
+                              : action === "returned"
+                                ? selected
+                                  ? "bg-red-800 text-white ring-2 ring-red-300"
+                                  : "bg-red-700 text-white"
+                                : selected
+                                  ? "bg-orange-600 text-black ring-2 ring-orange-300"
+                                  : "bg-orange-500 text-black";
+                          return (
                             <button
                               key={action}
                               type="button"
                               disabled={!canPressOfficial || markingId === item.id}
-                              onClick={() => void markSupervisorResult(item.id, "delivered")}
-                              className={`rounded-lg px-2 py-1 text-[11px] font-extrabold text-white disabled:opacity-60 ${item.settlementDisposition === "collect" ? "bg-emerald-800 ring-2 ring-emerald-300" : "bg-emerald-700"}`}
+                              onClick={() => pressStatus(item.id, action, item.settlementDisposition, weekClosed)}
+                              onDoubleClick={() => {
+                                if (!item.settlementDisposition) return;
+                                askStatusEdit(item.id, weekClosed);
+                              }}
+                              className={`rounded-lg px-2 py-1 text-[11px] font-extrabold disabled:opacity-60 ${tone}`}
                             >
-                              تم بنجاح
+                              {label}
                             </button>
-                          ) : action === "returned" ? (
-                            <button
-                              key={action}
-                              type="button"
-                              disabled={!canPressOfficial || markingId === item.id}
-                              onClick={() => void markSupervisorResult(item.id, "returned")}
-                              className={`rounded-lg px-2 py-1 text-[11px] font-extrabold text-white disabled:opacity-60 ${item.settlementDisposition === "return" ? "bg-red-800 ring-2 ring-red-300" : "bg-red-700"}`}
-                            >
-                              الغاء
-                            </button>
-                          ) : (
-                            <button
-                              key={action}
-                              type="button"
-                              disabled={!canPressOfficial || markingId === item.id}
-                              onClick={() => void markSupervisorResult(item.id, "postponed")}
-                              className={`rounded-lg px-2 py-1 text-[11px] font-extrabold disabled:opacity-60 ${item.settlementDisposition === "postpone" ? "bg-orange-600 text-black ring-2 ring-orange-300" : "bg-orange-500 text-black"}`}
-                            >
-                              مؤجل
-                            </button>
-                          ),
-                        )}
-                        </div>
+                          );
+                        })}
                       </div>
                     ) : null}
                     {item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" && item.confirmedAt ? (

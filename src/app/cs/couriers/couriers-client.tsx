@@ -23,6 +23,7 @@ type OrderCard = {
   outcome: "delivered" | "refused" | "postponed" | null;
   refusalReason: string;
   official?: "" | "collect" | "return" | "postpone";
+  weekClosed?: boolean;
   courierId: number | null;
   courierName: string;
   matches: number[];
@@ -46,6 +47,13 @@ function officialActions(official: OrderCard["official"], editing: boolean) {
   if (official === "return") return ["returned"] as const;
   if (official === "postpone") return ["postponed"] as const;
   return all;
+}
+
+function currentStatusAction(official: OrderCard["official"]) {
+  if (official === "collect") return "delivered" as const;
+  if (official === "return") return "returned" as const;
+  if (official === "postpone") return "postponed" as const;
+  return "" as const;
 }
 
 function OrderDetails({ order }: { order: OrderCard }) {
@@ -100,7 +108,13 @@ function CourierCard({ order, onPost }: { order: OrderCard; onPost: (body: Recor
   );
 }
 
-export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "admin" }) {
+export function CouriersClient({
+  mode,
+  canEditClosedWeek = false,
+}: {
+  mode: "supervisor" | "courier" | "admin";
+  canEditClosedWeek?: boolean;
+}) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [supervisor, setSupervisor] = useState<SupervisorData | null>(null);
@@ -284,27 +298,47 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
             {order.outcome === "refused" ? <p className="text-sm font-extrabold text-red-800">المندوب: رفض{order.refusalReason ? ` — ${order.refusalReason}` : ""}</p> : null}
             {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">المندوب: مؤجل</p> : null}
             {selected && order.courierId === selected.id ? (
-              <div className="grid gap-2">
-                {order.official ? (
-                  <button
-                    type="button"
-                    onClick={() => setEditingStatusId((current) => (current === order.id ? null : order.id))}
-                    className="w-fit rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]"
-                  >
-                    {editingStatusId === order.id ? "إغلاق التعديل" : "تعديل الحالة"}
-                  </button>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                {officialActions(order.official, editingStatusId === order.id).map((action) =>
-                  action === "delivered" ? (
-                    <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "delivered" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "collect" ? "bg-emerald-900 ring-2 ring-emerald-300" : "bg-emerald-700"}`}>تم بنجاح</button>
-                  ) : action === "returned" ? (
-                    <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "returned" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "return" ? "bg-red-900 ring-2 ring-red-300" : "bg-red-700"}`}>الغاء</button>
-                  ) : (
-                    <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "postponed" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-black ${order.official === "postpone" ? "bg-orange-600 ring-2 ring-orange-300" : "bg-orange-500"}`}>مؤجل</button>
-                  ),
-                )}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {officialActions(order.official, editingStatusId === order.id).map((action) => {
+                  const weekClosed = Boolean(order.weekClosed);
+                  const label = action === "delivered" ? "تم بنجاح" : action === "returned" ? "الغاء" : "مؤجل";
+                  const selectedStatus =
+                    (action === "delivered" && order.official === "collect") ||
+                    (action === "returned" && order.official === "return") ||
+                    (action === "postponed" && order.official === "postpone");
+                  const tone =
+                    action === "delivered"
+                      ? selectedStatus
+                        ? "bg-emerald-900 text-white ring-2 ring-emerald-300"
+                        : "bg-emerald-700 text-white"
+                      : action === "returned"
+                        ? selectedStatus
+                          ? "bg-red-900 text-white ring-2 ring-red-300"
+                          : "bg-red-700 text-white"
+                        : selectedStatus
+                          ? "bg-orange-600 text-black ring-2 ring-orange-300"
+                          : "bg-orange-500 text-black";
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      onClick={() => {
+                        if (weekClosed && !canEditClosedWeek) return;
+                        if (editingStatusId !== order.id && currentStatusAction(order.official) === action) return;
+                        void post({ action: "result", confirmationId: order.id, outcome: action });
+                      }}
+                      onDoubleClick={() => {
+                        if (!order.official || editingStatusId === order.id) return;
+                        if (weekClosed && !canEditClosedWeek) return;
+                        if (!window.confirm("هل تريد التعديل؟")) return;
+                        setEditingStatusId(order.id);
+                      }}
+                      className={`rounded-xl px-3 py-2 text-xs font-extrabold ${tone}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
             <button type="button" onClick={() => void post({ action: "unassign", confirmationId: order.id })} className="justify-self-start rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]">إرجاع للتوزيع</button>

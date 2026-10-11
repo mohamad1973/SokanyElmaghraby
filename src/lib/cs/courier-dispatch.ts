@@ -5,7 +5,7 @@ import { parseCsRoles } from "@/lib/cs/agents";
 import { orderMatchesAreas, parseCourierAreas, serializeCourierAreas } from "@/lib/cs/courier-areas";
 import { listCsAreasForGovernorate } from "@/lib/cs/egypt-areas";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
-import { cashAmountOf, openSettlementMarks } from "@/lib/cs/temima-settlement";
+import { cashAmountOf, closedTemimaWeekIds, openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { listTemimaSheetEdits, listUnifiedSayedSheetIds } from "@/lib/cs/temima-sheet-edits";
 import { onUnifiedSayedSheet, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
@@ -266,8 +266,13 @@ export async function loadCourierDispatch(viewerId: number, mode: "supervisor" |
     ]),
   ].sort((a, b) => a.localeCompare(b, "ar"));
 
-  const marks = await openSettlementMarks(cards.map((card) => card.id));
-  const withOfficial = cards.map((card) => ({ ...card, official: marks.get(card.id) || "" }));
+  const cardIds = cards.map((card) => card.id);
+  const [marks, closedWeeks] = await Promise.all([openSettlementMarks(cardIds), closedTemimaWeekIds(cardIds)]);
+  const withOfficial = cards.map((card) => ({
+    ...card,
+    official: marks.get(card.id) || "",
+    weekClosed: closedWeeks.has(card.id),
+  }));
 
   return {
     mode: "supervisor" as const,
