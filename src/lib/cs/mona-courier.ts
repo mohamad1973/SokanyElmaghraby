@@ -525,12 +525,19 @@ export async function markMonaSupervisorResult(confirmationId: number, result: O
     `;
     return { ok: true as const, message: "اتسجل في الحسابات." };
   }
-  await prisma.$executeRaw`
-    UPDATE CsOrderConfirmation
-    SET monaSupervisorResult = ${result},
-        monaIsLarge = IF(${result} = 'delivered', monaIsLarge, false)
-    WHERE id = ${confirmationId}
-  `;
+  if (result === "delivered") {
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaSupervisorResult = ${result}
+      WHERE id = ${confirmationId}
+    `;
+  } else {
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaSupervisorResult = ${result}, monaIsLarge = false
+      WHERE id = ${confirmationId}
+    `;
+  }
   return { ok: true as const, message: "اتسجل في الحسابات." };
 }
 
