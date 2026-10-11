@@ -670,11 +670,13 @@ type TemimaAddMatch = {
 
 type PrintMode = "none" | "sheet" | "queue";
 
-function officialActions(disposition: "" | "collect" | "return" | "postpone" | undefined) {
+function officialActions(disposition: "" | "collect" | "return" | "postpone" | undefined, editing: boolean) {
+  const all = ["delivered", "returned", "postponed"] as const;
+  if (editing || !disposition) return all;
   if (disposition === "collect") return ["delivered"] as const;
   if (disposition === "return") return ["returned"] as const;
-  if (disposition === "postpone") return ["delivered", "returned"] as const;
-  return ["delivered", "returned", "postponed"] as const;
+  if (disposition === "postpone") return ["postponed"] as const;
+  return all;
 }
 
 export function CsQueueClient({
@@ -722,6 +724,7 @@ export function CsQueueClient({
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
   const [savingHandId, setSavingHandId] = useState<number | null>(null);
   const [markingId, setMarkingId] = useState<number | null>(null);
+  const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
 
   async function lockCutoff(body: { now: true } | { minutes: number }) {
     setCutoffBusy(true);
@@ -927,6 +930,7 @@ export function CsQueueClient({
       setMessage(data.message || "تعذر تسجيل حالة الأوردر.");
       return;
     }
+    setEditingStatusId(null);
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
@@ -1778,8 +1782,18 @@ export function CsQueueClient({
                     </span>
                     <span className="text-xs text-[#14213D]/55">{day}</span>
                     {showOfficialMarks && item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {officialActions(item.settlementDisposition).map((action) =>
+                      <div className="mt-1 grid gap-1">
+                        {canPressOfficial && item.settlementDisposition ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditingStatusId((current) => (current === item.id ? null : item.id))}
+                            className="w-fit rounded-lg border border-[#14213D]/20 bg-white px-2 py-1 text-[11px] font-extrabold text-[#14213D]"
+                          >
+                            {editingStatusId === item.id ? "إغلاق التعديل" : "تعديل الحالة"}
+                          </button>
+                        ) : null}
+                        <div className="flex flex-wrap gap-1">
+                        {officialActions(item.settlementDisposition, editingStatusId === item.id).map((action) =>
                           action === "delivered" ? (
                             <button
                               key={action}
@@ -1812,6 +1826,7 @@ export function CsQueueClient({
                             </button>
                           ),
                         )}
+                        </div>
                       </div>
                     ) : null}
                     {item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" && item.confirmedAt ? (

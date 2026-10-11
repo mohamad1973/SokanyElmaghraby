@@ -39,11 +39,13 @@ type SupervisorData = {
 };
 type CourierData = { mode: "courier"; orders: OrderCard[] };
 
-function officialActions(official: OrderCard["official"]) {
+function officialActions(official: OrderCard["official"], editing: boolean) {
+  const all = ["delivered", "returned", "postponed"] as const;
+  if (editing || !official) return all;
   if (official === "collect") return ["delivered"] as const;
   if (official === "return") return ["returned"] as const;
-  if (official === "postpone") return ["delivered", "returned"] as const;
-  return ["delivered", "returned", "postponed"] as const;
+  if (official === "postpone") return ["postponed"] as const;
+  return all;
 }
 
 function OrderDetails({ order }: { order: OrderCard }) {
@@ -107,6 +109,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
   const [orderNumber, setOrderNumber] = useState("");
   const [collectedDraft, setCollectedDraft] = useState("");
   const [day, setDay] = useState(cairoTodayYmd());
+  const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     if (mode === "admin") {
@@ -154,6 +157,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
     const res = await fetch("/api/cs/courier-dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = (await res.json()) as { message?: string };
     if (!res.ok) { setMessage(data.message || "تعذر الحفظ."); return; }
+    if (body.action === "result") setEditingStatusId(null);
     await load();
   }
   if (mode === "courier" || mode === "admin") {
@@ -280,8 +284,18 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
             {order.outcome === "refused" ? <p className="text-sm font-extrabold text-red-800">المندوب: رفض{order.refusalReason ? ` — ${order.refusalReason}` : ""}</p> : null}
             {order.outcome === "postponed" ? <p className="text-sm font-extrabold text-orange-800">المندوب: مؤجل</p> : null}
             {selected && order.courierId === selected.id ? (
-              <div className="flex flex-wrap gap-2">
-                {officialActions(order.official).map((action) =>
+              <div className="grid gap-2">
+                {order.official ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingStatusId((current) => (current === order.id ? null : order.id))}
+                    className="w-fit rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]"
+                  >
+                    {editingStatusId === order.id ? "إغلاق التعديل" : "تعديل الحالة"}
+                  </button>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                {officialActions(order.official, editingStatusId === order.id).map((action) =>
                   action === "delivered" ? (
                     <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "delivered" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-white ${order.official === "collect" ? "bg-emerald-900 ring-2 ring-emerald-300" : "bg-emerald-700"}`}>تم بنجاح</button>
                   ) : action === "returned" ? (
@@ -290,6 +304,7 @@ export function CouriersClient({ mode }: { mode: "supervisor" | "courier" | "adm
                     <button key={action} type="button" onClick={() => void post({ action: "result", confirmationId: order.id, outcome: "postponed" })} className={`rounded-xl px-3 py-2 text-xs font-extrabold text-black ${order.official === "postpone" ? "bg-orange-600 ring-2 ring-orange-300" : "bg-orange-500"}`}>مؤجل</button>
                   ),
                 )}
+                </div>
               </div>
             ) : null}
             <button type="button" onClick={() => void post({ action: "unassign", confirmationId: order.id })} className="justify-self-start rounded-xl border border-[#14213D]/20 px-3 py-1.5 text-xs font-extrabold text-[#14213D]">إرجاع للتوزيع</button>

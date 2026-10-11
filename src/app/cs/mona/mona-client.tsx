@@ -97,6 +97,14 @@ function monaDayHeading(ymd: string) {
   return `يوم ${weekday} ${day}-${month}`;
 }
 
+function dayInSpan(day: string, from: string, to: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  const end = /^\d{4}-\d{2}-\d{2}$/.test(to) ? (from <= to ? to : from) : from;
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(to) ? (from <= to ? from : to) : from;
+  return day >= start && day <= end;
+}
+
 function dayBlocksOf(orders: OrderCard[]) {
   const byDay = new Map<string, OrderCard[]>();
   const undated: OrderCard[] = [];
@@ -267,6 +275,8 @@ function CourierInvoice({
   canEditMoney,
   dayAccounts,
   drafts,
+  dayFrom,
+  dayTo,
   onDraft,
   onSaveDay,
   onOfficial,
@@ -277,18 +287,21 @@ function CourierInvoice({
   canEditMoney: boolean;
   dayAccounts: DayAccount[];
   drafts: Record<string, DayDraft>;
+  dayFrom: string;
+  dayTo: string;
   onDraft: (dayYmd: string, next: DayDraft) => void;
   onSaveDay: (dayYmd: string) => void;
   onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
   onLarge?: (confirmationId: number, isLarge: boolean) => void;
 }) {
   const mine = orders.filter((order) => Number(order.courierId) === Number(line.courierId));
-  const dayBlocks = dayBlocksOf(mine);
+  const dayBlocks = dayBlocksOf(mine).filter((block) => dayInSpan(block.key, dayFrom, dayTo));
   const serials = new Map<number, number>();
   for (const block of dayBlocks) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(block.key)) continue;
     block.rows.forEach((order, index) => serials.set(order.id, index + 1));
   }
+  const visibleRows = dayBlocks.flatMap((block) => block.rows);
   const moneyCell = (value: number) => (value ? egp(value) : "");
   return (
     <article className="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15">
@@ -318,11 +331,30 @@ function CourierInvoice({
                   مفيش أوردرات عند المندوب.
                 </td>
               </tr>
+            ) : dayBlocks.length === 0 ? (
+              <tr>
+                <td colSpan={12} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
+                  مفيش أوردرات في اليوم ده.
+                </td>
+              </tr>
             ) : (
-              dayBlocks.map((block) => (
+              dayBlocks.map((block) => {
+                const saved = dayAccounts.find((row) => row.dayYmd === block.key);
+                const draft = drafts[block.key] || {
+                  collected: moneyText(saved?.collected ?? null),
+                  remitted: moneyText(saved?.remitted ?? null),
+                };
+                const remaining = dayRemaining(draft.collected, draft.remitted, dayShipping(block.rows));
+                const settled = remaining === 0;
+                return (
                 <Fragment key={block.key}>
                   <tr>
-                    <td colSpan={12} className="border border-[#14213D]/25 bg-[#14213D] px-3 py-2 text-center text-sm font-extrabold text-white">
+                    <td
+                      colSpan={12}
+                      className={`border border-[#14213D]/25 px-3 py-2 text-center text-sm font-extrabold ${
+                        settled ? "bg-emerald-700 text-white" : "bg-orange-500 text-black"
+                      }`}
+                    >
                       {block.title}
                     </td>
                   </tr>
@@ -408,12 +440,7 @@ function CourierInvoice({
                         <DayAccountBox
                           rows={block.rows}
                           canEdit={canEditMoney}
-                          draft={
-                            drafts[block.key] || {
-                              collected: moneyText(dayAccounts.find((row) => row.dayYmd === block.key)?.collected ?? null),
-                              remitted: moneyText(dayAccounts.find((row) => row.dayYmd === block.key)?.remitted ?? null),
-                            }
-                          }
+                          draft={draft}
                           onDraft={(next) => onDraft(block.key, next)}
                           onSave={() => onSaveDay(block.key)}
                         />
@@ -421,29 +448,30 @@ function CourierInvoice({
                     </tr>
                   ) : null}
                 </Fragment>
-              ))
+                );
+              })
             )}
           </tbody>
-          {mine.length ? (
+          {visibleRows.length ? (
             <tfoot>
               <tr>
                 <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={5}>
                   المجموع
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(mine, shipmentValue))}
+                  {egp(sumOf(visibleRows, shipmentValue))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(mine, (order) => order.depositAmount || 0))}
+                  {egp(sumOf(visibleRows, (order) => order.depositAmount || 0))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(mine, postponeValue))}
+                  {egp(sumOf(visibleRows, postponeValue))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(mine, refusalValue))}
+                  {egp(sumOf(visibleRows, refusalValue))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(mine, netValue))}
+                  {egp(sumOf(visibleRows, netValue))}
                 </td>
                 <td colSpan={2} className="border border-[#14213D] bg-[#14213D]" />
               </tr>
@@ -649,6 +677,8 @@ export function MonaCourierPanel({
   const [tab, setTab] = useState<"sheet" | "report">("sheet");
   const [fromDay, setFromDay] = useState("");
   const [toDay, setToDay] = useState("");
+  const [sheetDay, setSheetDay] = useState(cairoToday);
+  const [sheetTo, setSheetTo] = useState("");
   const [dayDrafts, setDayDrafts] = useState<Record<string, DayDraft>>({});
 
   const load = useCallback(async () => {
@@ -774,6 +804,28 @@ export function MonaCourierPanel({
         <p className="text-sm font-bold text-[#14213D]/70">المندوب مش موجود.</p>
       ) : null}
       {mode === "supervisor" && tab === "sheet" && focused ? (
+        <form className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+            اليوم
+            <input
+              type="date"
+              value={sheetDay}
+              onChange={(event) => setSheetDay(event.target.value)}
+              className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
+            إلى
+            <input
+              type="date"
+              value={sheetTo}
+              onChange={(event) => setSheetTo(event.target.value)}
+              className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
+            />
+          </label>
+        </form>
+      ) : null}
+      {mode === "supervisor" && tab === "sheet" && focused ? (
         <form
           className="flex flex-wrap gap-2"
           onSubmit={(event) => {
@@ -804,6 +856,8 @@ export function MonaCourierPanel({
                 canEditMoney={Boolean(desk?.canEditMoney)}
                 dayAccounts={focusedAccounts}
                 drafts={dayDrafts}
+                dayFrom={sheetDay}
+                dayTo={sheetTo}
                 onDraft={(dayYmd, next) => setDayDrafts((current) => ({ ...current, [dayYmd]: next }))}
                 onSaveDay={(dayYmd) => {
                   const draft = dayDrafts[dayYmd] || { collected: "", remitted: "" };
