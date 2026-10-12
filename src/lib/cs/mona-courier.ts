@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 
 import { parseCsRoles } from "@/lib/cs/agents";
 import { getPrismaClient } from "@/lib/db";
-import { cairoYmdFromIso } from "@/lib/cs/order-window";
+import { cairoYmdFromIso, effectivePaymentState } from "@/lib/cs/order-window";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 
 export const MONA_COURIER_FEE = 75;
@@ -114,6 +114,11 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     governorate?: string;
     area?: string;
     total?: string;
+    paymentMethod?: string;
+    paymentMethodId?: string | null;
+    wooStatus?: string;
+    datePaid?: string | null;
+    paymentState?: "awaiting_payment" | "paid" | "cod";
     items?: Array<{ name?: string; quantity?: number; price?: number | string; total?: number | string }>;
   };
   const id = Number(row.id);
@@ -160,7 +165,7 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     courierName: row.courierName || "",
     assignedDay: assignedDayOf(row.monaAssignedAt),
     orderTotal: moneyNumber(snap.total),
-    depositAmount: row.depositPaid ? moneyNumber(row.depositAmount) : 0,
+    depositAmount: monaDepositAmount(row, snap),
     productNames: (snap.items || [])
       .map((item) => String(item.name || "").trim())
       .filter(Boolean)
@@ -172,6 +177,29 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
 function moneyNumber(value: unknown) {
   const amount = Number(String(value ?? "").replace(/[^\d.]/g, ""));
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function monaDepositAmount(
+  row: OrderRow,
+  snap: {
+    total?: string;
+    paymentMethod?: string;
+    paymentMethodId?: string | null;
+    wooStatus?: string;
+    datePaid?: string | null;
+    paymentState?: "awaiting_payment" | "paid" | "cod";
+  },
+) {
+  const total = moneyNumber(snap.total);
+  const state = effectivePaymentState({
+    paymentMethod: snap.paymentMethod,
+    paymentMethodId: snap.paymentMethodId,
+    wooStatus: snap.wooStatus,
+    datePaid: snap.datePaid,
+    paymentState: snap.paymentState,
+  });
+  if (state === "paid") return total;
+  return row.depositPaid ? moneyNumber(row.depositAmount) : 0;
 }
 
 function monaSheetNet(card: { orderTotal: number; depositAmount: number }) {
