@@ -170,7 +170,7 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
       .map((item) => String(item.name || "").trim())
       .filter(Boolean)
       .join("، "),
-    isLarge: official === "delivered" && Boolean(row.monaIsLarge),
+    isLarge: (official === "delivered" || outcome === "delivered") && Boolean(row.monaIsLarge),
   };
 }
 
@@ -619,32 +619,39 @@ export async function markMonaSupervisorResult(confirmationId: number, result: O
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
   if (!Number.isInteger(confirmationId)) return { ok: false as const, message: "الأوردر غير موجود." };
   await ensureMonaLargeColumn();
-  const rows = await prisma.$queryRaw<Array<{ id: number }>>`
-    SELECT id
+  const rows = await prisma.$queryRaw<Array<{ id: number; monaOutcome: string | null }>>`
+    SELECT id, monaOutcome
     FROM CsOrderConfirmation
     WHERE id = ${confirmationId}
       AND (monaCourierId IS NOT NULL OR monaOutcome = 'postponed')
     LIMIT 1
   `;
   if (!rows[0]) return { ok: false as const, message: "الأوردر مش من أوردرات المشرفة." };
+  const keepLarge = rows[0].monaOutcome === "delivered" || result === "delivered";
   if (!result) {
     await prisma.$executeRaw`
       UPDATE CsOrderConfirmation
-      SET monaSupervisorResult = NULL, monaIsLarge = false
+      SET monaSupervisorResult = NULL
       WHERE id = ${confirmationId}
     `;
+    if (!keepLarge) {
+      await prisma.$executeRaw`
+        UPDATE CsOrderConfirmation
+        SET monaIsLarge = false
+        WHERE id = ${confirmationId}
+      `;
+    }
     return { ok: true as const, message: "اتسجل في الحسابات." };
   }
-  if (result === "delivered") {
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET monaSupervisorResult = ${result}
+    WHERE id = ${confirmationId}
+  `;
+  if (!keepLarge) {
     await prisma.$executeRaw`
       UPDATE CsOrderConfirmation
-      SET monaSupervisorResult = ${result}
-      WHERE id = ${confirmationId}
-    `;
-  } else {
-    await prisma.$executeRaw`
-      UPDATE CsOrderConfirmation
-      SET monaSupervisorResult = ${result}, monaIsLarge = false
+      SET monaIsLarge = false
       WHERE id = ${confirmationId}
     `;
   }
@@ -659,7 +666,7 @@ export async function markMonaLarge(confirmationId: number, isLarge: boolean) {
     UPDATE CsOrderConfirmation
     SET monaIsLarge = ${isLarge}
     WHERE id = ${confirmationId}
-      AND monaSupervisorResult = 'delivered'
+      AND (monaSupervisorResult = 'delivered' OR monaOutcome = 'delivered')
       AND (monaCourierId IS NOT NULL OR monaOutcome = 'postponed')
   `;
   if (!Number(changed)) return { ok: false as const, message: "كبير يتسجل مع تم بنجاح فقط." };

@@ -157,9 +157,13 @@ function sumOf(list: OrderCard[], pick: (order: OrderCard) => number) {
   return list.reduce((sum, order) => sum + pick(order), 0);
 }
 
+function shippingOrder(order: OrderCard) {
+  return order.outcome === "delivered" || order.official === "delivered";
+}
+
 function dayShipping(rows: OrderCard[]) {
   return rows.reduce((sum, order) => {
-    if (order.official !== "delivered") return sum;
+    if (!shippingOrder(order)) return sum;
     return sum + (order.isLarge ? MONA_DAY_LARGE_FEE : MONA_DAY_FEE);
   }, 0);
 }
@@ -421,7 +425,7 @@ function CourierInvoice({
                       <td className="border border-[#14213D]/15 px-2 py-2 text-center">
                         <input
                           type="checkbox"
-                          disabled={order.official !== "delivered"}
+                          disabled={!shippingOrder(order)}
                           checked={order.isLarge}
                           onChange={(event) => onLarge?.(order.id, event.target.checked)}
                         />
@@ -751,7 +755,7 @@ export function MonaCourierPanel({
             ? {
                 ...order,
                 official: result,
-                isLarge: result === "delivered" ? (isLarge ?? order.isLarge) : false,
+                isLarge: result === "delivered" || order.outcome === "delivered" ? (isLarge ?? order.isLarge) : false,
               }
             : order,
         ),
