@@ -402,6 +402,21 @@ function CourierInvoice({
                           <option value="refused">الغاء</option>
                           <option value="postponed">مؤجل</option>
                         </select>
+                        {order.outcome === "delivered" ? (
+                          <span className="mt-1 block w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-900">
+                            تم بنجاح
+                          </span>
+                        ) : null}
+                        {order.outcome === "refused" ? (
+                          <span className="mt-1 block w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-extrabold text-red-800">
+                            تم الرفض{order.refusalReason ? `: ${order.refusalReason}` : ""}
+                          </span>
+                        ) : null}
+                        {order.outcome === "postponed" ? (
+                          <span className="mt-1 block w-fit rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-extrabold text-orange-900">
+                            تأجيل
+                          </span>
+                        ) : null}
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2 text-center">
                         <input
