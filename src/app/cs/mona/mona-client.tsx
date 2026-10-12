@@ -8,6 +8,7 @@ type Outcome = "delivered" | "refused" | "postponed";
 type OrderCard = {
   id: number;
   wooOrderNumber: string;
+  invoiceNumber: string;
   customerName: string;
   phone: string;
   altPhone: string;
@@ -79,6 +80,84 @@ function orderState(order: OrderCard) {
   if (order.outcome === "postponed") return "مؤجّل";
   if (order.outcome === "refused") return "رفض";
   return "متوزع";
+}
+
+const SHEET_COLS = 13;
+
+function phoneDigits(value: string | null | undefined) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function openDateField(event: { currentTarget: HTMLElement }) {
+  const input = event.currentTarget.querySelector("input[type='date']");
+  if (!(input instanceof HTMLInputElement)) return;
+  input.focus();
+  try {
+    input.showPicker();
+  } catch {
+    // Picker already open, or this browser only opens it from the calendar control.
+  }
+}
+
+function matchesAccountSearch(order: OrderCard, rawQuery: string) {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+  const phone = phoneDigits(order.phone);
+  const alt = phoneDigits(order.altPhone);
+  const hay = [
+    order.wooOrderNumber,
+    order.invoiceNumber,
+    order.customerName,
+    order.phone,
+    phone,
+    phone.length >= 10 ? phone.slice(-10) : phone,
+    order.altPhone,
+    alt,
+    order.address,
+    order.landmarks,
+    order.area,
+    order.governorate,
+    order.productNames,
+    order.total,
+    order.refusalReason,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (hay.includes(q)) return true;
+  const qDigits = phoneDigits(q);
+  if (qDigits.length >= 4) {
+    if (phone.includes(qDigits) || phone.slice(-10).includes(qDigits.slice(-10))) return true;
+    if (alt.includes(qDigits) || alt.slice(-10).includes(qDigits.slice(-10))) return true;
+    if (String(order.wooOrderNumber).includes(qDigits)) return true;
+    if (String(order.invoiceNumber || "").includes(qDigits)) return true;
+  }
+  return false;
+}
+
+function AccountDateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div
+      className="cs-date-field flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-[#14213D]/15 bg-[#F5F5F0] px-2"
+      onClick={openDateField}
+    >
+      <span className="pointer-events-none shrink-0 text-xs font-extrabold text-[#14213D]/60">{label}</span>
+      <input
+        type="date"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-sm font-bold text-[#14213D] outline-none"
+      />
+    </div>
+  );
 }
 
 function orderNumber(order: OrderCard) {
@@ -245,7 +324,7 @@ function DayAccountBox({
             <span>المتبقي</span>
             <span>{remaining == null ? "—" : `${egp(remaining)} ج.م`}</span>
           </p>
-          <button type="submit" className="h-10 rounded-xl bg-[#FCA311] text-sm font-extrabold text-black">
+          <button type="submit" className="h-8 w-fit justify-self-end rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black">
             حفظ اليوم
           </button>
         </form>
@@ -285,6 +364,7 @@ function CourierInvoice({
   onSaveDay,
   onOfficial,
   onLarge,
+  query,
 }: {
   line: LedgerLine;
   orders: OrderCard[];
@@ -297,15 +377,24 @@ function CourierInvoice({
   onSaveDay: (dayYmd: string) => void;
   onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
   onLarge?: (confirmationId: number, isLarge: boolean) => void;
+  query: string;
 }) {
   const mine = orders.filter((order) => Number(order.courierId) === Number(line.courierId));
-  const dayBlocks = dayBlocksOf(mine).filter((block) => dayInSpan(block.key, dayFrom, dayTo));
+  const searching = query.trim().length > 0;
+  const spanBlocks = dayBlocksOf(mine).filter((block) => searching || dayInSpan(block.key, dayFrom, dayTo));
   const serials = new Map<number, number>();
-  for (const block of dayBlocks) {
+  for (const block of spanBlocks) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(block.key)) continue;
     block.rows.forEach((order, index) => serials.set(order.id, index + 1));
   }
-  const visibleRows = dayBlocks.flatMap((block) => block.rows);
+  const dayBlocks = spanBlocks
+    .map((block) => ({
+      ...block,
+      accountRows: block.rows,
+      rows: block.rows.filter((order) => matchesAccountSearch(order, query)),
+    }))
+    .filter((block) => block.rows.length > 0);
+  const accountRows = dayBlocks.flatMap((block) => block.accountRows);
   const moneyCell = (value: number) => (value ? egp(value) : "");
   return (
     <article className="overflow-hidden rounded-2xl bg-white shadow ring-1 ring-[#14213D]/15">
@@ -319,7 +408,7 @@ function CourierInvoice({
         <table className="min-w-full border-separate border-spacing-0 text-sm">
           <thead className="text-right">
             <tr>
-              {["مسلسل", "أوردر", "العميل", "موبايل", "المنتج", "قيمة الشحنات", "ديبوزت", "المؤجل", "الرفض", "الصافي", "الحالة", "كبير"].map(
+              {["مسلسل", "أوردر", "فاتورة", "العميل", "موبايل", "المنتج", "قيمة الشحنات", "ديبوزت", "المؤجل", "الرفض", "الصافي", "الحالة", "كبير"].map(
                 (head) => (
                   <th key={head} className="sticky top-0 z-10 border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">
                     {head}
@@ -331,30 +420,30 @@ function CourierInvoice({
           <tbody>
             {mine.length === 0 ? (
               <tr>
-                <td colSpan={12} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
+                <td colSpan={SHEET_COLS} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
                   مفيش أوردرات عند المندوب.
                 </td>
               </tr>
             ) : dayBlocks.length === 0 ? (
               <tr>
-                <td colSpan={12} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
-                  مفيش أوردرات في اليوم ده.
+                <td colSpan={SHEET_COLS} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
+                  {searching ? "مفيش أوردر مطابق للبحث." : "مفيش أوردرات في اليوم ده."}
                 </td>
               </tr>
             ) : (
-              dayBlocks.map((block) => {
+              dayBlocks.map((block, index) => {
                 const saved = dayAccounts.find((row) => row.dayYmd === block.key);
                 const draft = drafts[block.key] || {
                   collected: moneyText(saved?.collected ?? null),
                   remitted: moneyText(saved?.remitted ?? null),
                 };
-                const remaining = dayRemaining(draft.collected, draft.remitted, dayShipping(block.rows));
+                const remaining = dayRemaining(draft.collected, draft.remitted, dayShipping(block.accountRows));
                 const settled = remaining === 0;
                 return (
                 <Fragment key={block.key}>
                   <tr>
                     <td
-                      colSpan={12}
+                      colSpan={SHEET_COLS}
                       className={`border border-[#14213D]/25 px-3 py-2 text-center text-sm font-extrabold ${
                         settled ? "bg-emerald-700 text-white" : "bg-orange-500 text-black"
                       }`}
@@ -369,6 +458,9 @@ function CourierInvoice({
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
                         {order.wooOrderNumber}
+                      </td>
+                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
+                        {order.invoiceNumber || "—"}
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2">{order.customerName || "—"}</td>
                       <td className="whitespace-nowrap border border-[#14213D]/15 px-2 py-2 tabular-nums" dir="ltr">
@@ -433,31 +525,31 @@ function CourierInvoice({
                     </tr>
                   ))}
                   <tr>
-                    <td colSpan={5} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
+                    <td colSpan={6} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
                       تصفية اليوم
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
-                      {egp(sumOf(block.rows, shipmentValue))}
+                      {egp(sumOf(block.accountRows, shipmentValue))}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
-                      {egp(sumOf(block.rows, (order) => order.depositAmount || 0))}
+                      {egp(sumOf(block.accountRows, (order) => order.depositAmount || 0))}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
-                      {egp(sumOf(block.rows, postponeValue))}
+                      {egp(sumOf(block.accountRows, postponeValue))}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
-                      {egp(sumOf(block.rows, refusalValue))}
+                      {egp(sumOf(block.accountRows, refusalValue))}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
-                      {egp(sumOf(block.rows, netValue))}
+                      {egp(sumOf(block.accountRows, netValue))}
                     </td>
                     <td colSpan={2} className="border border-[#14213D]/15 bg-[#F5F5F0]" />
                   </tr>
                   {/^\d{4}-\d{2}-\d{2}$/.test(block.key) ? (
                     <tr>
-                      <td colSpan={12} className="border border-[#14213D]/25 p-0">
+                      <td colSpan={SHEET_COLS} className="border border-[#14213D]/25 p-0">
                         <DayAccountBox
-                          rows={block.rows}
+                          rows={block.accountRows}
                           canEdit={canEditMoney}
                           draft={draft}
                           onDraft={(next) => onDraft(block.key, next)}
@@ -466,31 +558,36 @@ function CourierInvoice({
                       </td>
                     </tr>
                   ) : null}
+                  {index < dayBlocks.length - 1 ? (
+                    <tr aria-hidden>
+                      <td colSpan={SHEET_COLS} className="h-5 border-0 bg-[#F7F4EF]" />
+                    </tr>
+                  ) : null}
                 </Fragment>
                 );
               })
             )}
           </tbody>
-          {visibleRows.length ? (
+          {accountRows.length ? (
             <tfoot>
               <tr>
-                <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={5}>
+                <td className="border border-[#14213D] bg-[#14213D] px-2 py-2 font-extrabold text-white" colSpan={6}>
                   المجموع
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(visibleRows, shipmentValue))}
+                  {egp(sumOf(accountRows, shipmentValue))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(visibleRows, (order) => order.depositAmount || 0))}
+                  {egp(sumOf(accountRows, (order) => order.depositAmount || 0))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(visibleRows, postponeValue))}
+                  {egp(sumOf(accountRows, postponeValue))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(visibleRows, refusalValue))}
+                  {egp(sumOf(accountRows, refusalValue))}
                 </td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  {egp(sumOf(visibleRows, netValue))}
+                  {egp(sumOf(accountRows, netValue))}
                 </td>
                 <td colSpan={2} className="border border-[#14213D] bg-[#14213D]" />
               </tr>
@@ -698,6 +795,7 @@ export function MonaCourierPanel({
   const [toDay, setToDay] = useState("");
   const [sheetDay, setSheetDay] = useState(cairoToday);
   const [sheetTo, setSheetTo] = useState("");
+  const [sheetQuery, setSheetQuery] = useState("");
   const [dayDrafts, setDayDrafts] = useState<Record<string, DayDraft>>({});
 
   const load = useCallback(async () => {
@@ -824,24 +922,14 @@ export function MonaCourierPanel({
       ) : null}
       {mode === "supervisor" && tab === "sheet" && focused ? (
         <form className="flex flex-wrap items-end gap-2">
-          <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
-            اليوم
-            <input
-              type="date"
-              value={sheetDay}
-              onChange={(event) => setSheetDay(event.target.value)}
-              className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
-            إلى
-            <input
-              type="date"
-              value={sheetTo}
-              onChange={(event) => setSheetTo(event.target.value)}
-              className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
-            />
-          </label>
+          <input
+            value={sheetQuery}
+            onChange={(event) => setSheetQuery(event.target.value)}
+            placeholder="بحث: موبايل، اسم، عنوان، منتج..."
+            className="h-10 min-w-[16rem] flex-1 rounded-xl border border-[#14213D]/15 bg-[#F5F5F0] px-3 text-sm font-bold text-[#14213D]"
+          />
+          <AccountDateField label="اليوم" value={sheetDay} onChange={setSheetDay} />
+          <AccountDateField label="إلى" value={sheetTo} onChange={setSheetTo} />
         </form>
       ) : null}
       {mode === "supervisor" && tab === "sheet" && focused ? (
@@ -877,6 +965,7 @@ export function MonaCourierPanel({
                 drafts={dayDrafts}
                 dayFrom={sheetDay}
                 dayTo={sheetTo}
+                query={sheetQuery}
                 onDraft={(dayYmd, next) => setDayDrafts((current) => ({ ...current, [dayYmd]: next }))}
                 onSaveDay={(dayYmd) => {
                   const draft = dayDrafts[dayYmd] || { collected: "", remitted: "" };
@@ -903,24 +992,8 @@ export function MonaCourierPanel({
       {mode === "supervisor" && tab === "report" && focused ? (
         <div className="grid gap-3">
           <form className="flex flex-wrap items-end gap-2">
-            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
-              من
-              <input
-                type="date"
-                value={fromDay}
-                onChange={(event) => setFromDay(event.target.value)}
-                className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-extrabold text-[#14213D]">
-              إلى
-              <input
-                type="date"
-                value={toDay}
-                onChange={(event) => setToDay(event.target.value)}
-                className="h-10 rounded-xl border border-[#14213D]/15 px-2 text-sm"
-              />
-            </label>
+            <AccountDateField label="من" value={fromDay} onChange={setFromDay} />
+            <AccountDateField label="إلى" value={toDay} onChange={setToDay} />
           </form>
           <div className="overflow-auto">
             <table className="min-w-full border-separate border-spacing-0 text-sm">

@@ -15,6 +15,7 @@ type Outcome = "delivered" | "refused" | "postponed";
 type OrderRow = {
   id: number;
   wooOrderNumber: string;
+  invoiceNumber: string | null;
   customerSnapshot: unknown;
   depositAmount: unknown;
   depositPaid: boolean | number | null;
@@ -37,6 +38,7 @@ type AnswerRow = {
 export type MonaOrderCard = {
   id: number;
   wooOrderNumber: string;
+  invoiceNumber: string;
   customerName: string;
   phone: string;
   altPhone: string;
@@ -135,6 +137,7 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
   return {
     id,
     wooOrderNumber: row.wooOrderNumber,
+    invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : "",
     customerName: answerText(mine, "customer_name") || snap.customerName || "",
     phone: answerText(mine, "primary_phone") || snap.phone || "",
     altPhone: String(mine.find((item) => item.itemKey === "alt_phone")?.note || "").trim(),
@@ -212,7 +215,7 @@ function assignedDayOf(value: Date | string | null | undefined) {
   return cairoYmdFromIso(iso);
 }
 
-const ORDER_COLUMNS = `c.id, c.wooOrderNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
+const ORDER_COLUMNS = `c.id, c.wooOrderNumber, c.invoiceNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
                c.monaCourierId, c.monaAssignedAt, c.monaOutcome, c.monaSupervisorResult,
                c.monaRefusalReason, c.monaIsLarge, a.name AS courierName`;
 
