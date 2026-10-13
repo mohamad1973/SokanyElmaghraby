@@ -1381,15 +1381,6 @@ export async function saveCsConfirmation(input: {
     const now = new Date();
     const data: Record<string, unknown> = { ...shippingMetaPatch };
     const editSaved = Boolean(input.canEditSavedInfo);
-    if (!editSaved) {
-      delete data.depositAmount;
-      delete data.depositPaid;
-      delete data.depositPayMethod;
-      delete data.depositFromNumber;
-      delete data.depositInstapayName;
-      delete data.depositToPhone;
-      delete data.depositToMethod;
-    }
     if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED) {
       if (row.confirmedAt) data.confirmationEditedAt = now;
       else data.confirmedAt = now;

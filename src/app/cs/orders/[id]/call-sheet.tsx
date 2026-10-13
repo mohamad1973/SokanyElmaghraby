@@ -529,7 +529,7 @@ export function CsCallSheet({
     depositAmount.trim() !== "" && Number.isFinite(typedDeposit) && typedDeposit > 0
       ? typedDeposit + 0.001 >= adjustedTotal
         ? "مدفوع بالكامل"
-        : "مدفوع مقدم"
+        : "مدفوع جزئي"
       : null;
   const lockRecorded = showFollowUp && !canEditSavedInfo;
   const paymentState =
@@ -1020,7 +1020,7 @@ export function CsCallSheet({
 
   function depositCard() {
     return (
-      <div className="flex min-h-16 flex-col justify-between rounded-xl bg-[#0D9488]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#0D9488]">
+      <div className="flex h-full flex-col justify-between rounded-xl bg-[#0D9488]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#0D9488]">
         <div className="flex items-start justify-between gap-1">
           <p className="text-xs font-extrabold text-[#14213D]">طلب ديبوزت</p>
           <button
@@ -1035,6 +1035,33 @@ export function CsCallSheet({
         <p className={`mt-1 text-[11px] font-extrabold ${depositPayLabel ? "text-[#0D9488]" : "text-[#14213D]/50"}`}>
           {depositPayLabel || "اختياري"}
         </p>
+      </div>
+    );
+  }
+
+  function bostaShipmentCard() {
+    return (
+      <div className="flex flex-col rounded-xl bg-[#14213D] p-1.5 text-white shadow-sm ring-2 ring-inset ring-[#FCA311]">
+        <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
+        <input
+          dir="ltr"
+          value={trackingNumber}
+          onChange={(e) => setTrackingNumber(e.target.value)}
+          placeholder="رقم التراك"
+          className={`mt-1 ${inputCls} text-[#14213D]`}
+        />
+        <p
+          className="mt-1 text-[10px] font-bold leading-4"
+          title={bostaSyncedAt ? `آخر تحديث ${new Date(bostaSyncedAt).toLocaleString("ar-EG")}` : undefined}
+        >
+          {bostaStatus ? getBostaStatusLabelAr(bostaStatus) : "لسه مفيش بوليصة"}
+          {" · "}
+          شحن {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")}`}
+          {" · "}
+          تحصيل {bostaCod == null ? "—" : `${bostaCod.toLocaleString("ar-EG")}`}
+          {bostaLastEvent ? ` · ${bostaLastEvent}` : ""}
+        </p>
+        {bostaError ? <p className="mt-1 text-[10px] font-bold text-[#FCA311]">{bostaError}</p> : null}
       </div>
     );
   }
@@ -1408,11 +1435,12 @@ export function CsCallSheet({
         </p>
       ) : null}
 
-      <div className="grid items-start gap-3 lg:grid-cols-2 lg:items-stretch">
-        <div className="order-1 flex min-w-0 flex-col gap-2 p-1 lg:order-2">
+      <div className="grid items-stretch gap-3 lg:grid-cols-2">
+        <div className="order-1 flex h-full min-h-0 flex-col gap-2 p-1 lg:order-2">
       {!showFollowUp ? (
-        <div className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-h-0 flex-1 content-stretch gap-2 sm:grid-cols-2 lg:auto-rows-fr lg:grid-cols-3">
           {infoCards(false)}
+          {lockedShipping === "bosta" ? bostaShipmentCard() : null}
         </div>
       ) : (
         <div className="grid content-start gap-2 sm:grid-cols-2">
@@ -1496,11 +1524,11 @@ export function CsCallSheet({
       )}
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
-      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid shrink-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-3">
         {!showFollowUp ? depositCard() : null}
 
         <div
-          className={`m-0.5 flex flex-col rounded-xl p-1.5 shadow-sm ring-2 ring-inset ${
+          className={`flex h-full flex-col rounded-xl p-1.5 shadow-sm ring-2 ring-inset ${
             missing.includes("shipping_company")
               ? "ring-red-500 bg-white"
               : "ring-[#FCA311] bg-[#FCA311]/20"
@@ -1512,32 +1540,9 @@ export function CsCallSheet({
           </p>
         </div>
 
-        {lockedShipping === "bosta" ? (
-          <div className="m-0.5 flex flex-col rounded-xl bg-[#14213D] p-1.5 text-white shadow-sm ring-2 ring-inset ring-[#FCA311]">
-            <p className="text-xs font-extrabold text-[#FCA311]">شحنة بوسطة</p>
-            <input
-              dir="ltr"
-              value={trackingNumber}
-              onChange={(e) => setTrackingNumber(e.target.value)}
-              placeholder="رقم التراك"
-              className={`mt-1 ${inputCls} text-[#14213D]`}
-            />
-            <p
-              className="mt-1 text-[10px] font-bold leading-4"
-              title={bostaSyncedAt ? `آخر تحديث ${new Date(bostaSyncedAt).toLocaleString("ar-EG")}` : undefined}
-            >
-              {bostaStatus ? getBostaStatusLabelAr(bostaStatus) : "لسه مفيش بوليصة"}
-              {" · "}
-              شحن {bostaFee == null ? "—" : `${bostaFee.toLocaleString("ar-EG")}`}
-              {" · "}
-              تحصيل {bostaCod == null ? "—" : `${bostaCod.toLocaleString("ar-EG")}`}
-              {bostaLastEvent ? ` · ${bostaLastEvent}` : ""}
-            </p>
-            {bostaError ? <p className="mt-1 text-[10px] font-bold text-[#FCA311]">{bostaError}</p> : null}
-          </div>
-        ) : null}
+        {showFollowUp && lockedShipping === "bosta" ? bostaShipmentCard() : null}
 
-        <div className="m-0.5 flex flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#059669]">
+        <div className="flex h-full flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#059669]">
           <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
         <button
           type="button"
@@ -1552,7 +1557,7 @@ export function CsCallSheet({
         </div>
       </div>
       </div>
-      <section className="order-2 flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 lg:order-1">
+      <section className="order-2 flex h-full flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 lg:order-1">
         <div className="grid gap-2 border-b border-[#14213D]/10 pb-3">
           <input
             value={itemQuery}
@@ -1710,7 +1715,7 @@ export function CsCallSheet({
           hideEvents={Boolean(bostaError)}
         />
       ) : null}
-      {depositFields(lockRecorded)}
+      {depositFields(false)}
       {showFollowUp ? (
         <section className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {infoCards(lockRecorded)}

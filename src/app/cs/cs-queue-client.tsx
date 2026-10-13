@@ -1916,7 +1916,12 @@ export function CsQueueClient({
                       </span>
                     ) : null}
                     {item.depositPaid || item.depositApprovalStatus === "approved" ? (
-                      <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">مقدم مؤكد</span>
+                      <span className="w-fit rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">
+                        {Number(item.depositAmount) > 0 &&
+                        Number(item.depositAmount) + 0.001 >= parseOrderTotal(item.customerSnapshot?.total)
+                          ? "مدفوع بالكامل"
+                          : "مدفوع جزئي"}
+                      </span>
                     ) : null}
                     {item.depositApprovalStatus === "rejected" ? (
                       <span className="w-fit rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">ديبوزت مرفوض</span>
