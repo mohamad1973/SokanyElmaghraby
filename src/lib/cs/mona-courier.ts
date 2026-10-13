@@ -65,6 +65,7 @@ export type MonaDayAccount = {
   courierId: number;
   dayYmd: string;
   collected: number | null;
+  shipping: number | null;
   remitted: number | null;
 };
 
@@ -360,6 +361,14 @@ async function ensureMonaDayTable() {
       PRIMARY KEY (\`courierAgentId\`, \`dayYmd\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+  try {
+    await prisma.$executeRawUnsafe(
+      "ALTER TABLE `CsMonaDayAccount` ADD COLUMN `shippingAmount` DECIMAL(12,2) NULL",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate column|already exists|1060/i.test(message)) throw error;
+  }
 }
 
 export async function loadMonaDayAccounts(): Promise<MonaDayAccount[]> {
@@ -367,12 +376,19 @@ export async function loadMonaDayAccounts(): Promise<MonaDayAccount[]> {
   if (!prisma) return [];
   await ensureMonaDayTable();
   const rows = await prisma.$queryRawUnsafe<
-    Array<{ courierAgentId: number; dayYmd: string; collectedAmount: unknown; remittedAmount: unknown }>
-  >(`SELECT courierAgentId, dayYmd, collectedAmount, remittedAmount FROM CsMonaDayAccount`);
+    Array<{
+      courierAgentId: number;
+      dayYmd: string;
+      collectedAmount: unknown;
+      shippingAmount: unknown;
+      remittedAmount: unknown;
+    }>
+  >(`SELECT courierAgentId, dayYmd, collectedAmount, shippingAmount, remittedAmount FROM CsMonaDayAccount`);
   return rows.map((row) => ({
     courierId: Number(row.courierAgentId),
     dayYmd: String(row.dayYmd || ""),
     collected: row.collectedAmount == null ? null : Number(row.collectedAmount),
+    shipping: row.shippingAmount == null ? null : Number(row.shippingAmount),
     remitted: row.remittedAmount == null ? null : Number(row.remittedAmount),
   }));
 }
@@ -387,7 +403,7 @@ function optionalMoney(value: unknown) {
 export async function saveMonaDayAccount(
   courierId: number,
   dayYmd: string,
-  input: { collected: unknown; remitted: unknown },
+  input: { collected: unknown; shipping: unknown; remitted: unknown },
 ) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
@@ -397,20 +413,23 @@ export async function saveMonaDayAccount(
     return { ok: false as const, message: "المندوب مش موجود." };
   }
   const collected = optionalMoney(input.collected);
+  const shipping = optionalMoney(input.shipping);
   const remitted = optionalMoney(input.remitted);
-  if (collected === undefined || remitted === undefined) {
+  if (collected === undefined || shipping === undefined || remitted === undefined) {
     return { ok: false as const, message: "اكتب المبالغ بشكل صحيح." };
   }
   await ensureMonaDayTable();
   await prisma.$executeRawUnsafe(
-    `INSERT INTO CsMonaDayAccount (courierAgentId, dayYmd, collectedAmount, remittedAmount)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO CsMonaDayAccount (courierAgentId, dayYmd, collectedAmount, shippingAmount, remittedAmount)
+     VALUES (?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        collectedAmount = VALUES(collectedAmount),
+       shippingAmount = VALUES(shippingAmount),
        remittedAmount = VALUES(remittedAmount)`,
     courierId,
     dayYmd,
     collected,
+    shipping,
     remitted,
   );
   return { ok: true as const, message: "اتحفظ حساب اليوم." };

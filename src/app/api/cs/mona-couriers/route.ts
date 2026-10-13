@@ -99,6 +99,7 @@ export async function POST(request: Request) {
     if (!access.viewer.isAdmin) return NextResponse.json({ message: "التعديل من حساب الأدمن." }, { status: 403 });
     const saved = await saveMonaDayAccount(Number(body.courierId), String(body.dayYmd || ""), {
       collected: body.collected,
+      shipping: body.shipping,
       remitted: body.remitted,
     });
     return NextResponse.json(saved, { status: saved.ok ? 200 : 400 });

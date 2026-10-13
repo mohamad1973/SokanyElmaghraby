@@ -52,6 +52,7 @@ type DayAccount = {
   courierId: number;
   dayYmd: string;
   collected: number | null;
+  shipping: number | null;
   remitted: number | null;
 };
 
@@ -65,7 +66,7 @@ type Desk = {
   dayAccounts?: DayAccount[];
 };
 
-type DayDraft = { collected: string; remitted: string };
+type DayDraft = { collected: string | null; shipping: string | null; remitted: string };
 
 const MONA_DAY_FEE = 75;
 const MONA_DAY_LARGE_FEE = 100;
@@ -216,6 +217,7 @@ function shipmentValue(order: OrderCard) {
 }
 
 function goodsAfterDeposit(order: OrderCard) {
+  if (order.official === "refused") return 0;
   return Math.max(0, shipmentValue(order) - (Number(order.depositAmount) || 0));
 }
 
@@ -261,6 +263,31 @@ function dayRemaining(collected: string, remitted: string, shipping: number) {
 
 function moneyText(value: number | null) {
   return value == null || Number.isNaN(value) ? "" : egp(value);
+}
+
+function shownMoney(text: string | null, fallback: number) {
+  if (text == null || text.trim() === "") return moneyText(fallback);
+  return text;
+}
+
+function fieldValue(text: string | null, fallback: number) {
+  return text == null ? moneyText(fallback) : text;
+}
+
+function overrideAmount(text: string | null, fallback: number) {
+  if (text == null || text.trim() === "") return null;
+  const amount = Number(text);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  if (Math.abs(amount - fallback) < 0.001) return null;
+  return Math.round(amount * 100) / 100;
+}
+
+function emptyDayDraft(saved?: DayAccount): DayDraft {
+  return {
+    collected: saved?.collected == null ? null : moneyText(saved.collected),
+    shipping: saved?.shipping == null ? null : moneyText(saved.shipping),
+    remitted: moneyText(saved?.remitted ?? null),
+  };
 }
 
 function InvoiceField({
@@ -350,8 +377,10 @@ function DayAccountBox({
   onSave: () => void;
 }) {
   const goods = sumOf(rows, goodsAfterDeposit);
-  const shipping = dayShipping(rows);
-  const remaining = dayRemaining(draft.collected, draft.remitted, shipping);
+  const autoShipping = dayShipping(rows);
+  const collectedShown = shownMoney(draft.collected, goods);
+  const shippingShown = shownMoney(draft.shipping, autoShipping);
+  const remaining = dayRemaining(collectedShown, draft.remitted, Number(shippingShown) || 0);
   return (
     <div className="grid gap-2 bg-[#F8F4EA] px-3 py-3 text-sm font-extrabold text-[#14213D]">
       <p className="flex items-center justify-between gap-3">
@@ -369,16 +398,27 @@ function DayAccountBox({
           <label className="flex items-center justify-between gap-3">
             <span>القيمة المحصلة</span>
             <input
-              value={draft.collected}
+              value={fieldValue(draft.collected, goods)}
               onChange={(event) => onDraft({ ...draft, collected: event.target.value })}
+              onBlur={(event) => {
+                if (event.currentTarget.value.trim() === "") onDraft({ ...draft, collected: null });
+              }}
               inputMode="decimal"
               className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
             />
           </label>
-          <p className="flex items-center justify-between gap-3">
+          <label className="flex items-center justify-between gap-3">
             <span>إجمالي تكلفة الشحن</span>
-            <span>{egp(shipping)} ج.م</span>
-          </p>
+            <input
+              value={fieldValue(draft.shipping, autoShipping)}
+              onChange={(event) => onDraft({ ...draft, shipping: event.target.value })}
+              onBlur={(event) => {
+                if (event.currentTarget.value.trim() === "") onDraft({ ...draft, shipping: null });
+              }}
+              inputMode="decimal"
+              className="h-9 w-36 rounded-lg border border-[#14213D]/15 bg-white px-2 text-left font-bold"
+            />
+          </label>
           <label className="flex items-center justify-between gap-3">
             <span>التوريد النقدي</span>
             <input
@@ -400,11 +440,11 @@ function DayAccountBox({
         <>
           <p className="flex items-center justify-between gap-3">
             <span>القيمة المحصلة</span>
-            <span>{draft.collected.trim() === "" ? "—" : `${draft.collected} ج.م`}</span>
+            <span>{collectedShown.trim() === "" ? "—" : `${collectedShown} ج.م`}</span>
           </p>
           <p className="flex items-center justify-between gap-3">
             <span>إجمالي تكلفة الشحن</span>
-            <span>{egp(shipping)} ج.م</span>
+            <span>{shippingShown.trim() === "" ? "—" : `${shippingShown} ج.م`}</span>
           </p>
           <p className="flex items-center justify-between gap-3">
             <span>التوريد النقدي</span>
@@ -443,7 +483,10 @@ function CourierInvoice({
   dayFrom: string;
   dayTo: string;
   onDraft: (dayYmd: string, next: DayDraft) => void;
-  onSaveDay: (dayYmd: string) => void;
+  onSaveDay: (
+    dayYmd: string,
+    amounts: { collected: number | null; shipping: number | null; remitted: number | null },
+  ) => void;
   onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
   onLarge?: (confirmationId: number, isLarge: boolean) => void;
   onInvoice?: (confirmationId: number, invoiceNumber: string) => void;
@@ -503,11 +546,14 @@ function CourierInvoice({
             ) : (
               dayBlocks.map((block, index) => {
                 const saved = dayAccounts.find((row) => row.dayYmd === block.key);
-                const draft = drafts[block.key] || {
-                  collected: moneyText(saved?.collected ?? null),
-                  remitted: moneyText(saved?.remitted ?? null),
-                };
-                const remaining = dayRemaining(draft.collected, draft.remitted, dayShipping(block.accountRows));
+                const draft = drafts[block.key] || emptyDayDraft(saved);
+                const goods = sumOf(block.accountRows, goodsAfterDeposit);
+                const autoShipping = dayShipping(block.accountRows);
+                const remaining = dayRemaining(
+                  shownMoney(draft.collected, goods),
+                  draft.remitted,
+                  Number(shownMoney(draft.shipping, autoShipping)) || 0,
+                );
                 const settled = remaining === 0;
                 return (
                 <Fragment key={block.key}>
@@ -627,7 +673,13 @@ function CourierInvoice({
                           canEdit={canEditMoney}
                           draft={draft}
                           onDraft={(next) => onDraft(block.key, next)}
-                          onSave={() => onSaveDay(block.key)}
+                          onSave={() =>
+                            onSaveDay(block.key, {
+                              collected: overrideAmount(draft.collected, goods),
+                              shipping: overrideAmount(draft.shipping, autoShipping),
+                              remitted: draft.remitted.trim() === "" ? null : Number(draft.remitted),
+                            })
+                          }
                         />
                       </td>
                     </tr>
@@ -839,12 +891,13 @@ function reportRows(orders: OrderCard[], accounts: DayAccount[], from: string, t
     .map((day) => {
       const rows = orders.filter((order) => order.assignedDay === day);
       const saved = accounts.find((row) => row.dayYmd === day);
-      const shipping = dayShipping(rows);
-      const collected = saved?.collected ?? null;
+      const goods = sumOf(rows, goodsAfterDeposit);
+      const shipping = saved?.shipping ?? dayShipping(rows);
+      const collected = saved?.collected ?? goods;
       const remitted = saved?.remitted ?? null;
       return {
         day,
-        goods: sumOf(rows, goodsAfterDeposit),
+        goods,
         collected,
         shipping,
         remitted,
@@ -891,10 +944,7 @@ export function MonaCourierPanel({
     setDayDrafts(() => {
       const next: Record<string, DayDraft> = {};
       for (const row of data.dayAccounts || []) {
-        next[row.dayYmd] = {
-          collected: moneyText(row.collected),
-          remitted: moneyText(row.remitted),
-        };
+        next[row.dayYmd] = emptyDayDraft(row);
       }
       return next;
     });
@@ -1052,14 +1102,14 @@ export function MonaCourierPanel({
                   });
                 }}
                 onDraft={(dayYmd, next) => setDayDrafts((current) => ({ ...current, [dayYmd]: next }))}
-                onSaveDay={(dayYmd) => {
-                  const draft = dayDrafts[dayYmd] || { collected: "", remitted: "" };
+                onSaveDay={(dayYmd, amounts) => {
                   void post({
                     action: "day",
                     courierId: line.courierId,
                     dayYmd,
-                    collected: draft.collected.trim() === "" ? null : Number(draft.collected),
-                    remitted: draft.remitted.trim() === "" ? null : Number(draft.remitted),
+                    collected: amounts.collected,
+                    shipping: amounts.shipping,
+                    remitted: amounts.remitted,
                   });
                 }}
                 onOfficial={(confirmationId, result) => {
