@@ -5,6 +5,7 @@ import { resolveCsViewer } from "@/lib/cs/confirmations";
 import {
   getReorderProducts,
   updateProductReorderThreshold,
+  type ReorderProduct,
   type StockStatusFilter,
 } from "@/lib/reorder-report";
 import { requireCsSession } from "@/lib/session-guards";
@@ -58,8 +59,34 @@ export async function PATCH(request: Request) {
   if (!session) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
 
   const body = (await request.json().catch(() => null)) as
-    | { productId?: number; threshold?: number }
+    | {
+        productId?: number;
+        threshold?: number;
+        items?: Array<{ productId?: number; threshold?: number }>;
+      }
     | null;
+
+  if (Array.isArray(body?.items)) {
+    const products: ReorderProduct[] = [];
+    let saved = 0;
+    let failed = 0;
+    for (const item of body.items) {
+      const productId = Number(item?.productId);
+      const threshold = Number(item?.threshold);
+      if (!Number.isFinite(productId) || productId < 1 || !Number.isFinite(threshold) || threshold < 0) {
+        failed += 1;
+        continue;
+      }
+      const result = await updateProductReorderThreshold(productId, threshold);
+      if (!result.ok) {
+        failed += 1;
+        continue;
+      }
+      saved += 1;
+      products.push(result.product);
+    }
+    return NextResponse.json({ saved, failed, products });
+  }
 
   const productId = Number(body?.productId);
   const threshold = Number(body?.threshold);

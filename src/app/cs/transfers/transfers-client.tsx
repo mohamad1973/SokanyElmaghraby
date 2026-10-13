@@ -118,6 +118,12 @@ type TransferDraft = {
   source: TransferSource;
 };
 
+type SavedTransferLine = {
+  productId: number;
+  qty: number;
+  source: TransferSource;
+};
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -158,8 +164,10 @@ export function CsTransfersClient() {
   const [warehouseBalances, setWarehouseBalances] = useState<WarehouseBalance[]>([]);
   const [savedSheets, setSavedSheets] = useState<SavedWarehouseSheet[]>([]);
   const sheetLoadTicket = useRef(0);
+  const transferTouched = useRef(false);
   const [transferDrafts, setTransferDrafts] = useState<Record<number, TransferDraft>>({});
   const [warehouseLoading, setWarehouseLoading] = useState(false);
+  const [sheetSaving, setSheetSaving] = useState(false);
   const [returnForm, setReturnForm] = useState({
     wooOrderNumber: "",
     productId: "",
@@ -265,10 +273,24 @@ export function CsTransfersClient() {
         const data = (await res.json().catch(() => null)) as {
           balances?: WarehouseBalance[];
           sheets?: SavedWarehouseSheet[];
+          transfers?: SavedTransferLine[];
         } | null;
         if (ticket !== sheetLoadTicket.current || !res.ok || !data) return;
         setWarehouseBalances(data.balances || []);
         setSavedSheets(data.sheets || []);
+        if (!transferTouched.current) {
+          setTransferDrafts(
+            Object.fromEntries(
+              (data.transfers || []).map((line) => [
+                line.productId,
+                {
+                  qty: String(line.qty),
+                  source: line.source === "tenthHome" ? "tenthHome" : "tenth",
+                },
+              ]),
+            ),
+          );
+        }
       } catch {
         if (ticket === sheetLoadTicket.current) setMessage("تعذر تحميل الشيتات المحفوظة.");
       }
@@ -290,6 +312,7 @@ export function CsTransfersClient() {
   }, [warehouseBalances]);
 
   function rememberTransfer(productId: number, patch: Partial<TransferDraft>) {
+    transferTouched.current = true;
     setTransferDrafts((prev) => ({
       ...prev,
       [productId]: {
@@ -373,6 +396,94 @@ export function CsTransfersClient() {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+  }
+
+  async function saveWarehouseSheet() {
+    const thresholds = products.flatMap((product) => {
+      const raw = draftThresholds[product.id];
+      if (raw == null || raw.trim() === "") return [];
+      const threshold = Number(raw);
+      if (!Number.isFinite(threshold) || threshold < 0) return [{ productId: product.id, threshold: -1 }];
+      if (Math.floor(threshold) === product.threshold) return [];
+      return [{ productId: product.id, threshold: Math.floor(threshold) }];
+    });
+    if (thresholds.some((row) => row.threshold < 0)) {
+      setMessage("حد الطلب غير صالح.");
+      return;
+    }
+    const transfers = Object.entries(transferDrafts).map(([id, draft]) => {
+      const qty = Number(draft.qty);
+      return {
+        productId: Number(id),
+        qty: Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 0,
+        source: draft.source === "tenthHome" ? "tenthHome" : "tenth",
+      };
+    });
+    if (!thresholds.length && !transfers.length) {
+      setMessage("مفيش تغيير للحفظ.");
+      return;
+    }
+    setMessage("");
+    setSheetSaving(true);
+    let thresholdNote = "";
+    if (thresholds.length) {
+      const res = await fetch("/api/cs/transfers/stock", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: thresholds }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        saved?: number;
+        failed?: number;
+        products?: StockProduct[];
+        message?: string;
+      } | null;
+      if (!res.ok || !data) {
+        setSheetSaving(false);
+        setMessage(data?.message || "تعذر حفظ حد الطلب.");
+        return;
+      }
+      if (data.products?.length) {
+        const byId = new Map(data.products.map((product) => [product.id, product]));
+        setProducts((prev) => prev.map((product) => (byId.has(product.id) ? { ...product, ...byId.get(product.id)! } : product)));
+        setDraftThresholds((prev) => {
+          const next = { ...prev };
+          for (const product of data.products || []) next[product.id] = String(product.threshold);
+          return next;
+        });
+      }
+      thresholdNote = data.failed ? ` تعذر حفظ حد الطلب لـ ${data.failed} صنف.` : "";
+    }
+    if (transfers.length) {
+      const res = await fetch("/api/cs/transfers/warehouses", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transfers }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        transfers?: SavedTransferLine[];
+        message?: string;
+      } | null;
+      if (!res.ok || !data?.transfers) {
+        setSheetSaving(false);
+        setMessage(data?.message || "تعذر حفظ طلبات التحويل.");
+        return;
+      }
+      transferTouched.current = false;
+      setTransferDrafts(
+        Object.fromEntries(
+          data.transfers.map((line) => [
+            line.productId,
+            {
+              qty: String(line.qty),
+              source: line.source === "tenthHome" ? "tenthHome" : "tenth",
+            },
+          ]),
+        ),
+      );
+    }
+    setSheetSaving(false);
+    setMessage(`تم حفظ الشيت.${thresholdNote}`);
   }
 
   async function saveThreshold(productId: number) {
@@ -1032,6 +1143,15 @@ export function CsTransfersClient() {
             ) : null}
           </form>
 
+          <button
+            type="button"
+            disabled={sheetSaving}
+            onClick={() => void saveWarehouseSheet()}
+            className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {sheetSaving ? "جاري الحفظ…" : "حفظ الشيت"}
+          </button>
+
           <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
             <table className="min-w-full text-sm">
               <thead className="bg-[#E5E5E5] text-right text-[#14213D]">
@@ -1045,13 +1165,12 @@ export function CsTransfersClient() {
                   <th className="px-3 py-2">الكمية</th>
                   <th className="px-3 py-2">حد الطلب</th>
                   <th className="px-3 py-2">الحالة</th>
-                  <th className="px-3 py-2">حفظ</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-8 text-center text-[#14213D]/60">
+                    <td colSpan={9} className="px-3 py-8 text-center text-[#14213D]/60">
                       {loading ? "جاري التحميل…" : "لا توجد أصناف مطابقة."}
                     </td>
                   </tr>
@@ -1119,16 +1238,6 @@ export function CsTransfersClient() {
                             <span className="text-xs text-[#14213D]/55">طبيعي</span>
                           )}
                         </td>
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            disabled={savingId === p.id}
-                            onClick={() => void saveThreshold(p.id)}
-                            className="rounded-lg bg-[#14213D] px-2 py-1 text-xs font-bold text-white disabled:opacity-60"
-                          >
-                            {savingId === p.id ? "…" : "حفظ"}
-                          </button>
-                        </td>
                       </tr>
                     );
                   })
@@ -1136,13 +1245,23 @@ export function CsTransfersClient() {
               </tbody>
             </table>
           </div>
-          <button
-            type="button"
-            onClick={printTransferReport}
-            className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black"
-          >
-            اطبع تقرير التحويل
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={sheetSaving}
+              onClick={() => void saveWarehouseSheet()}
+              className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+            >
+              {sheetSaving ? "جاري الحفظ…" : "حفظ الشيت"}
+            </button>
+            <button
+              type="button"
+              onClick={printTransferReport}
+              className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black"
+            >
+              اطبع تقرير التحويل
+            </button>
+          </div>
         </>
       ) : null}
     </div>

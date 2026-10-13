@@ -95,6 +95,96 @@ export async function loadWarehouseSheets(): Promise<StoredWarehouseSheet[]> {
     .sort((a, b) => (order.get(a.warehouse) ?? 0) - (order.get(b.warehouse) ?? 0));
 }
 
+export type WarehouseTransferLine = {
+  productId: number;
+  qty: number;
+  source: "tenth" | "tenthHome";
+};
+
+let transferTableReady: Promise<void> | null = null;
+
+export async function ensureWarehouseTransferTable() {
+  if (!transferTableReady) {
+    transferTableReady = createWarehouseTransferTable().catch((error) => {
+      transferTableReady = null;
+      throw error;
+    });
+  }
+  await transferTableReady;
+}
+
+async function createWarehouseTransferTable() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const ready = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT 1 AS n FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsWarehouseTransferLine' LIMIT 1`,
+  );
+  if (ready.length) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsWarehouseTransferLine\` (
+      \`productId\` INT NOT NULL,
+      \`qty\` INT NOT NULL,
+      \`source\` VARCHAR(20) NOT NULL,
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`productId\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+}
+
+function transferSource(value: string): WarehouseTransferLine["source"] | null {
+  if (value === "tenth" || value === "tenthHome") return value;
+  return null;
+}
+
+export async function loadWarehouseTransfers(): Promise<WarehouseTransferLine[]> {
+  const prisma = getPrismaClient();
+  if (!prisma) return [];
+  await ensureWarehouseTransferTable();
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ productId: number; qty: number; source: string }>
+  >("SELECT productId, qty, source FROM CsWarehouseTransferLine WHERE qty > 0");
+  return rows.flatMap((row) => {
+    const source = transferSource(row.source);
+    const productId = Number(row.productId);
+    const qty = Number(row.qty);
+    if (!source || !Number.isFinite(productId) || productId < 1 || !Number.isFinite(qty) || qty <= 0) {
+      return [];
+    }
+    return [{ productId, qty: Math.floor(qty), source }];
+  });
+}
+
+export async function saveWarehouseTransfers(
+  lines: Array<{ productId: number; qty: number; source: string }>,
+) {
+  const prisma = getPrismaClient();
+  if (!prisma) throw new Error("قاعدة البيانات غير متاحة.");
+  await ensureWarehouseTransferTable();
+  const updatedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    for (const line of lines) {
+      const productId = Math.floor(Number(line.productId));
+      const qty = Math.floor(Number(line.qty));
+      const source = transferSource(line.source);
+      if (!Number.isFinite(productId) || productId < 1 || !source || !Number.isFinite(qty)) continue;
+      if (qty <= 0) {
+        await tx.$executeRaw`DELETE FROM CsWarehouseTransferLine WHERE productId = ${productId}`;
+        continue;
+      }
+      await tx.$executeRaw`
+        INSERT INTO CsWarehouseTransferLine (productId, qty, source, updatedAt)
+        VALUES (${productId}, ${qty}, ${source}, ${updatedAt})
+        ON DUPLICATE KEY UPDATE
+          qty = VALUES(qty),
+          source = VALUES(source),
+          updatedAt = VALUES(updatedAt)
+      `;
+    }
+  });
+  return loadWarehouseTransfers();
+}
+
 export async function saveWarehouseSheets(
   sheets: Array<{ warehouse: WarehouseSheetKey; fileName: string; rows: StoredSheetRow[] }>,
 ) {

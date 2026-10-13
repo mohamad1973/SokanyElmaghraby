@@ -9,7 +9,9 @@ import { getReorderProducts } from "@/lib/reorder-report";
 import { requireCsSession } from "@/lib/session-guards";
 import {
   loadWarehouseSheets,
+  loadWarehouseTransfers,
   saveWarehouseSheets,
+  saveWarehouseTransfers,
   type StoredSheetRow,
   type WarehouseSheetKey,
 } from "@/lib/cs/warehouse-sheets";
@@ -66,11 +68,12 @@ export async function GET() {
   const session = await requireTransfersAccess();
   if (!session) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   try {
-    const sheets = await loadWarehouseSheets();
-    if (sheets.length < 3) return NextResponse.json({ balances: [], sheets: [] });
+    const [sheets, transfers] = await Promise.all([loadWarehouseSheets(), loadWarehouseTransfers()]);
+    if (sheets.length < 3) return NextResponse.json({ balances: [], sheets: [], transfers });
     const balances = await balancesFromStored(sheets);
     return NextResponse.json({
       balances,
+      transfers,
       sheets: sheets.map((sheet) => ({
         warehouse: sheet.warehouse,
         fileName: sheet.fileName,
@@ -79,6 +82,30 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر قراءة الشيتات المحفوظة.";
+    return NextResponse.json({ message }, { status: 502 });
+  }
+}
+
+export async function PUT(request: Request) {
+  const session = await requireTransfersAccess();
+  if (!session) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+  const body = (await request.json().catch(() => null)) as {
+    transfers?: Array<{ productId?: number; qty?: number; source?: string }>;
+  } | null;
+  if (!Array.isArray(body?.transfers)) {
+    return NextResponse.json({ message: "طلبات التحويل مطلوبة." }, { status: 400 });
+  }
+  try {
+    const transfers = await saveWarehouseTransfers(
+      body.transfers.map((line) => ({
+        productId: Number(line?.productId),
+        qty: Number(line?.qty),
+        source: String(line?.source || ""),
+      })),
+    );
+    return NextResponse.json({ transfers });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "تعذر حفظ طلبات التحويل.";
     return NextResponse.json({ message }, { status: 502 });
   }
 }
