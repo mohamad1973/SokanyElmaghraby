@@ -87,6 +87,7 @@ export default async function CsOrderPage({ params }: Props) {
       confirmationEditedAt={row.confirmationEditedAt ? row.confirmationEditedAt.toISOString() : null}
       orderTotalDelta={parseOrderTotalDelta(row.orderTotalDelta)}
       canApproveItems={viewer.isAdmin}
+      canEditSavedInfo={viewer.isAdmin}
       initialAnswers={confirmation.answers.map((a) => ({
         itemKey: a.itemKey,
         confirmed: a.confirmed,

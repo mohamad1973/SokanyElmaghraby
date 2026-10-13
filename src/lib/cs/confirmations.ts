@@ -1207,6 +1207,7 @@ export async function saveCsConfirmation(input: {
     customerFollowUp?: boolean;
   };
   sheetDayChoice?: "previous" | "today";
+  canEditSavedInfo?: boolean;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", missing: [] as string[] };
@@ -1379,6 +1380,16 @@ export async function saveCsConfirmation(input: {
   ) {
     const now = new Date();
     const data: Record<string, unknown> = { ...shippingMetaPatch };
+    const editSaved = Boolean(input.canEditSavedInfo);
+    if (!editSaved) {
+      delete data.depositAmount;
+      delete data.depositPaid;
+      delete data.depositPayMethod;
+      delete data.depositFromNumber;
+      delete data.depositInstapayName;
+      delete data.depositToPhone;
+      delete data.depositToMethod;
+    }
     if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED) {
       if (row.confirmedAt) data.confirmationEditedAt = now;
       else data.confirmedAt = now;
@@ -1418,7 +1429,13 @@ export async function saveCsConfirmation(input: {
       data.postCancelAt = now;
       data.failReason = "الغاء بعد التأكيد";
     }
-    const followAnswers = input.answers?.length ? input.answers : row.answers;
+    const storedAnswers: CsChecklistAnswerInput[] = row.answers.map((answer) => ({
+      itemKey: answer.itemKey,
+      confirmed: Boolean(answer.confirmed),
+      value: answer.value,
+      note: answer.note,
+    }));
+    const followAnswers = editSaved && input.answers?.length ? input.answers : storedAnswers;
     const followSnapshot = post?.refundPaid
       ? { ...snap, ...((data.customerSnapshot as Record<string, unknown> | undefined) || {}) }
       : waybillSnapshot(
@@ -1430,7 +1447,7 @@ export async function saveCsConfirmation(input: {
       where: { id: input.id },
       data: data as never,
     });
-    if (input.answers?.length && !post?.refundPaid) {
+    if (editSaved && input.answers?.length && !post?.refundPaid) {
       await persistChecklistAnswers(input.id, input.answers);
     }
     const followFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
@@ -1566,6 +1583,25 @@ export async function saveCsConfirmation(input: {
       message: "يجب أن تحدد المشرفة شركة الشحن أولاً من قائمة الأوردرات.",
       missing: ["shipping_company"],
     };
+  }
+
+  if (nextDepositAmount != null && nextDepositAmount > 0) {
+    const approval = String((row as { depositApprovalStatus?: string | null }).depositApprovalStatus || "")
+      .trim()
+      .toLowerCase();
+    const storedDeposit = parseDepositAmount(typed.depositAmount);
+    if (approval !== "approved" || storedDeposit == null || Math.abs(storedDeposit - nextDepositAmount) > 0.001) {
+      return {
+        ok: false as const,
+        message:
+          approval === "approved"
+            ? "اطلب الموافقة على قيمة الديبوزت الجديدة."
+            : "لا يُحفظ الأوردر قبل موافقة الديبوزت.",
+        missing: [] as string[],
+      };
+    }
+  } else if (input.depositAmount !== undefined) {
+    shippingMetaPatch.depositPaid = false;
   }
 
   const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);

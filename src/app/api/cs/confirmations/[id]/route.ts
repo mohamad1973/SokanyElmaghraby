@@ -184,6 +184,7 @@ export async function PUT(request: Request, context: Context) {
     });
   }
 
+  const viewer = await resolveCsViewer(session.user.csAgentId);
   const result = await saveCsConfirmation({
     id: numericId,
     agentId: session.user.csAgentId,
@@ -206,6 +207,7 @@ export async function PUT(request: Request, context: Context) {
     postCancel: body.postCancel,
     followUp: body.followUp,
     sheetDayChoice: body.sheetDayChoice,
+    canEditSavedInfo: viewer.isAdmin || Boolean(session.user.csIsAdmin),
   });
 
   if (!result.ok) {

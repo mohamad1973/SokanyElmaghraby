@@ -19,9 +19,6 @@ import {
   type BostaTrackEvent,
 } from "@/lib/shipping/bosta-zones";
 
-/** Order total at/above this (EGP) shows the optional deposit card. */
-const CS_DEPOSIT_THRESHOLD = 5000;
-
 const DEPOSIT_TO_OPTIONS = [
   { phone: "01000260262", method: "wallet" as const, label: "01000260262 — محفظة" },
   { phone: "01000260262", method: "instapay" as const, label: "01000260262 — انستا" },
@@ -96,6 +93,7 @@ type Props = {
   confirmationEditedAt?: string | null;
   orderTotalDelta?: number | null;
   canApproveItems?: boolean;
+  canEditSavedInfo?: boolean;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -351,6 +349,7 @@ export function CsCallSheet({
   confirmationEditedAt,
   orderTotalDelta: initialOrderTotalDelta,
   canApproveItems = false,
+  canEditSavedInfo = false,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
@@ -511,10 +510,6 @@ export function CsCallSheet({
     failContact: boolean;
     cancelOrder: boolean;
   } | null>(null);
-  const [allowPartialPay, setAllowPartialPay] = useState(() => {
-    const amount = Number(initialDepositAmount);
-    return Number.isFinite(amount) && amount > 0;
-  });
 
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const savedWhen = confirmedAt ? formatCairoOrderDateTime(confirmedAt) : null;
@@ -528,7 +523,7 @@ export function CsCallSheet({
         ? -adjustAbs
         : adjustAbs;
   const adjustedTotal = Math.max(0, (Number.isFinite(wooTotal) ? wooTotal : 0) + signedDelta);
-  const showDepositCard = adjustedTotal >= CS_DEPOSIT_THRESHOLD || allowPartialPay;
+  const lockRecorded = showFollowUp && !canEditSavedInfo;
   const paymentState =
     snapshot?.paymentState ||
     resolvePaymentState({
@@ -617,6 +612,27 @@ export function CsCallSheet({
         setSaving(false);
         setMessage("اكتب رقم الإلغاء على السيستم.");
         return;
+      }
+    }
+
+    if (finalize && !failContact && !cancelOrder && !showFollowUp) {
+      const typedDeposit = Number(depositAmount.replace(/,/g, "").trim());
+      const hasDeposit = depositAmount.trim() !== "" && Number.isFinite(typedDeposit) && typedDeposit > 0;
+      if (hasDeposit) {
+        const approvedAmount = Number(initialDepositAmount);
+        const matchesApproved =
+          depositApprovalStatus === "approved" &&
+          Number.isFinite(approvedAmount) &&
+          Math.abs(approvedAmount - typedDeposit) < 0.001;
+        if (!matchesApproved) {
+          setSaving(false);
+          setMessage(
+            depositApprovalStatus === "approved"
+              ? "اطلب الموافقة على قيمة الديبوزت الجديدة."
+              : "لا يُحفظ الأوردر قبل موافقة الديبوزت.",
+          );
+          return;
+        }
       }
     }
 
@@ -894,6 +910,320 @@ export function CsCallSheet({
 
   const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
+  function infoCards(locked: boolean) {
+    return (
+      <div className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {checklistVisible.map((item) => {
+          const state = answers[item.key];
+          const isMissing = missing.includes(item.key);
+          return (
+            <div
+              key={item.key}
+              className={`flex flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
+                isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
+              }`}
+            >
+              <label className="flex items-center justify-between gap-1">
+                <span className="min-w-0 text-xs font-extrabold leading-4 text-[#14213D]">{item.label}</span>
+                <input
+                  type="checkbox"
+                  className="size-4 shrink-0 accent-[#FCA311]"
+                  checked={state.confirmed}
+                  disabled={locked}
+                  onChange={(e) => update(item.key, { confirmed: e.target.checked })}
+                />
+              </label>
+              {item.help && item.type !== "confirm_only" ? (
+                <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-[#14213D]/60">{item.help}</p>
+              ) : null}
+              <div className="mt-1 space-y-1">
+                {item.key === "address_complete" ? (
+                  <textarea
+                    disabled={locked}
+                    rows={Math.min(4, Math.max(1, Math.ceil(state.value.trim().length / 36) || 1))}
+                    dir={/[\u0600-\u06FF]/.test(state.value) ? "rtl" : "ltr"}
+                    value={state.value}
+                    onChange={(e) => update(item.key, { value: e.target.value })}
+                    className={`${inputCls} resize-none leading-5`}
+                  />
+                ) : item.type === "confirm_text" ? (
+                  <input
+                    disabled={locked}
+                    value={state.value}
+                    onChange={(e) => update(item.key, { value: e.target.value })}
+                    className={inputCls}
+                  />
+                ) : null}
+                {item.type === "choice" ? (
+                  <select
+                    disabled={locked}
+                    value={state.value}
+                    onChange={(e) =>
+                      update(item.key, { value: e.target.value, confirmed: Boolean(e.target.value) })
+                    }
+                    className={inputCls}
+                  >
+                    <option value="">اختر...</option>
+                    {(item.choices || []).map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {item.type === "yes_no_extra" ? (
+                  <>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() => update(item.key, { yesNo: "yes", confirmed: false })}
+                        className={`flex-1 rounded-lg py-1 text-xs font-extrabold disabled:opacity-70 ${
+                          state.yesNo === "yes" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                        }`}
+                      >
+                        نعم
+                      </button>
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() => update(item.key, { yesNo: "no", confirmed: true, note: "" })}
+                        className={`flex-1 rounded-lg py-1 text-xs font-extrabold disabled:opacity-70 ${
+                          state.yesNo === "no" ? "bg-black text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                        }`}
+                      >
+                        لا
+                      </button>
+                    </div>
+                    {state.yesNo === "yes" ? (
+                      <input
+                        disabled={locked}
+                        value={state.note}
+                        onChange={(e) => update(item.key, { note: e.target.value })}
+                        placeholder="بديل"
+                        className={inputCls}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function depositFields(locked: boolean) {
+    return (
+      <div
+        className={`flex shrink-0 flex-col overflow-auto rounded-xl bg-[#0D9488]/15 p-2 shadow-sm ring-2 ring-[#0D9488] sm:col-span-3 ${
+          showFollowUp ? "" : "max-h-36"
+        }`}
+      >
+        <p className="text-sm font-extrabold text-[#14213D]">طلب ديبوزت</p>
+        <p className="mt-1 text-xs text-[#14213D]/60">
+          اختياري. لو اتسجلت قيمة، الحفظ النهائي بعد موافقة الأدمن.
+        </p>
+        <div className="mt-1.5 space-y-1.5">
+          <div>
+            <p className="text-[10px] font-bold text-[#14213D]/70">الدفع من</p>
+            <div className="mt-0.5 flex flex-wrap gap-1">
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => setDepositPayMethod("wallet")}
+                className={`${compactBtn} disabled:opacity-70 ${
+                  depositPayMethod === "wallet" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                }`}
+              >
+                محفظة
+              </button>
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => setDepositPayMethod("instapay")}
+                className={`${compactBtn} disabled:opacity-70 ${
+                  depositPayMethod === "instapay" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                }`}
+              >
+                انستا
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-[#14213D]/70">من رقم</label>
+            <input
+              dir="ltr"
+              disabled={locked}
+              value={depositFromNumber}
+              onChange={(e) => setDepositFromNumber(e.target.value)}
+              placeholder="رقم العميل"
+              className={inputCls}
+            />
+          </div>
+          {depositPayMethod === "instapay" ? (
+            <div>
+              <label className="text-[10px] font-bold text-[#14213D]/70">اسم حساب انستا</label>
+              <input
+                disabled={locked}
+                value={depositInstapayName}
+                onChange={(e) => setDepositInstapayName(e.target.value)}
+                placeholder="اختياري"
+                className={inputCls}
+              />
+            </div>
+          ) : null}
+          <div>
+            <label className="text-[10px] font-bold text-[#14213D]/70">الدفع إلى</label>
+            <select
+              disabled={locked}
+              value={depositToKey}
+              onChange={(e) => setDepositToKey(e.target.value)}
+              className={inputCls}
+              dir="ltr"
+            >
+              <option value="">اختر...</option>
+              {DEPOSIT_TO_OPTIONS.map((opt) => (
+                <option key={makeDepositToKey(opt.phone, opt.method)} value={makeDepositToKey(opt.phone, opt.method)}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-[#14213D]/70">قيمة المقدم</label>
+            <input
+              dir="ltr"
+              disabled={locked}
+              inputMode="decimal"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+              placeholder="0"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-[#14213D]/70">يوم الدفع (1–31)</label>
+            <input
+              dir="ltr"
+              disabled={locked}
+              inputMode="numeric"
+              min={1}
+              max={31}
+              value={depositPaidDay}
+              onChange={(e) => setDepositPaidDay(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+              placeholder="اليوم"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-[#14213D]/70">ساعة ودقيقة الدفع</label>
+            <div className="mt-0.5 flex items-center gap-1">
+              <input
+                dir="ltr"
+                disabled={locked}
+                inputMode="numeric"
+                value={depositPaidHour}
+                onChange={(e) => setDepositPaidHour(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+                placeholder="ساعة"
+                className={inputCls}
+              />
+              <span className="text-xs font-extrabold text-[#14213D]">:</span>
+              <input
+                dir="ltr"
+                disabled={locked}
+                inputMode="numeric"
+                value={depositPaidMinute}
+                onChange={(e) => setDepositPaidMinute(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+                placeholder="دقيقة"
+                className={inputCls}
+              />
+            </div>
+            <div className="mt-1 flex gap-1">
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => setDepositPaidPeriod("morning")}
+                className={`${compactBtn} flex-1 disabled:opacity-70 ${
+                  depositPaidPeriod === "morning" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                }`}
+              >
+                صباحاً
+              </button>
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => setDepositPaidPeriod("evening")}
+                className={`${compactBtn} flex-1 disabled:opacity-70 ${
+                  depositPaidPeriod === "evening" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
+                }`}
+              >
+                مساءً
+              </button>
+            </div>
+          </div>
+          <div className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
+            {depositApprovalStatus === "pending"
+              ? "بانتظار موافقة الأدمن"
+              : depositApprovalStatus === "approved"
+                ? "معتمد — العميل دفع"
+                : depositApprovalStatus === "rejected"
+                  ? "مرفوض — العميل لم يدفع"
+                  : "لم يُطلب موافقة بعد"}
+          </div>
+          <button
+            type="button"
+            disabled={locked || requestingApproval || depositApprovalStatus === "pending"}
+            onClick={() => {
+              void (async () => {
+                setRequestingApproval(true);
+                setMessage("");
+                const to = parseDepositToKey(depositToKey);
+                const paidAt = buildPaidAtIsoFromDayTime(
+                  depositPaidDay,
+                  depositPaidHour,
+                  depositPaidMinute,
+                  depositPaidPeriod,
+                );
+                if (!paidAt.ok) {
+                  setMessage(paidAt.message);
+                  setRequestingApproval(false);
+                  return;
+                }
+                const res = await fetch(`/api/cs/confirmations/${confirmationId}/deposit-approval`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
+                    depositPayMethod: depositPayMethod || null,
+                    depositFromNumber: depositFromNumber.trim() || null,
+                    depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
+                    depositToPhone: to.phone || null,
+                    depositToMethod: to.method || null,
+                    depositPaidAt: paidAt.iso,
+                    depositProofUrl: null,
+                  }),
+                });
+                const data = (await res.json()) as { message?: string };
+                setRequestingApproval(false);
+                if (!res.ok) {
+                  setMessage(data.message || "تعذر إرسال طلب الموافقة.");
+                  return;
+                }
+                setDepositApprovalStatus("pending");
+                setMessage("تم إرسال طلب الموافقة للأدمن.");
+              })();
+            }}
+            className="w-full rounded-lg bg-[#0D9488] px-2 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50"
+          >
+            {requestingApproval ? "جاري التحميل" : depositApprovalStatus === "pending" ? "بانتظار الرد…" : "طلب موافقه"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3 p-3" dir="rtl">
       {sheetDayPrompt ? (
@@ -1008,16 +1338,6 @@ export function CsCallSheet({
               : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
             {snapshot?.currency || "EGP"}
           </span>
-          <label className="flex items-center gap-1 text-xs font-bold">
-            <input
-              type="checkbox"
-              className="size-4 accent-[#FCA311]"
-              checked={showDepositCard}
-              disabled={adjustedTotal >= CS_DEPOSIT_THRESHOLD}
-              onChange={(event) => setAllowPartialPay(event.target.checked)}
-            />
-            العميل يدفع جزء أو كل القيمة
-          </label>
           <span>{snapshot?.paymentMethod}</span>
           {lockedShipping ? (
             <span className="rounded bg-white/15 px-2 py-0.5">
@@ -1053,103 +1373,7 @@ export function CsCallSheet({
       <div className="grid items-start gap-3 lg:grid-cols-2 lg:items-stretch">
         <div className="order-1 flex min-w-0 flex-col gap-2 p-1 lg:order-2">
       {!showFollowUp ? (
-        <div className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {checklistVisible.map((item) => {
-            const state = answers[item.key];
-            const isMissing = missing.includes(item.key);
-            const confirmBox = (
-              <input
-                type="checkbox"
-                className="size-4 shrink-0 accent-[#FCA311]"
-                checked={state.confirmed}
-                onChange={(e) => update(item.key, { confirmed: e.target.checked })}
-              />
-            );
-            return (
-              <div
-                key={item.key}
-                className={`flex flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
-                  isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
-                }`}
-              >
-                <label className="flex items-center justify-between gap-1">
-                  <span className="min-w-0 text-xs font-extrabold leading-4 text-[#14213D]">{item.label}</span>
-                  {confirmBox}
-                </label>
-                {item.help && item.type !== "confirm_only" ? (
-                  <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-[#14213D]/60">{item.help}</p>
-                ) : null}
-                <div className="mt-1 space-y-1">
-                  {item.key === "address_complete" ? (
-                    <textarea
-                      disabled={confirmed}
-                      rows={Math.min(4, Math.max(1, Math.ceil(state.value.trim().length / 36) || 1))}
-                      dir={/[\u0600-\u06FF]/.test(state.value) ? "rtl" : "ltr"}
-                      value={state.value}
-                      onChange={(e) => update(item.key, { value: e.target.value })}
-                      className={`${inputCls} resize-none leading-5`}
-                    />
-                  ) : item.type === "confirm_text" ? (
-                    <input
-                      disabled={confirmed}
-                      value={state.value}
-                      onChange={(e) => update(item.key, { value: e.target.value })}
-                      className={inputCls}
-                    />
-                  ) : null}
-                  {item.type === "choice" ? (
-                    <select
-                      value={state.value}
-                      onChange={(e) =>
-                        update(item.key, { value: e.target.value, confirmed: Boolean(e.target.value) })
-                      }
-                      className={inputCls}
-                    >
-                      <option value="">اختر...</option>
-                      {(item.choices || []).map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {item.type === "yes_no_extra" ? (
-                    <>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => update(item.key, { yesNo: "yes", confirmed: false })}
-                          className={`flex-1 rounded-lg py-1 text-xs font-extrabold ${
-                            state.yesNo === "yes" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-                          }`}
-                        >
-                          نعم
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => update(item.key, { yesNo: "no", confirmed: true, note: "" })}
-                          className={`flex-1 rounded-lg py-1 text-xs font-extrabold ${
-                            state.yesNo === "no" ? "bg-black text-white" : "bg-[#E5E5E5] text-[#14213D]"
-                          }`}
-                        >
-                          لا
-                        </button>
-                      </div>
-                      {state.yesNo === "yes" ? (
-                        <input
-                          value={state.note}
-                          onChange={(e) => update(item.key, { note: e.target.value })}
-                          placeholder="بديل"
-                          className={inputCls}
-                        />
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        infoCards(false)
       ) : (
         <div className="grid content-start gap-2 sm:grid-cols-2">
           {showCancelCard ? (
@@ -1231,239 +1455,9 @@ export function CsCallSheet({
         </div>
       )}
 
-      {showFollowUp && lockedShipping === "bosta" ? (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-          {(
-            [
-              ["customer_name", "الاسم"],
-              ["primary_phone", "التليفون"],
-              ["governorate_confirm", "المحافظة"],
-              ["area_confirm", "المنطقة"],
-              ["address_complete", "العنوان"],
-              ["address_landmarks", "علامات مميزة"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="grid gap-1 text-xs font-bold text-[#14213D]">
-              {label}
-              <input
-                value={answers[key]?.value || ""}
-                onChange={(e) => update(key, { value: e.target.value, confirmed: true })}
-                className={inputCls}
-              />
-            </label>
-          ))}
-          <label className="grid gap-1 text-xs font-bold text-[#14213D]">
-            تليفون إضافي
-            <input
-              value={answers.alt_phone?.yesNo === "no" ? "" : answers.alt_phone?.note || ""}
-              onChange={(e) =>
-                update("alt_phone", {
-                  yesNo: e.target.value.trim() ? "yes" : "no",
-                  note: e.target.value,
-                  confirmed: true,
-                })
-              }
-              className={inputCls}
-            />
-          </label>
-        </div>
-      ) : null}
-
       {/* Bottom row: shipping + deposit + tracking + waybill */}
       <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
-        {showDepositCard ? (
-          <div className="flex max-h-36 shrink-0 flex-col overflow-auto rounded-xl bg-[#0D9488]/15 p-2 shadow-sm ring-2 ring-[#0D9488] sm:col-span-3">
-            <p className="text-sm font-extrabold text-[#14213D]">طلب ديبوزت</p>
-            <p className="mt-1 text-xs text-[#14213D]/60">اختياري — ليس شرطاً للحفظ</p>
-            <div className="mt-1.5 space-y-1.5">
-              <div>
-                <p className="text-[10px] font-bold text-[#14213D]/70">الدفع من</p>
-                <div className="mt-0.5 flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setDepositPayMethod("wallet")}
-                    className={`${compactBtn} ${
-                      depositPayMethod === "wallet" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    محفظة
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDepositPayMethod("instapay")}
-                    className={`${compactBtn} ${
-                      depositPayMethod === "instapay" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    انستا
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">من رقم</label>
-                <input
-                  dir="ltr"
-                  value={depositFromNumber}
-                  onChange={(e) => setDepositFromNumber(e.target.value)}
-                  placeholder="رقم العميل"
-                  className={inputCls}
-                />
-              </div>
-              {depositPayMethod === "instapay" ? (
-                <div>
-                  <label className="text-[10px] font-bold text-[#14213D]/70">اسم حساب انستا</label>
-                  <input
-                    value={depositInstapayName}
-                    onChange={(e) => setDepositInstapayName(e.target.value)}
-                    placeholder="اختياري"
-                    className={inputCls}
-                  />
-                </div>
-              ) : null}
-              <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">الدفع إلى</label>
-                <select
-                  value={depositToKey}
-                  onChange={(e) => setDepositToKey(e.target.value)}
-                  className={inputCls}
-                  dir="ltr"
-                >
-                  <option value="">اختر...</option>
-                  {DEPOSIT_TO_OPTIONS.map((opt) => (
-                    <option
-                      key={makeDepositToKey(opt.phone, opt.method)}
-                      value={makeDepositToKey(opt.phone, opt.method)}
-                    >
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">قيمة المقدم</label>
-                <input
-                  dir="ltr"
-                  inputMode="decimal"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder="0"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">يوم الدفع (1–31)</label>
-                <input
-                  dir="ltr"
-                  inputMode="numeric"
-                  min={1}
-                  max={31}
-                  value={depositPaidDay}
-                  onChange={(e) => setDepositPaidDay(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
-                  placeholder="اليوم"
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-[#14213D]/70">ساعة ودقيقة الدفع</label>
-                <div className="mt-0.5 flex items-center gap-1">
-                  <input
-                    dir="ltr"
-                    inputMode="numeric"
-                    value={depositPaidHour}
-                    onChange={(e) => setDepositPaidHour(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
-                    placeholder="ساعة"
-                    className={inputCls}
-                  />
-                  <span className="text-xs font-extrabold text-[#14213D]">:</span>
-                  <input
-                    dir="ltr"
-                    inputMode="numeric"
-                    value={depositPaidMinute}
-                    onChange={(e) => setDepositPaidMinute(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
-                    placeholder="دقيقة"
-                    className={inputCls}
-                  />
-                </div>
-                <div className="mt-1 flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setDepositPaidPeriod("morning")}
-                    className={`${compactBtn} flex-1 ${
-                      depositPaidPeriod === "morning" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    صباحاً
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDepositPaidPeriod("evening")}
-                    className={`${compactBtn} flex-1 ${
-                      depositPaidPeriod === "evening" ? "bg-[#0D9488] text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    مساءً
-                  </button>
-                </div>
-              </div>
-              <div className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
-                {depositApprovalStatus === "pending"
-                  ? "بانتظار موافقة الأدمن"
-                  : depositApprovalStatus === "approved"
-                    ? "معتمد — العميل دفع"
-                    : depositApprovalStatus === "rejected"
-                      ? "مرفوض — العميل لم يدفع"
-                      : "لم يُطلب موافقة بعد"}
-              </div>
-              <button
-                type="button"
-                disabled={requestingApproval || depositApprovalStatus === "pending"}
-                onClick={() => {
-                  void (async () => {
-                    setRequestingApproval(true);
-                    setMessage("");
-                    const to = parseDepositToKey(depositToKey);
-                    const paidAt = buildPaidAtIsoFromDayTime(
-                      depositPaidDay,
-                      depositPaidHour,
-                      depositPaidMinute,
-                      depositPaidPeriod,
-                    );
-                    if (!paidAt.ok) {
-                      setMessage(paidAt.message);
-                      setRequestingApproval(false);
-                      return;
-                    }
-                    const res = await fetch(`/api/cs/confirmations/${confirmationId}/deposit-approval`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
-                        depositPayMethod: depositPayMethod || null,
-                        depositFromNumber: depositFromNumber.trim() || null,
-                        depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
-                        depositToPhone: to.phone || null,
-                        depositToMethod: to.method || null,
-                        depositPaidAt: paidAt.iso,
-                        depositProofUrl: null,
-                      }),
-                    });
-                    const data = (await res.json()) as { message?: string };
-                    setRequestingApproval(false);
-                    if (!res.ok) {
-                      setMessage(data.message || "تعذر إرسال طلب الموافقة.");
-                      return;
-                    }
-                    setDepositApprovalStatus("pending");
-                    setMessage("تم إرسال طلب الموافقة للأدمن.");
-                  })();
-                }}
-                className="w-full rounded-lg bg-[#0D9488] px-2 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50"
-              >
-                {requestingApproval ? "جاري التحميل" : depositApprovalStatus === "pending" ? "بانتظار الرد…" : "طلب موافقه"}
-              </button>
-            </div>
-          </div>
-        ) : null}
+        {!showFollowUp ? depositFields(false) : null}
 
         <div
           className={`m-0.5 flex flex-col rounded-xl p-1.5 shadow-sm ring-2 ring-inset ${
@@ -1675,6 +1669,12 @@ export function CsCallSheet({
           trackingNumber={trackingNumber}
           hideEvents={Boolean(bostaError)}
         />
+      ) : null}
+      {showFollowUp ? (
+        <section className="grid gap-2">
+          {infoCards(lockRecorded)}
+          {depositFields(lockRecorded)}
+        </section>
       ) : null}
     </div>
   );
