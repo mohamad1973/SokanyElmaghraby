@@ -477,6 +477,7 @@ export function CsCallSheet({
   const [depositPaidMinute, setDepositPaidMinute] = useState(() => paidParts.minute);
   const [depositPaidPeriod, setDepositPaidPeriod] = useState<"morning" | "evening" | "">(() => paidParts.period);
   const [requestingApproval, setRequestingApproval] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
   const [postInvoice, setPostInvoice] = useState<"before" | "after" | "">(
     () => postCancel?.invoice || "",
   );
@@ -523,6 +524,13 @@ export function CsCallSheet({
         ? -adjustAbs
         : adjustAbs;
   const adjustedTotal = Math.max(0, (Number.isFinite(wooTotal) ? wooTotal : 0) + signedDelta);
+  const typedDeposit = Number(depositAmount.replace(/,/g, "").trim());
+  const depositPayLabel =
+    depositAmount.trim() !== "" && Number.isFinite(typedDeposit) && typedDeposit > 0
+      ? typedDeposit + 0.001 >= adjustedTotal
+        ? "مدفوع بالكامل"
+        : "مدفوع مقدم"
+      : null;
   const lockRecorded = showFollowUp && !canEditSavedInfo;
   const paymentState =
     snapshot?.paymentState ||
@@ -911,9 +919,7 @@ export function CsCallSheet({
   const checklistVisible = CS_CHECKLIST_ITEMS.filter((item) => item.key !== "shipping_company");
 
   function infoCards(locked: boolean) {
-    return (
-      <div className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {checklistVisible.map((item) => {
+    return checklistVisible.map((item) => {
           const state = answers[item.key];
           const isMissing = missing.includes(item.key);
           return (
@@ -1009,23 +1015,51 @@ export function CsCallSheet({
               </div>
             </div>
           );
-        })}
+        });
+  }
+
+  function depositCard() {
+    return (
+      <div className="flex min-h-16 flex-col justify-between rounded-xl bg-[#0D9488]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#0D9488]">
+        <div className="flex items-start justify-between gap-1">
+          <p className="text-xs font-extrabold text-[#14213D]">طلب ديبوزت</p>
+          <button
+            type="button"
+            onClick={() => setDepositOpen(true)}
+            aria-label="تكبير كارت الديبوزت"
+            className="grid size-6 place-items-center rounded-md bg-[#0D9488] text-sm font-extrabold text-white"
+          >
+            ↗
+          </button>
+        </div>
+        <p className={`mt-1 text-[11px] font-extrabold ${depositPayLabel ? "text-[#0D9488]" : "text-[#14213D]/50"}`}>
+          {depositPayLabel || "اختياري"}
+        </p>
       </div>
     );
   }
 
   function depositFields(locked: boolean) {
+    if (!depositOpen) return null;
     return (
-      <div
-        className={`flex shrink-0 flex-col overflow-auto rounded-xl bg-[#0D9488]/15 p-2 shadow-sm ring-2 ring-[#0D9488] sm:col-span-3 ${
-          showFollowUp ? "" : "max-h-36"
-        }`}
-      >
-        <p className="text-sm font-extrabold text-[#14213D]">طلب ديبوزت</p>
-        <p className="mt-1 text-xs text-[#14213D]/60">
-          اختياري. لو اتسجلت قيمة، الحفظ النهائي بعد موافقة الأدمن.
-        </p>
-        <div className="mt-1.5 space-y-1.5">
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/40 p-4">
+        <div className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-hidden rounded-2xl bg-[#F4FFFC] p-3 shadow-lg ring-2 ring-[#0D9488]">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-extrabold text-[#14213D]">طلب ديبوزت</p>
+            <button
+              type="button"
+              onClick={() => setDepositOpen(false)}
+              aria-label="تصغير كارت الديبوزت"
+              className="grid size-8 place-items-center rounded-md bg-[#14213D] text-sm font-extrabold text-white"
+            >
+              ↙
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-[#14213D]/60">
+            اختياري. لو اتسجلت قيمة، الحفظ النهائي بعد موافقة الأدمن.
+            {depositPayLabel ? ` · ${depositPayLabel}` : ""}
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <p className="text-[10px] font-bold text-[#14213D]/70">الدفع من</p>
             <div className="mt-0.5 flex flex-wrap gap-1">
@@ -1215,10 +1249,11 @@ export function CsCallSheet({
                 setMessage("تم إرسال طلب الموافقة للأدمن.");
               })();
             }}
-            className="w-full rounded-lg bg-[#0D9488] px-2 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50"
+            className="w-full rounded-lg bg-[#0D9488] px-2 py-1.5 text-[11px] font-extrabold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-3"
           >
             {requestingApproval ? "جاري التحميل" : depositApprovalStatus === "pending" ? "بانتظار الرد…" : "طلب موافقه"}
           </button>
+          </div>
         </div>
       </div>
     );
@@ -1338,6 +1373,9 @@ export function CsCallSheet({
               : adjustedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}{" "}
             {snapshot?.currency || "EGP"}
           </span>
+          {depositPayLabel ? (
+            <span className="rounded bg-[#0D9488] px-2 py-0.5 font-extrabold text-white">{depositPayLabel}</span>
+          ) : null}
           <span>{snapshot?.paymentMethod}</span>
           {lockedShipping ? (
             <span className="rounded bg-white/15 px-2 py-0.5">
@@ -1373,7 +1411,9 @@ export function CsCallSheet({
       <div className="grid items-start gap-3 lg:grid-cols-2 lg:items-stretch">
         <div className="order-1 flex min-w-0 flex-col gap-2 p-1 lg:order-2">
       {!showFollowUp ? (
-        infoCards(false)
+        <div className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {infoCards(false)}
+        </div>
       ) : (
         <div className="grid content-start gap-2 sm:grid-cols-2">
           {showCancelCard ? (
@@ -1457,7 +1497,7 @@ export function CsCallSheet({
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
       <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
-        {!showFollowUp ? depositFields(false) : null}
+        {!showFollowUp ? depositCard() : null}
 
         <div
           className={`m-0.5 flex flex-col rounded-xl p-1.5 shadow-sm ring-2 ring-inset ${
@@ -1670,10 +1710,11 @@ export function CsCallSheet({
           hideEvents={Boolean(bostaError)}
         />
       ) : null}
+      {depositFields(lockRecorded)}
       {showFollowUp ? (
-        <section className="grid gap-2">
+        <section className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {infoCards(lockRecorded)}
-          {depositFields(lockRecorded)}
+          {depositCard()}
         </section>
       ) : null}
     </div>
