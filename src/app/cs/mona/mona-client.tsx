@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 type Outcome = "delivered" | "refused" | "postponed";
 
@@ -215,6 +215,10 @@ function shipmentValue(order: OrderCard) {
   return Math.max(0, Number(order.orderTotal) || 0);
 }
 
+function goodsAfterDeposit(order: OrderCard) {
+  return Math.max(0, shipmentValue(order) - (Number(order.depositAmount) || 0));
+}
+
 function remainder(order: OrderCard) {
   return Math.max(0, Number(order.cashAmount) || 0);
 }
@@ -259,6 +263,70 @@ function moneyText(value: number | null) {
   return value == null || Number.isNaN(value) ? "" : egp(value);
 }
 
+function InvoiceField({
+  confirmationId,
+  value,
+  onSaved,
+}: {
+  confirmationId: number;
+  value: string;
+  onSaved: (next: string) => void;
+}) {
+  const [text, setText] = useState(value);
+  const [hint, setHint] = useState("");
+  const timer = useRef<number | null>(null);
+  const saved = useRef(value);
+
+  useEffect(() => {
+    setText(value);
+    saved.current = value;
+  }, [value]);
+
+  async function persist(next: string) {
+    const trimmed = next.trim();
+    if (trimmed === saved.current.trim()) return;
+    setHint("جاري التحميل");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoiceNumber: trimmed }),
+    });
+    const data = (await res.json()) as { message?: string; invoiceNumber?: string | null };
+    if (!res.ok) {
+      setHint(data.message || "تعذر الحفظ");
+      return;
+    }
+    const stored = data.invoiceNumber || "";
+    saved.current = stored;
+    setText(stored);
+    onSaved(stored);
+    setHint("");
+  }
+
+  return (
+    <input
+      value={text}
+      dir="ltr"
+      inputMode="numeric"
+      maxLength={10}
+      aria-label="رقم الفاتورة"
+      title={hint}
+      onChange={(event) => {
+        const next = event.target.value.replace(/\D/g, "").slice(0, 10);
+        setText(next);
+        setHint("");
+        if (timer.current) window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => void persist(next), 700);
+      }}
+      onBlur={() => {
+        if (timer.current) window.clearTimeout(timer.current);
+        void persist(text);
+      }}
+      className="h-8 w-24 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-center text-xs font-bold text-[#14213D]"
+    />
+  );
+}
+
 function cairoToday() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Cairo",
@@ -281,7 +349,7 @@ function DayAccountBox({
   onDraft: (next: DayDraft) => void;
   onSave: () => void;
 }) {
-  const goods = sumOf(rows, shipmentValue);
+  const goods = sumOf(rows, goodsAfterDeposit);
   const shipping = dayShipping(rows);
   const remaining = dayRemaining(draft.collected, draft.remitted, shipping);
   return (
@@ -364,6 +432,7 @@ function CourierInvoice({
   onSaveDay,
   onOfficial,
   onLarge,
+  onInvoice,
   query,
 }: {
   line: LedgerLine;
@@ -377,6 +446,7 @@ function CourierInvoice({
   onSaveDay: (dayYmd: string) => void;
   onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
   onLarge?: (confirmationId: number, isLarge: boolean) => void;
+  onInvoice?: (confirmationId: number, invoiceNumber: string) => void;
   query: string;
 }) {
   const mine = orders.filter((order) => Number(order.courierId) === Number(line.courierId));
@@ -459,8 +529,12 @@ function CourierInvoice({
                       <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
                         {order.wooOrderNumber}
                       </td>
-                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
-                        {order.invoiceNumber || "—"}
+                      <td className="border border-[#14213D]/15 px-2 py-2">
+                        <InvoiceField
+                          confirmationId={order.id}
+                          value={order.invoiceNumber || ""}
+                          onSaved={(next) => onInvoice?.(order.id, next)}
+                        />
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2">{order.customerName || "—"}</td>
                       <td className="whitespace-nowrap border border-[#14213D]/15 px-2 py-2 tabular-nums" dir="ltr">
@@ -770,7 +844,7 @@ function reportRows(orders: OrderCard[], accounts: DayAccount[], from: string, t
       const remitted = saved?.remitted ?? null;
       return {
         day,
-        goods: sumOf(rows, shipmentValue),
+        goods: sumOf(rows, goodsAfterDeposit),
         collected,
         shipping,
         remitted,
@@ -966,6 +1040,17 @@ export function MonaCourierPanel({
                 dayFrom={sheetDay}
                 dayTo={sheetTo}
                 query={sheetQuery}
+                onInvoice={(confirmationId, invoiceNumber) => {
+                  setDesk((current) => {
+                    if (!current) return current;
+                    return {
+                      ...current,
+                      orders: current.orders.map((order) =>
+                        order.id === confirmationId ? { ...order, invoiceNumber } : order,
+                      ),
+                    };
+                  });
+                }}
                 onDraft={(dayYmd, next) => setDayDrafts((current) => ({ ...current, [dayYmd]: next }))}
                 onSaveDay={(dayYmd) => {
                   const draft = dayDrafts[dayYmd] || { collected: "", remitted: "" };
