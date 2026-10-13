@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { excludeTemimaOrder, freezePreparedTemimaDay, includeTemimaOrders, searchTemimaSheetOrders } from "@/lib/cs/temima-sheet-edits";
-import { setTemimaSheetSerial } from "@/lib/cs/temima-sheet-freeze";
+import { closeTemimaSheetFromPrint, excludeTemimaOrder, freezePreparedTemimaDay, includeTemimaOrders, searchTemimaSheetOrders } from "@/lib/cs/temima-sheet-edits";
+import { reopenTemimaSheetDay, setTemimaSheetSerial } from "@/lib/cs/temima-sheet-freeze";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function POST(request: Request) {
@@ -11,7 +11,6 @@ export async function POST(request: Request) {
   if (!session?.user.csAgentId) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   await ensureCsTables();
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isAdmin) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   const body = (await request.json().catch(() => null)) as {
     action?: string;
     dayYmd?: string;
@@ -21,6 +20,17 @@ export async function POST(request: Request) {
     serial?: number;
   } | null;
   const dayYmd = String(body?.dayYmd || "");
+  const canPrintSheet = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
+  if (body?.action === "freeze-print") {
+    if (!canPrintSheet) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    const result = await closeTemimaSheetFromPrint(dayYmd);
+    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+  }
+  if (!viewer.isAdmin) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+  if (body?.action === "open") {
+    const result = await reopenTemimaSheetDay(dayYmd);
+    return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+  }
   if (body?.action === "freeze") {
     const result = await freezePreparedTemimaDay(dayYmd);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });

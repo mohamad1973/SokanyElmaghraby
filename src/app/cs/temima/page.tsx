@@ -5,6 +5,7 @@ import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { listTemimaFrozenDays } from "@/lib/cs/temima-sheet-freeze";
 import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { closedTemimaWeekIds, openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
@@ -22,11 +23,12 @@ export default async function CsTemimaSheetPage() {
   if (!viewer.isAdmin && !viewer.isSupervisor && !viewer.isCourierSupervisor) redirect("/cs");
 
   const today = cairoTodayYmd();
-  const [sheet, temimaSheetEdits, couriers, temimaCutoffs] = await Promise.all([
+  const [sheet, temimaSheetEdits, couriers, temimaCutoffs, frozenTemimaDays] = await Promise.all([
     listUnifiedSayedSheet(today, today),
     listTemimaSheetEdits(),
     listCourierAgents(),
     listTemimaCutoffs(),
+    listTemimaFrozenDays("2024-01-01", today),
   ]);
   const sheetIds = sheet.map((item) => item.id);
   const [marks, closedWeeks] = await Promise.all([openSettlementMarks(sheetIds), closedTemimaWeekIds(sheetIds)]);
@@ -51,6 +53,8 @@ export default async function CsTemimaSheetPage() {
       canEditTemimaSheet={viewer.isAdmin}
       canEditInvoice={viewer.isAdmin || viewer.isSupervisor}
       canPrintQueue={viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor)}
+      canReopenTemimaSheet={viewer.isAdmin}
+      frozenTemimaDays={[...frozenTemimaDays]}
       temimaCutoffs={temimaCutoffs}
       temimaSheetEdits={temimaSheetEdits}
     />

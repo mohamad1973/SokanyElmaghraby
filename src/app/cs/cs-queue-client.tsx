@@ -493,10 +493,12 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
 function InvoiceBox({
   confirmationId,
   value,
+  disabled = false,
   onSaved,
 }: {
   confirmationId: number;
   value: string;
+  disabled?: boolean;
   onSaved: (next: string) => void;
 }) {
   const [text, setText] = useState(value);
@@ -510,6 +512,7 @@ function InvoiceBox({
   }, [value]);
 
   async function persist(next: string) {
+    if (disabled) return;
     const trimmed = next.trim();
     if (trimmed === saved.current.trim()) return;
     setHint("جاري التحميل");
@@ -537,6 +540,7 @@ function InvoiceBox({
         dir="ltr"
         placeholder="رقم الفاتورة"
         inputMode="numeric"
+        disabled={disabled}
         maxLength={10}
         onChange={(e) => {
           const next = e.target.value.replace(/\D/g, "").slice(0, 10);
@@ -572,17 +576,24 @@ function timeValueToMinutes(value: string) {
 function TemimaCutoffBox({
   cutoffs,
   busy,
+  closed,
+  canEditClosed,
   onLockNow,
   onLockMinutes,
+  onReopen,
 }: {
   cutoffs: TemimaCutoff[];
   busy: boolean;
+  closed: boolean;
+  canEditClosed: boolean;
   onLockNow: () => Promise<void>;
   onLockMinutes: (minutes: number) => Promise<void>;
+  onReopen: () => Promise<void>;
 }) {
   const today = cutoffs.find((row) => row.dayYmd === cairoTodayYmd());
   const shown = today?.minutes ?? cairoClock(new Date().toISOString())?.minutes ?? 0;
   const picker = useRef<HTMLInputElement>(null);
+  const locked = closed && !canEditClosed;
 
   function openPicker() {
     const input = picker.current;
@@ -601,14 +612,22 @@ function TemimaCutoffBox({
   }
 
   return (
-    <div className="no-print rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+    <div
+      className={`no-print rounded-2xl p-3 shadow ring-1 ${
+        closed ? "bg-red-100 ring-red-600" : "bg-white ring-[#14213D]/10"
+      }`}
+    >
       <p className="text-sm font-extrabold text-[#14213D]">
-        {today ? `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(today.minutes)}.` : "قفل شيت سيد تميمة"}
+        {closed
+          ? `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(shown)}.`
+          : today
+            ? `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(today.minutes)}.`
+            : "قفل شيت سيد تميمة"}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || locked}
           onClick={openPicker}
           className="h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-extrabold text-[#14213D] disabled:opacity-60"
         >
@@ -618,7 +637,7 @@ function TemimaCutoffBox({
           ref={picker}
           type="time"
           tabIndex={-1}
-          disabled={busy}
+          disabled={busy || locked}
           value={minutesToTimeValue(shown)}
           onChange={(event) => {
             const total = timeValueToMinutes(event.target.value);
@@ -629,12 +648,24 @@ function TemimaCutoffBox({
         />
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || locked}
           onClick={() => void onLockNow()}
-          className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
+          className={`h-9 rounded-lg px-3 text-xs font-extrabold disabled:opacity-60 ${
+            closed ? "bg-red-700 text-white" : "bg-[#FCA311] text-black"
+          }`}
         >
           {busy ? "جاري التحميل" : "الآن"}
         </button>
+        {closed && canEditClosed ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void onReopen()}
+            className="h-9 rounded-lg bg-[#14213D] px-3 text-xs font-extrabold text-white disabled:opacity-60"
+          >
+            {busy ? "جاري التحميل" : "فتح الشيت"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -654,6 +685,8 @@ type Props = {
   canEditInvoice?: boolean;
   canPrintQueue?: boolean;
   canHandToCarrier?: boolean;
+  canReopenTemimaSheet?: boolean;
+  frozenTemimaDays?: string[];
   temimaCutoffs?: TemimaCutoff[];
   temimaSheetEdits?: TemimaSheetEdit[];
   agents?: Array<{ id: number; name: string }>;
@@ -702,6 +735,8 @@ export function CsQueueClient({
   canEditInvoice = false,
   canPrintQueue = false,
   canHandToCarrier = false,
+  canReopenTemimaSheet = false,
+  frozenTemimaDays = [],
   temimaCutoffs = [],
   temimaSheetEdits = [],
   agents = [],
@@ -715,6 +750,9 @@ export function CsQueueClient({
   const [loading, setLoading] = useState(false);
   const [filtering, setFiltering] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [printCopies, setPrintCopies] = useState("1");
+  const [printCopyCount, setPrintCopyCount] = useState(1);
+  const [frozenDays, setFrozenDays] = useState<string[]>(frozenTemimaDays);
   const [draft, setDraft] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
   const [applied, setApplied] = useState<DraftFilters>(isCourierSupervisor ? temimaSheetDraft : defaultDraft);
   const [afterLastDistribution, setAfterLastDistribution] = useState(false);
@@ -751,8 +789,8 @@ export function CsQueueClient({
       setMessage(data.message || "تعذر حفظ الوقت.");
       return;
     }
-    if (data.frozen) {
-      setMessage("الشيت متجمد من وقت القفل.");
+    if (data.frozen && !canReopenTemimaSheet) {
+      setMessage("الشيت متقفل.");
       return;
     }
     setCutoffs((prev) => {
@@ -1051,27 +1089,91 @@ export function CsQueueClient({
       to: filters.dateTo,
     });
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
-    const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
+    const data = (await res.json()) as { message?: string; items?: CsQueueItem[]; frozenDays?: string[] };
     if (!res.ok) {
       setMessage(data.message || "تعذر تحميل شيت سيد.");
       return;
     }
     setItems(data.items || []);
+    rememberFrozenDays(filters.dateFrom, filters.dateTo, data.frozenDays || []);
+  }
+
+  function rememberFrozenDays(from: string, to: string, days: string[]) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return;
+    setFrozenDays((prev) => [...prev.filter((day) => day < from || day > to), ...days]);
+  }
+
+  function sheetCopyCount() {
+    const copies = Math.floor(Number(printCopies));
+    if (!Number.isInteger(copies) || copies < 1) return 1;
+    return Math.min(copies, 20);
+  }
+
+  async function closeSheetFromPrint(dayYmd: string) {
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "freeze-print", dayYmd }),
+    });
+    const data = (await res.json()) as { message?: string; minutes?: number; frozen?: boolean };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر قفل الشيت.");
+      return false;
+    }
+    setFrozenDays((prev) => (prev.includes(dayYmd) ? prev : [...prev, dayYmd]));
+    if (typeof data.minutes === "number") {
+      setCutoffs((prev) => {
+        const next = prev.filter((row) => row.dayYmd !== dayYmd);
+        next.push({ dayYmd, minutes: data.minutes as number });
+        return next;
+      });
+    }
+    return true;
+  }
+
+  async function reopenSheetDay(dayYmd: string) {
+    if (!dayYmd || sheetEditBusy) return;
+    setSheetEditBusy(true);
+    setMessage("");
+    const res = await fetch("/api/cs/temima-sheet-edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "open", dayYmd }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setSheetEditBusy(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر فتح الشيت.");
+      return;
+    }
+    setFrozenDays((prev) => prev.filter((day) => day !== dayYmd));
+    if (isCourierSupervisor) await loadSayedSheet(applied);
+    setMessage(data.message || "اتفتح الشيت.");
   }
 
   async function printApplied() {
     if (printing) return;
     setPrinting(true);
     const filters = { ...applied, query: draft.query };
+    const copies = sheetCopyCount();
+    const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
     if (isCourierSupervisor || temimaDateMode(filters)) {
+      if (singleDay && (copies === 4 || copies === 5)) {
+        const closed = await closeSheetFromPrint(singleDay);
+        if (!closed) {
+          setPrinting(false);
+          return;
+        }
+      }
       const params = new URLSearchParams({ sheet: "temima", from: filters.dateFrom, to: filters.dateTo });
       const res = await fetch(`/api/cs/orders?${params.toString()}`);
-      const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
+      const data = (await res.json()) as { message?: string; items?: CsQueueItem[]; frozenDays?: string[] };
       if (!res.ok) {
         setPrinting(false);
         setMessage(data.message || "تعذر تجهيز الطباعة.");
         return;
       }
+      rememberFrozenDays(filters.dateFrom, filters.dateTo, data.frozenDays || []);
       const printed = [...(data.items || [])];
       if (filters.dateFrom && filters.dateFrom === filters.dateTo && printed.some((item) => item.sheetSerial && item.sheetSerial > 0)) {
         printed.sort((a, b) => (a.sheetSerial || 0) - (b.sheetSerial || 0));
@@ -1079,9 +1181,12 @@ export function CsQueueClient({
         printed.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
       }
       setSheetPrintRows(printed);
+      if (isCourierSupervisor) setItems(printed);
+      setPrintCopyCount(copies);
       setPrintMode("sheet");
       return;
     }
+    setPrintCopyCount(1);
     const params = new URLSearchParams();
     const query = filters.query.trim();
     if (query) params.set("q", query);
@@ -1114,6 +1219,9 @@ export function CsQueueClient({
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
+  const sheetFrozen = Boolean(sheetDay) && frozenDays.includes(sheetDay);
+  const todayFrozen = frozenDays.includes(cairoTodayYmd());
+  const sheetEditsLocked = sheetFrozen && !canEditTemimaSheet && !canReopenTemimaSheet;
   const liveSheetSerial = useMemo(() => {
     const ordered = [...items].sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
     const map = new Map<number, number>();
@@ -1314,6 +1422,20 @@ export function CsQueueClient({
             </Link>
           ) : null}
           {canPrintQueue ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {isCourierSupervisor || temimaDateMode(applied) ? (
+              <label className="flex items-center gap-1 text-[11px] font-extrabold text-[#14213D]">
+                عدد النسخ
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={printCopies}
+                  onChange={(event) => setPrintCopies(event.target.value)}
+                  className="h-9 w-14 rounded-xl border border-[#E5E5E5] bg-white px-2 text-center text-xs font-extrabold"
+                />
+              </label>
+            ) : null}
           <button
             type="button"
             disabled={printing}
@@ -1325,6 +1447,7 @@ export function CsQueueClient({
           >
             {printing ? "جاري التحميل" : "طباعة"}
           </button>
+          </div>
           ) : null}
           {isCourierSupervisor ? (
             <Link
@@ -1355,6 +1478,7 @@ export function CsQueueClient({
                   if (printing) return;
                   setPrinting(true);
                   setSheetPrintRows(null);
+                  setPrintCopyCount(1);
                   setPrintingCourierId(Number(courierPrintPick));
                   setPrintMode("sheet");
                 }}
@@ -1378,9 +1502,12 @@ export function CsQueueClient({
       {canSetTemimaCutoff ? (
         <TemimaCutoffBox
           cutoffs={cutoffs}
-          busy={cutoffBusy}
+          busy={cutoffBusy || sheetEditBusy}
+          closed={todayFrozen}
+          canEditClosed={canReopenTemimaSheet}
           onLockNow={() => lockCutoff({ now: true })}
           onLockMinutes={(minutes) => lockCutoff({ minutes })}
+          onReopen={() => reopenSheetDay(cairoTodayYmd())}
         />
       ) : null}
 
@@ -1601,7 +1728,9 @@ export function CsQueueClient({
 
       {canEditTemimaSheet && sheetDay ? (
         <form
-          className="no-print grid gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10"
+          className={`no-print grid gap-2 rounded-2xl p-3 shadow ring-1 ${
+            sheetFrozen ? "bg-red-100 ring-red-600" : "bg-white ring-[#14213D]/10"
+          }`}
           onSubmit={(event) => {
             event.preventDefault();
             void addSheetOrders();
@@ -1615,14 +1744,25 @@ export function CsQueueClient({
             >
               +
             </button>
-            <button
-              type="button"
-              disabled={sheetEditBusy}
-              onClick={() => void freezeSheetDay()}
-              className="h-9 rounded-xl bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
-            >
-              {sheetEditBusy ? "جاري التحميل" : "قفل وتجميد"}
-            </button>
+            {sheetFrozen ? (
+              <button
+                type="button"
+                disabled={sheetEditBusy}
+                onClick={() => void reopenSheetDay(sheetDay)}
+                className="h-9 rounded-xl bg-red-700 px-3 text-xs font-extrabold text-white disabled:opacity-60"
+              >
+                {sheetEditBusy ? "جاري التحميل" : "فتح الشيت"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={sheetEditBusy}
+                onClick={() => void freezeSheetDay()}
+                className="h-9 rounded-xl bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
+              >
+                {sheetEditBusy ? "جاري التحميل" : "قفل وتجميد"}
+              </button>
+            )}
           </div>
           {addOpen ? (
             <div className="grid gap-2">
@@ -1740,9 +1880,15 @@ export function CsQueueClient({
               <div
                 key={item.id}
                 className={`rounded-xl px-3 py-2.5 shadow-sm ring-1 ${
-                  returnedPostponed ? "bg-orange-100 ring-orange-500" : dup ? dup.colorClass : "bg-white"
+                  sheetFrozen
+                    ? "bg-red-100 ring-red-600"
+                    : returnedPostponed
+                      ? "bg-orange-100 ring-orange-500"
+                      : dup
+                        ? dup.colorClass
+                        : "bg-white"
                 } ${
-                  returnedPostponed
+                  sheetFrozen || returnedPostponed
                     ? ""
                     : isConfirmed
                       ? "ring-[#FCA311]"
@@ -1834,7 +1980,7 @@ export function CsQueueClient({
                             <button
                               key={action}
                               type="button"
-                              disabled={!canPressOfficial || markingId === item.id}
+                              disabled={!canPressOfficial || markingId === item.id || sheetEditsLocked}
                               onClick={() => pressStatus(item.id, action, item.settlementDisposition, weekClosed)}
                               onDoubleClick={() => {
                                 if (!item.settlementDisposition) return;
@@ -1995,6 +2141,7 @@ export function CsQueueClient({
                       <InvoiceBox
                         confirmationId={item.id}
                         value={item.invoiceNumber || ""}
+                        disabled={sheetEditsLocked}
                         onSaved={(next) =>
                           setItems((prev) =>
                             prev.map((row) => (row.id === item.id ? { ...row, invoiceNumber: next || null } : row)),
@@ -2044,23 +2191,24 @@ export function CsQueueClient({
       </div>
 
       <div className="print-only hidden" dir="rtl">
-        <h1 className="mb-2 text-center text-lg font-bold">
-          {printMode === "sheet" || applied.shipping === "sayed_temima"
-            ? `${
-                applied.dateFrom === applied.dateTo
-                  ? formatSayedSheetHeading(applied.dateFrom)
-                  : `شيت مخزن سيد تميمة — ${applied.dateFrom} → ${applied.dateTo}`
-              }${
-                printingCourierId
-                  ? ` — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
-                  : ""
-              }`
-            : "قائمة الطلبات"}
-        </h1>
-        <p className="mb-2 text-center text-xs">
-          {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
-        </p>
         {printMode === "sheet" || applied.shipping === "sayed_temima" ? (
+          Array.from({ length: Math.max(1, printingCourierId ? 1 : printCopyCount) }, (_, copy) => (
+          <section key={copy} className={copy + 1 < Math.max(1, printingCourierId ? 1 : printCopyCount) ? "print-copy" : undefined}>
+          <h1 className="mb-2 text-center text-lg font-bold">
+            {`${
+              applied.dateFrom === applied.dateTo
+                ? formatSayedSheetHeading(applied.dateFrom)
+                : `شيت مخزن سيد تميمة — ${applied.dateFrom} → ${applied.dateTo}`
+            }${
+              printingCourierId
+                ? ` — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
+                : ""
+            }`}
+          </h1>
+          <p className="mb-2 text-center text-xs">
+            {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
+            {printCopyCount > 1 && !printingCourierId ? ` · نسخة ${copy + 1}` : ""}
+          </p>
           <table className="w-full border-collapse text-[10px]">
             <thead>
               <tr>
@@ -2114,7 +2262,14 @@ export function CsQueueClient({
               </tr>
             </tfoot>
           </table>
+          </section>
+          ))
         ) : (
+          <>
+          <h1 className="mb-2 text-center text-lg font-bold">قائمة الطلبات</h1>
+          <p className="mb-2 text-center text-xs">
+            {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
+          </p>
           <table className="w-full border-collapse text-[10px]">
             <thead>
               <tr>
@@ -2154,6 +2309,7 @@ export function CsQueueClient({
               })}
             </tbody>
           </table>
+          </>
         )}
       </div>
 
@@ -2169,12 +2325,19 @@ export function CsQueueClient({
           .print-only {
             display: block !important;
             position: absolute;
-            inset: 0;
+            top: 0;
+            right: 0;
+            left: 0;
+            height: auto;
             padding: 12mm;
             background: white;
           }
           .no-print {
             display: none !important;
+          }
+          .print-copy {
+            break-after: page;
+            page-break-after: always;
           }
           @page {
             size: A4;

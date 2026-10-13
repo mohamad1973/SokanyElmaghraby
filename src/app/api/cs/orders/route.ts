@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAccountingRole } from "@/lib/cs/agents";
 import { CS_QUEUE_PAGE_SIZE, listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
 import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaFrozenDays } from "@/lib/cs/temima-sheet-freeze";
 import { closedTemimaWeekIds, openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -21,13 +22,18 @@ export async function GET(request: Request) {
     const to = url.searchParams.get("to") || "";
     const items = await listVisibleSayedSheet(from, to);
     const ids = items.map((item) => item.id);
-    const [marks, closedWeeks] = await Promise.all([openSettlementMarks(ids), closedTemimaWeekIds(ids)]);
+    const [marks, closedWeeks, frozenDays] = await Promise.all([
+      openSettlementMarks(ids),
+      closedTemimaWeekIds(ids),
+      listTemimaFrozenDays(from, to),
+    ]);
     return NextResponse.json({
       items: items.map((item) => ({
         ...item,
         settlementDisposition: marks.get(item.id) || "",
         temimaWeekClosed: closedWeeks.has(item.id),
       })),
+      frozenDays: [...frozenDays],
       total: items.length,
       hasMore: false,
       nextCursor: null,

@@ -6,6 +6,7 @@ import { listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
 import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
 import { listCourierAgents } from "@/lib/cs/courier-dispatch";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { listTemimaFrozenDays } from "@/lib/cs/temima-sheet-freeze";
 import { listTemimaSheetEdits, listUnifiedSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { closedTemimaWeekIds, openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
@@ -77,7 +78,11 @@ export default async function CsHomePage() {
     ? (await listActiveCsAgents()).map((a) => ({ id: a.id, name: a.name }))
     : [];
   const couriers = isCourierSupervisor ? await listCourierAgents() : [];
-  const temimaCutoffs = isCourierSupervisor || isSupervisor ? await listTemimaCutoffs() : [];
+  const today = cairoTodayYmd();
+  const [temimaCutoffs, frozenTemimaDays] = await Promise.all([
+    isCourierSupervisor || isSupervisor ? listTemimaCutoffs() : Promise.resolve([]),
+    isCourierSupervisor || isSupervisor ? listTemimaFrozenDays("2024-01-01", today) : Promise.resolve(new Set<string>()),
+  ]);
 
   return (
     <CsQueueClient
@@ -94,6 +99,8 @@ export default async function CsHomePage() {
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
       canPrintQueue={isSupervisor && !isCourierSupervisor}
       canHandToCarrier={viewer.isAdmin || (isSupervisor && !isCourierSupervisor)}
+      canReopenTemimaSheet={viewer.isAdmin}
+      frozenTemimaDays={[...frozenTemimaDays]}
       temimaCutoffs={temimaCutoffs}
       temimaSheetEdits={temimaSheetEdits}
       initialHasMore={initialHasMore}

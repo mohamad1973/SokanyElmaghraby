@@ -3,7 +3,7 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { addCairoYmdDays, cairoClock, cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
-import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { ensureTemimaDayCutoff, listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import {
   addTemimaFreezeIds,
   clearTemimaPrepareHold,
@@ -312,6 +312,18 @@ async function ensureClosedDaysFrozen(dateFrom: string, dateTo: string) {
     if (await hasTemimaPrepareHold(day)) continue;
     await captureTemimaSheetFreeze(day);
   }
+}
+
+export async function closeTemimaSheetFromPrint(dayYmd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return { ok: false as const, message: "اليوم غير صحيح." };
+  if (await hasTemimaFreezeDay(dayYmd)) {
+    return { ok: true as const, dayYmd, frozen: true as const, message: "الشيت متقفل." };
+  }
+  const cutoff = await ensureTemimaDayCutoff(dayYmd);
+  if (!cutoff.ok) return cutoff;
+  const frozen = await freezePreparedTemimaDay(dayYmd);
+  if (!frozen.ok) return frozen;
+  return { ...frozen, minutes: cutoff.minutes };
 }
 
 /** Admin backfill: snapshot the orders visible on a prepared day. A second press does not replace the snapshot. */

@@ -30,7 +30,9 @@ export async function POST(request: Request) {
   if (!body || (!body.now && !Number.isInteger(body.minutes))) {
     return NextResponse.json({ message: "الساعة غير صحيحة." }, { status: 400 });
   }
-  const result = body.now ? await lockTemimaCutoff() : await lockTemimaCutoff(body.minutes);
+  const result = body.now
+    ? await lockTemimaCutoff(undefined, viewer.isAdmin)
+    : await lockTemimaCutoff(body.minutes, viewer.isAdmin);
   if (result.ok && !result.frozen) await captureTemimaSheetFreeze(result.dayYmd);
   return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
 }

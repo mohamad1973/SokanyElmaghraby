@@ -277,6 +277,16 @@ export async function removeTemimaFreezeExcept(confirmationId: number, keepDay: 
   );
 }
 
+export async function reopenTemimaSheetDay(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  if (!DAY.test(dayYmd)) return { ok: false as const, message: "اليوم غير صحيح." };
+  await ensureTemimaFreezeTables();
+  await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetFreeze WHERE dayYmd = ?", dayYmd);
+  await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetFreezeDay WHERE dayYmd = ?", dayYmd);
+  return { ok: true as const, dayYmd, frozen: false as const, message: "اتفتح الشيت." };
+}
+
 export async function removeTemimaFreezeId(dayYmd: string, confirmationId: number) {
   const prisma = getPrismaClient();
   if (!prisma || !DAY.test(dayYmd) || !Number.isInteger(confirmationId) || confirmationId <= 0) return;

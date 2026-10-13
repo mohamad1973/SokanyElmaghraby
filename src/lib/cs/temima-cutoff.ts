@@ -16,7 +16,23 @@ export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
   return rows.map((row) => ({ dayYmd: row.dayYmd, minutes: row.minutes }));
 }
 
-export async function lockTemimaCutoff(chosenMinutes?: number) {
+export async function ensureTemimaDayCutoff(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) {
+    return { ok: false as const, message: "اليوم غير صحيح." };
+  }
+  const existing = await prisma.csTemimaSheetCutoff.findUnique({
+    where: { dayYmd },
+    select: { minutes: true },
+  });
+  if (existing) return { ok: true as const, dayYmd, minutes: existing.minutes };
+  const clock = cairoClock(new Date().toISOString());
+  if (!clock) return { ok: false as const, message: "الساعة غير صحيحة." };
+  await prisma.csTemimaSheetCutoff.create({ data: { dayYmd, minutes: clock.minutes } });
+  return { ok: true as const, dayYmd, minutes: clock.minutes };
+}
+
+export async function lockTemimaCutoff(chosenMinutes?: number, allowFrozen = false) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   let dayYmd = "";
@@ -32,7 +48,7 @@ export async function lockTemimaCutoff(chosenMinutes?: number) {
     dayYmd = cairoTodayYmd();
     minutes = chosenMinutes;
   }
-  if (await hasTemimaFreezeDay(dayYmd)) {
+  if (!allowFrozen && (await hasTemimaFreezeDay(dayYmd))) {
     const existing = await prisma.csTemimaSheetCutoff.findUnique({ where: { dayYmd }, select: { minutes: true } });
     return { ok: true as const, dayYmd, minutes: existing?.minutes ?? minutes, frozen: true as const };
   }
@@ -44,5 +60,5 @@ export async function lockTemimaCutoff(chosenMinutes?: number) {
     create: { dayYmd, minutes },
     update: { minutes },
   });
-  return { ok: true as const, dayYmd, minutes, frozen: false as const };
+  return { ok: true as const, dayYmd, minutes, frozen: await hasTemimaFreezeDay(dayYmd) };
 }
