@@ -1273,31 +1273,62 @@ function returnReceivedAt(row: Record<string, unknown>) {
   return "";
 }
 
-/** Deliveries Bosta currently marks as returned to the sender. The caller keeps today's receipts. */
-export async function listBostaReturnedToBusiness(): Promise<
+/** Deliveries Bosta marks as returned to the sender. The caller keeps receipts inside the Cairo range. */
+export async function listBostaReturnedToBusiness(range?: { from: string; to: string }): Promise<
   { ok: true; rows: BostaReceivedReturn[] } | { ok: false; message: string }
 > {
+  const from = range?.from || "";
+  const to = range?.to || "";
   const errors: string[] = [];
   const collected: Record<string, unknown>[] = [];
+  const seenKeys = new Set<string>();
   const remember = (raw: unknown) => {
-    collected.push(...deliveryRecords(raw));
+    let added = 0;
+    for (const row of deliveryRecords(raw)) {
+      const key = rowTracking(row) || JSON.stringify(row).slice(0, 80);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      collected.push(row);
+      added += 1;
+    }
+    return added;
   };
-  const listed = await bostaFetch("/deliveries?pageNumber=0&pageLimit=200&state=46");
-  if (listed.ok) remember(listed.data);
-  else errors.push(listed.message);
-  const searched = await bostaFetch("/deliveries/search", {
-    method: "POST",
-    body: JSON.stringify({
-      state: 46,
-      stateCodes: ["46"],
-      states: [46, "46", "returned_to_business"],
-      pageNumber: 0,
-      pageLimit: 200,
-      limit: 200,
-    }),
-  });
-  if (searched.ok) remember(searched.data);
-  else if (!collected.length) errors.push(searched.message);
+  const dateBody = from && to
+    ? { dateFrom: from, dateTo: to, fromDate: from, toDate: to, startDate: from, endDate: to, updatedAtStart: from, updatedAtEnd: to }
+    : {};
+  for (let page = 0; page < 3; page += 1) {
+    const params = new URLSearchParams({ pageNumber: String(page), pageLimit: "200", state: "46" });
+    if (from) params.set("dateFrom", from);
+    if (to) params.set("dateTo", to);
+    const listed = await bostaFetch(`/deliveries?${params.toString()}`);
+    if (!listed.ok) {
+      if (page === 0) errors.push(listed.message);
+      break;
+    }
+    const added = remember(listed.data);
+    if (added < 200) break;
+  }
+  for (let page = 0; page < 3; page += 1) {
+    const searched = await bostaFetch("/deliveries/search", {
+      method: "POST",
+      body: JSON.stringify({
+        state: 46,
+        stateCodes: ["46"],
+        states: [46, "46", "returned_to_business"],
+        pageNumber: page,
+        page: page + 1,
+        pageLimit: 200,
+        limit: 200,
+        ...dateBody,
+      }),
+    });
+    if (!searched.ok) {
+      if (page === 0 && !collected.length) errors.push(searched.message);
+      break;
+    }
+    const added = remember(searched.data);
+    if (added < 200) break;
+  }
   if (!collected.length && errors.length) return { ok: false, message: errors[0] };
 
   const seen = new Set<string>();

@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { listTodayBostaReceivedReturns, listTodayTemimaReturns } from "@/lib/cs/maintenance-returns";
+import {
+  listBostaReceivedReturns,
+  listCourierReturns,
+  listTemimaReturns,
+  maintenanceRange,
+} from "@/lib/cs/maintenance-returns";
 import { requireCsSession } from "@/lib/session-guards";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
@@ -13,10 +18,19 @@ export async function GET() {
   if (!viewer.isMaintenance) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   }
-  const [bosta, temima] = await Promise.all([listTodayBostaReceivedReturns(), listTodayTemimaReturns()]);
+  const url = new URL(request.url);
+  const range = maintenanceRange(url.searchParams.get("from") || "", url.searchParams.get("to") || "");
+  const [bosta, temima, couriers] = await Promise.all([
+    listBostaReceivedReturns(range.from, range.to),
+    listTemimaReturns(range.from, range.to),
+    listCourierReturns(range.from, range.to),
+  ]);
   return NextResponse.json({
-    day: bosta.day,
+    from: range.from,
+    to: range.to,
     bosta: { rows: bosta.rows, error: bosta.error },
     temima: { rows: temima.rows },
+    eid: couriers.eid,
+    momen: couriers.momen,
   });
 }
