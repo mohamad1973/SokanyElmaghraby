@@ -9,6 +9,7 @@ import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { listTemimaFreezePairs } from "@/lib/cs/temima-sheet-freeze";
 import { openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { listCapturedBostaReturns } from "@/lib/cs/bosta-return-capture";
+import { listBostaReturnProducts, type LinkedReturnProduct } from "@/lib/cs/bosta-return-product";
 import { listBostaReturnReviews, type BostaReturnReview } from "@/lib/cs/bosta-return-review";
 import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
@@ -32,6 +33,7 @@ export type MaintenanceBostaRow = {
   customerName: string;
   phone: string;
   product: string;
+  linkedProduct: LinkedReturnProduct | null;
   kind: BostaHeadingKind;
   statusLabel: string;
   reasonText: string;
@@ -188,15 +190,19 @@ const KIND_LABEL: Record<BostaHeadingKind, string> = {
 
 export async function listBostaReceivedReturns(from: string, to: string) {
   const stored = await listCapturedBostaReturns(from, to);
-  const [matched, reviews] = await Promise.all([
+  const trackings = stored.map((row) => row.trackingNumber);
+  const [matched, reviews, linkedProducts] = await Promise.all([
     matchLocalOrders(stored),
-    listBostaReturnReviews(stored.map((row) => row.trackingNumber)),
+    listBostaReturnReviews(trackings),
+    listBostaReturnProducts(trackings),
   ]);
   const rows = stored
     .map((row) => {
       const local = matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
       const snap = local?.snap || {};
-      const product = productLabel(snap.items);
+      const orderProduct = productLabel(snap.items);
+      const linked = linkedProducts.get(row.trackingNumber) || null;
+      const product = linked ? [linked.productName, linked.productCode].filter(Boolean).join(" · ") : orderProduct;
       const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
       const customerName = snap.customerName || row.customerName;
       const phone = snap.phone || row.phone;
@@ -208,6 +214,7 @@ export async function listBostaReceivedReturns(from: string, to: string) {
         customerName,
         phone,
         product,
+        linkedProduct: linked,
         kind: row.kind,
         statusLabel: KIND_LABEL[row.kind],
         reasonText: row.reasonText,

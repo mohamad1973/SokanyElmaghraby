@@ -27,6 +27,12 @@ type LocalRow = {
   searchText: string;
 };
 
+type LinkedProduct = {
+  productId: number;
+  productName: string;
+  productCode: string;
+};
+
 type BostaRow = Omit<LocalRow, "confirmationId"> & {
   trackingNumber: string;
   confirmationId: number | null;
@@ -34,6 +40,7 @@ type BostaRow = Omit<LocalRow, "confirmationId"> & {
   statusLabel: string;
   reasonText: string;
   review: Review | null;
+  linkedProduct: LinkedProduct | null;
 };
 
 type CourierSection = {
@@ -119,6 +126,116 @@ function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loadi
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function productText(product: LinkedProduct) {
+  return [product.productName, product.productCode].filter(Boolean).join(" · ");
+}
+
+function ProductSearch({
+  row,
+  onClose,
+  onSaved,
+}: {
+  row: BostaRow;
+  onClose: () => void;
+  onSaved: (product: LinkedProduct) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<Array<{ id: number; name: string; displayCode: string; sku: string }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [savingId, setSavingId] = useState(0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setHits([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      setError("");
+      void fetch(`/api/products/search?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+        .then(async (response) => {
+          const body = (await response.json()) as { products?: Array<{ id: number; name: string; displayCode: string; sku: string }> };
+          setHits(Array.isArray(body.products) ? body.products : []);
+        })
+        .catch(() => setError("تعذر البحث عن المنتج."))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  async function choose(hit: { id: number; name: string; displayCode: string; sku: string }) {
+    setSavingId(hit.id);
+    setError("");
+    try {
+      const response = await fetch("/api/cs/maintenance/returns/product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trackingNumber: row.trackingNumber,
+          productId: hit.id,
+          productName: hit.name,
+          productCode: hit.displayCode || hit.sku,
+        }),
+      });
+      const body = (await response.json()) as { message?: string; product?: LinkedProduct };
+      if (!response.ok || !body.product) {
+        setError(body.message || "تعذر ربط المنتج.");
+        return;
+      }
+      onSaved(body.product);
+      onClose();
+    } catch {
+      setError("تعذر ربط المنتج.");
+    } finally {
+      setSavingId(0);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" dir="rtl">
+      <div className="w-full max-w-lg space-y-3 rounded-3xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-extrabold text-[#14213D]/60">المنتج المستلم</p>
+            <h2 className="text-lg font-extrabold text-[#14213D]">{row.wooOrderNumber || row.trackingNumber}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold">
+            إغلاق
+          </button>
+        </div>
+        <input
+          autoFocus
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="اسم المنتج أو رقم الموديل"
+          className="w-full rounded-2xl border border-black/10 px-3 py-3 text-sm font-bold"
+        />
+        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
+        <div className="max-h-72 space-y-2 overflow-y-auto">
+          {searching ? <p className="text-sm font-bold text-[#14213D]/60">جارٍ البحث…</p> : null}
+          {!searching && query.trim().length >= 2 && !hits.length ? (
+            <p className="text-sm font-bold text-[#14213D]/60">مفيش منتج بالاسم ده.</p>
+          ) : null}
+          {hits.map((hit) => (
+            <button
+              key={hit.id}
+              type="button"
+              disabled={savingId === hit.id}
+              onClick={() => void choose(hit)}
+              className="block w-full rounded-2xl bg-[#F5F5F0] px-3 py-3 text-right disabled:opacity-60"
+            >
+              <span className="block text-sm font-extrabold text-[#14213D]">{hit.name}</span>
+              <span className="block text-xs font-bold text-[#14213D]/60">{hit.displayCode || hit.sku}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -303,6 +420,7 @@ export function MaintenanceClient() {
   const [kinds, setKinds] = useState<Kind[]>(["refused", "exchange", "return"]);
   const [grouped, setGrouped] = useState(false);
   const [active, setActive] = useState<BostaRow | null>(null);
+  const [linking, setLinking] = useState<BostaRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -363,6 +481,23 @@ export function MaintenanceClient() {
 
   function toggleKind(kind: Kind) {
     setKinds((current) => (current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]));
+  }
+
+  function rememberProduct(trackingNumber: string, linkedProduct: LinkedProduct) {
+    const product = productText(linkedProduct);
+    setData((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        bosta: {
+          ...current.bosta,
+          rows: current.bosta.rows.map((row) =>
+            row.trackingNumber === trackingNumber ? { ...row, linkedProduct, product, searchText: `${row.searchText} ${product}` } : row,
+          ),
+        },
+      };
+    });
+    setActive((current) => (current && current.trackingNumber === trackingNumber ? { ...current, linkedProduct, product } : current));
   }
 
   function rememberReview(trackingNumber: string, review: Review) {
@@ -532,7 +667,18 @@ export function MaintenanceClient() {
                         <td className="px-3 py-2 font-extrabold">{row.wooOrderNumber || "—"}</td>
                         <td className="px-3 py-2">{row.customerName || "—"}</td>
                         <td className="px-3 py-2">{row.phone || "—"}</td>
-                        <td className="px-3 py-2">{row.product || "—"}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setLinking(row);
+                            }}
+                            className="text-right font-bold text-[#14213D] underline"
+                          >
+                            {row.product || "إضافة منتج"}
+                          </button>
+                        </td>
                         <td className="px-3 py-2">{row.statusLabel}</td>
                         <td className="px-3 py-2">{row.review?.label || "—"}</td>
                       </tr>
@@ -569,6 +715,14 @@ export function MaintenanceClient() {
           />
         ) : null}
       </section>
+      {linking ? (
+        <ProductSearch
+          key={linking.trackingNumber}
+          row={linking}
+          onClose={() => setLinking(null)}
+          onSaved={(product) => rememberProduct(linking.trackingNumber, product)}
+        />
+      ) : null}
       {active ? (
         <ReviewCards
           key={active.trackingNumber}
