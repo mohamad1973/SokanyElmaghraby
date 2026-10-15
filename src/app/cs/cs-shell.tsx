@@ -659,6 +659,7 @@ function CsHeader() {
   const isTransfers = roles.includes("transfers") || Boolean(session?.user?.csIsTransfers);
   const isShipping = roles.includes("shipping");
   const isAccounting = roles.includes("accounting");
+  const isMaintenance = roles.includes("maintenance") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
   const isCourierSupervisor = roles.includes("courier_supervisor");
   const isCourier = roles.includes("courier");
   const isMonaCourier = roles.includes("mona_courier");
@@ -695,7 +696,9 @@ function CsHeader() {
                   ? "حساب شحن · تصفية سيد تميمة"
                   : isAccounting
                     ? "حسابات · كل الأوردرات"
-                    : "خدمة العملاء · الأوردرات والتحويلات"}
+                    : isMaintenance && !canSeeOrders && !isTransfers && !isShipping
+                      ? "الصيانة · المرتجعات"
+                      : "خدمة العملاء · الأوردرات والتحويلات"}
             </p>
           </div>
           <div className="shrink-0 overflow-visible">
@@ -735,6 +738,11 @@ function CsHeader() {
           {canTransfers ? (
             <Link href="/cs/transfers" className={navClass(pathname.startsWith("/cs/transfers"))}>
               التحويلات
+            </Link>
+          ) : null}
+          {isMaintenance ? (
+            <Link href="/cs/maintenance" className={navClass(pathname.startsWith("/cs/maintenance"))}>
+              الصيانة
             </Link>
           ) : null}
           {isSupervisor ? (

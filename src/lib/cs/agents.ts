@@ -10,6 +10,7 @@ export type CsRole =
   | "transfers"
   | "shipping"
   | "accounting"
+  | "maintenance"
   | "courier_supervisor"
   | "courier"
   | "mona_courier";
@@ -21,6 +22,7 @@ export const CS_ROLES: CsRole[] = [
   "transfers",
   "shipping",
   "accounting",
+  "maintenance",
   "courier_supervisor",
   "courier",
   "mona_courier",
@@ -71,7 +73,7 @@ export function parseCsRoles(raw: {
   return [single];
 }
 
-const ADMIN_ALL_ROLES: CsRole[] = ["admin", "agent", "supervisor", "transfers", "shipping", "accounting"];
+const ADMIN_ALL_ROLES: CsRole[] = ["admin", "agent", "supervisor", "transfers", "shipping", "accounting", "maintenance"];
 
 export function csFlagsFromRoles(roles: CsRole[]) {
   const hasAdmin = roles.includes("admin");
@@ -84,6 +86,7 @@ export function csFlagsFromRoles(roles: CsRole[]) {
     isTransfers: hasAdmin || list.includes("transfers"),
     isShipping: hasAdmin || list.includes("shipping"),
     isAccounting: hasAdmin || list.includes("accounting"),
+    isMaintenance: hasAdmin || list.includes("maintenance"),
     isCourierSupervisor: list.includes("courier_supervisor"),
     isCourier: list.includes("courier"),
     isMonaCourier: list.includes("mona_courier"),
@@ -581,7 +584,7 @@ async function runEnsureCsTables() {
     `);
     await prisma.$executeRawUnsafe(`
       UPDATE \`CsAgent\` SET \`role\` = 'admin',
-        \`roles\` = 'admin,agent,supervisor,transfers,shipping,accounting',
+        \`roles\` = 'admin,agent,supervisor,transfers,shipping,accounting,maintenance',
         \`isSupervisor\` = true
       WHERE LOWER(COALESCE(\`username\`, '')) = 'mm'
         OR \`role\` = 'admin'

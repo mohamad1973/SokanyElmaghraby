@@ -1788,6 +1788,7 @@ export async function resolveCsViewer(agentId: number) {
       isTransfers: false,
       isShipping: false,
       isAccounting: false,
+      isMaintenance: false,
       canAccessTransfers: false,
       canSeeOrders: true,
       isCourierSupervisor: false,

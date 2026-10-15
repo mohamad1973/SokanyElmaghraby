@@ -7,6 +7,7 @@ import type { AdminOrder } from "@/lib/orders";
 import {
   findBostaCity,
   getBostaStatusLabelAr,
+  normalizeBostaStatus,
   mapGovernorateToBostaCity,
   type BostaTrackEvent,
 } from "./bosta-zones";
@@ -1238,6 +1239,86 @@ export async function updateCsBostaDelivery(trackingNumber: string, party: CsBos
     message: "تم تحديث بوليصة بوسطة.",
     raw: live.ok ? live.data : result.data,
   };
+}
+
+export type BostaReceivedReturn = {
+  trackingNumber: string;
+  status: string;
+  statusLabel: string;
+  customerName: string;
+  phone: string;
+  businessReference: string;
+  receivedAt: string;
+};
+
+function returnedToBusiness(status: string) {
+  const key = normalizeBostaStatus(status);
+  return key === "46" || key === "returned_to_business";
+}
+
+function rowPhone(row: Record<string, unknown>) {
+  const receiver = asRecord(row.receiver) || {};
+  return String(receiver.phone || row.phone || row.receiverPhone || "").trim();
+}
+
+function returnReceivedAt(row: Record<string, unknown>) {
+  const events = readBostaTransitEvents(row);
+  const hit = [...events].reverse().find((event) => returnedToBusiness(event.status) || /رجعت للراسل|returned to business/i.test(event.label));
+  if (hit?.at) return hit.at;
+  const state = asRecord(row.state);
+  for (const value of [row.returnedAt, row.returnedToBusinessAt, row.changedToRTODate, state?.receivedAt, row.updatedAt]) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+/** Deliveries Bosta currently marks as returned to the sender. The caller keeps today's receipts. */
+export async function listBostaReturnedToBusiness(): Promise<
+  { ok: true; rows: BostaReceivedReturn[] } | { ok: false; message: string }
+> {
+  const errors: string[] = [];
+  const collected: Record<string, unknown>[] = [];
+  const remember = (raw: unknown) => {
+    collected.push(...deliveryRecords(raw));
+  };
+  const listed = await bostaFetch("/deliveries?pageNumber=0&pageLimit=200&state=46");
+  if (listed.ok) remember(listed.data);
+  else errors.push(listed.message);
+  const searched = await bostaFetch("/deliveries/search", {
+    method: "POST",
+    body: JSON.stringify({
+      state: 46,
+      stateCodes: ["46"],
+      states: [46, "46", "returned_to_business"],
+      pageNumber: 0,
+      pageLimit: 200,
+      limit: 200,
+    }),
+  });
+  if (searched.ok) remember(searched.data);
+  else if (!collected.length) errors.push(searched.message);
+  if (!collected.length && errors.length) return { ok: false, message: errors[0] };
+
+  const seen = new Set<string>();
+  const rows: BostaReceivedReturn[] = [];
+  for (const row of collected) {
+    const status = readBostaStatus(row) || "";
+    if (!returnedToBusiness(status)) continue;
+    const trackingNumber = rowTracking(row) || "";
+    if (!trackingNumber || seen.has(trackingNumber)) continue;
+    seen.add(trackingNumber);
+    rows.push({
+      trackingNumber,
+      status,
+      statusLabel: getBostaStatusLabelAr(status),
+      customerName: rowName(row).trim(),
+      phone: rowPhone(row),
+      businessReference: rowBusinessReference(row),
+      receivedAt: returnReceivedAt(row),
+    });
+  }
+  return { ok: true, rows };
 }
 
 export async function fetchCsBostaDelivery(trackingNumber: string) {

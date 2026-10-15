@@ -34,6 +34,9 @@ export default async function CsHomePage() {
   if (!viewer.canSeeOrders && (viewer.isShipping || isShippingRole(session.user.csRole))) {
     redirect("/cs/settlement");
   }
+  if (!viewer.canSeeOrders && viewer.isMaintenance) {
+    redirect("/cs/maintenance");
+  }
 
   const isCourierSupervisor = viewer.isCourierSupervisor;
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
