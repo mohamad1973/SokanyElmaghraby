@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { saveBostaReturnReview } from "@/lib/cs/bosta-return-review";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import {
   listBostaReceivedReturns,
@@ -33,4 +34,24 @@ export async function GET(request: Request) {
     eid: couriers.eid,
     momen: couriers.momen,
   });
+}
+
+export async function POST(request: Request) {
+  const session = await requireCsSession();
+  if (!session?.user.csAgentId) {
+    return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  const viewer = await resolveCsViewer(session.user.csAgentId);
+  if (!viewer.isMaintenance) {
+    return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+  }
+  const body = (await request.json().catch(() => null)) as { trackingNumber?: string; condition?: string; defects?: unknown } | null;
+  const defects = Array.isArray(body?.defects) ? body.defects.filter((item): item is string => typeof item === "string") : [];
+  const result = await saveBostaReturnReview({
+    trackingNumber: String(body?.trackingNumber || ""),
+    condition: String(body?.condition || ""),
+    defects,
+  });
+  if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+  return NextResponse.json({ review: result.review });
 }

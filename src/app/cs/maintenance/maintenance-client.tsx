@@ -5,6 +5,17 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Kind = "refused" | "return" | "exchange";
 type TabId = "bosta" | "temima" | "eid" | "momen";
+type Condition = "sound" | "broken" | "defective";
+type Defect = "break" | "power" | "disassembled" | "dented";
+type Phase = "choose" | "defects" | "hand" | "claim" | "saved";
+
+type Review = {
+  condition: Condition;
+  defects: Defect[];
+  destination: "online_warehouse" | "shelf" | "maintenance";
+  bostaClaim: boolean;
+  label: string;
+};
 
 type LocalRow = {
   confirmationId: number;
@@ -22,6 +33,7 @@ type BostaRow = Omit<LocalRow, "confirmationId"> & {
   kind: Kind;
   statusLabel: string;
   reasonText: string;
+  review: Review | null;
 };
 
 type CourierSection = {
@@ -47,19 +59,18 @@ const TABS: Array<{ id: TabId; label: string }> = [
 
 const KINDS: Array<{ id: Kind; label: string }> = [
   { id: "refused", label: "رفض استلام" },
-  { id: "return", label: "استرجاع" },
   { id: "exchange", label: "استبدال" },
+  { id: "return", label: "استرجاع" },
 ];
 
-function OrderLink({ id, number }: { id: number | null; number: string }) {
-  if (!number) return <span>—</span>;
-  if (!id) return <span>{number}</span>;
-  return (
-    <Link href={`/cs/orders/${id}`} className="font-extrabold text-[#14213D] underline">
-      {number}
-    </Link>
-  );
-}
+const DEFECTS: Array<{ id: Defect; label: string }> = [
+  { id: "break", label: "كسر" },
+  { id: "power", label: "فاصل بور" },
+  { id: "disassembled", label: "مفكك" },
+  { id: "dented", label: "مخبوط" },
+];
+
+const KIND_RANK: Record<Kind, number> = { refused: 0, exchange: 1, return: 2 };
 
 function matchesQuery(searchText: string, raw: string) {
   const query = raw.trim().toLowerCase();
@@ -68,6 +79,10 @@ function matchesQuery(searchText: string, raw: string) {
   if (hay.includes(query)) return true;
   const digits = query.replace(/\D/g, "");
   return digits.length >= 4 && hay.replace(/\D/g, "").includes(digits);
+}
+
+function groupRows(rows: BostaRow[]) {
+  return KINDS.flatMap((kind) => rows.filter((row) => row.kind === kind.id));
 }
 
 function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loading: boolean; empty: string; missing?: string }) {
@@ -89,9 +104,7 @@ function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loadi
             rows.map((row) => (
               <tr key={row.confirmationId} className="border-t border-black/5">
                 <td className="px-3 py-2">{row.day || "—"}</td>
-                <td className="px-3 py-2">
-                  <OrderLink id={row.confirmationId} number={row.wooOrderNumber} />
-                </td>
+                <td className="px-3 py-2 font-extrabold">{row.wooOrderNumber || "—"}</td>
                 <td className="px-3 py-2">{row.customerName || "—"}</td>
                 <td className="px-3 py-2">{row.phone || "—"}</td>
                 <td className="px-3 py-2">{row.product || "—"}</td>
@@ -110,13 +123,186 @@ function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loadi
   );
 }
 
+function ReviewCards({
+  row,
+  onClose,
+  onSaved,
+}: {
+  row: BostaRow;
+  onClose: () => void;
+  onSaved: (review: Review) => void;
+}) {
+  const [phase, setPhase] = useState<Phase>(row.review ? "saved" : "choose");
+  const [condition, setCondition] = useState<Condition | "">(row.review?.condition || "");
+  const [defects, setDefects] = useState<Defect[]>(row.review?.defects || []);
+  const [savedReview, setSavedReview] = useState<Review | null>(row.review);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const refused = row.kind === "refused";
+
+  function choose(next: Condition) {
+    setError("");
+    setCondition(next);
+    setDefects([]);
+    setPhase(next === "defective" ? "defects" : "hand");
+  }
+
+  function toggleDefect(defect: Defect) {
+    setDefects((current) => (current.includes(defect) ? current.filter((item) => item !== defect) : [...current, defect]));
+  }
+
+  async function finish() {
+    if (!condition) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/cs/maintenance/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackingNumber: row.trackingNumber, condition, defects }),
+      });
+      const body = (await response.json()) as { message?: string; review?: Review };
+      if (!response.ok || !body.review) {
+        setError(body.message || "تعذر حفظ الفحص.");
+        return;
+      }
+      onSaved(body.review);
+      setSavedReview(body.review);
+      setPhase("saved");
+    } catch {
+      setError("تعذر حفظ الفحص.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const handText =
+    condition === "sound" && refused
+      ? "الرجوع إلى مخزن أونلاين"
+      : condition === "sound"
+        ? "يعود إلى الرف"
+        : "يسلم إلى الصيانة";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" dir="rtl">
+      <div className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-extrabold text-[#14213D]/60">{row.statusLabel}</p>
+            <h2 className="text-lg font-extrabold text-[#14213D]">{row.wooOrderNumber || row.trackingNumber}</h2>
+            <p className="text-sm font-bold text-[#14213D]/70">
+              {row.customerName || "—"} · {row.product || "—"}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold">
+            إغلاق
+          </button>
+        </div>
+        {row.confirmationId ? (
+          <Link href={`/cs/orders/${row.confirmationId}`} className="inline-block text-sm font-extrabold text-[#14213D] underline">
+            فتح صفحة الأوردر
+          </Link>
+        ) : null}
+        {phase === "saved" && savedReview ? (
+          <div className="space-y-3">
+            <p className="rounded-2xl bg-emerald-50 px-4 py-6 text-center text-xl font-extrabold text-emerald-900">{savedReview.label}</p>
+            <button
+              type="button"
+              onClick={() => setPhase("choose")}
+              className="w-full rounded-2xl bg-[#F5F5F0] px-4 py-3 text-sm font-extrabold"
+            >
+              تعديل
+            </button>
+          </div>
+        ) : null}
+        {phase === "choose" ? (
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={() => choose("sound")} className="rounded-2xl bg-[#14213D] px-4 py-8 text-xl font-extrabold text-white">
+              سليم
+            </button>
+            <button
+              type="button"
+              onClick={() => choose(refused ? "broken" : "defective")}
+              className="rounded-2xl bg-[#E6B325] px-4 py-8 text-xl font-extrabold text-black"
+            >
+              {refused ? "مكسور" : "معيب"}
+            </button>
+          </div>
+        ) : null}
+        {phase === "defects" ? (
+          <div className="space-y-3">
+            <p className="text-sm font-extrabold text-[#14213D]">اختَر العيب. يمكن أكثر من واحد.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {DEFECTS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleDefect(item.id)}
+                  className={`rounded-2xl px-3 py-4 text-sm font-extrabold ${
+                    defects.includes(item.id) ? "bg-[#E6B325] text-black" : "bg-[#F5F5F0] text-[#14213D]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={!defects.length}
+              onClick={() => setPhase("hand")}
+              className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-40"
+            >
+              التالي
+            </button>
+          </div>
+        ) : null}
+        {phase === "hand" ? (
+          <div className="space-y-3">
+            <p className="rounded-2xl bg-[#F5F5F0] px-4 py-8 text-center text-xl font-extrabold text-[#14213D]">{handText}</p>
+            {condition === "broken" ? (
+              <button type="button" onClick={() => setPhase("claim")} className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
+                التالي
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void finish()}
+                className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+              >
+                {saving ? "جارٍ الحفظ…" : "تم"}
+              </button>
+            )}
+          </div>
+        ) : null}
+        {phase === "claim" ? (
+          <div className="space-y-3">
+            <p className="rounded-2xl bg-[#F5F5F0] px-4 py-8 text-center text-xl font-extrabold text-[#14213D]">رفع تذكرة للتعويض من بوسطة</p>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void finish()}
+              className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+            >
+              {saving ? "جارٍ الحفظ…" : "تم"}
+            </button>
+          </div>
+        ) : null}
+        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 export function MaintenanceClient() {
   const [data, setData] = useState<Payload | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabId>("bosta");
-  const [kinds, setKinds] = useState<Kind[]>(["refused", "return", "exchange"]);
+  const [kinds, setKinds] = useState<Kind[]>(["refused", "exchange", "return"]);
+  const [grouped, setGrouped] = useState(false);
+  const [active, setActive] = useState<BostaRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -179,19 +365,46 @@ export function MaintenanceClient() {
     setKinds((current) => (current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]));
   }
 
+  function rememberReview(trackingNumber: string, review: Review) {
+    setData((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        bosta: {
+          ...current.bosta,
+          rows: current.bosta.rows.map((row) =>
+            row.trackingNumber === trackingNumber
+              ? { ...row, review, searchText: `${row.searchText} ${review.label}` }
+              : row,
+          ),
+        },
+      };
+    });
+    setActive((current) => (current && current.trackingNumber === trackingNumber ? { ...current, review } : current));
+  }
+
   function visible<T extends { searchText: string }>(rows: T[]) {
     return rows.filter((row) => matchesQuery(row.searchText, query));
   }
 
   const bostaSearched = visible(data?.bosta.rows || []);
-  const bostaRows = bostaSearched.filter((row) => kinds.includes(row.kind));
+  const bostaFiltered = bostaSearched.filter((row) => kinds.includes(row.kind));
+  const bostaRows = grouped
+    ? [...bostaFiltered].sort(
+        (left, right) =>
+          KIND_RANK[left.kind] - KIND_RANK[right.kind] ||
+          right.day.localeCompare(left.day) ||
+          right.trackingNumber.localeCompare(left.trackingNumber),
+      )
+    : bostaFiltered;
+  const printGroups = groupRows(bostaFiltered);
   const temimaRows = visible(data?.temima.rows || []);
   const eidRows = visible(data?.eid.rows || []);
   const momenRows = visible(data?.momen.rows || []);
   const counts = {
     refused: bostaSearched.filter((row) => row.kind === "refused").length,
-    return: bostaSearched.filter((row) => row.kind === "return").length,
     exchange: bostaSearched.filter((row) => row.kind === "exchange").length,
+    return: bostaSearched.filter((row) => row.kind === "return").length,
   };
 
   return (
@@ -268,14 +481,24 @@ export function MaintenanceClient() {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => void capture()}
-                disabled={saving}
-                className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
-              >
-                {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  disabled={!bostaRows.length}
+                  className="rounded-full bg-white px-4 py-2 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10 disabled:opacity-40"
+                >
+                  طباعة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void capture()}
+                  disabled={saving}
+                  className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+                >
+                  {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
+                </button>
+              </div>
             </header>
             {data?.bosta.error ? <p className="px-4 py-3 text-sm font-bold text-red-700">{data.bosta.error}</p> : null}
             <div className="overflow-x-auto">
@@ -288,27 +511,35 @@ export function MaintenanceClient() {
                     <th className="px-3 py-2">العميل</th>
                     <th className="px-3 py-2">الموبايل</th>
                     <th className="px-3 py-2">المنتج</th>
-                    <th className="px-3 py-2">التصنيف</th>
+                    <th className="px-3 py-2">
+                      <button type="button" onClick={() => setGrouped((value) => !value)} className="font-extrabold">
+                        التصنيف{grouped ? " (مجمّع)" : ""}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2">الفحص</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bostaRows.length ? (
                     bostaRows.map((row) => (
-                      <tr key={row.trackingNumber} className="border-t border-black/5">
+                      <tr
+                        key={row.trackingNumber}
+                        onClick={() => setActive(row)}
+                        className="cursor-pointer border-t border-black/5 hover:bg-[#F5F5F0]"
+                      >
                         <td className="px-3 py-2">{row.day || "—"}</td>
                         <td className="px-3 py-2 font-bold">{row.trackingNumber}</td>
-                        <td className="px-3 py-2">
-                          <OrderLink id={row.confirmationId} number={row.wooOrderNumber} />
-                        </td>
+                        <td className="px-3 py-2 font-extrabold">{row.wooOrderNumber || "—"}</td>
                         <td className="px-3 py-2">{row.customerName || "—"}</td>
                         <td className="px-3 py-2">{row.phone || "—"}</td>
                         <td className="px-3 py-2">{row.product || "—"}</td>
                         <td className="px-3 py-2">{row.statusLabel}</td>
+                        <td className="px-3 py-2">{row.review?.label || "—"}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
+                      <td colSpan={8} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
                         {loading ? "جارٍ التحميل…" : "مفيش مرتجعات محفوظة في المدى. احفظ الظاهر على بوسطة الأول."}
                       </td>
                     </tr>
@@ -338,6 +569,84 @@ export function MaintenanceClient() {
           />
         ) : null}
       </section>
+      {active ? (
+        <ReviewCards
+          key={active.trackingNumber}
+          row={active}
+          onClose={() => setActive(null)}
+          onSaved={(review) => rememberReview(active.trackingNumber, review)}
+        />
+      ) : null}
+      {tab === "bosta" ? (
+        <div className="print-only">
+          <h1 className="text-center text-lg font-extrabold">
+            مرتجعات بوسطة {from} — {to}
+          </h1>
+          {KINDS.map((kind) => {
+            const rows = printGroups.filter((row) => row.kind === kind.id);
+            if (!rows.length) return null;
+            return (
+              <section key={kind.id}>
+                <h2 className="mt-4 text-sm font-extrabold">
+                  {kind.label} ({rows.length})
+                </h2>
+                <table className="w-full border-collapse text-right text-xs">
+                  <thead>
+                    <tr>
+                      <th className="border border-black px-1 py-1">اليوم</th>
+                      <th className="border border-black px-1 py-1">البوليصة</th>
+                      <th className="border border-black px-1 py-1">الأوردر</th>
+                      <th className="border border-black px-1 py-1">العميل</th>
+                      <th className="border border-black px-1 py-1">الموبايل</th>
+                      <th className="border border-black px-1 py-1">المنتج</th>
+                      <th className="border border-black px-1 py-1">الفحص</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((item) => (
+                      <tr key={item.trackingNumber}>
+                        <td className="border border-black px-1 py-1">{item.day}</td>
+                        <td className="border border-black px-1 py-1">{item.trackingNumber}</td>
+                        <td className="border border-black px-1 py-1">{item.wooOrderNumber}</td>
+                        <td className="border border-black px-1 py-1">{item.customerName}</td>
+                        <td className="border border-black px-1 py-1">{item.phone}</td>
+                        <td className="border border-black px-1 py-1">{item.product}</td>
+                        <td className="border border-black px-1 py-1">{item.review?.label || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            );
+          })}
+        </div>
+      ) : null}
+      <style jsx global>{`
+        .print-only {
+          display: none;
+        }
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          .print-only,
+          .print-only * {
+            visibility: visible !important;
+          }
+          .print-only {
+            display: block !important;
+            position: absolute;
+            inset: 0;
+            padding: 8mm;
+            background: white;
+            color: black;
+          }
+          @page {
+            size: A4 landscape;
+            margin: 8mm;
+          }
+        }
+      `}</style>
     </div>
   );
 }

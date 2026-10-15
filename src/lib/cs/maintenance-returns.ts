@@ -9,6 +9,7 @@ import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { listTemimaFreezePairs } from "@/lib/cs/temima-sheet-freeze";
 import { openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { listCapturedBostaReturns } from "@/lib/cs/bosta-return-capture";
+import { listBostaReturnReviews, type BostaReturnReview } from "@/lib/cs/bosta-return-review";
 import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -34,6 +35,7 @@ export type MaintenanceBostaRow = {
   kind: BostaHeadingKind;
   statusLabel: string;
   reasonText: string;
+  review: BostaReturnReview | null;
   searchText: string;
 };
 
@@ -186,7 +188,10 @@ const KIND_LABEL: Record<BostaHeadingKind, string> = {
 
 export async function listBostaReceivedReturns(from: string, to: string) {
   const stored = await listCapturedBostaReturns(from, to);
-  const matched = await matchLocalOrders(stored);
+  const [matched, reviews] = await Promise.all([
+    matchLocalOrders(stored),
+    listBostaReturnReviews(stored.map((row) => row.trackingNumber)),
+  ]);
   const rows = stored
     .map((row) => {
       const local = matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
@@ -206,6 +211,7 @@ export async function listBostaReceivedReturns(from: string, to: string) {
         kind: row.kind,
         statusLabel: KIND_LABEL[row.kind],
         reasonText: row.reasonText,
+        review: reviews.get(row.trackingNumber) || null,
         searchText: searchBlob([
           row.trackingNumber,
           row.businessReference,
@@ -215,6 +221,7 @@ export async function listBostaReceivedReturns(from: string, to: string) {
           row.phone,
           product,
           KIND_LABEL[row.kind],
+          reviews.get(row.trackingNumber)?.label,
           row.reasonText,
           snap.address,
           snap.addressFull,
