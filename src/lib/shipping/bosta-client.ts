@@ -1352,6 +1352,87 @@ export async function listBostaReturnedToBusiness(range?: { from: string; to: st
   return { ok: true, rows };
 }
 
+export type BostaHeadingKind = "refused" | "return" | "exchange";
+
+export type BostaHeadingReturn = {
+  trackingNumber: string;
+  kind: BostaHeadingKind;
+  reasonText: string;
+  customerName: string;
+  phone: string;
+  businessReference: string;
+  statusLabel: string;
+  updatedAt: string;
+  sourceState: string;
+};
+
+const HEADING_STATES = [
+  "Picking up from consignee",
+  "Picked up from consignee",
+  "In transit between Hubs",
+  "Exception",
+  "Received at warehouse",
+];
+
+function headingKind(row: Record<string, unknown>): BostaHeadingKind | "" {
+  const type = asRecord(row.type);
+  const code = String(type?.code ?? type?.value ?? row.type ?? "").trim();
+  if (code === "30" || /exchange/i.test(code)) return "exchange";
+  if (code === "25" || /customer return pickup|crp/i.test(code)) return "return";
+  if (code === "20" || code.toLowerCase() === "rto") return "refused";
+  return "";
+}
+
+function headingReason(row: Record<string, unknown>) {
+  const state = asRecord(row.state);
+  const type = asRecord(row.type);
+  const text = String(state?.exceptionReason || row.exceptionReason || type?.value || state?.value || "").trim();
+  return text.slice(0, 180);
+}
+
+/** Live return shipments Bosta shows while they are heading back, before that list disappears. */
+export async function listBostaHeadingReturns(): Promise<
+  { ok: true; rows: BostaHeadingReturn[] } | { ok: false; message: string }
+> {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  const rows: BostaHeadingReturn[] = [];
+  for (const state of HEADING_STATES) {
+    for (let page = 0; page < 3; page += 1) {
+      const searched = await bostaFetch("/deliveries/search", {
+        method: "POST",
+        body: JSON.stringify({ state: [state], pageNumber: page, pageLimit: 50 }),
+      });
+      if (!searched.ok) {
+        if (page === 0) errors.push(searched.message);
+        break;
+      }
+      const batch = deliveryRecords(searched.data);
+      for (const row of batch) {
+        const kind = headingKind(row);
+        const trackingNumber = rowTracking(row) || "";
+        if (!kind || !trackingNumber || seen.has(trackingNumber)) continue;
+        seen.add(trackingNumber);
+        const status = readBostaStatus(row) || state;
+        rows.push({
+          trackingNumber,
+          kind,
+          reasonText: headingReason(row),
+          customerName: rowName(row).trim(),
+          phone: rowPhone(row),
+          businessReference: rowBusinessReference(row),
+          statusLabel: getBostaStatusLabelAr(status),
+          updatedAt: String(row.updatedAt || "").trim(),
+          sourceState: state,
+        });
+      }
+      if (batch.length < 50) break;
+    }
+  }
+  if (!rows.length && errors.length === HEADING_STATES.length) return { ok: false, message: errors[0] };
+  return { ok: true, rows };
+}
+
 export async function fetchCsBostaDelivery(trackingNumber: string) {
   const business = await bostaFetch(`/deliveries/business/${encodeURIComponent(trackingNumber)}`);
   if (business.ok) return business;

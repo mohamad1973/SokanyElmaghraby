@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+type Kind = "refused" | "return" | "exchange";
+type TabId = "bosta" | "temima" | "eid" | "momen";
+
 type LocalRow = {
   confirmationId: number;
   day: string;
@@ -16,8 +19,9 @@ type LocalRow = {
 type BostaRow = Omit<LocalRow, "confirmationId"> & {
   trackingNumber: string;
   confirmationId: number | null;
+  kind: Kind;
   statusLabel: string;
-  receivedTime: string;
+  reasonText: string;
 };
 
 type CourierSection = {
@@ -33,6 +37,19 @@ type Payload = {
   eid: CourierSection;
   momen: CourierSection;
 };
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: "bosta", label: "بوسطة" },
+  { id: "temima", label: "تميمة" },
+  { id: "eid", label: "عيد" },
+  { id: "momen", label: "مؤمن" },
+];
+
+const KINDS: Array<{ id: Kind; label: string }> = [
+  { id: "refused", label: "رفض استلام" },
+  { id: "return", label: "استرجاع" },
+  { id: "exchange", label: "استبدال" },
+];
 
 function OrderLink({ id, number }: { id: number | null; number: string }) {
   if (!number) return <span>—</span>;
@@ -53,63 +70,43 @@ function matchesQuery(searchText: string, raw: string) {
   return digits.length >= 4 && hay.replace(/\D/g, "").includes(digits);
 }
 
-function LocalTable({
-  title,
-  rows,
-  loading,
-  empty,
-  missing,
-}: {
-  title: string;
-  rows: LocalRow[];
-  loading: boolean;
-  empty: string;
-  missing?: string;
-}) {
+function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loading: boolean; empty: string; missing?: string }) {
+  if (missing) return <p className="px-4 py-6 text-center text-sm font-bold text-[#14213D]/60">{missing}</p>;
   return (
-    <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
-      <header className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
-        <h2 className="text-base font-extrabold text-[#14213D]">{title}</h2>
-        <span className="text-xs font-bold text-[#14213D]/60">{missing ? 0 : rows.length}</span>
-      </header>
-      {missing ? <p className="px-4 py-6 text-center text-sm font-bold text-[#14213D]/60">{missing}</p> : null}
-      {missing ? null : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-right text-sm">
-            <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
-              <tr>
-                <th className="px-3 py-2">اليوم</th>
-                <th className="px-3 py-2">الأوردر</th>
-                <th className="px-3 py-2">العميل</th>
-                <th className="px-3 py-2">الموبايل</th>
-                <th className="px-3 py-2">المنتج</th>
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-right text-sm">
+        <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
+          <tr>
+            <th className="px-3 py-2">اليوم</th>
+            <th className="px-3 py-2">الأوردر</th>
+            <th className="px-3 py-2">العميل</th>
+            <th className="px-3 py-2">الموبايل</th>
+            <th className="px-3 py-2">المنتج</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((row) => (
+              <tr key={row.confirmationId} className="border-t border-black/5">
+                <td className="px-3 py-2">{row.day || "—"}</td>
+                <td className="px-3 py-2">
+                  <OrderLink id={row.confirmationId} number={row.wooOrderNumber} />
+                </td>
+                <td className="px-3 py-2">{row.customerName || "—"}</td>
+                <td className="px-3 py-2">{row.phone || "—"}</td>
+                <td className="px-3 py-2">{row.product || "—"}</td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.length ? (
-                rows.map((row) => (
-                  <tr key={row.confirmationId} className="border-t border-black/5">
-                    <td className="px-3 py-2">{row.day || "—"}</td>
-                    <td className="px-3 py-2">
-                      <OrderLink id={row.confirmationId} number={row.wooOrderNumber} />
-                    </td>
-                    <td className="px-3 py-2">{row.customerName || "—"}</td>
-                    <td className="px-3 py-2">{row.phone || "—"}</td>
-                    <td className="px-3 py-2">{row.product || "—"}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
-                    {loading ? "جارٍ التحميل…" : empty}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={5} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
+                {loading ? "جارٍ التحميل…" : empty}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -118,8 +115,12 @@ export function MaintenanceClient() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<TabId>("bosta");
+  const [kinds, setKinds] = useState<Kind[]>(["refused", "return", "exchange"]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async (range?: { from: string; to: string }) => {
     setLoading(true);
@@ -154,19 +155,61 @@ export function MaintenanceClient() {
     void load({ from, to });
   }
 
+  async function capture() {
+    setSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch("/api/cs/maintenance/returns/capture", { method: "POST" });
+      const body = (await response.json()) as { message?: string; found?: number; saved?: number };
+      if (!response.ok) {
+        setError(body.message || "تعذر حفظ مرتجعات بوسطة.");
+        return;
+      }
+      setNotice(`اتحفظ ${body.saved ?? 0} من ${body.found ?? 0} ظاهرين على بوسطة.`);
+      await load({ from, to });
+    } catch {
+      setError("تعذر حفظ مرتجعات بوسطة.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleKind(kind: Kind) {
+    setKinds((current) => (current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]));
+  }
+
   function visible<T extends { searchText: string }>(rows: T[]) {
     return rows.filter((row) => matchesQuery(row.searchText, query));
   }
-  const bostaRows = visible(data?.bosta.rows || []);
+
+  const bostaSearched = visible(data?.bosta.rows || []);
+  const bostaRows = bostaSearched.filter((row) => kinds.includes(row.kind));
   const temimaRows = visible(data?.temima.rows || []);
   const eidRows = visible(data?.eid.rows || []);
   const momenRows = visible(data?.momen.rows || []);
+  const counts = {
+    refused: bostaSearched.filter((row) => row.kind === "refused").length,
+    return: bostaSearched.filter((row) => row.kind === "return").length,
+    exchange: bostaSearched.filter((row) => row.kind === "exchange").length,
+  };
 
   return (
     <div className="space-y-4" dir="rtl">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <span className="rounded-full bg-[#14213D] px-3 py-1 text-sm font-extrabold text-white">المرتجعات</span>
+        <div className="flex gap-2">
+          {TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              className={`rounded-full px-4 py-2 text-sm font-extrabold ${
+                tab === item.id ? "bg-[#14213D] text-white" : "bg-white text-[#14213D] ring-1 ring-black/10"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
         <form onSubmit={onSearch} className="flex flex-wrap items-end gap-2">
           <label className="text-xs font-extrabold text-[#14213D]">
@@ -206,75 +249,95 @@ export function MaintenanceClient() {
         </form>
       </div>
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
-          <header className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
-            <h2 className="text-base font-extrabold text-[#14213D]">مرتجعات بوسطة</h2>
-            <span className="text-xs font-bold text-[#14213D]/60">{bostaRows.length}</span>
-          </header>
-          {data?.bosta.error ? <p className="px-4 py-3 text-sm font-bold text-red-700">{data.bosta.error}</p> : null}
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-right text-sm">
-              <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
-                <tr>
-                  <th className="px-3 py-2">اليوم</th>
-                  <th className="px-3 py-2">البوليصة</th>
-                  <th className="px-3 py-2">الأوردر</th>
-                  <th className="px-3 py-2">العميل</th>
-                  <th className="px-3 py-2">الموبايل</th>
-                  <th className="px-3 py-2">المنتج</th>
-                  <th className="px-3 py-2">الحالة</th>
-                  <th className="px-3 py-2">الاستلام</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bostaRows.length ? (
-                  bostaRows.map((row) => (
-                    <tr key={row.trackingNumber} className="border-t border-black/5">
-                      <td className="px-3 py-2">{row.day || "—"}</td>
-                      <td className="px-3 py-2 font-bold">{row.trackingNumber}</td>
-                      <td className="px-3 py-2">
-                        <OrderLink id={row.confirmationId} number={row.wooOrderNumber} />
-                      </td>
-                      <td className="px-3 py-2">{row.customerName || "—"}</td>
-                      <td className="px-3 py-2">{row.phone || "—"}</td>
-                      <td className="px-3 py-2">{row.product || "—"}</td>
-                      <td className="px-3 py-2">{row.statusLabel}</td>
-                      <td className="px-3 py-2">{row.receivedTime || "—"}</td>
-                    </tr>
-                  ))
-                ) : (
+      {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{notice}</p> : null}
+      <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
+        {tab === "bosta" ? (
+          <>
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
+              <div className="flex flex-wrap gap-2">
+                {KINDS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleKind(item.id)}
+                    className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                      kinds.includes(item.id) ? "bg-[#E6B325] text-black" : "bg-[#F5F5F0] text-[#14213D]/50"
+                    }`}
+                  >
+                    {item.label} {counts[item.id]}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => void capture()}
+                disabled={saving}
+                className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+              >
+                {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
+              </button>
+            </header>
+            {data?.bosta.error ? <p className="px-4 py-3 text-sm font-bold text-red-700">{data.bosta.error}</p> : null}
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-right text-sm">
+                <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
                   <tr>
-                    <td colSpan={8} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
-                      {loading ? "جارٍ جلب مرتجعات بوسطة…" : "مفيش مرتجعات مستلمة في المدى."}
-                    </td>
+                    <th className="px-3 py-2">اليوم</th>
+                    <th className="px-3 py-2">البوليصة</th>
+                    <th className="px-3 py-2">الأوردر</th>
+                    <th className="px-3 py-2">العميل</th>
+                    <th className="px-3 py-2">الموبايل</th>
+                    <th className="px-3 py-2">المنتج</th>
+                    <th className="px-3 py-2">التصنيف</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <LocalTable
-          title="مرتجعات سيد تميمة"
-          rows={temimaRows}
-          loading={loading}
-          empty="مفيش إلغاء على الشيت في المدى."
-        />
-        <LocalTable
-          title="مرتجعات عيد"
-          rows={eidRows}
-          loading={loading}
-          empty="مفيش إلغاء على شيت عيد في المدى."
-          missing={data && !data.eid.found ? "المندوب مش متسجل." : ""}
-        />
-        <LocalTable
-          title="مرتجعات مؤمن"
-          rows={momenRows}
-          loading={loading}
-          empty="مفيش إلغاء على شيت مؤمن في المدى."
-          missing={data && !data.momen.found ? "المندوب مش متسجل." : ""}
-        />
-      </div>
+                </thead>
+                <tbody>
+                  {bostaRows.length ? (
+                    bostaRows.map((row) => (
+                      <tr key={row.trackingNumber} className="border-t border-black/5">
+                        <td className="px-3 py-2">{row.day || "—"}</td>
+                        <td className="px-3 py-2 font-bold">{row.trackingNumber}</td>
+                        <td className="px-3 py-2">
+                          <OrderLink id={row.confirmationId} number={row.wooOrderNumber} />
+                        </td>
+                        <td className="px-3 py-2">{row.customerName || "—"}</td>
+                        <td className="px-3 py-2">{row.phone || "—"}</td>
+                        <td className="px-3 py-2">{row.product || "—"}</td>
+                        <td className="px-3 py-2">{row.statusLabel}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
+                        {loading ? "جارٍ التحميل…" : "مفيش مرتجعات محفوظة في المدى. احفظ الظاهر على بوسطة الأول."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+        {tab === "temima" ? (
+          <LocalTable rows={temimaRows} loading={loading} empty="مفيش إلغاء على الشيت في المدى." />
+        ) : null}
+        {tab === "eid" ? (
+          <LocalTable
+            rows={eidRows}
+            loading={loading}
+            empty="مفيش إلغاء على شيت عيد في المدى."
+            missing={data && !data.eid.found ? "المندوب مش متسجل." : ""}
+          />
+        ) : null}
+        {tab === "momen" ? (
+          <LocalTable
+            rows={momenRows}
+            loading={loading}
+            empty="مفيش إلغاء على شيت مؤمن في المدى."
+            missing={data && !data.momen.found ? "المندوب مش متسجل." : ""}
+          />
+        ) : null}
+      </section>
     </div>
   );
 }

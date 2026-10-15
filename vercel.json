@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/check-stock-alerts",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/capture-bosta-returns",
+      "schedule": "15 9-12 * * *"
     }
   ]
 }

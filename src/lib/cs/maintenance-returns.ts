@@ -2,13 +2,14 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { listMonaCourierAgents } from "@/lib/cs/mona-courier";
-import { cairoClock, cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { listTemimaFreezePairs } from "@/lib/cs/temima-sheet-freeze";
 import { openSettlementMarks } from "@/lib/cs/temima-settlement";
-import { listBostaReturnedToBusiness } from "@/lib/shipping/bosta-client";
+import { listCapturedBostaReturns } from "@/lib/cs/bosta-return-capture";
+import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -30,8 +31,9 @@ export type MaintenanceBostaRow = {
   customerName: string;
   phone: string;
   product: string;
+  kind: BostaHeadingKind;
   statusLabel: string;
-  receivedTime: string;
+  reasonText: string;
   searchText: string;
 };
 
@@ -68,14 +70,6 @@ function dayOf(value: string) {
   if (!text) return "";
   if (DAY.test(text)) return text;
   return cairoYmdFromIso(text);
-}
-
-function clockLabel(value: string) {
-  const clock = cairoClock(value);
-  if (!clock) return "";
-  const hour = Math.floor(clock.minutes / 60);
-  const minute = clock.minutes % 60;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function orderDigits(value: string) {
@@ -184,32 +178,34 @@ async function matchLocalOrders(rows: Array<{ trackingNumber: string; businessRe
   return { byTracking, byNumber };
 }
 
+const KIND_LABEL: Record<BostaHeadingKind, string> = {
+  refused: "رفض استلام",
+  return: "استرجاع",
+  exchange: "استبدال",
+};
+
 export async function listBostaReceivedReturns(from: string, to: string) {
-  const listed = await listBostaReturnedToBusiness({ from, to });
-  if (!listed.ok) {
-    return { rows: [] as MaintenanceBostaRow[], error: listed.message };
-  }
-  const ranged = listed.rows.filter((row) => inRange(dayOf(row.receivedAt), from, to));
-  const matched = await matchLocalOrders(ranged);
-  const rows = ranged
+  const stored = await listCapturedBostaReturns(from, to);
+  const matched = await matchLocalOrders(stored);
+  const rows = stored
     .map((row) => {
       const local = matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
       const snap = local?.snap || {};
       const product = productLabel(snap.items);
-      const day = dayOf(row.receivedAt);
-      const wooOrderNumber = local?.wooOrderNumber || orderDigits(row.businessReference);
-      const customerName = local?.snap.customerName || row.customerName;
-      const phone = local?.snap.phone || row.phone;
+      const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
+      const customerName = snap.customerName || row.customerName;
+      const phone = snap.phone || row.phone;
       return {
         trackingNumber: row.trackingNumber,
-        confirmationId: local?.id ?? null,
-        day,
+        confirmationId: local?.id ?? row.confirmationId,
+        day: row.seenDay,
         wooOrderNumber,
         customerName,
         phone,
         product,
-        statusLabel: row.statusLabel || "رجعت للراسل",
-        receivedTime: clockLabel(row.receivedAt),
+        kind: row.kind,
+        statusLabel: KIND_LABEL[row.kind],
+        reasonText: row.reasonText,
         searchText: searchBlob([
           row.trackingNumber,
           row.businessReference,
@@ -218,6 +214,8 @@ export async function listBostaReceivedReturns(from: string, to: string) {
           phone,
           row.phone,
           product,
+          KIND_LABEL[row.kind],
+          row.reasonText,
           snap.address,
           snap.addressFull,
           snap.area,
