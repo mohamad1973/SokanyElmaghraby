@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
-import { cairoTodayYmd, cairoYmdFromIso } from "@/lib/cs/order-window";
+import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { listBostaHeadingReturns, type BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 export type StoredBostaReturn = {
@@ -97,7 +97,16 @@ export async function captureBostaHeadingReturns() {
   const listed = await listBostaHeadingReturns();
   if (!listed.ok) return { ok: false as const, message: listed.message, found: 0, saved: 0 };
   const today = cairoTodayYmd();
-  const fresh = listed.rows.filter((row) => row.sourceState !== "Received at warehouse" || cairoYmdFromIso(row.updatedAt) === today);
+  const fresh = listed.rows;
+  if (fresh.length) {
+    const keep = fresh.map((row) => row.trackingNumber);
+    const marks = keep.map(() => "?").join(", ");
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM \`CsBostaReturnCapture\` WHERE seenDay = ? AND trackingNumber NOT IN (${marks})`,
+      today,
+      ...keep,
+    );
+  }
   const matched = await matchOrders(fresh);
   let saved = 0;
   for (const row of fresh) {
