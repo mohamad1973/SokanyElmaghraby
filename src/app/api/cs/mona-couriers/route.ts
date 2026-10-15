@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { assignMonaOrder, loadMonaDesk, markMonaLarge, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust, saveMonaDayAccount } from "@/lib/cs/mona-courier";
+import { assignMonaOrder, loadMonaDesk, markMonaLarge, markMonaOutcome, markMonaSupervisorResult, recordMonaRemit, saveMonaCourierAdjust, saveMonaDayAccount, unassignMonaOrder } from "@/lib/cs/mona-courier";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function accessOrNull() {
@@ -52,6 +52,12 @@ export async function POST(request: Request) {
   if (body.action === "assign") {
     if (!access.supervisor) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     const result = await assignMonaOrder(String(body.orderNumber || ""), Number(body.courierId));
+    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "unassign") {
+    if (!access.viewer.isAdmin) return NextResponse.json({ message: "الشيل من حساب الأدمن." }, { status: 403 });
+    const result = await unassignMonaOrder(Number(body.confirmationId), Number(body.courierId));
     return NextResponse.json(result, { status: result.ok ? 200 : 400 });
   }
 

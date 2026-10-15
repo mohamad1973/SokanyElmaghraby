@@ -471,6 +471,7 @@ function CourierInvoice({
   onDraft,
   onSaveDay,
   onOfficial,
+  onUnassign,
   onLarge,
   onInvoice,
   query,
@@ -488,6 +489,7 @@ function CourierInvoice({
     amounts: { collected: number | null; shipping: number | null; remitted: number | null },
   ) => void;
   onOfficial?: (confirmationId: number, result: "delivered" | "refused" | "postponed" | null) => void;
+  onUnassign?: (confirmationId: number) => void;
   onLarge?: (confirmationId: number, isLarge: boolean) => void;
   onInvoice?: (confirmationId: number, invoiceNumber: string) => void;
   query: string;
@@ -572,8 +574,22 @@ function CourierInvoice({
                       <td className="border border-[#14213D]/25 px-2 py-2 text-center font-extrabold tabular-nums">
                         {serials.get(order.id) || ""}
                       </td>
-                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
-                        {order.wooOrderNumber}
+                      <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold">
+                        <div className="flex items-center justify-between gap-2">
+                          <span dir="ltr">{order.wooOrderNumber}</span>
+                          {canEditMoney && onUnassign ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!window.confirm(`تشيل الأوردر ${order.wooOrderNumber} من الشيت؟`)) return;
+                                onUnassign(order.id);
+                              }}
+                              className="rounded-lg border border-red-200 px-2 py-1 text-[11px] font-extrabold text-red-700"
+                            >
+                              شيل
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2">
                         <InvoiceField
@@ -1121,6 +1137,7 @@ export function MonaCourierPanel({
                   });
                 }}
                 onLarge={(confirmationId, isLarge) => void post({ action: "large", confirmationId, isLarge })}
+                onUnassign={(confirmationId) => void post({ action: "unassign", confirmationId, courierId: line.courierId })}
               />
             ))
         : null}

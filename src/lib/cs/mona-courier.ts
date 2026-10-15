@@ -595,6 +595,27 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
   return { ok: true as const, message: "اتضاف الأوردر للمندوب." };
 }
 
+export async function unassignMonaOrder(confirmationId: number, courierId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متاحة." };
+  if (!Number.isInteger(confirmationId) || confirmationId <= 0 || !Number.isInteger(courierId) || courierId <= 0) {
+    return { ok: false as const, message: "الأوردر مش عند المندوب." };
+  }
+  await ensureMonaLargeColumn();
+  const changed = await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET monaCourierId = NULL,
+        monaAssignedAt = NULL,
+        monaOutcome = NULL,
+        monaRefusalReason = NULL,
+        monaSupervisorResult = NULL,
+        monaIsLarge = false
+    WHERE id = ${confirmationId} AND monaCourierId = ${courierId}
+  `;
+  if (!Number(changed)) return { ok: false as const, message: "الأوردر مش عند المندوب." };
+  return { ok: true as const, message: "اتشال الأوردر من الشيت." };
+}
+
 export async function markMonaOutcome(input: {
   confirmationId: number;
   courierId: number;
