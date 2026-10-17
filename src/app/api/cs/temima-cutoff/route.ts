@@ -4,6 +4,7 @@ import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { listTemimaCutoffs, lockTemimaCutoff } from "@/lib/cs/temima-cutoff";
 import { captureTemimaSheetFreeze } from "@/lib/cs/temima-sheet-edits";
+import { hasTemimaFreezeDay } from "@/lib/cs/temima-sheet-freeze";
 import { requireCsSession } from "@/lib/session-guards";
 
 async function viewerOrNull() {
@@ -33,6 +34,10 @@ export async function POST(request: Request) {
   const result = body.now
     ? await lockTemimaCutoff(undefined, viewer.isAdmin)
     : await lockTemimaCutoff(body.minutes, viewer.isAdmin);
-  if (result.ok && !result.frozen) await captureTemimaSheetFreeze(result.dayYmd);
-  return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: 400 });
+  }
+  if (!result.frozen) await captureTemimaSheetFreeze(result.dayYmd);
+  const frozen = await hasTemimaFreezeDay(result.dayYmd);
+  return NextResponse.json({ ...result, frozen });
 }

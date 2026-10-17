@@ -656,7 +656,7 @@ function TemimaCutoffBox({
           disabled={busy || locked}
           onClick={() => void onLockNow()}
           className={`h-9 rounded-lg px-3 text-xs font-extrabold disabled:opacity-60 ${
-            closed ? "bg-red-700 text-white" : "bg-[#FCA311] text-black"
+            closed ? "bg-red-600 text-white ring-2 ring-red-800" : "bg-[#FCA311] text-black"
           }`}
         >
           {busy ? "جاري التحميل" : "الآن"}
@@ -794,20 +794,28 @@ export function CsQueueClient({
       setMessage(data.message || "تعذر حفظ الوقت.");
       return;
     }
+    const dayYmd = data.dayYmd as string;
     if (data.frozen && !canReopenTemimaSheet) {
-      setFrozenDays((prev) => (prev.includes(data.dayYmd as string) ? prev : [...prev, data.dayYmd as string]));
+      setCutoffs((prev) => {
+        if (prev.some((row) => row.dayYmd === dayYmd)) return prev;
+        return [...prev, { dayYmd, minutes: data.minutes as number }];
+      });
+      setFrozenDays((prev) => (prev.includes(dayYmd) ? prev : [...prev, dayYmd]));
       setMessage("الشيت متقفل.");
       return;
     }
     setCutoffs((prev) => {
-      const next = prev.filter((row) => row.dayYmd !== data.dayYmd);
-      next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
+      const next = prev.filter((row) => row.dayYmd !== dayYmd);
+      next.push({ dayYmd, minutes: data.minutes as number });
       return next;
     });
-    setFrozenDays((prev) => (prev.includes(data.dayYmd as string) ? prev : [...prev, data.dayYmd as string]));
     if (isCourierSupervisor) await loadSayedSheet(applied);
+    // Keep red lock state even if the sheet reload omits the freeze day briefly.
+    setFrozenDays((prev) => (prev.includes(dayYmd) ? prev : [...prev, dayYmd]));
     const clock = formatCutoffClock12(data.minutes);
-    setMessage(hadToday ? `اتعدل وقت قفل الشيت إلى ${clock}.` : `شيت سيد اتقفل النهاردة عند ${clock}.`);
+    setMessage(
+      hadToday ? `اتقفل وتجمد الشيت عند ${clock}.` : `شيت سيد اتقفل وتجمد النهاردة عند ${clock}.`,
+    );
   }
 
   const syncingRef = useRef(false);
@@ -1227,8 +1235,11 @@ export function CsQueueClient({
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
-  const sheetFrozen = Boolean(sheetDay) && frozenDays.includes(sheetDay);
-  const todayFrozen = frozenDays.includes(cairoTodayYmd());
+  const todayYmd = cairoTodayYmd();
+  const dayIsFrozen = (dayYmd: string) =>
+    Boolean(dayYmd) && (frozenDays.includes(dayYmd) || cutoffs.some((row) => row.dayYmd === dayYmd));
+  const sheetFrozen = dayIsFrozen(sheetDay);
+  const todayFrozen = dayIsFrozen(todayYmd);
   const sheetEditsLocked = sheetFrozen && !canEditTemimaSheet && !canReopenTemimaSheet;
   const liveSheetSerial = useMemo(() => {
     const ordered = [...items].sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
