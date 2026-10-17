@@ -40,7 +40,8 @@ type BostaRow = Omit<LocalRow, "confirmationId"> & {
   statusLabel: string;
   reasonText: string;
   review: Review | null;
-  linkedProduct: LinkedProduct | null;
+  orderProduct: string;
+  linkedProducts: LinkedProduct[];
 };
 
 type CourierSection = {
@@ -132,6 +133,11 @@ function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loadi
 
 function productText(product: LinkedProduct) {
   return [product.productName, product.productCode].filter(Boolean).join(" · ");
+}
+
+function productsLabel(products: LinkedProduct[], orderProduct: string) {
+  if (products.length) return products.map(productText).join("، ");
+  return orderProduct || "";
 }
 
 function ProductSearch({
@@ -483,21 +489,58 @@ export function MaintenanceClient() {
     setKinds((current) => (current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]));
   }
 
-  function rememberProduct(trackingNumber: string, linkedProduct: LinkedProduct) {
-    const product = productText(linkedProduct);
+  function patchProducts(trackingNumber: string, linkedProducts: LinkedProduct[]) {
     setData((current) => {
       if (!current) return current;
       return {
         ...current,
         bosta: {
           ...current.bosta,
-          rows: current.bosta.rows.map((row) =>
-            row.trackingNumber === trackingNumber ? { ...row, linkedProduct, product, searchText: `${row.searchText} ${product}` } : row,
-          ),
+          rows: current.bosta.rows.map((row) => {
+            if (row.trackingNumber !== trackingNumber) return row;
+            const product = productsLabel(linkedProducts, row.orderProduct);
+            return { ...row, linkedProducts, product, searchText: `${row.searchText} ${product}` };
+          }),
         },
       };
     });
-    setActive((current) => (current && current.trackingNumber === trackingNumber ? { ...current, linkedProduct, product } : current));
+    setActive((current) => {
+      if (!current || current.trackingNumber !== trackingNumber) return current;
+      const product = productsLabel(linkedProducts, current.orderProduct);
+      return { ...current, linkedProducts, product };
+    });
+  }
+
+  function rememberProduct(trackingNumber: string, linkedProduct: LinkedProduct) {
+    const current = data?.bosta.rows.find((row) => row.trackingNumber === trackingNumber);
+    const existing = current?.linkedProducts || [];
+    const next = existing.some((item) => item.productId === linkedProduct.productId)
+      ? existing.map((item) => (item.productId === linkedProduct.productId ? linkedProduct : item))
+      : [...existing, linkedProduct];
+    patchProducts(trackingNumber, next);
+  }
+
+  async function removeProduct(trackingNumber: string, productId: number) {
+    setError("");
+    try {
+      const response = await fetch("/api/cs/maintenance/returns/product", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackingNumber, productId }),
+      });
+      const body = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        setError(body.message || "تعذر شيل المنتج.");
+        return;
+      }
+      const current = data?.bosta.rows.find((row) => row.trackingNumber === trackingNumber);
+      patchProducts(
+        trackingNumber,
+        (current?.linkedProducts || []).filter((item) => item.productId !== productId),
+      );
+    } catch {
+      setError("تعذر شيل المنتج.");
+    }
   }
 
   function rememberReview(trackingNumber: string, review: Review) {
@@ -667,17 +710,37 @@ export function MaintenanceClient() {
                         <td className="px-3 py-2 font-extrabold">{row.wooOrderNumber || "—"}</td>
                         <td className="px-3 py-2">{row.customerName || "—"}</td>
                         <td className="px-3 py-2">{row.phone || "—"}</td>
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setLinking(row);
-                            }}
-                            className="text-right font-bold text-[#14213D] underline"
-                          >
-                            {row.product || "إضافة منتج"}
-                          </button>
+                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {row.linkedProducts.length
+                              ? row.linkedProducts.map((item) => (
+                                  <span
+                                    key={item.productId}
+                                    className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-bold text-[#14213D]"
+                                  >
+                                    <span className="truncate">{productText(item)}</span>
+                                    <button
+                                      type="button"
+                                      aria-label="شيل المنتج"
+                                      onClick={() => void removeProduct(row.trackingNumber, item.productId)}
+                                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-sm font-extrabold text-red-700 ring-1 ring-red-200"
+                                    >
+                                      −
+                                    </button>
+                                  </span>
+                                ))
+                              : row.orderProduct
+                                ? <span className="text-sm font-bold text-[#14213D]">{row.orderProduct}</span>
+                                : null}
+                            <button
+                              type="button"
+                              aria-label="إضافة منتج"
+                              onClick={() => setLinking(row)}
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#14213D] text-base font-extrabold text-white"
+                            >
+                              +
+                            </button>
+                          </div>
                         </td>
                         <td className="px-3 py-2">{row.statusLabel}</td>
                         <td className="px-3 py-2">{row.review?.label || "—"}</td>
