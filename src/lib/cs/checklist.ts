@@ -138,8 +138,36 @@ export type CsChecklistAnswerInput = {
   yesNo?: "yes" | "no" | null;
 };
 
-export function validateChecklistAnswers(answers: CsChecklistAnswerInput[]) {
+export type ValidateChecklistOpts = {
+  /** When set (or answered as bosta), full card checkmarks are not required for finalize. */
+  shippingCompany?: string | null;
+};
+
+/**
+ * Temima: every required checklist card must be completed.
+ * Bosta: only shipping company is required — agents save from the order page without marking every card.
+ */
+export function validateChecklistAnswers(
+  answers: CsChecklistAnswerInput[],
+  opts?: ValidateChecklistOpts,
+) {
   const byKey = new Map(answers.map((a) => [a.itemKey, a]));
+  const shipping =
+    String(opts?.shippingCompany || byKey.get("shipping_company")?.value || "")
+      .trim()
+      .toLowerCase() || null;
+
+  if (shipping === "bosta") {
+    if (opts?.shippingCompany === "bosta") {
+      return { ok: true, missing: [] as string[] };
+    }
+    const ship = byKey.get("shipping_company");
+    if (!ship?.confirmed || String(ship.value || "").trim() !== "bosta") {
+      return { ok: false, missing: ["shipping_company"] };
+    }
+    return { ok: true, missing: [] as string[] };
+  }
+
   const missing: string[] = [];
 
   for (const item of CS_CHECKLIST_ITEMS) {

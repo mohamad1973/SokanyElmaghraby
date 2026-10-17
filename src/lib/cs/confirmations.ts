@@ -1559,7 +1559,9 @@ export async function saveCsConfirmation(input: {
     else answersForValidation.push(filled);
   }
 
-  const validation = validateChecklistAnswers(answersForValidation);
+  const validation = validateChecklistAnswers(answersForValidation, {
+    shippingCompany,
+  });
   if (!validation.ok) {
     return {
       ok: false as const,

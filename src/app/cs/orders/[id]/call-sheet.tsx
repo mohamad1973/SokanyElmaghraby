@@ -589,11 +589,17 @@ export function CsCallSheet({
         setMissing(["shipping_company"]);
         return;
       }
-      const validation = validateChecklistAnswers(payloadAnswers);
+      const validation = validateChecklistAnswers(payloadAnswers, {
+        shippingCompany: lockedShipping,
+      });
       setMissing(validation.missing);
       if (!validation.ok) {
         setSaving(false);
-        setMessage("استكمل البنود الناقصة قبل الحفظ النهائي.");
+        setMessage(
+          lockedShipping === "bosta"
+            ? "لازم شركة الشحن تكون بوسطة قبل الحفظ النهائي."
+            : "استكمل البنود الناقصة قبل الحفظ النهائي.",
+        );
         return;
       }
       if (lockedShipping === "bosta" && !waybillPrinted) {
@@ -1334,6 +1340,11 @@ export function CsCallSheet({
           <p className="text-xs font-bold text-[#14213D]/60">
             {when.absolute} · {when.relative}
           </p>
+          {lockedShipping === "bosta" && !showFollowUp ? (
+            <p className="text-xs font-bold text-[#14213D]/70">
+              بوسطة: الحفظ من الصفحة دي، ومش لازم تعليم كل الكروت — اطبعي البوليصة وبعدين حفظ نهائي.
+            </p>
+          ) : null}
           {savedWhen ? (
             <p className="text-xs font-bold text-[#14213D]/70">حُفظ {savedWhen.absolute}</p>
           ) : null}

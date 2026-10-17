@@ -3,7 +3,6 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
-import { resolveCsViewer, setCsHandedToCarrier } from "@/lib/cs/confirmations";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 
@@ -63,6 +62,7 @@ function productLabel(items: unknown) {
     .join("، ");
 }
 
+/** Oversight list only — save happens inside the order page, not from this board. */
 export async function listBostaBoard(from: string, to: string) {
   const prisma = getPrismaClient();
   if (!prisma) return [] as BostaBoardRow[];
@@ -109,34 +109,4 @@ export async function listBostaBoard(from: string, to: string) {
       confirmedAt: row.confirmedAt ? row.confirmedAt.toISOString() : "",
     };
   });
-}
-
-/** One-click board save: mark handed to Bosta without opening the order page. */
-export async function saveBostaBoardRow(confirmationId: number, agentId: number) {
-  const prisma = getPrismaClient();
-  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  await ensureCsTables();
-  const viewer = await resolveCsViewer(agentId);
-  const allowed = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
-  if (!allowed) return { ok: false as const, message: "للأدمن ومشرفة خدمة العملاء فقط." };
-  if (!Number.isInteger(confirmationId) || confirmationId <= 0) {
-    return { ok: false as const, message: "الأوردر غير موجود." };
-  }
-  const row = await prisma.csOrderConfirmation.findUnique({
-    where: { id: confirmationId },
-    select: { id: true, status: true, shippingCompany: true, handedToCarrier: true },
-  });
-  if (!row) return { ok: false as const, message: "الأوردر غير موجود." };
-  if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
-    return { ok: false as const, message: "الأوردر لازم يكون متأكد الأول." };
-  }
-  if (row.shippingCompany !== "bosta") {
-    return { ok: false as const, message: "الأوردر مش على بوسطة." };
-  }
-  if (row.handedToCarrier) {
-    return { ok: true as const, message: "الأوردر متسجل على اللوحة.", handedToCarrier: true };
-  }
-  const result = await setCsHandedToCarrier({ id: confirmationId, handedToCarrier: true, agentId });
-  if (!result.ok) return { ok: false as const, message: result.message };
-  return { ok: true as const, message: "اتحفظ من اللوحة.", handedToCarrier: true };
 }

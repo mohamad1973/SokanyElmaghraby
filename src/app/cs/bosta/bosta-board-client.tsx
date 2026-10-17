@@ -27,11 +27,9 @@ export function BostaBoardClient() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
-  const [pendingOnly, setPendingOnly] = useState(true);
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState(0);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
   const load = useCallback(async (range?: { from: string; to: string }) => {
     setLoading(true);
@@ -66,36 +64,6 @@ export function BostaBoardClient() {
     void load({ from, to });
   }
 
-  async function saveRow(id: number) {
-    setSavingId(id);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch("/api/cs/bosta-board", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmationId: id }),
-      });
-      const body = (await response.json()) as { message?: string; handedToCarrier?: boolean };
-      if (!response.ok) {
-        setError(body.message || "تعذر الحفظ.");
-        return;
-      }
-      setNotice(body.message || "اتحفظ.");
-      setData((current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          rows: current.rows.map((row) => (row.id === id ? { ...row, handedToCarrier: true } : row)),
-        };
-      });
-    } catch {
-      setError("تعذر الحفظ.");
-    } finally {
-      setSavingId(0);
-    }
-  }
-
   const q = query.trim().toLowerCase();
   const digits = q.replace(/\D/g, "");
   const rows = (data?.rows || []).filter((row) => {
@@ -124,7 +92,7 @@ export function BostaBoardClient() {
         <div>
           <h1 className="text-lg font-extrabold text-[#14213D]">لوحة بوسطة</h1>
           <p className="text-xs font-bold text-[#14213D]/70">
-            احفظ من الصف من غير فتح الأوردر. افتح الأوردر فقط لو هتعدّل العنوان أو المحافظة أو المنطقة.
+            للرقابة والمتابعة. الحفظ من داخل صفحة الأوردر — ومش لازم تعليم كل الكروت زي تميمة.
           </p>
         </div>
         <form onSubmit={onSearch} className="flex flex-wrap items-end gap-2">
@@ -157,7 +125,7 @@ export function BostaBoardClient() {
           </label>
           <label className="flex items-center gap-2 pb-2 text-xs font-extrabold text-[#14213D]">
             <input type="checkbox" checked={pendingOnly} onChange={(event) => setPendingOnly(event.target.checked)} />
-            اللي لسه متحفظتش
+            اللي لسه متسلمتش للشحن
           </label>
           <button
             type="submit"
@@ -169,7 +137,6 @@ export function BostaBoardClient() {
         </form>
       </div>
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
-      {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{notice}</p> : null}
       <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
         <div className="overflow-x-auto">
           <table className="min-w-full text-right text-sm">
@@ -182,7 +149,8 @@ export function BostaBoardClient() {
                 <th className="px-3 py-2">المنتج</th>
                 <th className="px-3 py-2">البوليصة</th>
                 <th className="px-3 py-2">حالة بوسطة</th>
-                <th className="px-3 py-2">حفظ</th>
+                <th className="px-3 py-2">التسليم</th>
+                <th className="px-3 py-2">الأوردر</th>
               </tr>
             </thead>
             <tbody>
@@ -195,13 +163,7 @@ export function BostaBoardClient() {
                       {row.phone || "—"}
                     </td>
                     <td className="px-3 py-2">
-                      <p className="font-bold">{[row.governorate, row.area].filter(Boolean).join(" · ") || "—"}</p>
-                      <Link
-                        href={`/cs/orders/${row.id}`}
-                        className="text-xs font-extrabold text-[#14213D] underline"
-                      >
-                        تعديل العنوان
-                      </Link>
+                      {[row.governorate, row.area].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td className="max-w-[12rem] truncate px-3 py-2">{row.product || "—"}</td>
                     <td className="px-3 py-2">
@@ -216,24 +178,27 @@ export function BostaBoardClient() {
                     <td className="px-3 py-2">
                       {row.handedToCarrier ? (
                         <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-900">
-                          محفوظ
+                          اتسلّم
                         </span>
                       ) : (
-                        <button
-                          type="button"
-                          disabled={savingId === row.id}
-                          onClick={() => void saveRow(row.id)}
-                          className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
-                        >
-                          {savingId === row.id ? "جارٍ الحفظ…" : "حفظ"}
-                        </button>
+                        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-900">
+                          لسه
+                        </span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/cs/orders/${row.id}`}
+                        className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white"
+                      >
+                        فتح للحفظ
+                      </Link>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                  <td colSpan={9} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
                     {loading ? "جارٍ التحميل…" : "مفيش أوردرات بوسطة في المدى."}
                   </td>
                 </tr>
