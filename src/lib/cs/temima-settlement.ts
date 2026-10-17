@@ -104,6 +104,8 @@ export function cashAmountOf(row: {
   customerSnapshot: unknown;
   depositAmount: unknown;
   depositPaid: boolean | null;
+  orderTotalDelta?: unknown;
+  discountApprovalStatus?: string | null;
 }) {
   const snap = (row.customerSnapshot || {}) as {
     total?: string;
@@ -122,8 +124,14 @@ export function cashAmountOf(row: {
       datePaid: snap.datePaid,
     });
   if (state !== "cod") return 0;
+  const delta = Number(row.orderTotalDelta);
+  const discountOk =
+    String(row.discountApprovalStatus || "").toLowerCase() === "approved" &&
+    Number.isFinite(delta) &&
+    delta < 0;
+  const total = Math.max(0, money(snap.total) + (discountOk ? delta : 0));
   const deposit = row.depositPaid ? money(row.depositAmount) : 0;
-  return Math.max(0, money(snap.total) - deposit);
+  return Math.max(0, total - deposit);
 }
 
 function settlementSplit(

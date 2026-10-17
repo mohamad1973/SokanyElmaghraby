@@ -197,11 +197,19 @@ export function sheetCollectedSplit(input: {
   depositAmount?: number | null;
   depositPaid?: boolean | null;
   depositApprovalStatus?: string | null;
+  orderTotalDelta?: number | null;
+  discountApprovalStatus?: string | null;
   settlementDepositOverride?: number | null;
   /** Open Temima settlement keeps a cancelled sheet order at its value. */
   keepCancelledValue?: boolean;
 }) {
-  const total = Math.max(0, Number(input.total) || 0);
+  const base = Math.max(0, Number(input.total) || 0);
+  const delta = Number(input.orderTotalDelta);
+  const discountOk =
+    String(input.discountApprovalStatus || "").toLowerCase() === "approved" &&
+    Number.isFinite(delta) &&
+    delta < 0;
+  const total = Math.max(0, base + (discountOk ? delta : 0));
   const status = String(input.wooStatus || "").toLowerCase().trim();
   const cancelled = status === "cancelled" || status === "canceled" || status === "failed" || status === "refunded" || status === "trash";
   const override = input.settlementDepositOverride;

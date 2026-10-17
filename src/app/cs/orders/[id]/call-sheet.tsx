@@ -83,6 +83,7 @@ type Props = {
   depositPaidAt?: string | null;
   depositProofUrl?: string | null;
   depositApprovalStatus?: string | null;
+  discountApprovalStatus?: string | null;
   postCancel?: {
     invoice: "before" | "after" | "";
     systemNo: string | null;
@@ -344,6 +345,7 @@ export function CsCallSheet({
   depositToMethod: initialDepositToMethod,
   depositPaidAt: initialDepositPaidAt,
   depositApprovalStatus: initialDepositApprovalStatus,
+  discountApprovalStatus: initialDiscountApprovalStatus,
   postCancel,
   confirmedAt,
   confirmationEditedAt,
@@ -484,8 +486,29 @@ export function CsCallSheet({
   const [postSystemNo, setPostSystemNo] = useState(() => String(postCancel?.systemNo || "").trim());
   const [postRefundPaid, setPostRefundPaid] = useState(Boolean(postCancel?.refundPaid));
   const initialDelta = splitOrderTotalDelta(initialOrderTotalDelta);
-  const [totalSign, setTotalSign] = useState<"plus" | "minus">(initialDelta.sign);
-  const [totalAdjustAmount, setTotalAdjustAmount] = useState(initialDelta.amount);
+  const [discountAmount, setDiscountAmount] = useState(() =>
+    initialDelta.sign === "minus" ? initialDelta.amount : "",
+  );
+  const [discountApprovalStatus, setDiscountApprovalStatus] = useState(() => {
+    const s = String(initialDiscountApprovalStatus || "").trim().toLowerCase();
+    if (s === "pending" || s === "approved" || s === "rejected") return s;
+    return initialDelta.sign === "minus" && initialDelta.amount ? "approved" : "none";
+  });
+  const [requestingDiscountApproval, setRequestingDiscountApproval] = useState(false);
+  const [extraPhoneOpen, setExtraPhoneOpen] = useState(() => {
+    const extra = initialAnswers.find((a) => a.itemKey === "extra_phone");
+    if (String(extra?.value || "").trim()) return true;
+    const legacy = initialAnswers.find((a) => a.itemKey === "alt_phone");
+    return Boolean(legacy && legacy.value !== "no" && String(legacy.note || "").trim());
+  });
+  const [extraPhone, setExtraPhone] = useState(() => {
+    const extra = initialAnswers.find((a) => a.itemKey === "extra_phone");
+    const fromExtra = String(extra?.value || "").trim();
+    if (fromExtra) return fromExtra;
+    const legacy = initialAnswers.find((a) => a.itemKey === "alt_phone");
+    if (legacy && legacy.value !== "no") return String(legacy.note || "").trim();
+    return "";
+  });
   const [missing, setMissing] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [itemQuery, setItemQuery] = useState("");
@@ -516,13 +539,9 @@ export function CsCallSheet({
   const savedWhen = confirmedAt ? formatCairoOrderDateTime(confirmedAt) : null;
   const editedWhen = confirmationEditedAt ? formatCairoOrderDateTime(confirmationEditedAt) : null;
   const wooTotal = Number(String(snapshot?.total || "").replace(/,/g, ""));
-  const adjustAbs = Number(String(totalAdjustAmount).replace(/,/g, "").trim());
+  const discountAbs = Number(String(discountAmount).replace(/,/g, "").trim());
   const signedDelta =
-    !String(totalAdjustAmount).trim() || !Number.isFinite(adjustAbs) || adjustAbs <= 0
-      ? 0
-      : totalSign === "minus"
-        ? -adjustAbs
-        : adjustAbs;
+    !String(discountAmount).trim() || !Number.isFinite(discountAbs) || discountAbs <= 0 ? 0 : -discountAbs;
   const adjustedTotal = Math.max(0, (Number.isFinite(wooTotal) ? wooTotal : 0) + signedDelta);
   const typedDeposit = Number(depositAmount.replace(/,/g, "").trim());
   const depositPayLabel =
@@ -544,29 +563,36 @@ export function CsCallSheet({
     paymentState === "paid" && /fawry|فورى|فوري/i.test(`${snapshot?.paymentMethod || ""} ${snapshot?.paymentMethodId || ""}`);
   const showCancelCard = showFollowUp && (!fu.handedToCarrier || postRefundPaid);
 
-  const payloadAnswers: CsChecklistAnswerInput[] = useMemo(
-    () =>
-      CS_CHECKLIST_ITEMS.map((item) => {
-        const state = answers[item.key];
-        if (item.key === "shipping_company" && lockedShipping) {
-          return {
-            itemKey: item.key,
-            confirmed: true,
-            value: lockedShipping,
-            note: null,
-            yesNo: null,
-          };
-        }
+  const payloadAnswers: CsChecklistAnswerInput[] = useMemo(() => {
+    const base = CS_CHECKLIST_ITEMS.map((item) => {
+      const state = answers[item.key];
+      if (item.key === "shipping_company" && lockedShipping) {
         return {
           itemKey: item.key,
-          confirmed: state.confirmed,
-          value: item.type === "yes_no_extra" ? state.yesNo || null : state.value || null,
-          note: item.type === "yes_no_extra" ? state.note || null : state.note || null,
-          yesNo: item.type === "yes_no_extra" ? state.yesNo || null : null,
+          confirmed: true,
+          value: lockedShipping,
+          note: null,
+          yesNo: null,
         };
-      }),
-    [answers, lockedShipping],
-  );
+      }
+      return {
+        itemKey: item.key,
+        confirmed: state.confirmed,
+        value: item.type === "yes_no_extra" ? state.yesNo || null : state.value || null,
+        note: item.type === "yes_no_extra" ? state.note || null : state.note || null,
+        yesNo: item.type === "yes_no_extra" ? state.yesNo || null : null,
+      };
+    });
+    const phone = extraPhoneOpen ? extraPhone.trim() : "";
+    base.push({
+      itemKey: "extra_phone",
+      confirmed: Boolean(phone),
+      value: phone || null,
+      note: null,
+      yesNo: null,
+    });
+    return base;
+  }, [answers, lockedShipping, extraPhone, extraPhoneOpen]);
 
   function update(key: string, patch: Partial<AnswerState>) {
     setAnswers((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
@@ -648,6 +674,25 @@ export function CsCallSheet({
           return;
         }
       }
+      const typedDiscount = Number(discountAmount.replace(/,/g, "").trim());
+      const hasDiscount = discountAmount.trim() !== "" && Number.isFinite(typedDiscount) && typedDiscount > 0;
+      if (hasDiscount) {
+        const approvedDiscount = Math.abs(Number(initialOrderTotalDelta));
+        const matchesApproved =
+          discountApprovalStatus === "approved" &&
+          Number.isFinite(approvedDiscount) &&
+          approvedDiscount > 0 &&
+          Math.abs(approvedDiscount - typedDiscount) < 0.001;
+        if (!matchesApproved) {
+          setSaving(false);
+          setMessage(
+            discountApprovalStatus === "approved"
+              ? "اطلب الموافقة على قيمة الخصم الجديدة."
+              : "لا يُحفظ الأوردر قبل موافقة الخصم.",
+          );
+          return;
+        }
+      }
     }
 
     const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
@@ -667,7 +712,12 @@ export function CsCallSheet({
         depositInstapayName: depositPayMethod === "instapay" ? depositInstapayName.trim() || null : null,
         depositToPhone: to.phone || null,
         depositToMethod: to.method || null,
-        orderTotalDelta: null,
+        orderTotalDelta:
+          discountApprovalStatus === "approved" && signedDelta < 0
+            ? signedDelta
+            : discountAmount.trim() === ""
+              ? null
+              : undefined,
         postCancel:
           showFollowUp && postRefundPaid
             ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
@@ -959,12 +1009,43 @@ export function CsCallSheet({
                     className={`${inputCls} resize-none leading-5`}
                   />
                 ) : item.type === "confirm_text" ? (
-                  <input
-                    disabled={locked}
-                    value={state.value}
-                    onChange={(e) => update(item.key, { value: e.target.value })}
-                    className={inputCls}
-                  />
+                  <>
+                    <div className="flex items-center gap-1">
+                      <input
+                        disabled={locked}
+                        value={state.value}
+                        onChange={(e) => update(item.key, { value: e.target.value })}
+                        className={`${inputCls} flex-1`}
+                      />
+                      {item.key === "primary_phone" && !locked ? (
+                        <button
+                          type="button"
+                          aria-label={extraPhoneOpen ? "إزالة التليفون الإضافي" : "إضافة تليفون آخر"}
+                          onClick={() => {
+                            if (extraPhoneOpen) {
+                              setExtraPhoneOpen(false);
+                              setExtraPhone("");
+                            } else {
+                              setExtraPhoneOpen(true);
+                            }
+                          }}
+                          className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#14213D] text-sm font-extrabold text-white"
+                        >
+                          {extraPhoneOpen ? "−" : "+"}
+                        </button>
+                      ) : null}
+                    </div>
+                    {item.key === "primary_phone" && extraPhoneOpen ? (
+                      <input
+                        disabled={locked}
+                        dir="ltr"
+                        value={extraPhone}
+                        onChange={(e) => setExtraPhone(e.target.value)}
+                        placeholder="تليفون آخر"
+                        className={inputCls}
+                      />
+                    ) : null}
+                  </>
                 ) : null}
                 {item.type === "choice" ? (
                   <select
@@ -1022,6 +1103,79 @@ export function CsCallSheet({
             </div>
           );
         });
+  }
+
+  function discountCard(locked: boolean) {
+    return (
+      <div className="flex h-full flex-col justify-between rounded-xl bg-[#FCA311]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#FCA311]">
+        <div>
+          <p className="text-xs font-extrabold text-[#14213D]">خصم</p>
+          <p className="mt-0.5 text-[10px] font-bold text-[#14213D]/60">اختياري — بموافقة الأدمن</p>
+          <input
+            disabled={locked || discountApprovalStatus === "pending"}
+            dir="ltr"
+            inputMode="decimal"
+            value={discountAmount}
+            onChange={(e) => {
+              setDiscountAmount(e.target.value.replace(/[^\d.]/g, ""));
+              if (discountApprovalStatus === "approved" || discountApprovalStatus === "rejected") {
+                setDiscountApprovalStatus("none");
+              }
+            }}
+            placeholder="قيمة الخصم"
+            className={`${inputCls} mt-1`}
+          />
+          <p className="mt-1 text-[10px] font-bold text-[#14213D]/70">
+            بعد الخصم: {Number.isFinite(adjustedTotal) ? adjustedTotal : "—"} ج.م
+          </p>
+          <div className="mt-1 rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
+            {discountApprovalStatus === "pending"
+              ? "بانتظار موافقة الأدمن"
+              : discountApprovalStatus === "approved"
+                ? "معتمد"
+                : discountApprovalStatus === "rejected"
+                  ? "مرفوض"
+                  : "لم يُطلب موافقة بعد"}
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={
+            locked ||
+            requestingDiscountApproval ||
+            discountApprovalStatus === "pending" ||
+            !discountAmount.trim() ||
+            !(Number(discountAmount.replace(/,/g, "")) > 0)
+          }
+          onClick={() => {
+            void (async () => {
+              setRequestingDiscountApproval(true);
+              setMessage("");
+              const res = await fetch(`/api/cs/confirmations/${confirmationId}/discount-approval`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ discountAmount: discountAmount.trim() }),
+              });
+              const data = (await res.json()) as { message?: string };
+              setRequestingDiscountApproval(false);
+              if (!res.ok) {
+                setMessage(data.message || "تعذر إرسال طلب الخصم.");
+                return;
+              }
+              setDiscountApprovalStatus("pending");
+              setMessage("تم إرسال طلب الخصم للأدمن.");
+            })();
+          }}
+          className="mt-2 w-full rounded-lg bg-[#FCA311] px-2 py-1.5 text-[11px] font-extrabold text-black disabled:opacity-50"
+        >
+          {requestingDiscountApproval
+            ? "جاري التحميل"
+            : discountApprovalStatus === "pending"
+              ? "بانتظار الرد…"
+              : "طلب موافقه"}
+        </button>
+      </div>
+    );
   }
 
   function depositCard() {
@@ -1451,6 +1605,7 @@ export function CsCallSheet({
       {!showFollowUp ? (
         <div className="grid min-h-0 flex-1 content-stretch gap-2 sm:grid-cols-2 lg:auto-rows-fr lg:grid-cols-3">
           {infoCards(false)}
+          {discountCard(false)}
           {lockedShipping === "bosta" ? bostaShipmentCard() : null}
         </div>
       ) : (

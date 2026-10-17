@@ -6,6 +6,7 @@ import {
   markAdminNotificationsRead,
 } from "@/lib/admin-notifications";
 import { listPendingDepositApprovals } from "@/lib/cs/deposit-approvals";
+import { listPendingDiscountApprovals } from "@/lib/cs/discount-approvals";
 import { requireAdminSession } from "@/lib/session-guards";
 
 export async function GET() {
@@ -15,17 +16,20 @@ export async function GET() {
   }
 
   try {
-    const [notifications, deposits, unreadCount] = await Promise.all([
+    const [notifications, deposits, discounts, unreadCount] = await Promise.all([
       listOpenAdminNotifications({ limit: 50 }),
       listPendingDepositApprovals(),
+      listPendingDiscountApprovals(),
       countUnreadAdminNotifications(),
     ]);
 
     return NextResponse.json({
       notifications,
       deposits,
+      discounts,
       unreadCount,
       depositCount: deposits.length,
+      discountCount: discounts.length,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر تحميل الإشعارات.";

@@ -68,6 +68,7 @@ export function AdminNotificationsBell() {
   const [open, setOpen] = useState(false);
   const [selectedDeposit, setSelectedDeposit] = useState<DepositItem | null>(null);
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
+  const [discountCount, setDiscountCount] = useState(0);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
   const [decideBusy, setDecideBusy] = useState(false);
@@ -97,9 +98,13 @@ export function AdminNotificationsBell() {
           return;
         }
 
-        const payload = (await notifRes.json().catch(() => null)) as { deposits?: DepositItem[] } | null;
+        const payload = (await notifRes.json().catch(() => null)) as {
+          deposits?: DepositItem[];
+          discountCount?: number;
+        } | null;
         const items = payload?.deposits || [];
         const currentIds = new Set(items.map((d) => d.id));
+        if (isMounted) setDiscountCount(Number(payload?.discountCount) || 0);
 
         if (!initializedRef.current) {
           knownPendingRef.current = currentIds;
@@ -343,13 +348,20 @@ export function AdminNotificationsBell() {
           </div>
 
           {!selectedDeposit ? (
-            <div className="flex shrink-0 border-t border-black/10 px-4 py-3">
+            <div className="flex shrink-0 flex-col gap-2 border-t border-black/10 px-4 py-3">
               <Link
                 href="/admin/deposit-approvals"
                 className="flex-1 rounded-full bg-[#0D9488] px-3 py-2.5 text-center text-xs font-extrabold text-white"
                 onClick={() => setOpen(false)}
               >
                 كل طلبات الديبوزت
+              </Link>
+              <Link
+                href="/admin/discount-approvals"
+                className="flex-1 rounded-full bg-[#FCA311] px-3 py-2.5 text-center text-xs font-extrabold text-black"
+                onClick={() => setOpen(false)}
+              >
+                طلبات الخصم{discountCount ? ` (${discountCount})` : ""}
               </Link>
             </div>
           ) : null}

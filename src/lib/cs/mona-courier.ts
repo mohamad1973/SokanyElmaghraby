@@ -141,7 +141,13 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : "",
     customerName: answerText(mine, "customer_name") || snap.customerName || "",
     phone: answerText(mine, "primary_phone") || snap.phone || "",
-    altPhone: String(mine.find((item) => item.itemKey === "alt_phone")?.note || "").trim(),
+    altPhone: (() => {
+      const extra = String(mine.find((item) => item.itemKey === "extra_phone")?.value || "").trim();
+      if (extra) return extra;
+      const legacy = mine.find((item) => item.itemKey === "alt_phone");
+      if (!legacy || legacy.value === "no") return "";
+      return String(legacy.note || "").trim();
+    })(),
     governorate: answerText(mine, "governorate_confirm") || snap.governorate || "",
     area: answerText(mine, "area_confirm") || snap.area || "",
     address: answerText(mine, "address_complete") || snap.address || "",

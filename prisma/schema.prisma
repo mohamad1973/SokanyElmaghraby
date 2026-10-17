@@ -309,6 +309,10 @@ model CsOrderConfirmation {
   confirmedAt          DateTime?
   confirmationEditedAt DateTime?
   orderTotalDelta      Decimal?            @db.Decimal(12, 2)
+  discountApprovalStatus String            @default("none") @db.VarChar(32)
+  discountApprovalRequestedAt DateTime?
+  discountApprovalDecidedAt DateTime?
+  discountAgentDecisionSeenAt DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   answers              CsChecklistAnswer[]
@@ -322,6 +326,7 @@ model CsOrderConfirmation {
   @@index([trackingNumber])
   @@index([waybillPrinted])
   @@index([depositApprovalStatus])
+  @@index([discountApprovalStatus])
 }
 
 model CsChecklistAnswer {

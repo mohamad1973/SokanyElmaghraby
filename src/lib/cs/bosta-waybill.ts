@@ -41,11 +41,15 @@ function textOf(answers: CsChecklistAnswerInput[], key: string) {
   return String(item?.value || "").trim();
 }
 
-function altPhone(answers: CsChecklistAnswerInput[]) {
-  const item = answers.find((answer) => answer.itemKey === "alt_phone");
-  if (!item) return "";
-  if (item.yesNo === "no" || item.value === "no") return "";
-  return String(item.note || "").trim();
+/** Extra phone from + on primary card; falls back to legacy alt_phone note. */
+export function secondPhoneFromAnswers(answers: CsChecklistAnswerInput[]) {
+  const extra = answers.find((answer) => answer.itemKey === "extra_phone");
+  const fromExtra = String(extra?.value || "").trim();
+  if (fromExtra) return fromExtra;
+  const legacy = answers.find((answer) => answer.itemKey === "alt_phone");
+  if (!legacy) return "";
+  if (legacy.yesNo === "no" || legacy.value === "no") return "";
+  return String(legacy.note || "").trim();
 }
 
 function partyFromAnswers(input: {
@@ -53,6 +57,10 @@ function partyFromAnswers(input: {
   snapshot: Snapshot;
   wooOrderId: number;
   wooOrderNumber: string;
+  orderTotalDelta?: number | null;
+  depositAmount?: number | null;
+  depositPaid?: boolean | null;
+  depositApprovalStatus?: string | null;
 }): { ok: true; party: CsBostaParty } | { ok: false; message: string } {
   const snap = input.snapshot || {};
   const name = textOf(input.answers, "customer_name") || String(snap.customerName || "").trim();
@@ -72,13 +80,19 @@ function partyFromAnswers(input: {
     paymentState: snap.paymentState === "paid" || snap.paymentState === "awaiting_payment" || snap.paymentState === "cod" ? snap.paymentState : null,
   });
   const total = Number(String(snap.total || "").replace(/,/g, ""));
-  const cod = paymentState === "paid" ? 0 : Number.isFinite(total) ? total : 0;
+  const delta = Number(input.orderTotalDelta);
+  const adjusted = Math.max(0, (Number.isFinite(total) ? total : 0) + (Number.isFinite(delta) ? delta : 0));
+  const depositApproved =
+    Boolean(input.depositPaid || String(input.depositApprovalStatus || "").toLowerCase() === "approved") &&
+    Number(input.depositAmount) > 0;
+  const deposit = depositApproved ? Math.min(adjusted, Number(input.depositAmount) || 0) : 0;
+  const cod = paymentState === "paid" ? 0 : Math.max(0, adjusted - deposit);
   return {
     ok: true,
     party: {
       name,
       phone,
-      secondPhone: altPhone(input.answers) || undefined,
+      secondPhone: secondPhoneFromAnswers(input.answers) || undefined,
       governorate,
       area,
       address,
@@ -389,6 +403,10 @@ export async function syncCsBostaWaybill(input: {
   bostaShippingFee: number | null;
   answers: CsChecklistAnswerInput[];
   snapshot: Snapshot;
+  orderTotalDelta?: number | null;
+  depositAmount?: number | null;
+  depositPaid?: boolean | null;
+  depositApprovalStatus?: string | null;
 }): Promise<BostaWaybillState> {
   if (input.shippingCompany !== "bosta") {
     return present({ trackingNumber: input.trackingNumber, bostaStatus: input.bostaStatus, bostaShippingFee: input.bostaShippingFee });
@@ -406,7 +424,48 @@ export async function syncCsBostaWaybill(input: {
     }
   }
 
-  const built = partyFromAnswers(input);
+  const prisma = getPrismaClient();
+  let orderTotalDelta = input.orderTotalDelta ?? null;
+  let depositAmount = input.depositAmount ?? null;
+  let depositPaid = input.depositPaid ?? null;
+  let depositApprovalStatus = input.depositApprovalStatus ?? null;
+  if (prisma && (orderTotalDelta == null || depositAmount == null || depositApprovalStatus == null)) {
+    const row = await prisma.csOrderConfirmation.findUnique({
+      where: { id: input.confirmationId },
+      select: {
+        orderTotalDelta: true,
+        depositAmount: true,
+        depositPaid: true,
+        depositApprovalStatus: true,
+      } as never,
+    });
+    const typed = row as {
+      orderTotalDelta?: unknown;
+      depositAmount?: unknown;
+      depositPaid?: boolean | null;
+      depositApprovalStatus?: string | null;
+    } | null;
+    if (typed) {
+      if (orderTotalDelta == null && typed.orderTotalDelta != null) {
+        const n = Number(typed.orderTotalDelta);
+        orderTotalDelta = Number.isFinite(n) ? n : null;
+      }
+      if (depositAmount == null && typed.depositAmount != null) {
+        const n = Number(typed.depositAmount);
+        depositAmount = Number.isFinite(n) ? n : null;
+      }
+      if (depositPaid == null) depositPaid = Boolean(typed.depositPaid);
+      if (depositApprovalStatus == null) depositApprovalStatus = typed.depositApprovalStatus || null;
+    }
+  }
+
+  const built = partyFromAnswers({
+    ...input,
+    orderTotalDelta,
+    depositAmount,
+    depositPaid,
+    depositApprovalStatus,
+  });
   if (!built.ok) {
     await writeConfirmation({
       confirmationId: input.confirmationId,

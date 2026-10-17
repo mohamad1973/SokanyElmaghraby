@@ -3,7 +3,7 @@ import "server-only";
 import { getPrismaClient } from "@/lib/db";
 import { ensureCsTables } from "@/lib/cs/agents";
 
-export type AdminNotificationType = "deposit_approval";
+export type AdminNotificationType = "deposit_approval" | "discount_approval";
 export type AdminNotificationStatus = "unread" | "read" | "done";
 
 export type DepositApprovalNotificationBody = {
@@ -20,6 +20,17 @@ export type DepositApprovalNotificationBody = {
   depositToMethod: string | null;
   depositPaidAt: string | null;
   depositProofUrl: string | null;
+  agentName: string | null;
+};
+
+export type DiscountApprovalNotificationBody = {
+  confirmationId: number;
+  wooOrderId: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+  total: string;
+  discountAmount: number | null;
   agentName: string | null;
 };
 
@@ -72,6 +83,50 @@ export async function markDepositApprovalNotificationsDone(confirmationId: numbe
   });
 }
 
+export async function createDiscountApprovalNotification(input: {
+  confirmationId: number;
+  title: string;
+  body: DiscountApprovalNotificationBody;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return null;
+  await ensureInboxTable();
+
+  await prisma.adminNotification.updateMany({
+    where: {
+      type: "discount_approval",
+      refId: input.confirmationId,
+      status: { in: ["unread", "read"] },
+    },
+    data: { status: "done" },
+  });
+
+  return prisma.adminNotification.create({
+    data: {
+      type: "discount_approval",
+      refId: input.confirmationId,
+      title: input.title.slice(0, 255),
+      body: input.body,
+      status: "unread",
+    },
+  });
+}
+
+export async function markDiscountApprovalNotificationsDone(confirmationId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await ensureInboxTable();
+
+  await prisma.adminNotification.updateMany({
+    where: {
+      type: "discount_approval",
+      refId: confirmationId,
+      status: { in: ["unread", "read"] },
+    },
+    data: { status: "done" },
+  });
+}
+
 export async function listOpenAdminNotifications(opts?: { limit?: number }) {
   const prisma = getPrismaClient();
   if (!prisma) return [];
@@ -88,7 +143,7 @@ export async function listOpenAdminNotifications(opts?: { limit?: number }) {
     type: row.type,
     refId: row.refId,
     title: row.title,
-    body: row.body as DepositApprovalNotificationBody | null,
+    body: row.body as DepositApprovalNotificationBody | DiscountApprovalNotificationBody | null,
     status: row.status as AdminNotificationStatus,
     createdAt: row.createdAt.toISOString(),
   }));

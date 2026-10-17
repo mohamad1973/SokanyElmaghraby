@@ -62,17 +62,9 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
   {
     key: "primary_phone",
     label: "تليفون أساسي",
-    help: "أكد رقم التليفون الأساسي.",
+    help: "أكد رقم التليفون الأساسي. يمكن إضافة رقم ثانٍ بزر +.",
     type: "confirm_text",
     required: true,
-  },
-  {
-    key: "alt_phone",
-    label: "تليفون بديل لشخص آخر",
-    help: "إن وُجد سجّل الاسم والرقم. إن لم يوجد اختر «لا».",
-    type: "yes_no_extra",
-    required: true,
-    extraRequiredWhenYes: true,
   },
   {
     key: "payment_preference",

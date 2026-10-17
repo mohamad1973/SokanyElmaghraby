@@ -14,6 +14,7 @@ const TEMIMA = "sayed_temima";
 const CARD_KEYS = [
   "customer_name",
   "primary_phone",
+  "extra_phone",
   "alt_phone",
   "governorate_confirm",
   "area_confirm",
@@ -83,8 +84,11 @@ function cardFromRow(row: {
     total?: string;
     items?: Array<{ name?: string; quantity?: number }>;
   };
-  const alt = row.answers.find((item) => item.itemKey === "alt_phone");
-  const altPhone = String(alt?.note || "").trim();
+  const extra = row.answers.find((item) => item.itemKey === "extra_phone");
+  const legacy = row.answers.find((item) => item.itemKey === "alt_phone");
+  const altPhone =
+    String(extra?.value || "").trim() ||
+    (legacy && legacy.value !== "no" ? String(legacy.note || "").trim() : "");
   return {
     id: row.id,
     wooOrderNumber: row.wooOrderNumber,

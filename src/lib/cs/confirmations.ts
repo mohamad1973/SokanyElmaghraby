@@ -1268,6 +1268,8 @@ export async function saveCsConfirmation(input: {
     depositInstapayName?: string | null;
     depositToPhone?: string | null;
     depositToMethod?: string | null;
+    orderTotalDelta?: unknown;
+    discountApprovalStatus?: string | null;
     postCancelAt?: Date | null;
     handedToCarrier?: boolean | null;
     bostaStatus?: string | null;
@@ -1595,6 +1597,34 @@ export async function saveCsConfirmation(input: {
     }
   } else if (input.depositAmount !== undefined) {
     shippingMetaPatch.depositPaid = false;
+  }
+
+  const nextDelta =
+    input.orderTotalDelta !== undefined
+      ? parseOrderTotalDelta(input.orderTotalDelta)
+      : parseOrderTotalDelta(typed.orderTotalDelta);
+  if (nextDelta != null && nextDelta < 0) {
+    const discountApproval = String(
+      (row as { discountApprovalStatus?: string | null }).discountApprovalStatus || "",
+    )
+      .trim()
+      .toLowerCase();
+    const storedDelta = parseOrderTotalDelta(typed.orderTotalDelta);
+    if (
+      discountApproval !== "approved" ||
+      storedDelta == null ||
+      storedDelta >= 0 ||
+      Math.abs(storedDelta - nextDelta) > 0.001
+    ) {
+      return {
+        ok: false as const,
+        message:
+          discountApproval === "approved"
+            ? "اطلب الموافقة على قيمة الخصم الجديدة."
+            : "لا يُحفظ الأوردر قبل موافقة الخصم.",
+        missing: [] as string[],
+      };
+    }
   }
 
   const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
