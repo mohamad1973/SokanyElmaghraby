@@ -750,6 +750,11 @@ function CsHeader() {
               توزيع
             </Link>
           ) : null}
+          {isSupervisor && !isCourierSupervisor ? (
+            <Link href="/cs/bosta" className={navClass(pathname.startsWith("/cs/bosta"))}>
+              لوحة بوسطة
+            </Link>
+          ) : null}
           {isSupervisor && !isAdmin ? (
             <Link href="/cs/temima" className={navClass(pathname.startsWith("/cs/temima"))}>
               شيت سيد تميمة
@@ -808,6 +813,14 @@ function CsHeader() {
               className="fixed z-[80] w-48 rounded-xl bg-white p-1 text-sm font-bold text-[#14213D] shadow-lg ring-1 ring-black/10"
               style={{ top: shippingPos.top, left: shippingPos.left }}
             >
+              <Link
+                href="/cs/bosta"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                لوحة بوسطة
+              </Link>
               <Link
                 href="/cs/temima"
                 role="menuitem"
