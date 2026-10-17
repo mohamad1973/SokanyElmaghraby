@@ -617,12 +617,17 @@ function TemimaCutoffBox({
         closed ? "bg-red-100 ring-red-600" : "bg-white ring-[#14213D]/10"
       }`}
     >
-      <p className="text-sm font-extrabold text-[#14213D]">
-        {closed
-          ? `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(shown)}.`
-          : today
-            ? `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(today.minutes)}.`
-            : "قفل شيت سيد تميمة"}
+      <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-[#14213D]">
+        {closed ? (
+          <>
+            <span className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-extrabold text-white">تجميد الشيت</span>
+            <span>{`شيت سيد مقفول النهاردة عند ${formatCutoffClock12(shown)}.`}</span>
+          </>
+        ) : today ? (
+          `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(today.minutes)}.`
+        ) : (
+          "قفل شيت سيد تميمة"
+        )}
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
@@ -790,6 +795,7 @@ export function CsQueueClient({
       return;
     }
     if (data.frozen && !canReopenTemimaSheet) {
+      setFrozenDays((prev) => (prev.includes(data.dayYmd as string) ? prev : [...prev, data.dayYmd as string]));
       setMessage("الشيت متقفل.");
       return;
     }
@@ -798,6 +804,8 @@ export function CsQueueClient({
       next.push({ dayYmd: data.dayYmd as string, minutes: data.minutes as number });
       return next;
     });
+    setFrozenDays((prev) => (prev.includes(data.dayYmd as string) ? prev : [...prev, data.dayYmd as string]));
+    if (isCourierSupervisor) await loadSayedSheet(applied);
     const clock = formatCutoffClock12(data.minutes);
     setMessage(hadToday ? `اتعدل وقت قفل الشيت إلى ${clock}.` : `شيت سيد اتقفل النهاردة عند ${clock}.`);
   }
@@ -1371,6 +1379,7 @@ export function CsQueueClient({
       setMessage(data.message || "تعذر تجميد اليوم.");
       return;
     }
+    setFrozenDays((prev) => (prev.includes(sheetDay) ? prev : [...prev, sheetDay]));
     await loadSayedSheet(applied);
     setMessage(data.message || "اتقفل وتجمد.");
   }
@@ -1390,12 +1399,19 @@ export function CsQueueClient({
     <div className="space-y-4" dir="rtl">
       <div className="no-print flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:p-4">
         <div className="min-w-0 sm:flex-1">
-          <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">
-            {isCourierSupervisor
-              ? sheetDay
-                ? formatSayedSheetHeading(sheetDay)
-                : "شيت سيد تميمة"
-              : "قائمة تأكيد الطلبات"}
+          <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold text-[#14213D] sm:text-2xl">
+            <span>
+              {isCourierSupervisor
+                ? sheetDay
+                  ? formatSayedSheetHeading(sheetDay)
+                  : "شيت سيد تميمة"
+                : "قائمة تأكيد الطلبات"}
+            </span>
+            {isCourierSupervisor && sheetFrozen ? (
+              <span className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-extrabold text-white sm:text-sm">
+                تجميد الشيت
+              </span>
+            ) : null}
           </h1>
           <div className="mt-1 flex items-center justify-between gap-3 text-sm font-bold text-[#14213D]/70">
             <p>
@@ -1745,14 +1761,17 @@ export function CsQueueClient({
               +
             </button>
             {sheetFrozen ? (
-              <button
-                type="button"
-                disabled={sheetEditBusy}
-                onClick={() => void reopenSheetDay(sheetDay)}
-                className="h-9 rounded-xl bg-red-700 px-3 text-xs font-extrabold text-white disabled:opacity-60"
-              >
-                {sheetEditBusy ? "جاري التحميل" : "فتح الشيت"}
-              </button>
+              <>
+                <span className="rounded-xl bg-red-600 px-3 py-2 text-xs font-extrabold text-white">تجميد الشيت</span>
+                <button
+                  type="button"
+                  disabled={sheetEditBusy}
+                  onClick={() => void reopenSheetDay(sheetDay)}
+                  className="h-9 rounded-xl bg-red-700 px-3 text-xs font-extrabold text-white disabled:opacity-60"
+                >
+                  {sheetEditBusy ? "جاري التحميل" : "فتح الشيت"}
+                </button>
+              </>
             ) : (
               <button
                 type="button"
