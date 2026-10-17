@@ -22,7 +22,11 @@ export async function GET(request: Request) {
   const own = url.searchParams.get("scope") === "own" || !access.supervisor;
   const requested = Number(url.searchParams.get("courierId"));
   const focus = !own && Number.isInteger(requested) && requested > 0 ? requested : undefined;
-  const desk = await loadMonaDesk(own ? access.session.user.csAgentId! : focus);
+  const dayParam = url.searchParams.get("day");
+  const desk = await loadMonaDesk(own ? access.session.user.csAgentId! : focus, {
+    filterByDay: own,
+    dayYmd: dayParam,
+  });
   return NextResponse.json({
     mode: access.supervisor ? "supervisor" : "courier",
     canEditMoney: Boolean(access.supervisor && access.viewer.isAdmin),

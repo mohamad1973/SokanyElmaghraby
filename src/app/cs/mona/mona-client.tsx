@@ -59,6 +59,7 @@ type DayAccount = {
 type Desk = {
   mode: "supervisor" | "courier";
   canEditMoney?: boolean;
+  day?: string | null;
   couriers: Array<{ id: number; name: string }>;
   orders: OrderCard[];
   returned?: OrderCard[];
@@ -940,12 +941,18 @@ export function MonaCourierPanel({
   const [sheetTo, setSheetTo] = useState("");
   const [sheetQuery, setSheetQuery] = useState("");
   const [dayDrafts, setDayDrafts] = useState<Record<string, DayDraft>>({});
+  /** Courier phone: defaults to today; not persisted across visits. */
+  const [courierDay, setCourierDay] = useState(cairoToday);
 
   const load = useCallback(async () => {
     setLoading(true);
     const query = new URLSearchParams();
-    if (mode === "courier") query.set("scope", "own");
-    else if (focusCourierId) query.set("courierId", String(focusCourierId));
+    if (mode === "courier") {
+      query.set("scope", "own");
+      query.set("day", courierDay || cairoToday());
+    } else if (focusCourierId) {
+      query.set("courierId", String(focusCourierId));
+    }
     const res = await fetch(`/api/cs/mona-couriers${query.size ? `?${query}` : ""}`);
     const data = (await res.json()) as Desk | { message?: string };
     setLoading(false);
@@ -965,7 +972,7 @@ export function MonaCourierPanel({
       return next;
     });
     setMessage("");
-  }, [mode, focusCourierId]);
+  }, [mode, focusCourierId, courierDay]);
 
   useEffect(() => {
     void load();
@@ -1026,7 +1033,9 @@ export function MonaCourierPanel({
             {mode === "courier" ? "مناديب المشرفة" : focused ? `حساب ${focused.name}` : "حساب المندوب"}
           </h2>
           {mode === "courier" ? (
-            <p className="text-xs font-bold text-[#14213D]/70">أجر 75 جنيه على كل أوردر اتسلم. المتبقي = التحصيل − الأجر − التوريد.</p>
+            <p className="text-xs font-bold text-[#14213D]/70">
+              أوردرات اليوم فقط. تقدر تختار يوم سابق من التاريخ. أجر 75 جنيه على كل أوردر اتسلم.
+            </p>
           ) : (
             <p className="text-xs font-bold text-[#14213D]/70">كل يوم حساب لوحده. المتبقي = المحصلة − الشحن − التوريد.</p>
           )}
@@ -1037,6 +1046,29 @@ export function MonaCourierPanel({
           </Link>
         ) : null}
       </div>
+      {mode === "courier" ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-sm font-extrabold text-[#14213D]">
+            التاريخ
+            <input
+              type="date"
+              value={courierDay}
+              max={cairoToday()}
+              onChange={(event) => setCourierDay(event.target.value || cairoToday())}
+              className="mt-1 block h-11 rounded-xl border border-[#E5E5E5] bg-white px-3 text-sm font-bold"
+            />
+          </label>
+          {courierDay !== cairoToday() ? (
+            <button
+              type="button"
+              onClick={() => setCourierDay(cairoToday())}
+              className="h-11 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white"
+            >
+              اليوم
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {mode === "supervisor" ? (
         <div className="flex gap-2">
           <button
@@ -1222,7 +1254,7 @@ export function MonaCourierPanel({
         </div>
       ) : null}
       {mode === "courier" && desk && !orders.length ? (
-        <p className="text-sm font-bold text-[#14213D]/70">مفيش أوردرات عندك.</p>
+        <p className="text-sm font-bold text-[#14213D]/70">مفيش أوردرات في اليوم ده.</p>
       ) : null}
     </section>
   );

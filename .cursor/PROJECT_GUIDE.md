@@ -441,6 +441,7 @@
 | لوحة بوسطة السريعة | رقابة فقط؛ الحفظ من داخل صفحة الأوردر؛ بوسطة بدون شرط تعليم كل كروت التشيكليست (تميمة تفضل كاملة) | `checklist.ts`, `bosta-board.ts`, `cs/bosta` |
 | تليفون إضافي + خصم بموافقة | زر + على التليفون الأساسي لبوسطة؛ كارت خصم اختياري بموافقة أدمن يحدّث COD البوليصة | `call-sheet.tsx`, `discount-approvals.ts`, `bosta-waybill.ts` |
 | أعمدة خصم بدون db push | `node scripts/ensure-discount-columns.cjs` يضيف ALTER فقط (من غير `--accept-data-loss`) | `ensure-discount-columns.cjs`, `agents.ts` |
+| مندوب مونى — يوم فقط | أوردرات اليوم افتراضياً + تاريخ اختيارى ليوم سابق (من غير حفظ دائم) | `mona-courier.ts`, `mona-client.tsx` |
 | شيل أوردر المندوب | الأدمن يشيل أوردر نزل بالغلط من شيت عيد أو مؤمن، من غير ما يدخل طابور المؤجل | `mona-courier.ts`, `mona-client.tsx` |
 | حفظ شيت التحويل | تحويل المخازن يتحفظ كله من زر فوق الجدول وتحته، من غير زر حفظ قدام كل صنف | `transfers-client.tsx`, `warehouse-sheets.ts`, `stock/route.ts`, `warehouses/route.ts` |
 | ديبوزت بعد الحفظ | الموظفة تعدّل الديبوزت وتطلب الموافقة بعد الحفظ، وكارت الأوردر يكتب مدفوع جزئي أو مدفوع بالكامل، وشحنة بوسطة تطلع للمكان الفاضي | `call-sheet.tsx`, `confirmations.ts`, `cs-queue-client.tsx` |

@@ -178,10 +178,27 @@ export function CouriersClient({
     return (
       <div className="mx-auto grid max-w-3xl gap-3">
         <h1 className="text-xl font-extrabold text-[#14213D]">{mode === "admin" ? "المندوب" : "أوردراتي"}</h1>
-        <label className="flex items-center gap-2 text-sm font-extrabold text-[#14213D]">
-          التاريخ
-          <input type="date" value={day} onChange={(event) => setDay(event.target.value)} className="h-11 rounded-xl border border-[#E5E5E5] bg-white px-3" />
-        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-sm font-extrabold text-[#14213D]">
+            التاريخ
+            <input
+              type="date"
+              value={day}
+              max={cairoTodayYmd()}
+              onChange={(event) => setDay(event.target.value || cairoTodayYmd())}
+              className="mt-1 block h-11 rounded-xl border border-[#E5E5E5] bg-white px-3"
+            />
+          </label>
+          {day !== cairoTodayYmd() ? (
+            <button
+              type="button"
+              onClick={() => setDay(cairoTodayYmd())}
+              className="h-11 rounded-xl bg-[#14213D] px-4 text-sm font-extrabold text-white"
+            >
+              اليوم
+            </button>
+          ) : null}
+        </div>
         {mode === "courier" || selectedId ? (
           <TrackingScanBox
             action="deliver"

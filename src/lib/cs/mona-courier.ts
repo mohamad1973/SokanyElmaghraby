@@ -4,11 +4,18 @@ import { Prisma } from "@prisma/client";
 
 import { parseCsRoles } from "@/lib/cs/agents";
 import { getPrismaClient } from "@/lib/db";
-import { cairoYmdFromIso, effectivePaymentState } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso, effectivePaymentState } from "@/lib/cs/order-window";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 
 export const MONA_COURIER_FEE = 75;
 export const MONA_LARGE_FEE = 100;
+
+const DAY_YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+export function resolveMonaDayYmd(input?: string | null) {
+  const raw = String(input || "").trim();
+  return DAY_YMD.test(raw) ? raw : cairoTodayYmd();
+}
 
 type Outcome = "delivered" | "refused" | "postponed";
 
@@ -264,27 +271,60 @@ export async function listMonaCourierAgents() {
     .map((row) => ({ id: Number(row.id), name: row.name }));
 }
 
-async function loadAssignedOrders(courierId?: number) {
+async function loadAssignedOrders(courierId?: number, dayYmd?: string | null) {
   const prisma = getPrismaClient();
   if (!prisma) return [] as OrderRow[];
   await ensureMonaLargeColumn();
-  const rows = courierId
-    ? await prisma.$queryRawUnsafe<OrderRow[]>(
-        `SELECT ${ORDER_COLUMNS}
-         FROM CsOrderConfirmation c
-         LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-         WHERE c.monaCourierId = ?
-         ORDER BY c.monaAssignedAt DESC, c.id DESC`,
-        courierId,
-      )
-    : await prisma.$queryRawUnsafe<OrderRow[]>(
-        `SELECT ${ORDER_COLUMNS}
-         FROM CsOrderConfirmation c
-         LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-         WHERE c.monaCourierId IS NOT NULL
-         ORDER BY c.monaAssignedAt DESC, c.id DESC`,
-      );
-  return rows;
+  const dayFilter = dayYmd ? resolveMonaDayYmd(dayYmd) : null;
+  const bounds = dayFilter ? cairoYmdBounds(dayFilter) : null;
+  if (dayFilter && !bounds) return [] as OrderRow[];
+
+  if (courierId && bounds) {
+    return prisma.$queryRawUnsafe<OrderRow[]>(
+      `SELECT ${ORDER_COLUMNS}
+       FROM CsOrderConfirmation c
+       LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+       WHERE c.monaCourierId = ?
+         AND c.monaAssignedAt IS NOT NULL
+         AND c.monaAssignedAt >= ?
+         AND c.monaAssignedAt < ?
+       ORDER BY c.monaAssignedAt DESC, c.id DESC`,
+      courierId,
+      bounds.start,
+      bounds.endExclusive,
+    );
+  }
+  if (courierId) {
+    return prisma.$queryRawUnsafe<OrderRow[]>(
+      `SELECT ${ORDER_COLUMNS}
+       FROM CsOrderConfirmation c
+       LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+       WHERE c.monaCourierId = ?
+       ORDER BY c.monaAssignedAt DESC, c.id DESC`,
+      courierId,
+    );
+  }
+  if (bounds) {
+    return prisma.$queryRawUnsafe<OrderRow[]>(
+      `SELECT ${ORDER_COLUMNS}
+       FROM CsOrderConfirmation c
+       LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+       WHERE c.monaCourierId IS NOT NULL
+         AND c.monaAssignedAt IS NOT NULL
+         AND c.monaAssignedAt >= ?
+         AND c.monaAssignedAt < ?
+       ORDER BY c.monaAssignedAt DESC, c.id DESC`,
+      bounds.start,
+      bounds.endExclusive,
+    );
+  }
+  return prisma.$queryRawUnsafe<OrderRow[]>(
+    `SELECT ${ORDER_COLUMNS}
+     FROM CsOrderConfirmation c
+     LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+     WHERE c.monaCourierId IS NOT NULL
+     ORDER BY c.monaAssignedAt DESC, c.id DESC`,
+  );
 }
 
 async function loadAnswers(ids: number[]) {
@@ -501,11 +541,16 @@ async function loadReturnedPostponed() {
   );
 }
 
-export async function loadMonaDesk(viewerCourierId?: number) {
+export async function loadMonaDesk(
+  viewerCourierId?: number,
+  opts?: { dayYmd?: string | null; filterByDay?: boolean },
+) {
   await releasePostponedMona();
   const couriers = await listMonaCourierAgents();
   const visible = viewerCourierId ? couriers.filter((row) => row.id === viewerCourierId) : couriers;
-  const rows = await loadAssignedOrders(viewerCourierId);
+  /** Courier phone UI: day-scoped. Supervisor desks keep all assigned days. */
+  const dayYmd = opts?.filterByDay ? resolveMonaDayYmd(opts.dayYmd) : null;
+  const rows = await loadAssignedOrders(viewerCourierId, dayYmd);
   const returnedRows = viewerCourierId ? [] : await loadReturnedPostponed();
   const answers = await loadAnswers([...rows, ...returnedRows].map((row) => row.id));
   const cards = rows.map((row) => cardFrom(row, answers));
@@ -517,6 +562,7 @@ export async function loadMonaDesk(viewerCourierId?: number) {
   ]);
   const visibleIds = new Set(visible.map((row) => row.id));
   return {
+    day: dayYmd,
     couriers: visible,
     orders: cards,
     returned,
