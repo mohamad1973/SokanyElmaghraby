@@ -506,20 +506,39 @@ export function MaintenanceClient() {
       const body = (await response.json()) as Payload & { message?: string };
       if (!response.ok) {
         setError(body.message || "تعذر تحميل المرتجعات.");
-        return;
+        return null;
       }
       setData(body);
       setFrom(body.from);
       setTo(body.to);
+      return body;
     } catch {
       setError("تعذر تحميل المرتجعات.");
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void (async () => {
+      const first = await load();
+      // Pull live «متجه إليك» as soon as the page opens (don't wait for cron).
+      try {
+        const response = await fetch("/api/cs/maintenance/returns/capture", { method: "POST" });
+        const body = (await response.json()) as { message?: string; found?: number; saved?: number };
+        if (response.ok) {
+          const saved = body.saved ?? 0;
+          const found = body.found ?? 0;
+          if (saved > 0 || found > 0) {
+            setNotice(`اتحدّث من بوسطة: ${saved} جديد من ${found} ظاهر.`);
+          }
+          await load({ from: first?.from || "", to: first?.to || "" });
+        }
+      } catch {
+        // keep the first load even if live pull fails
+      }
+    })();
   }, [load]);
 
   function onSearch(event: FormEvent) {
@@ -861,7 +880,9 @@ export function MaintenanceClient() {
                   ) : (
                     <tr>
                       <td colSpan={8} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
-                        {loading ? "جارٍ التحميل…" : "مفيش مرتجعات محفوظة في المدى. احفظ الظاهر على بوسطة الأول."}
+                        {loading
+                          ? "جارٍ التحميل…"
+                          : "مفيش مرتجعات في المدى ده. وسّع من/إلى (إمبارح موجود لو التاريخ يشمله) أو اضغط «حفظ ظاهر بوسطة»."}
                       </td>
                     </tr>
                   )}

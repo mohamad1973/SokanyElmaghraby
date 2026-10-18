@@ -2,7 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { listMonaCourierAgents } from "@/lib/cs/mona-courier";
-import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
+import { cairoDaysAgoYmd, cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
@@ -58,9 +58,11 @@ type Snap = {
   items?: Array<{ name?: string; quantity?: number }>;
 };
 
+/** Default window keeps recent days visible (yesterday no longer "disappears"). */
 export function maintenanceRange(fromInput: string, toInput: string) {
   const today = cairoTodayYmd();
-  let from = DAY.test(fromInput) ? fromInput : today;
+  const defaultFrom = cairoDaysAgoYmd(6);
+  let from = DAY.test(fromInput) ? fromInput : defaultFrom;
   let to = DAY.test(toInput) ? toInput : today;
   if (from > to) {
     const swap = from;
