@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { captureBostaHeadingReturns } from "@/lib/cs/bosta-return-capture";
-import { cairoClock } from "@/lib/cs/order-window";
 import { isDatabaseConfigured } from "@/lib/db";
 
 function authorize(request: Request) {
@@ -14,22 +13,12 @@ function authorize(request: Request) {
   return auth === `Bearer ${secret}`;
 }
 
-function insideHeadingWindow() {
-  const clock = cairoClock(new Date().toISOString());
-  if (!clock) return false;
-  const hour = Math.floor(clock.minutes / 60);
-  return hour >= 12 && hour < 14;
-}
-
 export async function GET(request: Request) {
   if (!authorize(request)) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
   }
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ message: "DATABASE_URL غير مضبوط." }, { status: 503 });
-  }
-  if (!insideHeadingWindow()) {
-    return NextResponse.json({ ok: true, skipped: true });
   }
   try {
     const result = await captureBostaHeadingReturns();

@@ -11,7 +11,7 @@
     },
     {
       "path": "/api/cron/capture-bosta-returns",
-      "schedule": "15 9-12 * * *"
+      "schedule": "15 5-19 * * *"
     }
   ]
 }

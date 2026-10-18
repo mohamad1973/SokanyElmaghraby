@@ -7,13 +7,18 @@ type Kind = "refused" | "return" | "exchange";
 type TabId = "bosta" | "temima" | "eid" | "momen";
 type Condition = "sound" | "broken" | "defective";
 type Defect = "break" | "power" | "disassembled" | "dented";
-type Phase = "choose" | "defects" | "hand" | "claim" | "saved";
+type Usage = "new" | "used";
+type Destination = "online_warehouse" | "shelf" | "maintenance";
+type Phase = "choose" | "defects" | "usage" | "hand" | "claim" | "saved";
+type UsageFilter = "all" | "new" | "used" | "unset";
+type DestinationFilter = "all" | Destination | "unreviewed";
 
 type Review = {
   condition: Condition;
   defects: Defect[];
-  destination: "online_warehouse" | "shelf" | "maintenance";
+  destination: Destination;
   bostaClaim: boolean;
+  usage: Usage | null;
   label: string;
 };
 
@@ -80,6 +85,33 @@ const DEFECTS: Array<{ id: Defect; label: string }> = [
 
 const KIND_RANK: Record<Kind, number> = { refused: 0, exchange: 1, return: 2 };
 
+const USAGE_OPTIONS: Array<{ id: Usage; label: string }> = [
+  { id: "new", label: "جديد" },
+  { id: "used", label: "مستخدم" },
+];
+
+const DEST_FILTERS: Array<{ id: DestinationFilter; label: string }> = [
+  { id: "all", label: "كل الوجهات" },
+  { id: "online_warehouse", label: "مخزن أونلاين" },
+  { id: "shelf", label: "الرف" },
+  { id: "maintenance", label: "صيانة" },
+  { id: "unreviewed", label: "لسه متفحصش" },
+];
+
+const USAGE_FILTERS: Array<{ id: UsageFilter; label: string }> = [
+  { id: "all", label: "كل الاستخدام" },
+  { id: "new", label: "جديد" },
+  { id: "used", label: "مستخدم" },
+  { id: "unset", label: "لسه متحددش" },
+];
+
+const DEST_PRINT_ORDER: Array<{ id: Destination | "unreviewed"; label: string }> = [
+  { id: "online_warehouse", label: "مخزن أونلاين" },
+  { id: "shelf", label: "الرف" },
+  { id: "maintenance", label: "صيانة" },
+  { id: "unreviewed", label: "لسه متفحصش" },
+];
+
 function matchesQuery(searchText: string, raw: string) {
   const query = raw.trim().toLowerCase();
   if (!query) return true;
@@ -87,10 +119,6 @@ function matchesQuery(searchText: string, raw: string) {
   if (hay.includes(query)) return true;
   const digits = query.replace(/\D/g, "");
   return digits.length >= 4 && hay.replace(/\D/g, "").includes(digits);
-}
-
-function groupRows(rows: BostaRow[]) {
-  return KINDS.flatMap((kind) => rows.filter((row) => row.kind === kind.id));
 }
 
 function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loading: boolean; empty: string; missing?: string }) {
@@ -258,6 +286,7 @@ function ReviewCards({
   const [phase, setPhase] = useState<Phase>(row.review ? "saved" : "choose");
   const [condition, setCondition] = useState<Condition | "">(row.review?.condition || "");
   const [defects, setDefects] = useState<Defect[]>(row.review?.defects || []);
+  const [usage, setUsage] = useState<Usage | "">(row.review?.usage || "");
   const [savedReview, setSavedReview] = useState<Review | null>(row.review);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -267,7 +296,7 @@ function ReviewCards({
     setError("");
     setCondition(next);
     setDefects([]);
-    setPhase(next === "defective" ? "defects" : "hand");
+    setPhase(next === "defective" ? "defects" : "usage");
   }
 
   function toggleDefect(defect: Defect) {
@@ -276,13 +305,18 @@ function ReviewCards({
 
   async function finish() {
     if (!condition) return;
+    if (usage !== "new" && usage !== "used") {
+      setError("حدّد المنتج جديد أو مستخدم.");
+      setPhase("usage");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
       const response = await fetch("/api/cs/maintenance/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackingNumber: row.trackingNumber, condition, defects }),
+        body: JSON.stringify({ trackingNumber: row.trackingNumber, condition, defects, usage }),
       });
       const body = (await response.json()) as { message?: string; review?: Review };
       if (!response.ok || !body.review) {
@@ -372,6 +406,32 @@ function ReviewCards({
             <button
               type="button"
               disabled={!defects.length}
+              onClick={() => setPhase("usage")}
+              className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-40"
+            >
+              التالي
+            </button>
+          </div>
+        ) : null}
+        {phase === "usage" ? (
+          <div className="space-y-3">
+            <p className="text-sm font-extrabold text-[#14213D]">بعد المعاينة: المنتج جديد ولا مستخدم؟ (اختيار واحد)</p>
+            <div className="flex flex-wrap gap-4">
+              {USAGE_OPTIONS.map((item) => (
+                <label key={item.id} className="flex items-center gap-2 text-base font-extrabold text-[#14213D]">
+                  <input
+                    type="checkbox"
+                    className="size-5 accent-[#E6B325]"
+                    checked={usage === item.id}
+                    onChange={() => setUsage(item.id)}
+                  />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={usage !== "new" && usage !== "used"}
               onClick={() => setPhase("hand")}
               className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-40"
             >
@@ -424,6 +484,8 @@ export function MaintenanceClient() {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabId>("bosta");
   const [kinds, setKinds] = useState<Kind[]>(["refused", "exchange", "return"]);
+  const [usageFilter, setUsageFilter] = useState<UsageFilter>("all");
+  const [destinationFilter, setDestinationFilter] = useState<DestinationFilter>("all");
   const [grouped, setGrouped] = useState(false);
   const [active, setActive] = useState<BostaRow | null>(null);
   const [linking, setLinking] = useState<BostaRow | null>(null);
@@ -566,7 +628,20 @@ export function MaintenanceClient() {
   }
 
   const bostaSearched = visible(data?.bosta.rows || []);
-  const bostaFiltered = bostaSearched.filter((row) => kinds.includes(row.kind));
+  const bostaFiltered = bostaSearched.filter((row) => {
+    if (!kinds.includes(row.kind)) return false;
+    if (usageFilter === "new" || usageFilter === "used") {
+      if (row.review?.usage !== usageFilter) return false;
+    } else if (usageFilter === "unset") {
+      if (row.review?.usage === "new" || row.review?.usage === "used") return false;
+    }
+    if (destinationFilter === "unreviewed") {
+      if (row.review) return false;
+    } else if (destinationFilter !== "all") {
+      if (row.review?.destination !== destinationFilter) return false;
+    }
+    return true;
+  });
   const bostaRows = grouped
     ? [...bostaFiltered].sort(
         (left, right) =>
@@ -575,7 +650,14 @@ export function MaintenanceClient() {
           right.trackingNumber.localeCompare(left.trackingNumber),
       )
     : bostaFiltered;
-  const printGroups = groupRows(bostaFiltered);
+  const printByDestination = DEST_PRINT_ORDER.map((dest) => ({
+    ...dest,
+    rows: bostaFiltered.filter((row) =>
+      dest.id === "unreviewed" ? !row.review : row.review?.destination === dest.id,
+    ),
+  })).filter((group) => group.rows.length > 0);
+  const usageFilterLabel = USAGE_FILTERS.find((item) => item.id === usageFilter)?.label || "";
+  const destFilterLabel = DEST_FILTERS.find((item) => item.id === destinationFilter)?.label || "";
   const temimaRows = visible(data?.temima.rows || []);
   const eidRows = visible(data?.eid.rows || []);
   const momenRows = visible(data?.momen.rows || []);
@@ -644,38 +726,68 @@ export function MaintenanceClient() {
       <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
         {tab === "bosta" ? (
           <>
-            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
+            <header className="space-y-3 border-b border-black/10 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {KINDS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => toggleKind(item.id)}
+                      className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                        kinds.includes(item.id) ? "bg-[#E6B325] text-black" : "bg-[#F5F5F0] text-[#14213D]/50"
+                      }`}
+                    >
+                      {item.label} {counts[item.id]}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    disabled={!bostaRows.length}
+                    className="rounded-full bg-white px-4 py-2 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10 disabled:opacity-40"
+                  >
+                    طباعة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void capture()}
+                    disabled={saving}
+                    className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
+                  </button>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {KINDS.map((item) => (
+                {USAGE_FILTERS.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => toggleKind(item.id)}
+                    onClick={() => setUsageFilter(item.id)}
                     className={`rounded-full px-3 py-1 text-xs font-extrabold ${
-                      kinds.includes(item.id) ? "bg-[#E6B325] text-black" : "bg-[#F5F5F0] text-[#14213D]/50"
+                      usageFilter === item.id ? "bg-[#14213D] text-white" : "bg-[#F5F5F0] text-[#14213D]/70"
                     }`}
                   >
-                    {item.label} {counts[item.id]}
+                    {item.label}
                   </button>
                 ))}
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  disabled={!bostaRows.length}
-                  className="rounded-full bg-white px-4 py-2 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10 disabled:opacity-40"
-                >
-                  طباعة
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void capture()}
-                  disabled={saving}
-                  className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
-                >
-                  {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
-                </button>
+              <div className="flex flex-wrap gap-2">
+                {DEST_FILTERS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setDestinationFilter(item.id)}
+                    className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                      destinationFilter === item.id ? "bg-[#14213D] text-white" : "bg-[#F5F5F0] text-[#14213D]/70"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             </header>
             {data?.bosta.error ? <p className="px-4 py-3 text-sm font-bold text-red-700">{data.bosta.error}</p> : null}
@@ -799,43 +911,48 @@ export function MaintenanceClient() {
           <h1 className="text-center text-lg font-extrabold">
             مرتجعات بوسطة {from} — {to}
           </h1>
-          {KINDS.map((kind) => {
-            const rows = printGroups.filter((row) => row.kind === kind.id);
-            if (!rows.length) return null;
-            return (
-              <section key={kind.id}>
-                <h2 className="mt-4 text-sm font-extrabold">
-                  {kind.label} ({rows.length})
-                </h2>
-                <table className="w-full border-collapse text-right text-xs">
-                  <thead>
-                    <tr>
-                      <th className="border border-black px-1 py-1">اليوم</th>
-                      <th className="border border-black px-1 py-1">البوليصة</th>
-                      <th className="border border-black px-1 py-1">الأوردر</th>
-                      <th className="border border-black px-1 py-1">العميل</th>
-                      <th className="border border-black px-1 py-1">الموبايل</th>
-                      <th className="border border-black px-1 py-1">المنتج</th>
-                      <th className="border border-black px-1 py-1">الفحص</th>
+          <p className="mb-2 text-center text-xs font-bold">
+            {usageFilterLabel} · {destFilterLabel} · عدد الصفوف: {bostaFiltered.length}
+          </p>
+          {printByDestination.map((group) => (
+            <section key={group.id}>
+              <h2 className="mt-4 text-sm font-extrabold">
+                {group.label} ({group.rows.length})
+              </h2>
+              <table className="w-full border-collapse text-right text-xs">
+                <thead>
+                  <tr>
+                    <th className="border border-black px-1 py-1">اليوم</th>
+                    <th className="border border-black px-1 py-1">البوليصة</th>
+                    <th className="border border-black px-1 py-1">الأوردر</th>
+                    <th className="border border-black px-1 py-1">العميل</th>
+                    <th className="border border-black px-1 py-1">الموبايل</th>
+                    <th className="border border-black px-1 py-1">النوع</th>
+                    <th className="border border-black px-1 py-1">المنتج</th>
+                    <th className="border border-black px-1 py-1">جديد/مستخدم</th>
+                    <th className="border border-black px-1 py-1">الفحص</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.rows.map((item) => (
+                    <tr key={item.trackingNumber}>
+                      <td className="border border-black px-1 py-1">{item.day}</td>
+                      <td className="border border-black px-1 py-1">{item.trackingNumber}</td>
+                      <td className="border border-black px-1 py-1">{item.wooOrderNumber}</td>
+                      <td className="border border-black px-1 py-1">{item.customerName}</td>
+                      <td className="border border-black px-1 py-1">{item.phone}</td>
+                      <td className="border border-black px-1 py-1">{item.statusLabel}</td>
+                      <td className="border border-black px-1 py-1">{item.product}</td>
+                      <td className="border border-black px-1 py-1">
+                        {item.review?.usage === "new" ? "جديد" : item.review?.usage === "used" ? "مستخدم" : ""}
+                      </td>
+                      <td className="border border-black px-1 py-1">{item.review?.label || ""}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((item) => (
-                      <tr key={item.trackingNumber}>
-                        <td className="border border-black px-1 py-1">{item.day}</td>
-                        <td className="border border-black px-1 py-1">{item.trackingNumber}</td>
-                        <td className="border border-black px-1 py-1">{item.wooOrderNumber}</td>
-                        <td className="border border-black px-1 py-1">{item.customerName}</td>
-                        <td className="border border-black px-1 py-1">{item.phone}</td>
-                        <td className="border border-black px-1 py-1">{item.product}</td>
-                        <td className="border border-black px-1 py-1">{item.review?.label || ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            );
-          })}
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          ))}
         </div>
       ) : null}
       <style jsx global>{`

@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مرتجعات بوسطة طول اليوم | سحب متجه إليك كل ساعة من الصبح من غير مسح التاريخي؛ فحص جديد/مستخدم حصري؛ فلتر وجهة واستخدام وطباعة حسب الفلتر | `bosta-return-capture.ts`, `bosta-return-review.ts`, `maintenance-client.tsx`, `vercel.json` |
 | مزامنة البوليصة + عيد/مؤمن | تعديل العنوان/السعر يتحدّث في `customerSnapshot` وبوليصة بوسطة؛ عيد ومؤمن شركات شحن تحت بوسطة/تميمة مع تعيين `monaCourierId` وفلتر | `confirmations.ts`, `checklist.ts`, `cs-queue-client.tsx`, `mona-courier.ts`, `bosta-waybill.ts` |
 | قفل الشيت بالطباعة | طباعة شيت سيد بأربع أو خمس نسخ تقفل اليوم، واليوم المقفول خلفيته حمراء والأدمن بس يفتحه | `cs-queue-client.tsx`, `temima-sheet-edits.ts`, `temima-sheet-freeze.ts`, `temima-cutoff.ts` |
 | شارة تجميد الشيت | بعد القفل تظهر «تجميد الشيت» بخلفية حمراء فوراً (تحديث frozenDays + شارة في العنوان وصندوق القفل) | `cs-queue-client.tsx` |

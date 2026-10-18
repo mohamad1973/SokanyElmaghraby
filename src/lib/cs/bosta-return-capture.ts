@@ -98,15 +98,7 @@ export async function captureBostaHeadingReturns() {
   if (!listed.ok) return { ok: false as const, message: listed.message, found: 0, saved: 0 };
   const today = cairoTodayYmd();
   const fresh = listed.rows;
-  if (fresh.length) {
-    const keep = fresh.map((row) => row.trackingNumber);
-    const marks = keep.map(() => "?").join(", ");
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM \`CsBostaReturnCapture\` WHERE seenDay = ? AND trackingNumber NOT IN (${marks})`,
-      today,
-      ...keep,
-    );
-  }
+  // Keep historical captures: insert-only so reviewed rows and early-morning pulls stay.
   const matched = await matchOrders(fresh);
   let saved = 0;
   for (const row of fresh) {

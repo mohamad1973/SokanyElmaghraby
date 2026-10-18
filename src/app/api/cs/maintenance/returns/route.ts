@@ -45,12 +45,18 @@ export async function POST(request: Request) {
   if (!viewer.isMaintenance) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   }
-  const body = (await request.json().catch(() => null)) as { trackingNumber?: string; condition?: string; defects?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as {
+    trackingNumber?: string;
+    condition?: string;
+    defects?: unknown;
+    usage?: string;
+  } | null;
   const defects = Array.isArray(body?.defects) ? body.defects.filter((item): item is string => typeof item === "string") : [];
   const result = await saveBostaReturnReview({
     trackingNumber: String(body?.trackingNumber || ""),
     condition: String(body?.condition || ""),
     defects,
+    usage: String(body?.usage || ""),
   });
   if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
   return NextResponse.json({ review: result.review });
