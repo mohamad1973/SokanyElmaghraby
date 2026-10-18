@@ -58,12 +58,18 @@ function currentStatusAction(official: OrderCard["official"]) {
 }
 
 function OrderDetails({ order }: { order: OrderCard }) {
+  const invoice = String(order.invoiceNumber || "").trim();
   return (
     <div className="grid gap-1 text-sm text-[#14213D]">
       <p className="text-base font-extrabold">#{order.wooOrderNumber} · {order.customerName || "—"}</p>
-      {order.invoiceNumber ? (
-        <p className="font-extrabold text-[#14213D]">فاتورة {order.invoiceNumber}</p>
-      ) : null}
+      <p
+        className={`w-fit rounded-lg px-2 py-1 text-sm font-extrabold ${
+          invoice ? "bg-[#FCA311] text-black" : "bg-[#14213D]/10 text-[#14213D]"
+        }`}
+        dir="ltr"
+      >
+        فاتورة {invoice || "—"}
+      </p>
       <p className="font-bold">{order.phone || "—"}{order.altPhone ? ` · ${order.altPhone}` : ""}</p>
       <p className="font-bold">{[order.governorate, order.area].filter(Boolean).join(" · ") || "منطقة غير مسجلة"}</p>
       <p>{order.address || "—"}</p>
