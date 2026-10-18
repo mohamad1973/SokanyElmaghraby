@@ -748,6 +748,9 @@ function OrderDetails({ order }: { order: OrderCard }) {
       <p className="text-base font-extrabold">
         #{order.wooOrderNumber} · {order.customerName || "—"}
       </p>
+      {order.invoiceNumber ? (
+        <p className="font-extrabold text-[#14213D]">فاتورة {order.invoiceNumber}</p>
+      ) : null}
       <p className="font-bold">
         {order.phone || "—"}
         {order.altPhone ? ` · ${order.altPhone}` : ""}

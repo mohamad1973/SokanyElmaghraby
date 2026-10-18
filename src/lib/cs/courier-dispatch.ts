@@ -27,6 +27,7 @@ type AnswerRow = { itemKey: string; value: string | null; note: string | null };
 export type CourierOrderCard = {
   id: number;
   wooOrderNumber: string;
+  invoiceNumber: string;
   customerName: string;
   phone: string;
   altPhone: string;
@@ -65,6 +66,7 @@ function answerText(answers: AnswerRow[], key: string) {
 function cardFromRow(row: {
   id: number;
   wooOrderNumber: string;
+  invoiceNumber?: string | null;
   customerSnapshot: unknown;
   deliveredToCustomer: boolean;
   courierAgentId: number | null;
@@ -92,6 +94,7 @@ function cardFromRow(row: {
   return {
     id: row.id,
     wooOrderNumber: row.wooOrderNumber,
+    invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : "",
     customerName: answerText(row.answers, "customer_name") || snap.customerName || "",
     phone: answerText(row.answers, "primary_phone") || snap.phone || "",
     altPhone,
@@ -154,6 +157,7 @@ async function loadSheetRows(today: string) {
     select: {
       id: true,
       wooOrderNumber: true,
+      invoiceNumber: true,
       customerSnapshot: true,
       deliveredToCustomer: true,
       courierAgentId: true,
@@ -213,6 +217,7 @@ async function loadCourierDay(courierId: number, dayYmd?: string) {
     select: {
       id: true,
       wooOrderNumber: true,
+      invoiceNumber: true,
       customerSnapshot: true,
       deliveredToCustomer: true,
       courierAgentId: true,
