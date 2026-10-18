@@ -614,15 +614,12 @@ function TemimaCutoffBox({
   return (
     <div
       className={`no-print rounded-2xl p-3 shadow ring-1 ${
-        closed ? "bg-red-100 ring-red-600" : "bg-white ring-[#14213D]/10"
+        closed ? "bg-gray-100 ring-gray-400" : "bg-white ring-[#14213D]/10"
       }`}
     >
       <p className="flex flex-wrap items-center gap-2 text-sm font-extrabold text-[#14213D]">
         {closed ? (
-          <>
-            <span className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-extrabold text-white">تجميد الشيت</span>
-            <span>{`شيت سيد مقفول النهاردة عند ${formatCutoffClock12(shown)}.`}</span>
-          </>
+          `شيت سيد مقفول ومجمّد النهاردة عند ${formatCutoffClock12(shown)}.`
         ) : today ? (
           `شيت سيد مقفول النهاردة عند ${formatCutoffClock12(today.minutes)}.`
         ) : (
@@ -655,8 +652,10 @@ function TemimaCutoffBox({
           type="button"
           disabled={busy || locked}
           onClick={() => void onLockNow()}
-          className={`h-9 rounded-lg px-3 text-xs font-extrabold disabled:opacity-60 ${
-            closed ? "bg-red-600 text-white ring-2 ring-red-800" : "bg-[#FCA311] text-black"
+          className={`h-9 rounded-lg px-3 text-xs font-extrabold ${
+            closed
+              ? "bg-gray-400 text-white disabled:cursor-not-allowed disabled:opacity-100"
+              : "bg-[#FCA311] text-black disabled:opacity-60"
           }`}
         >
           {busy ? "جاري التحميل" : "الآن"}
@@ -1148,7 +1147,7 @@ export function CsQueueClient({
   }
 
   async function reopenSheetDay(dayYmd: string) {
-    if (!dayYmd || sheetEditBusy) return;
+    if (!dayYmd || sheetEditBusy || !canReopenTemimaSheet) return;
     setSheetEditBusy(true);
     setMessage("");
     const res = await fetch("/api/cs/temima-sheet-edit", {
@@ -1163,6 +1162,7 @@ export function CsQueueClient({
       return;
     }
     setFrozenDays((prev) => prev.filter((day) => day !== dayYmd));
+    setCutoffs((prev) => prev.filter((row) => row.dayYmd !== dayYmd));
     if (isCourierSupervisor) await loadSayedSheet(applied);
     setMessage(data.message || "اتفتح الشيت.");
   }
@@ -1174,7 +1174,8 @@ export function CsQueueClient({
     const copies = sheetCopyCount();
     const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
     if (isCourierSupervisor || temimaDateMode(filters)) {
-      if (singleDay && (copies === 4 || copies === 5)) {
+      const printLocksSheet = Boolean(singleDay && (copies === 4 || copies === 5));
+      if (printLocksSheet) {
         const closed = await closeSheetFromPrint(singleDay);
         if (!closed) {
           setPrinting(false);
@@ -1190,6 +1191,10 @@ export function CsQueueClient({
         return;
       }
       rememberFrozenDays(filters.dateFrom, filters.dateTo, data.frozenDays || []);
+      if (printLocksSheet) {
+        setFrozenDays((prev) => (prev.includes(singleDay) ? prev : [...prev, singleDay]));
+        setMessage("اتقفل وتجمد الشيت بعد الطباعة.");
+      }
       const printed = [...(data.items || [])];
       if (filters.dateFrom && filters.dateFrom === filters.dateTo && printed.some((item) => item.sheetSerial && item.sheetSerial > 0)) {
         printed.sort((a, b) => (a.sheetSerial || 0) - (b.sheetSerial || 0));
@@ -1376,7 +1381,7 @@ export function CsQueueClient({
   }
 
   async function freezeSheetDay() {
-    if (!sheetDay || sheetEditBusy) return;
+    if (!sheetDay || sheetEditBusy || !canEditTemimaSheet || sheetFrozen) return;
     setSheetEditBusy(true);
     setMessage("");
     const res = await fetch("/api/cs/temima-sheet-edit", {
@@ -1392,6 +1397,7 @@ export function CsQueueClient({
     }
     setFrozenDays((prev) => (prev.includes(sheetDay) ? prev : [...prev, sheetDay]));
     await loadSayedSheet(applied);
+    setFrozenDays((prev) => (prev.includes(sheetDay) ? prev : [...prev, sheetDay]));
     setMessage(data.message || "اتقفل وتجمد.");
   }
 
@@ -1410,19 +1416,12 @@ export function CsQueueClient({
     <div className="space-y-4" dir="rtl">
       <div className="no-print flex flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:p-4">
         <div className="min-w-0 sm:flex-1">
-          <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold text-[#14213D] sm:text-2xl">
-            <span>
-              {isCourierSupervisor
-                ? sheetDay
-                  ? formatSayedSheetHeading(sheetDay)
-                  : "شيت سيد تميمة"
-                : "قائمة تأكيد الطلبات"}
-            </span>
-            {isCourierSupervisor && sheetFrozen ? (
-              <span className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-extrabold text-white sm:text-sm">
-                تجميد الشيت
-              </span>
-            ) : null}
+          <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">
+            {isCourierSupervisor
+              ? sheetDay
+                ? formatSayedSheetHeading(sheetDay)
+                : "شيت سيد تميمة"
+              : "قائمة تأكيد الطلبات"}
           </h1>
           <div className="mt-1 flex items-center justify-between gap-3 text-sm font-bold text-[#14213D]/70">
             <p>
@@ -1753,48 +1752,41 @@ export function CsQueueClient({
         <p className="no-print rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      {canEditTemimaSheet && sheetDay ? (
+      {sheetDay && (canEditTemimaSheet || canReopenTemimaSheet || isCourierSupervisor || sheetFrozen) ? (
         <form
           className={`no-print grid gap-2 rounded-2xl p-3 shadow ring-1 ${
-            sheetFrozen ? "bg-red-100 ring-red-600" : "bg-white ring-[#14213D]/10"
+            sheetFrozen ? "bg-gray-100 ring-gray-400" : "bg-white ring-[#14213D]/10"
           }`}
           onSubmit={(event) => {
             event.preventDefault();
+            if (!canEditTemimaSheet) return;
             void addSheetOrders();
           }}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAddOpen((open) => !open)}
-              className="h-9 w-9 rounded-xl bg-[#14213D] text-lg font-extrabold text-white"
-            >
-              +
-            </button>
-            {sheetFrozen ? (
-              <>
-                <span className="rounded-xl bg-red-600 px-3 py-2 text-xs font-extrabold text-white">تجميد الشيت</span>
-                <button
-                  type="button"
-                  disabled={sheetEditBusy}
-                  onClick={() => void reopenSheetDay(sheetDay)}
-                  className="h-9 rounded-xl bg-red-700 px-3 text-xs font-extrabold text-white disabled:opacity-60"
-                >
-                  {sheetEditBusy ? "جاري التحميل" : "فتح الشيت"}
-                </button>
-              </>
-            ) : (
+            {canEditTemimaSheet ? (
               <button
                 type="button"
-                disabled={sheetEditBusy}
-                onClick={() => void freezeSheetDay()}
-                className="h-9 rounded-xl bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
+                onClick={() => setAddOpen((open) => !open)}
+                className="h-9 w-9 rounded-xl bg-[#14213D] text-lg font-extrabold text-white"
               >
-                {sheetEditBusy ? "جاري التحميل" : "قفل وتجميد"}
+                +
               </button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              disabled={sheetEditBusy || (sheetFrozen ? !canReopenTemimaSheet : !canEditTemimaSheet)}
+              onClick={() => void (sheetFrozen ? reopenSheetDay(sheetDay) : freezeSheetDay())}
+              className={
+                sheetFrozen
+                  ? "h-9 rounded-xl bg-gray-400 px-3 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-100"
+                  : "h-9 rounded-xl bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
+              }
+            >
+              {sheetEditBusy ? "جاري التحميل" : "قفل وتجميد"}
+            </button>
           </div>
-          {addOpen ? (
+          {canEditTemimaSheet && addOpen ? (
             <div className="grid gap-2">
               <div className="flex flex-wrap items-end gap-2">
                 <input
@@ -1911,7 +1903,7 @@ export function CsQueueClient({
                 key={item.id}
                 className={`rounded-xl px-3 py-2.5 shadow-sm ring-1 ${
                   sheetFrozen
-                    ? "bg-red-100 ring-red-600"
+                    ? "bg-gray-100 ring-gray-400"
                     : returnedPostponed
                       ? "bg-orange-100 ring-orange-500"
                       : dup
