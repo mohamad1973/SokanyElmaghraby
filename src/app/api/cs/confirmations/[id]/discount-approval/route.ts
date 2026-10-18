@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requestDiscountApproval } from "@/lib/cs/discount-approvals";
+import { cancelDiscountApproval, requestDiscountApproval } from "@/lib/cs/discount-approvals";
 import { requireCsSession } from "@/lib/session-guards";
 
 type Context = { params: Promise<{ id: string }> };
@@ -22,6 +22,17 @@ export async function POST(request: Request, context: Context) {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ message: "طلب غير صالح." }, { status: 400 });
+  }
+
+  if (body.action === "cancel") {
+    const cancelled = await cancelDiscountApproval({
+      id: numericId,
+      agentId: session.user.csAgentId,
+    });
+    if (!cancelled.ok) {
+      return NextResponse.json({ message: cancelled.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, status: cancelled.status });
   }
 
   const result = await requestDiscountApproval({

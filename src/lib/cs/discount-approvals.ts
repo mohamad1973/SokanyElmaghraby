@@ -156,6 +156,43 @@ export async function getDiscountApprovalById(id: number) {
   };
 }
 
+/** Agent cancels a stuck pending discount request so the order can be saved without a discount. */
+export async function cancelDiscountApproval(input: { id: number; agentId: number }) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
+  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+
+  const current = normalizeDiscountApprovalStatus(
+    (row as { discountApprovalStatus?: string | null }).discountApprovalStatus,
+  );
+  if (current !== "pending") {
+    return { ok: false as const, message: "مفيش طلب خصم معلّق لإلغائه." };
+  }
+
+  await prisma.csOrderConfirmation.update({
+    where: { id: input.id },
+    data: {
+      assignedAgentId: input.agentId,
+      orderTotalDelta: null,
+      discountApprovalStatus: null,
+      discountApprovalRequestedAt: null,
+      discountApprovalDecidedAt: null,
+      discountAgentDecisionSeenAt: null,
+    } as never,
+  });
+
+  try {
+    await markDiscountApprovalNotificationsDone(input.id);
+  } catch (error) {
+    console.error("[discount-approvals] cancel notification done failed", error);
+  }
+
+  return { ok: true as const, status: "none" as const };
+}
+
 export async function decideDiscountApproval(input: {
   id: number;
   decision: "approved" | "rejected";

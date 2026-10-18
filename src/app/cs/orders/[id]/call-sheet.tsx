@@ -1111,13 +1111,56 @@ export function CsCallSheet({
   }
 
   function discountCard(locked: boolean) {
+    const canSendDiscount =
+      !locked &&
+      !requestingDiscountApproval &&
+      Boolean(discountAmount.trim()) &&
+      Number(discountAmount.replace(/,/g, "")) > 0;
+
+    async function sendDiscountApproval(resend: boolean) {
+      setRequestingDiscountApproval(true);
+      setMessage("");
+      const res = await fetch(`/api/cs/confirmations/${confirmationId}/discount-approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discountAmount: discountAmount.trim() }),
+      });
+      const data = (await res.json()) as { message?: string };
+      setRequestingDiscountApproval(false);
+      if (!res.ok) {
+        setMessage(data.message || "تعذر إرسال طلب الخصم.");
+        return;
+      }
+      setDiscountApprovalStatus("pending");
+      setMessage(resend ? "تم إعادة إرسال طلب الخصم (طلب واحد للأدمن)." : "تم إرسال طلب الخصم للأدمن.");
+    }
+
+    async function cancelPendingDiscount() {
+      setRequestingDiscountApproval(true);
+      setMessage("");
+      const res = await fetch(`/api/cs/confirmations/${confirmationId}/discount-approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
+      const data = (await res.json()) as { message?: string };
+      setRequestingDiscountApproval(false);
+      if (!res.ok) {
+        setMessage(data.message || "تعذر إلغاء طلب الخصم.");
+        return;
+      }
+      setDiscountApprovalStatus("none");
+      setDiscountAmount("");
+      setMessage("اتلغى طلب الخصم. تقدر تحفظ من غير خصم.");
+    }
+
     return (
       <div className="flex h-full flex-col justify-between rounded-xl bg-[#FCA311]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#FCA311]">
         <div>
           <p className="text-xs font-extrabold text-[#14213D]">خصم</p>
           <p className="mt-0.5 text-[10px] font-bold text-[#14213D]/60">اختياري — بموافقة الأدمن</p>
           <input
-            disabled={locked || discountApprovalStatus === "pending"}
+            disabled={locked}
             dir="ltr"
             inputMode="decimal"
             value={discountAmount}
@@ -1135,7 +1178,7 @@ export function CsCallSheet({
           </p>
           <div className="mt-1 rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
             {discountApprovalStatus === "pending"
-              ? "بانتظار موافقة الأدمن"
+              ? "بانتظار موافقة الأدمن — لو مهنج اضغطي إعادة إرسال"
               : discountApprovalStatus === "approved"
                 ? "معتمد"
                 : discountApprovalStatus === "rejected"
@@ -1143,42 +1186,30 @@ export function CsCallSheet({
                   : "لم يُطلب موافقة بعد"}
           </div>
         </div>
-        <button
-          type="button"
-          disabled={
-            locked ||
-            requestingDiscountApproval ||
-            discountApprovalStatus === "pending" ||
-            !discountAmount.trim() ||
-            !(Number(discountAmount.replace(/,/g, "")) > 0)
-          }
-          onClick={() => {
-            void (async () => {
-              setRequestingDiscountApproval(true);
-              setMessage("");
-              const res = await fetch(`/api/cs/confirmations/${confirmationId}/discount-approval`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ discountAmount: discountAmount.trim() }),
-              });
-              const data = (await res.json()) as { message?: string };
-              setRequestingDiscountApproval(false);
-              if (!res.ok) {
-                setMessage(data.message || "تعذر إرسال طلب الخصم.");
-                return;
-              }
-              setDiscountApprovalStatus("pending");
-              setMessage("تم إرسال طلب الخصم للأدمن.");
-            })();
-          }}
-          className="mt-2 w-full rounded-lg bg-[#FCA311] px-2 py-1.5 text-[11px] font-extrabold text-black disabled:opacity-50"
-        >
-          {requestingDiscountApproval
-            ? "جاري التحميل"
-            : discountApprovalStatus === "pending"
-              ? "بانتظار الرد…"
-              : "طلب موافقه"}
-        </button>
+        <div className="mt-2 grid gap-1">
+          <button
+            type="button"
+            disabled={!canSendDiscount}
+            onClick={() => void sendDiscountApproval(discountApprovalStatus === "pending")}
+            className="w-full rounded-lg bg-[#FCA311] px-2 py-1.5 text-[11px] font-extrabold text-black disabled:opacity-50"
+          >
+            {requestingDiscountApproval
+              ? "جاري التحميل"
+              : discountApprovalStatus === "pending"
+                ? "إعادة إرسال الموافقة"
+                : "طلب موافقه"}
+          </button>
+          {discountApprovalStatus === "pending" ? (
+            <button
+              type="button"
+              disabled={locked || requestingDiscountApproval}
+              onClick={() => void cancelPendingDiscount()}
+              className="w-full rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-[#14213D] ring-1 ring-[#14213D]/20 disabled:opacity-50"
+            >
+              إلغاء طلب الخصم
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }

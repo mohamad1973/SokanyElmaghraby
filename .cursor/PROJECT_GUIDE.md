@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فك تعليق موافقة الخصم | إعادة إرسال/إلغاء طلب الخصم للموظفة؛ مسح pending مع لم يرد؛ جرس الأدمن ينبّه ويعرض طلبات الخصم | `discount-approvals.ts`, `call-sheet.tsx`, `confirmations.ts`, `order-notification-bar.tsx` |
 | قفل شيت سيد بعد الطباعة | تجميد عند ≥4 نسخ من خانة التطبيق أو 4 ضغطات؛ طباعة المندوب تسجّل العدّاد؛ توضيح إن نسخ حوار الطابعة مش بتتحسب | `temima-sheet-edits.ts`, `cs-queue-client.tsx` |
 | مزامنة خصم/ديبوزت مع بوسطة | موافقة الخصم أو الديبوزت تحدّث waybillTotal وتدفع COD لبوسطة فورًا وتعيد تفعيل طباعة البوليصة | `bosta-waybill.ts`, `deposit-approvals.ts`, `discount-approvals.ts`, `confirmations.ts` |
 | قفل حالات مشرف تميمة + مؤجلات سابقة | تم بنجاح/الغاء متقفلين للمشرف (مؤجل فقط يتعدّل)؛ تحصيل المؤجل بعد قفل الأسبوع يدخل أسبوع اليوم تحت بند مؤجلات سابقة مع أرقام الأوردرات | `temima-settlement.ts`, `cs-queue-client.tsx`, `couriers-client.tsx`, `temima-settlement-client.tsx` |

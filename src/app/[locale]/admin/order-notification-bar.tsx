@@ -26,7 +26,20 @@ type DepositItem = {
   assignedAgent?: { id: number; name: string } | null;
 };
 
+type DiscountItem = {
+  id: number;
+  wooOrderNumber: string;
+  wooOrderId: number;
+  customerName: string;
+  phone: string;
+  total?: string;
+  discountAmount: number | null;
+  discountApprovalRequestedAt?: string | null;
+  assignedAgent?: { id: number; name: string } | null;
+};
+
 const lastPendingDepositIdsKey = "sokany:admin-pending-deposit-ids";
+const lastPendingDiscountIdsKey = "sokany:admin-pending-discount-ids";
 const pollIntervalMs = 8000;
 
 const METHOD_LABEL: Record<string, string> = {
@@ -49,6 +62,21 @@ function writePendingIds(ids: Set<number>) {
   window.localStorage.setItem(lastPendingDepositIdsKey, JSON.stringify([...ids]));
 }
 
+function readPendingDiscountIds(): Set<number> {
+  try {
+    const raw = window.localStorage.getItem(lastPendingDiscountIdsKey);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as number[];
+    return new Set(Array.isArray(arr) ? arr.filter((n) => Number.isInteger(n)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writePendingDiscountIds(ids: Set<number>) {
+  window.localStorage.setItem(lastPendingDiscountIdsKey, JSON.stringify([...ids]));
+}
+
 function BellIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
@@ -63,23 +91,25 @@ function BellIcon({ className }: { className?: string }) {
   );
 }
 
-/** Bell for store admin: deposit approval requests only. */
+/** Bell for store admin: deposit + discount approval requests. */
 export function AdminNotificationsBell() {
   const [open, setOpen] = useState(false);
   const [selectedDeposit, setSelectedDeposit] = useState<DepositItem | null>(null);
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
-  const [discountCount, setDiscountCount] = useState(0);
+  const [discounts, setDiscounts] = useState<DiscountItem[]>([]);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
   const [decideBusy, setDecideBusy] = useState(false);
   const [decideMessage, setDecideMessage] = useState("");
   const [ringPulse, setRingPulse] = useState(false);
   const knownPendingRef = useRef<Set<number>>(new Set());
+  const knownDiscountRef = useRef<Set<number>>(new Set());
   const initializedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
     knownPendingRef.current = readPendingIds();
+    knownDiscountRef.current = readPendingDiscountIds();
   }, []);
 
   useEffect(() => {
@@ -93,26 +123,31 @@ export function AdminNotificationsBell() {
         if (!notifRes.ok) {
           const errBody = (await notifRes.json().catch(() => null)) as { message?: string } | null;
           if (isMounted) {
-            setError(errBody?.message || `تعذر تحميل إشعارات الديبوزت (${notifRes.status})`);
+            setError(errBody?.message || `تعذر تحميل الإشعارات (${notifRes.status})`);
           }
           return;
         }
 
         const payload = (await notifRes.json().catch(() => null)) as {
           deposits?: DepositItem[];
+          discounts?: DiscountItem[];
           discountCount?: number;
         } | null;
         const items = payload?.deposits || [];
+        const discountItems = payload?.discounts || [];
         const currentIds = new Set(items.map((d) => d.id));
-        if (isMounted) setDiscountCount(Number(payload?.discountCount) || 0);
+        const currentDiscountIds = new Set(discountItems.map((d) => d.id));
 
         if (!initializedRef.current) {
           knownPendingRef.current = currentIds;
+          knownDiscountRef.current = currentDiscountIds;
           writePendingIds(currentIds);
+          writePendingDiscountIds(currentDiscountIds);
           initializedRef.current = true;
         } else {
-          const freshIds = [...currentIds].filter((id) => !knownPendingRef.current.has(id));
-          if (freshIds.length > 0) {
+          const freshDeposit = [...currentIds].filter((id) => !knownPendingRef.current.has(id));
+          const freshDiscount = [...currentDiscountIds].filter((id) => !knownDiscountRef.current.has(id));
+          if (freshDeposit.length > 0 || freshDiscount.length > 0) {
             playLoudDepositAlert();
             if (isMounted) setRingPulse(true);
             window.setTimeout(() => {
@@ -120,11 +155,14 @@ export function AdminNotificationsBell() {
             }, 6000);
           }
           knownPendingRef.current = currentIds;
+          knownDiscountRef.current = currentDiscountIds;
           writePendingIds(currentIds);
+          writePendingDiscountIds(currentDiscountIds);
         }
 
         if (isMounted) {
           setDeposits(items);
+          setDiscounts(discountItems);
           setSelectedDeposit((prev) => {
             if (!prev) return null;
             return items.find((d) => d.id === prev.id) || null;
@@ -200,7 +238,9 @@ export function AdminNotificationsBell() {
   }
 
   const hasDeposits = deposits.length > 0;
-  const alertActive = hasDeposits || ringPulse;
+  const hasDiscounts = discounts.length > 0;
+  const alertActive = hasDeposits || hasDiscounts || ringPulse;
+  const discountCount = discounts.length;
 
   const panel =
     open && mounted ? (
@@ -222,7 +262,9 @@ export function AdminNotificationsBell() {
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
             <p className="text-sm font-extrabold">
-              {selectedDeposit ? `طلب تأكيد ديبوزت #${selectedDeposit.wooOrderNumber}` : "طلب تأكيد ديبوزت"}
+              {selectedDeposit
+                ? `طلب تأكيد ديبوزت #${selectedDeposit.wooOrderNumber}`
+                : "إشعارات الديبوزت والخصم"}
             </p>
             <button
               type="button"
@@ -318,32 +360,61 @@ export function AdminNotificationsBell() {
                   </button>
                 </div>
               </div>
-            ) : deposits.length === 0 && !error ? (
-              <p className="text-zinc-500">لا توجد طلبات تأكيد ديبوزت معلّقة.</p>
+            ) : !hasDeposits && !hasDiscounts && !error ? (
+              <p className="text-zinc-500">لا توجد طلبات ديبوزت أو خصم معلّقة.</p>
             ) : (
-              <ul className="space-y-1.5">
-                {deposits.map((d) => (
-                  <li key={`dep-${d.id}`}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedDeposit(d);
-                        setDecideMessage("");
-                      }}
-                      className="block w-full rounded-lg bg-[#0D9488]/10 px-3 py-2.5 text-right font-bold text-[#14213D] hover:bg-[#0D9488]/20"
-                    >
-                      <span className="block">طلب تأكيد ديبوزت #{d.wooOrderNumber}</span>
-                      <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
-                        {d.customerName || "عميل"} · {d.depositAmount ?? "?"} ج.م
-                        {d.depositPayMethod
-                          ? ` · ${METHOD_LABEL[d.depositPayMethod] || d.depositPayMethod}`
-                          : ""}
-                        {d.assignedAgent?.name ? ` · ${d.assignedAgent.name}` : ""}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-4">
+                {hasDeposits ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-extrabold text-[#0D9488]">ديبوزت ({deposits.length})</p>
+                    <ul className="space-y-1.5">
+                      {deposits.map((d) => (
+                        <li key={`dep-${d.id}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDeposit(d);
+                              setDecideMessage("");
+                            }}
+                            className="block w-full rounded-lg bg-[#0D9488]/10 px-3 py-2.5 text-right font-bold text-[#14213D] hover:bg-[#0D9488]/20"
+                          >
+                            <span className="block">طلب تأكيد ديبوزت #{d.wooOrderNumber}</span>
+                            <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                              {d.customerName || "عميل"} · {d.depositAmount ?? "?"} ج.م
+                              {d.depositPayMethod
+                                ? ` · ${METHOD_LABEL[d.depositPayMethod] || d.depositPayMethod}`
+                                : ""}
+                              {d.assignedAgent?.name ? ` · ${d.assignedAgent.name}` : ""}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {hasDiscounts ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-extrabold text-[#FCA311]">خصم ({discounts.length})</p>
+                    <ul className="space-y-1.5">
+                      {discounts.map((d) => (
+                        <li key={`disc-${d.id}`}>
+                          <Link
+                            href={`/admin/discount-approvals/${d.id}`}
+                            onClick={() => setOpen(false)}
+                            className="block w-full rounded-lg bg-[#FCA311]/15 px-3 py-2.5 text-right font-bold text-[#14213D] hover:bg-[#FCA311]/25"
+                          >
+                            <span className="block">طلب خصم #{d.wooOrderNumber}</span>
+                            <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                              {d.customerName || "عميل"} · {d.discountAmount ?? "?"} ج.م
+                              {d.assignedAgent?.name ? ` · ${d.assignedAgent.name}` : ""}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
 
@@ -390,6 +461,11 @@ export function AdminNotificationsBell() {
         {hasDeposits ? (
           <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#0D9488] px-1.5 text-[11px] font-extrabold text-white">
             ديبوزت {deposits.length}
+          </span>
+        ) : null}
+        {hasDiscounts ? (
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FCA311] px-1.5 text-[11px] font-extrabold text-black">
+            خصم {discountCount}
           </span>
         ) : null}
       </button>

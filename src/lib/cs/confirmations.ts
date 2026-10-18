@@ -15,6 +15,7 @@ import {
 import { ensureCsTables } from "@/lib/cs/agents";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { resolveHandedToCarrierAt } from "@/lib/cs/temima-sheet";
+import { markDiscountApprovalNotificationsDone } from "@/lib/admin-notifications";
 import { attachBostaWaybillByOrderReference, syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import {
   parseWooOrderNumber,
@@ -1637,6 +1638,19 @@ export async function saveCsConfirmation(input: {
     return { ok: true as const, status: row.status, missing: [] as string[] };
   }
 
+  const pendingDiscountClear =
+    String(typed.discountApprovalStatus || "")
+      .trim()
+      .toLowerCase() === "pending"
+      ? {
+          orderTotalDelta: null,
+          discountApprovalStatus: null,
+          discountApprovalRequestedAt: null,
+          discountApprovalDecidedAt: null,
+          discountAgentDecisionSeenAt: null,
+        }
+      : {};
+
   if (input.failContact) {
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
@@ -1644,8 +1658,16 @@ export async function saveCsConfirmation(input: {
         status: CS_CONFIRMATION_STATUS.FAILED_CONTACT,
         failReason: input.failReason?.trim() || "لم يرد",
         assignedAgentId: input.agentId,
-      },
+        ...pendingDiscountClear,
+      } as never,
     });
+    if (Object.keys(pendingDiscountClear).length) {
+      try {
+        await markDiscountApprovalNotificationsDone(input.id);
+      } catch (error) {
+        console.error("[confirmations] discount notify clear on failContact failed", error);
+      }
+    }
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
   }
 
@@ -1656,8 +1678,16 @@ export async function saveCsConfirmation(input: {
         status: CS_CONFIRMATION_STATUS.CANCELLED,
         failReason: input.failReason?.trim() || "لاغى",
         assignedAgentId: input.agentId,
-      },
+        ...pendingDiscountClear,
+      } as never,
     });
+    if (Object.keys(pendingDiscountClear).length) {
+      try {
+        await markDiscountApprovalNotificationsDone(input.id);
+      } catch (error) {
+        console.error("[confirmations] discount notify clear on cancelOrder failed", error);
+      }
+    }
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
   }
 
