@@ -1124,18 +1124,25 @@ export function CsQueueClient({
     return Math.min(copies, 20);
   }
 
-  async function closeSheetFromPrint(dayYmd: string) {
+  async function recordSheetPrint(dayYmd: string, copies: number) {
     const res = await fetch("/api/cs/temima-sheet-edit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "freeze-print", dayYmd }),
+      body: JSON.stringify({ action: "record-print", dayYmd, copies }),
     });
-    const data = (await res.json()) as { message?: string; minutes?: number; frozen?: boolean };
+    const data = (await res.json()) as {
+      message?: string;
+      minutes?: number;
+      frozen?: boolean;
+      count?: number;
+    };
     if (!res.ok) {
-      setMessage(data.message || "تعذر قفل الشيت.");
-      return false;
+      setMessage(data.message || "تعذر تسجيل الطباعة.");
+      return { ok: false as const, frozen: false };
     }
-    setFrozenDays((prev) => (prev.includes(dayYmd) ? prev : [...prev, dayYmd]));
+    if (data.frozen) {
+      setFrozenDays((prev) => (prev.includes(dayYmd) ? prev : [...prev, dayYmd]));
+    }
     if (typeof data.minutes === "number") {
       setCutoffs((prev) => {
         const next = prev.filter((row) => row.dayYmd !== dayYmd);
@@ -1143,7 +1150,7 @@ export function CsQueueClient({
         return next;
       });
     }
-    return true;
+    return { ok: true as const, frozen: Boolean(data.frozen), message: data.message || "" };
   }
 
   async function reopenSheetDay(dayYmd: string) {
@@ -1174,13 +1181,15 @@ export function CsQueueClient({
     const copies = sheetCopyCount();
     const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
     if (isCourierSupervisor || temimaDateMode(filters)) {
-      const printLocksSheet = Boolean(singleDay && (copies === 4 || copies === 5));
-      if (printLocksSheet) {
-        const closed = await closeSheetFromPrint(singleDay);
-        if (!closed) {
+      let printFrozen = false;
+      if (singleDay) {
+        const recorded = await recordSheetPrint(singleDay, copies);
+        if (!recorded.ok) {
           setPrinting(false);
           return;
         }
+        printFrozen = recorded.frozen;
+        if (recorded.message) setMessage(recorded.message);
       }
       const params = new URLSearchParams({ sheet: "temima", from: filters.dateFrom, to: filters.dateTo });
       const res = await fetch(`/api/cs/orders?${params.toString()}`);
@@ -1191,9 +1200,8 @@ export function CsQueueClient({
         return;
       }
       rememberFrozenDays(filters.dateFrom, filters.dateTo, data.frozenDays || []);
-      if (printLocksSheet) {
+      if (printFrozen && singleDay) {
         setFrozenDays((prev) => (prev.includes(singleDay) ? prev : [...prev, singleDay]));
-        setMessage("اتقفل وتجمد الشيت بعد الطباعة.");
       }
       const printed = [...(data.items || [])];
       if (filters.dateFrom && filters.dateFrom === filters.dateTo && printed.some((item) => item.sheetSerial && item.sheetSerial > 0)) {
@@ -1450,16 +1458,19 @@ export function CsQueueClient({
           {canPrintQueue ? (
           <div className="flex shrink-0 items-center gap-2">
             {isCourierSupervisor || temimaDateMode(applied) ? (
-              <label className="flex items-center gap-1 text-[11px] font-extrabold text-[#14213D]">
-                عدد النسخ
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={printCopies}
-                  onChange={(event) => setPrintCopies(event.target.value)}
-                  className="h-9 w-14 rounded-xl border border-[#E5E5E5] bg-white px-2 text-center text-xs font-extrabold"
-                />
+              <label className="flex flex-col gap-0.5 text-[11px] font-extrabold text-[#14213D]">
+                <span className="flex items-center gap-1">
+                  عدد النسخ
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={printCopies}
+                    onChange={(event) => setPrintCopies(event.target.value)}
+                    className="h-9 w-14 rounded-xl border border-[#E5E5E5] bg-white px-2 text-center text-xs font-extrabold"
+                  />
+                </span>
+                <span className="text-[10px] font-bold text-[#14213D]/70">أي يوم: 4 أو 5 نسخ = قفل · أو 4 طباعات</span>
               </label>
             ) : null}
           <button

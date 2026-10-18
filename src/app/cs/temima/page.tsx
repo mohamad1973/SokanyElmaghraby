@@ -52,7 +52,7 @@ export default async function CsTemimaSheetPage() {
       canOpenOrders={viewer.isAdmin}
       canEditTemimaSheet={viewer.isAdmin}
       canEditInvoice={viewer.isAdmin || viewer.isSupervisor}
-      canPrintQueue={viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor)}
+      canPrintQueue={viewer.isAdmin || viewer.isSupervisor || viewer.isCourierSupervisor}
       canReopenTemimaSheet={viewer.isAdmin}
       frozenTemimaDays={[...frozenTemimaDays]}
       temimaCutoffs={temimaCutoffs}

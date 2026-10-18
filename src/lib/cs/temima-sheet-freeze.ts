@@ -15,6 +15,7 @@ export async function ensureTemimaFreezeTables() {
   }
   await freezeTablesReady;
   await ensureTemimaSerialColumn();
+  await ensureTemimaPrintCountTable();
 }
 
 async function createTemimaFreezeTables() {
@@ -284,7 +285,51 @@ export async function reopenTemimaSheetDay(dayYmd: string) {
   await ensureTemimaFreezeTables();
   await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetFreeze WHERE dayYmd = ?", dayYmd);
   await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetFreezeDay WHERE dayYmd = ?", dayYmd);
+  await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetPrintCount WHERE dayYmd = ?", dayYmd);
+  await prisma.$executeRawUnsafe("DELETE FROM CsTemimaSheetCutoff WHERE dayYmd = ?", dayYmd);
   return { ok: true as const, dayYmd, frozen: false as const, message: "اتفتح الشيت." };
+}
+
+let printCountReady: Promise<void> | null = null;
+
+async function ensureTemimaPrintCountTable() {
+  if (!printCountReady) {
+    printCountReady = createTemimaPrintCountTable().catch((error) => {
+      printCountReady = null;
+      throw error;
+    });
+  }
+  await printCountReady;
+}
+
+async function createTemimaPrintCountTable() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsTemimaSheetPrintCount\` (
+      \`dayYmd\` VARCHAR(10) NOT NULL,
+      \`count\` INT NOT NULL DEFAULT 0,
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (\`dayYmd\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+}
+
+/** Increment sheet print count for a day. Returns the new count. */
+export async function incrementTemimaSheetPrintCount(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma || !DAY.test(dayYmd)) return 0;
+  await ensureTemimaFreezeTables();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO CsTemimaSheetPrintCount (dayYmd, count) VALUES (?, 1)
+     ON DUPLICATE KEY UPDATE count = count + 1`,
+    dayYmd,
+  );
+  const rows = await prisma.$queryRawUnsafe<Array<{ count: number | bigint }>>(
+    "SELECT count FROM CsTemimaSheetPrintCount WHERE dayYmd = ? LIMIT 1",
+    dayYmd,
+  );
+  return Number(rows[0]?.count ?? 0);
 }
 
 export async function removeTemimaFreezeId(dayYmd: string, confirmationId: number) {

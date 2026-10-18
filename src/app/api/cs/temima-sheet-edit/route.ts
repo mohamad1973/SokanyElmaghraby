@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { closeTemimaSheetFromPrint, excludeTemimaOrder, freezePreparedTemimaDay, includeTemimaOrders, searchTemimaSheetOrders } from "@/lib/cs/temima-sheet-edits";
+import {
+  closeTemimaSheetFromPrint,
+  excludeTemimaOrder,
+  freezePreparedTemimaDay,
+  includeTemimaOrders,
+  recordTemimaSheetPrint,
+  searchTemimaSheetOrders,
+} from "@/lib/cs/temima-sheet-edits";
 import { reopenTemimaSheetDay, setTemimaSheetSerial } from "@/lib/cs/temima-sheet-freeze";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -18,12 +25,16 @@ export async function POST(request: Request) {
     confirmationIds?: number[];
     confirmationId?: number;
     serial?: number;
+    copies?: number;
   } | null;
   const dayYmd = String(body?.dayYmd || "");
-  const canPrintSheet = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
-  if (body?.action === "freeze-print") {
+  const canPrintSheet = viewer.isAdmin || viewer.isSupervisor || viewer.isCourierSupervisor;
+  if (body?.action === "freeze-print" || body?.action === "record-print") {
     if (!canPrintSheet) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
-    const result = await closeTemimaSheetFromPrint(dayYmd);
+    const result =
+      body.action === "record-print"
+        ? await recordTemimaSheetPrint(dayYmd, Number(body.copies) || 1)
+        : await closeTemimaSheetFromPrint(dayYmd);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
   }
   if (!viewer.isAdmin) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });

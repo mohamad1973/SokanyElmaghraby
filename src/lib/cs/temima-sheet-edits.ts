@@ -9,6 +9,7 @@ import {
   clearTemimaPrepareHold,
   hasTemimaFreezeDay,
   hasTemimaPrepareHold,
+  incrementTemimaSheetPrintCount,
   listEarliestFreezeDays,
   listTemimaFreezePairs,
   listTemimaFrozenDays,
@@ -324,6 +325,45 @@ export async function closeTemimaSheetFromPrint(dayYmd: string) {
   const frozen = await freezePreparedTemimaDay(dayYmd);
   if (!frozen.ok) return frozen;
   return { ...frozen, minutes: cutoff.minutes };
+}
+
+/**
+ * Record one sheet print for a day. Freezes when copies are 4/5 in one job,
+ * or when the day has been printed 4+ times (even 1 copy each).
+ */
+export async function recordTemimaSheetPrint(dayYmd: string, copies: number) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return { ok: false as const, message: "اليوم غير صحيح." };
+  const copyCount = Number.isInteger(copies) && copies > 0 ? Math.min(copies, 20) : 1;
+  const count = await incrementTemimaSheetPrintCount(dayYmd);
+  if (await hasTemimaFreezeDay(dayYmd)) {
+    return {
+      ok: true as const,
+      dayYmd,
+      count,
+      frozen: true as const,
+      message: "الشيت متقفل.",
+    };
+  }
+  const shouldFreeze = copyCount === 4 || copyCount === 5 || count >= 4;
+  if (!shouldFreeze) {
+    return {
+      ok: true as const,
+      dayYmd,
+      count,
+      frozen: false as const,
+      message: `تم تسجيل الطباعة (${count}/4).`,
+    };
+  }
+  const result = await closeTemimaSheetFromPrint(dayYmd);
+  if (!result.ok) return result;
+  return {
+    ...result,
+    count,
+    message:
+      copyCount === 4 || copyCount === 5
+        ? result.message || "اتقفل وتجمد الشيت بعد الطباعة."
+        : "اتقفل وتجمد الشيت بعد أربع طباعات.",
+  };
 }
 
 /** Admin backfill: snapshot the orders visible on a prepared day. A second press does not replace the snapshot. */
