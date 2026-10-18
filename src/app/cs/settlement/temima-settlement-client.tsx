@@ -277,6 +277,22 @@ export function TemimaSettlementClient({
   const refusalTotal = useMemo(() => rows.reduce((sum, row) => sum + refusalValue(row), 0), [rows]);
   const netTotal = useMemo(() => rows.reduce((sum, row) => sum + netValue(row), 0), [rows]);
   const shippingTotal = useMemo(() => rows.reduce((sum, row) => sum + shippingFee(row), 0), [rows]);
+  const weekCollectDue = useMemo(
+    () => rows.reduce((sum, row) => sum + (row.carried ? 0 : netValue(row)), 0),
+    [rows],
+  );
+  const priorPostponeCollectDue = useMemo(
+    () => rows.reduce((sum, row) => sum + (row.carried ? netValue(row) : 0), 0),
+    [rows],
+  );
+  const priorPostponeCollectedOrders = useMemo(
+    () =>
+      rows
+        .filter((row) => row.carried && row.disposition === "collect")
+        .map((row) => row.wooOrderNumber)
+        .sort((a, b) => Number(String(b).replace(/\D/g, "")) - Number(String(a).replace(/\D/g, ""))),
+    [rows],
+  );
   const cashDue = closedCashDue == null ? netTotal : closedCashDue;
   const locked = !canEdit || status === "closed";
 
@@ -637,8 +653,18 @@ export function TemimaSettlementClient({
         <p className="text-sm font-extrabold text-[#14213D]">الديبوزت: {money(depositTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">المؤجل: {money(postponeTotal)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الرفض: {money(refusalTotal)} ج</p>
+        <p className="text-sm font-extrabold text-[#14213D]">تحصيل الأسبوع الحالي: {money(weekCollectDue)} ج</p>
+        <p className="text-sm font-extrabold text-[#14213D]">مؤجلات سابقة: {money(priorPostponeCollectDue)} ج</p>
         <p className="text-sm font-extrabold text-[#14213D]">الصافي المستحق: {money(cashDue)} ج</p>
-        <p className="text-xs font-bold text-[#14213D]/70 sm:col-span-2 lg:col-span-4">مجموع تم بنجاح. الالغاء والمؤجل مش داخل المطلوب تحصيله.</p>
+        {priorPostponeCollectedOrders.length ? (
+          <p className="text-xs font-bold text-[#14213D]/80 sm:col-span-2 lg:col-span-4" dir="ltr">
+            أوردرات مؤجلة سابقة ومحصّلة هذا الأسبوع:{" "}
+            {priorPostponeCollectedOrders.map((n) => `#${n}`).join(" · ")}
+          </p>
+        ) : null}
+        <p className="text-xs font-bold text-[#14213D]/70 sm:col-span-2 lg:col-span-4">
+          المطلوب تحصيله = تحصيل الأسبوع + مؤجلات سابقة. الالغاء والمؤجل الحالي مش داخل المطلوب. الأسبوع القديم ما بيتأثرش.
+        </p>
         <label className="text-sm font-bold">
           المدفوع من تميمة
           <input

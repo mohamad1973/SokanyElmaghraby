@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| قفل حالات مشرف تميمة + مؤجلات سابقة | تم بنجاح/الغاء متقفلين للمشرف (مؤجل فقط يتعدّل)؛ تحصيل المؤجل بعد قفل الأسبوع يدخل أسبوع اليوم تحت بند مؤجلات سابقة مع أرقام الأوردرات | `temima-settlement.ts`, `cs-queue-client.tsx`, `couriers-client.tsx`, `temima-settlement-client.tsx` |
 | شيت مرتجعات بوسطة — مدى + سحب تلقائي | الافتراضي آخر 7 أيام (إمبارح ميبقاش يختفي)؛ فتح الصفحة يسحب متجه إليك تلقائيًا؛ رسالة فاضية توضّح توسيع التاريخ | `maintenance-returns.ts`, `maintenance-client.tsx` |
 | مرتجعات بوسطة طول اليوم | سحب متجه إليك كل ساعة من الصبح من غير مسح التاريخي؛ فحص جديد/مستخدم حصري؛ فلتر وجهة واستخدام وطباعة حسب الفلتر | `bosta-return-capture.ts`, `bosta-return-review.ts`, `maintenance-client.tsx`, `vercel.json` |
 | مزامنة البوليصة + عيد/مؤمن | تعديل العنوان/السعر يتحدّث في `customerSnapshot` وبوليصة بوسطة؛ عيد ومؤمن شركات شحن تحت بوسطة/تميمة مع تعيين `monaCourierId` وفلتر | `confirmations.ts`, `checklist.ts`, `cs-queue-client.tsx`, `mona-courier.ts`, `bosta-waybill.ts` |

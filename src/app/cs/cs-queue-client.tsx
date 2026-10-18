@@ -1005,9 +1005,15 @@ export function CsQueueClient({
     );
   }
 
-  function askStatusEdit(id: number, weekClosed: boolean) {
+  function askStatusEdit(
+    id: number,
+    weekClosed: boolean,
+    disposition: CsQueueItem["settlementDisposition"],
+  ) {
     if (editingStatusId === id) return;
     if (weekClosed && !canEditClosedWeek) return;
+    // Supervisors may only re-edit مؤجل; تم بنجاح / الغاء stay locked (admin override via canEditClosedWeek).
+    if (!canEditClosedWeek && (disposition === "collect" || disposition === "return")) return;
     if (!window.confirm("هل تريد التعديل؟")) return;
     setEditingStatusId(id);
   }
@@ -1019,6 +1025,13 @@ export function CsQueueClient({
     weekClosed: boolean,
   ) {
     if (weekClosed && !canEditClosedWeek) return;
+    if (
+      !canEditClosedWeek &&
+      (disposition === "collect" || disposition === "return") &&
+      editingStatusId !== id
+    ) {
+      return;
+    }
     if (editingStatusId !== id && currentStatusAction(disposition) === action) return;
     void markSupervisorResult(id, action);
   }
@@ -2040,7 +2053,7 @@ export function CsQueueClient({
                               onClick={() => pressStatus(item.id, action, item.settlementDisposition, weekClosed)}
                               onDoubleClick={() => {
                                 if (!item.settlementDisposition) return;
-                                askStatusEdit(item.id, weekClosed);
+                                askStatusEdit(item.id, weekClosed, item.settlementDisposition);
                               }}
                               className={`rounded-lg px-2 py-1 text-[11px] font-extrabold disabled:opacity-60 ${tone}`}
                             >

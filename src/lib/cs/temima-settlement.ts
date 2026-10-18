@@ -410,6 +410,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       if (row.carried || !row.sheetDay) return range.fullWeek;
       return row.sheetDay >= range.start && row.sheetDay <= range.end;
     });
+    const due = collectDueBreakdown(rows);
     return {
       ok: true as const,
       weekStart: range.start,
@@ -417,6 +418,9 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       fullWeek: range.fullWeek,
       status: "closed" as const,
       cashDue: Number(week.cashDue),
+      weekCollectDue: due.weekCollectDue,
+      priorPostponeCollectDue: due.priorPostponeCollectDue,
+      priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,
       cashPaid: Number(week.cashPaid),
       monthId: week.monthId,
       rows,
@@ -502,9 +506,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   }
 
   rows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
-  const cashDue = rows
-    .filter((row) => row.disposition === "collect")
-    .reduce((sum, row) => sum + row.cashAmount, 0);
+  const due = collectDueBreakdown(rows);
 
   return {
     ok: true as const,
@@ -512,11 +514,36 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     weekEnd: range.end,
     fullWeek: range.fullWeek,
     status: "open" as const,
-    cashDue,
+    cashDue: due.cashDue,
+    weekCollectDue: due.weekCollectDue,
+    priorPostponeCollectDue: due.priorPostponeCollectDue,
+    priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,
     cashPaid: week ? Number(week.cashPaid) : 0,
     monthId: week?.monthId ?? null,
     rows,
     history: historyOf(weeks),
+  };
+}
+
+function collectDueBreakdown(rows: TemimaSheetRow[]) {
+  let weekCollectDue = 0;
+  let priorPostponeCollectDue = 0;
+  const priorPostponeCollectedOrders: string[] = [];
+  for (const row of rows) {
+    if (row.disposition !== "collect") continue;
+    if (row.carried) {
+      priorPostponeCollectDue += row.cashAmount;
+      priorPostponeCollectedOrders.push(row.wooOrderNumber);
+    } else {
+      weekCollectDue += row.cashAmount;
+    }
+  }
+  priorPostponeCollectedOrders.sort((a, b) => Number(b.replace(/\D/g, "")) - Number(a.replace(/\D/g, "")));
+  return {
+    weekCollectDue,
+    priorPostponeCollectDue,
+    priorPostponeCollectedOrders,
+    cashDue: weekCollectDue + priorPostponeCollectDue,
   };
 }
 
@@ -742,24 +769,17 @@ export async function applySupervisorOrderResult(input: {
   });
   if (!order) return { ok: false as const, message: "الأوردر مش على شيت سيد تميمة." };
 
-  const cutoffs = await listTemimaCutoffs();
-  const sheetDay = sayedSheetYmd(order, cutoffs) || cairoTodayYmd();
-  const sunday = sundayOnOrBefore(sheetDay);
-  const saturday = addDaysYmd(sunday, 6);
-  const week = await upsertOpenWeek(sunday, saturday, input.agentId);
-  if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
-  const weekClosed = week.status === "closed";
-  if (weekClosed && !input.allowClosed) return { ok: false as const, message: "الأسبوع مقفل." };
+  const priorMark = await prisma.$queryRawUnsafe<Array<{ disposition: string | null }>>(
+    `SELECT temimaSupervisorResult AS disposition FROM CsOrderConfirmation WHERE id = ${order.id} LIMIT 1`,
+  );
+  const currentMark = storedDisposition(priorMark[0]?.disposition);
+  if (!input.allowClosed && (currentMark === "collect" || currentMark === "return")) {
+    return { ok: false as const, message: "تم بنجاح والغاء متقفلين. التعديل للمؤجل فقط." };
+  }
 
   const disposition: TemimaDisposition =
     input.result === "returned" ? "return" : input.result === "postponed" ? "postpone" : "collect";
 
-  const overrides = await depositOverrides([order.id]);
-  const split = settlementSplit(order, overrides.get(order.id) ?? null, true, true);
-  const existing = await prisma.csCarrierWeekLine.findFirst({
-    where: { weekId: week.id, confirmationId: order.id },
-    select: { isLarge: true },
-  });
   const closedPostpones = await prisma.csCarrierWeekLine.findMany({
     where: {
       confirmationId: order.id,
@@ -776,6 +796,24 @@ export async function applySupervisorOrderResult(input: {
     : [];
   const resolvedIds = new Set(resolved.map((line) => line.resolvesLineId));
   const openPostponeId = closedPostpones.find((line) => !resolvedIds.has(line.id))?.id ?? null;
+
+  const cutoffs = await listTemimaCutoffs();
+  const sheetDay = sayedSheetYmd(order, cutoffs) || cairoTodayYmd();
+  const sheetSunday = sundayOnOrBefore(sheetDay);
+  // Unresolved postpone from a closed week lands on the current open week only.
+  const targetSunday = openPostponeId ? sundayOnOrBefore(cairoTodayYmd()) : sheetSunday;
+  const targetSaturday = addDaysYmd(targetSunday, 6);
+  const week = await upsertOpenWeek(targetSunday, targetSaturday, input.agentId);
+  if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
+  const weekClosed = week.status === "closed";
+  if (weekClosed && !input.allowClosed) return { ok: false as const, message: "الأسبوع مقفل." };
+
+  const overrides = await depositOverrides([order.id]);
+  const split = settlementSplit(order, overrides.get(order.id) ?? null, true, true);
+  const existing = await prisma.csCarrierWeekLine.findFirst({
+    where: { weekId: week.id, confirmationId: order.id },
+    select: { isLarge: true },
+  });
 
   await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id, confirmationId: order.id } });
   await prisma.csCarrierWeekLine.create({

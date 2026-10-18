@@ -351,12 +351,20 @@ export function CouriersClient({
                       type="button"
                       onClick={() => {
                         if (weekClosed && !canEditClosedWeek) return;
+                        if (
+                          !canEditClosedWeek &&
+                          (order.official === "collect" || order.official === "return") &&
+                          editingStatusId !== order.id
+                        ) {
+                          return;
+                        }
                         if (editingStatusId !== order.id && currentStatusAction(order.official) === action) return;
                         void post({ action: "result", confirmationId: order.id, outcome: action });
                       }}
                       onDoubleClick={() => {
                         if (!order.official || editingStatusId === order.id) return;
                         if (weekClosed && !canEditClosedWeek) return;
+                        if (!canEditClosedWeek && (order.official === "collect" || order.official === "return")) return;
                         if (!window.confirm("هل تريد التعديل؟")) return;
                         setEditingStatusId(order.id);
                       }}
