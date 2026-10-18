@@ -1255,6 +1255,11 @@ async function pushBostaIfNeeded(input: {
     wooOrderNumber: string;
     customerSnapshot: unknown;
     shippingCompany?: string | null;
+    orderTotalDelta?: unknown;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
+    depositApprovalStatus?: string | null;
+    discountApprovalStatus?: string | null;
   };
   answers: CsChecklistAnswerInput[];
   shippingCompany: string | null;
@@ -1262,9 +1267,32 @@ async function pushBostaIfNeeded(input: {
   bostaStatus: string | null;
   bostaShippingFee: number | null;
   allowCreate: boolean;
+  orderTotalDelta?: number | null;
+  depositAmount?: number | null;
+  depositPaid?: boolean | null;
+  depositApprovalStatus?: string | null;
 }) {
   if (input.shippingCompany !== "bosta") return null;
   if (!input.allowCreate && !input.trackingNumber) return null;
+  const discountApproved =
+    String(input.row.discountApprovalStatus || "").toLowerCase() === "approved";
+  const deltaFromRow = parseOrderTotalDelta(input.row.orderTotalDelta);
+  const orderTotalDelta =
+    input.orderTotalDelta !== undefined
+      ? input.orderTotalDelta
+      : discountApproved && deltaFromRow != null && deltaFromRow < 0
+        ? deltaFromRow
+        : null;
+  const depositAmount =
+    input.depositAmount !== undefined
+      ? input.depositAmount
+      : parseDepositAmount(input.row.depositAmount);
+  const depositPaid =
+    input.depositPaid !== undefined ? input.depositPaid : Boolean(input.row.depositPaid);
+  const depositApprovalStatus =
+    input.depositApprovalStatus !== undefined
+      ? input.depositApprovalStatus
+      : input.row.depositApprovalStatus || null;
   return syncCsBostaWaybill({
     confirmationId: input.row.id,
     wooOrderId: input.row.wooOrderId,
@@ -1275,6 +1303,10 @@ async function pushBostaIfNeeded(input: {
     bostaShippingFee: input.bostaShippingFee,
     answers: input.answers,
     snapshot: (input.row.customerSnapshot as Record<string, unknown> | null) || null,
+    orderTotalDelta,
+    depositAmount,
+    depositPaid,
+    depositApprovalStatus,
   });
 }
 
@@ -1371,6 +1403,7 @@ export async function saveCsConfirmation(input: {
     depositToMethod?: string | null;
     orderTotalDelta?: unknown;
     discountApprovalStatus?: string | null;
+    depositApprovalStatus?: string | null;
     postCancelAt?: Date | null;
     handedToCarrier?: boolean | null;
     bostaStatus?: string | null;
@@ -1455,6 +1488,18 @@ export async function saveCsConfirmation(input: {
   if (input.orderTotalDelta !== undefined) {
     shippingMetaPatch.orderTotalDelta = parseOrderTotalDelta(input.orderTotalDelta);
   }
+
+  const moneyRowFields = () => ({
+    orderTotalDelta:
+      shippingMetaPatch.orderTotalDelta !== undefined
+        ? shippingMetaPatch.orderTotalDelta
+        : typed.orderTotalDelta,
+    depositAmount: nextDepositAmount,
+    depositPaid:
+      input.depositPaid !== undefined ? nextDepositPaid : Boolean(typed.depositPaid),
+    depositApprovalStatus: typed.depositApprovalStatus || null,
+    discountApprovalStatus: typed.discountApprovalStatus || null,
+  });
 
   const salesOrderPatch =
     input.salesOrderNumber !== undefined
@@ -1553,7 +1598,7 @@ export async function saveCsConfirmation(input: {
     const bosta = post?.refundPaid
       ? null
       : await pushBostaIfNeeded({
-          row: { ...row, customerSnapshot: followSnapshot },
+          row: { ...row, customerSnapshot: followSnapshot, ...moneyRowFields() },
           answers: followAnswers,
           shippingCompany: row.shippingCompany,
           trackingNumber: nextTracking,
@@ -1643,7 +1688,7 @@ export async function saveCsConfirmation(input: {
     });
     const draftFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
     const draftBosta = await pushBostaIfNeeded({
-      row: { ...row, customerSnapshot: nextSnapshot },
+      row: { ...row, customerSnapshot: nextSnapshot, ...moneyRowFields() },
       answers: input.answers,
       shippingCompany,
       trackingNumber: nextTracking,
@@ -1758,7 +1803,7 @@ export async function saveCsConfirmation(input: {
 
   const savedFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
   const bosta = await pushBostaIfNeeded({
-    row: { ...row, shippingCompany, customerSnapshot: nextSnapshot },
+    row: { ...row, shippingCompany, customerSnapshot: nextSnapshot, ...moneyRowFields() },
     answers: input.answers,
     shippingCompany,
     trackingNumber: nextTracking,

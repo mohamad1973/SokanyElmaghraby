@@ -429,7 +429,11 @@ export async function syncCsBostaWaybill(input: {
   let depositAmount = input.depositAmount ?? null;
   let depositPaid = input.depositPaid ?? null;
   let depositApprovalStatus = input.depositApprovalStatus ?? null;
-  if (prisma && (orderTotalDelta == null || depositAmount == null || depositApprovalStatus == null)) {
+  let discountApprovalStatus: string | null = null;
+  if (
+    prisma &&
+    (orderTotalDelta == null || depositAmount == null || depositApprovalStatus == null || !discountApprovalStatus)
+  ) {
     const row = await prisma.csOrderConfirmation.findUnique({
       where: { id: input.confirmationId },
       select: {
@@ -437,6 +441,7 @@ export async function syncCsBostaWaybill(input: {
         depositAmount: true,
         depositPaid: true,
         depositApprovalStatus: true,
+        discountApprovalStatus: true,
       } as never,
     });
     const typed = row as {
@@ -444,8 +449,10 @@ export async function syncCsBostaWaybill(input: {
       depositAmount?: unknown;
       depositPaid?: boolean | null;
       depositApprovalStatus?: string | null;
+      discountApprovalStatus?: string | null;
     } | null;
     if (typed) {
+      discountApprovalStatus = typed.discountApprovalStatus || null;
       if (orderTotalDelta == null && typed.orderTotalDelta != null) {
         const n = Number(typed.orderTotalDelta);
         orderTotalDelta = Number.isFinite(n) ? n : null;
@@ -457,6 +464,12 @@ export async function syncCsBostaWaybill(input: {
       if (depositPaid == null) depositPaid = Boolean(typed.depositPaid);
       if (depositApprovalStatus == null) depositApprovalStatus = typed.depositApprovalStatus || null;
     }
+  }
+  // Only approved discounts change COD on the waybill.
+  if (String(discountApprovalStatus || "").toLowerCase() !== "approved") {
+    orderTotalDelta = null;
+  } else if (orderTotalDelta != null && !(Number(orderTotalDelta) < 0)) {
+    orderTotalDelta = null;
   }
 
   const built = partyFromAnswers({
@@ -597,6 +610,139 @@ export async function syncCsBostaWaybill(input: {
     lastEvent: details.lastEvent,
     events: details.events,
   });
+}
+
+function moneySnapshotWithWaybillTotal(snapshot: Snapshot, orderTotalDelta: number | null): Snapshot {
+  const next: Record<string, unknown> = { ...(snapshot || {}) };
+  const rawBase = Number(String(next.wooTotal || next.total || "").replace(/,/g, ""));
+  if (Number.isFinite(rawBase) && !next.wooTotal) next.wooTotal = String(rawBase);
+  const base = Number(String(next.wooTotal || next.total || "").replace(/,/g, ""));
+  const delta = Number(orderTotalDelta);
+  if (Number.isFinite(base)) {
+    const adjusted = Math.max(0, base + (Number.isFinite(delta) ? delta : 0));
+    next.waybillTotal = String(adjusted);
+  }
+  return next;
+}
+
+/**
+ * After discount/deposit approval: refresh local waybillTotal and push COD to Bosta
+ * when a delivery already exists (does not create a new waybill).
+ */
+export async function syncConfirmationMoneyToBosta(confirmationId: number): Promise<{
+  ok: true;
+  synced: boolean;
+  message: string | null;
+  bosta: BostaWaybillState | null;
+}> {
+  const prisma = getPrismaClient();
+  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: true, synced: false, message: null, bosta: null };
+  }
+
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    include: { answers: true },
+  });
+  if (!row) return { ok: true, synced: false, message: null, bosta: null };
+
+  const typed = row as {
+    shippingCompany?: string | null;
+    trackingNumber?: string | null;
+    bostaStatus?: string | null;
+    bostaShippingFee?: unknown;
+    orderTotalDelta?: unknown;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
+    depositApprovalStatus?: string | null;
+    discountApprovalStatus?: string | null;
+  };
+
+  const discountApproved = String(typed.discountApprovalStatus || "").toLowerCase() === "approved";
+  let orderTotalDelta: number | null = null;
+  if (discountApproved && typed.orderTotalDelta != null) {
+    const n = Number(typed.orderTotalDelta);
+    if (Number.isFinite(n) && n < 0) orderTotalDelta = n;
+  }
+
+  const snap = moneySnapshotWithWaybillTotal((row.customerSnapshot as Snapshot) || null, orderTotalDelta);
+  await prisma.csOrderConfirmation.update({
+    where: { id: confirmationId },
+    data: { customerSnapshot: snap } as never,
+  });
+
+  if (typed.shippingCompany !== "bosta") {
+    return { ok: true, synced: false, message: null, bosta: null };
+  }
+
+  const answers: CsChecklistAnswerInput[] = row.answers.map((answer) => ({
+    itemKey: answer.itemKey,
+    confirmed: Boolean(answer.confirmed),
+    value: answer.value,
+    note: answer.note,
+  }));
+
+  let trackingNumber = String(typed.trackingNumber || "").trim() || null;
+  let bostaStatus = typed.bostaStatus || null;
+  let bostaShippingFee =
+    typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
+      ? null
+      : Number(typed.bostaShippingFee);
+
+  if (!trackingNumber) {
+    const linked = await linkExistingBostaDelivery({
+      confirmationId,
+      wooOrderId: row.wooOrderId,
+      wooOrderNumber: row.wooOrderNumber,
+      snapshot: snap,
+      answers,
+    });
+    if (linked?.trackingNumber) {
+      trackingNumber = linked.trackingNumber;
+      bostaStatus = linked.bostaStatus;
+      bostaShippingFee = linked.bostaShippingFee;
+    }
+  }
+
+  if (!trackingNumber) {
+    return { ok: true, synced: false, message: null, bosta: null };
+  }
+
+  const depositAmount =
+    typed.depositAmount == null || !Number.isFinite(Number(typed.depositAmount))
+      ? null
+      : Number(typed.depositAmount);
+
+  const state = await syncCsBostaWaybill({
+    confirmationId,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    shippingCompany: "bosta",
+    trackingNumber,
+    bostaStatus,
+    bostaShippingFee,
+    answers,
+    snapshot: snap,
+    orderTotalDelta,
+    depositAmount,
+    depositPaid: Boolean(typed.depositPaid),
+    depositApprovalStatus: typed.depositApprovalStatus || null,
+  });
+
+  const synced = !state.bostaSyncError;
+  if (synced) {
+    await prisma.csOrderConfirmation.update({
+      where: { id: confirmationId },
+      data: { waybillPrinted: false } as never,
+    });
+  }
+
+  return {
+    ok: true,
+    synced,
+    message: state.message || state.bostaSyncError,
+    bosta: state,
+  };
 }
 
 export async function refreshCsBostaWaybill(confirmationId: number): Promise<BostaWaybillState | null> {

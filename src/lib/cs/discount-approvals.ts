@@ -6,6 +6,7 @@ import {
   createDiscountApprovalNotification,
   markDiscountApprovalNotificationsDone,
 } from "@/lib/admin-notifications";
+import { syncConfirmationMoneyToBosta } from "@/lib/cs/bosta-waybill";
 import { parseOrderTotalDelta } from "@/lib/cs/confirmations";
 
 export type DiscountApprovalStatus = "none" | "pending" | "approved" | "rejected";
@@ -189,6 +190,12 @@ export async function decideDiscountApproval(input: {
     await markDiscountApprovalNotificationsDone(input.id);
   } catch (error) {
     console.error("[discount-approvals] notification done failed", error);
+  }
+
+  try {
+    await syncConfirmationMoneyToBosta(input.id);
+  } catch (error) {
+    console.error("[discount-approvals] bosta money sync failed", error);
   }
 
   return { ok: true as const, status: approved ? ("approved" as const) : ("rejected" as const) };

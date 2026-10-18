@@ -6,6 +6,7 @@ import {
   createDepositApprovalNotification,
   markDepositApprovalNotificationsDone,
 } from "@/lib/admin-notifications";
+import { syncConfirmationMoneyToBosta } from "@/lib/cs/bosta-waybill";
 import {
   normalizeDepositFromNumber,
   normalizeDepositInstapayName,
@@ -248,6 +249,12 @@ export async function decideDepositApproval(input: {
     await markDepositApprovalNotificationsDone(input.id);
   } catch (error) {
     console.error("[deposit-approvals] notification done failed", error);
+  }
+
+  try {
+    await syncConfirmationMoneyToBosta(input.id);
+  } catch (error) {
+    console.error("[deposit-approvals] bosta money sync failed", error);
   }
 
   return { ok: true as const, status: approved ? ("approved" as const) : ("rejected" as const) };
