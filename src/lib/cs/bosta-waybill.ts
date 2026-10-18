@@ -191,6 +191,7 @@ async function writeConfirmation(input: {
   bostaShippingFee: number | null;
   bostaSyncError: string | null;
   governorate?: string | null;
+  shippingCompany?: string | null;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return;
@@ -209,6 +210,7 @@ async function writeConfirmation(input: {
       bostaSyncedAt: new Date(),
       bostaSyncError: input.bostaSyncError ? input.bostaSyncError.slice(0, 255) : null,
       customerSnapshot: snap,
+      ...(input.shippingCompany ? { shippingCompany: input.shippingCompany } : {}),
     } as never,
   });
   if (!governorate) return;
@@ -259,6 +261,7 @@ async function persistLinkedDelivery(input: {
     bostaShippingFee: input.found.shippingFee,
     bostaSyncError: null,
     governorate,
+    shippingCompany: "bosta",
   });
   const built = partyFromAnswers({
     answers: input.answers,
@@ -590,6 +593,7 @@ export async function syncCsBostaWaybill(input: {
     bostaStatus: status,
     bostaShippingFee: fee,
     bostaSyncError: null,
+    shippingCompany: "bosta",
   });
   await rememberShipment({
     wooOrderId: input.wooOrderId,
@@ -743,6 +747,83 @@ export async function syncConfirmationMoneyToBosta(confirmationId: number): Prom
     message: state.message || state.bostaSyncError,
     bosta: state,
   };
+}
+
+/**
+ * Link an existing Bosta delivery by order reference, or create one and attach tracking.
+ * Used when the agent wants to print an AWB but none exists yet.
+ */
+export async function ensureCsBostaWaybill(confirmationId: number): Promise<
+  | { ok: true; created: boolean; state: BostaWaybillState }
+  | { ok: false; message: string }
+> {
+  const prisma = getPrismaClient();
+  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: false, message: "الطلب غير موجود." };
+  }
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    include: { answers: true },
+  });
+  if (!row) return { ok: false, message: "الطلب غير موجود." };
+
+  const typed = row as {
+    trackingNumber?: string | null;
+    bostaStatus?: string | null;
+    bostaShippingFee?: unknown;
+    orderTotalDelta?: unknown;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
+    depositApprovalStatus?: string | null;
+  };
+  const answers: CsChecklistAnswerInput[] = row.answers.map((answer) => ({
+    itemKey: answer.itemKey,
+    confirmed: Boolean(answer.confirmed),
+    value: answer.value,
+    note: answer.note,
+  }));
+  const snapshot = (row.customerSnapshot as Snapshot) || null;
+  const fee =
+    typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
+      ? null
+      : Number(typed.bostaShippingFee);
+
+  const existingTracking = String(typed.trackingNumber || "").trim();
+  if (existingTracking) {
+    const live = await fetchCsBostaDelivery(existingTracking);
+    if (live.ok) {
+      const refreshed = await refreshCsBostaWaybill(confirmationId);
+      if (refreshed?.trackingNumber) {
+        return { ok: true, created: false, state: refreshed };
+      }
+    }
+  }
+
+  const beforeTracking = existingTracking;
+  const state = await syncCsBostaWaybill({
+    confirmationId,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    shippingCompany: "bosta",
+    trackingNumber: null,
+    bostaStatus: typed.bostaStatus || null,
+    bostaShippingFee: fee,
+    answers,
+    snapshot,
+    orderTotalDelta: typed.orderTotalDelta == null ? null : Number(typed.orderTotalDelta),
+    depositAmount: typed.depositAmount == null ? null : Number(typed.depositAmount),
+    depositPaid: Boolean(typed.depositPaid),
+    depositApprovalStatus: typed.depositApprovalStatus || null,
+  });
+
+  if (!state.trackingNumber) {
+    return {
+      ok: false,
+      message: state.bostaSyncError || state.message || "تعذر إنشاء بوليصة بوسطة.",
+    };
+  }
+  const created = !beforeTracking || beforeTracking !== state.trackingNumber;
+  return { ok: true, created, state };
 }
 
 export async function refreshCsBostaWaybill(confirmationId: number): Promise<BostaWaybillState | null> {

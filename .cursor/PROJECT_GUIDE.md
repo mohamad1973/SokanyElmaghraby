@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إنشاء بوليصة عند الطباعة | لو مفيش بوليصة بوسطة يظهر بوباب نعم/لا؛ نعم ينشئ ويربط ويطبع من نفس الأوردر | `bosta-waybill.ts`, `bosta/route.ts`, `bosta-awb/route.ts`, `call-sheet.tsx` |
 | فك تعليق موافقة الخصم | إعادة إرسال/إلغاء طلب الخصم للموظفة؛ مسح pending مع لم يرد؛ جرس الأدمن ينبّه ويعرض طلبات الخصم | `discount-approvals.ts`, `call-sheet.tsx`, `confirmations.ts`, `order-notification-bar.tsx` |
 | قفل شيت سيد بعد الطباعة | تجميد عند ≥4 نسخ من خانة التطبيق أو 4 ضغطات؛ طباعة المندوب تسجّل العدّاد؛ توضيح إن نسخ حوار الطابعة مش بتتحسب | `temima-sheet-edits.ts`, `cs-queue-client.tsx` |
 | مزامنة خصم/ديبوزت مع بوسطة | موافقة الخصم أو الديبوزت تحدّث waybillTotal وتدفع COD لبوسطة فورًا وتعيد تفعيل طباعة البوليصة | `bosta-waybill.ts`, `deposit-approvals.ts`, `discount-approvals.ts`, `confirmations.ts` |

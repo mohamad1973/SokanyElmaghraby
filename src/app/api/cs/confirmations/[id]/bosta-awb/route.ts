@@ -27,9 +27,20 @@ export async function GET(_request: Request, context: Context) {
   if (!row) {
     return NextResponse.json({ message: "الطلب غير موجود." }, { status: 404 });
   }
-  const printed = await fetchBostaAwbPdf(String(row.trackingNumber || ""));
+  const tracking = String(row.trackingNumber || "").trim();
+  if (!tracking) {
+    return NextResponse.json(
+      { message: "مفيش بوليصة بوسطة للطباعة.", code: "missing_waybill" },
+      { status: 400 },
+    );
+  }
+  const printed = await fetchBostaAwbPdf(tracking);
   if (!printed.ok) {
-    return NextResponse.json({ message: printed.message }, { status: 400 });
+    const missing = /مفيش بوليصة|غير موجود|not found|404|does not exist/i.test(printed.message);
+    return NextResponse.json(
+      { message: printed.message, code: missing ? "missing_waybill" : "awb_error" },
+      { status: 400 },
+    );
   }
   return new NextResponse(Buffer.from(printed.bytes), {
     headers: {

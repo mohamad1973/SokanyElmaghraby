@@ -796,10 +796,12 @@ export function CsCallSheet({
     "w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold text-[#14213D]";
   const compactBtn = "rounded-lg px-2.5 py-1 text-[11px] font-extrabold";
   const [printingWaybill, setPrintingWaybill] = useState(false);
+  const [waybillCreatePrompt, setWaybillCreatePrompt] = useState(false);
+  const [creatingWaybill, setCreatingWaybill] = useState(false);
 
-  async function printWaybill() {
-    if (!trackingNumber.trim()) {
-      setMessage("مفيش بوليصة بوسطة للطباعة.");
+  async function printWaybillPdf(currentTracking: string) {
+    if (!currentTracking.trim()) {
+      setWaybillCreatePrompt(true);
       return;
     }
     const preview = window.open("", "bosta-awb");
@@ -808,8 +810,13 @@ export function CsCallSheet({
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`);
     if (!res.ok) {
       preview?.close();
-      const data = (await res.json().catch(() => null)) as { message?: string } | null;
+      const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
       setPrintingWaybill(false);
+      if (data?.code === "missing_waybill" || /مفيش بوليصة|غير موجود|not found|404/i.test(data?.message || "")) {
+        setWaybillCreatePrompt(true);
+        setMessage("");
+        return;
+      }
       setMessage(data?.message || "تعذر طباعة بوليصة بوسطة.");
       return;
     }
@@ -897,6 +904,44 @@ export function CsCallSheet({
     };
     document.body.appendChild(frame);
     frame.src = url;
+  }
+
+  async function printWaybill() {
+    await printWaybillPdf(trackingNumber);
+  }
+
+  async function createWaybillAndPrint() {
+    if (creatingWaybill || printingWaybill) return;
+    setCreatingWaybill(true);
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create" }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      message?: string;
+      trackingNumber?: string | null;
+      bostaStatus?: string | null;
+      bostaShippingFee?: number | null;
+      bostaSyncedAt?: string | null;
+      bostaSyncError?: string | null;
+      cod?: number | null;
+    };
+    setCreatingWaybill(false);
+    if (!res.ok || !data.trackingNumber) {
+      setMessage(data.message || data.bostaSyncError || "تعذر إنشاء بوليصة بوسطة.");
+      return;
+    }
+    setTrackingNumber(data.trackingNumber);
+    if (data.bostaStatus) setBostaStatus(data.bostaStatus);
+    if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
+    if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
+    if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
+    setBostaError("");
+    setWaybillCreatePrompt(false);
+    setMessage(data.message || "تم إنشاء البوليصة وربطها بالأوردر.");
+    await printWaybillPdf(data.trackingNumber);
   }
 
   useEffect(() => {
@@ -1748,17 +1793,50 @@ export function CsCallSheet({
           <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
         <button
           type="button"
-          disabled={printingWaybill}
+          disabled={printingWaybill || creatingWaybill}
           onClick={() => void printWaybill()}
           className={`mt-1 rounded-lg px-2 py-1 text-xs font-extrabold ring-1 ring-[#059669] ${
             waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
           }`}
         >
-          {printingWaybill ? "جاري الطباعة" : waybillPrinted ? "مطبوع" : "طباعة البوليصة"}
+          {printingWaybill || creatingWaybill
+            ? "جاري التحميل"
+            : waybillPrinted
+              ? "مطبوع"
+              : "طباعة البوليصة"}
         </button>
         </div>
       </div>
       </div>
+
+      {waybillCreatePrompt ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" dir="rtl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-[#14213D]/15">
+            <p className="text-base font-extrabold text-[#14213D]">مفيش بوليصة على بوسطة</p>
+            <p className="mt-2 text-sm font-bold text-[#14213D]/80">
+              هذا الأوردر لا توجد له بوليصة على بوسطة. هل تريد عمل بوليصة؟
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={creatingWaybill || printingWaybill}
+                onClick={() => void createWaybillAndPrint()}
+                className="flex-1 rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black disabled:opacity-60"
+              >
+                {creatingWaybill ? "جاري الإنشاء…" : "نعم اعمل بوليصة"}
+              </button>
+              <button
+                type="button"
+                disabled={creatingWaybill || printingWaybill}
+                onClick={() => setWaybillCreatePrompt(false)}
+                className="flex-1 rounded-xl bg-[#14213D] px-4 py-2.5 text-sm font-extrabold text-white disabled:opacity-60"
+              >
+                لا
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <section className="order-2 flex h-full flex-col gap-3 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15 lg:order-1">
         <div className="grid gap-2 border-b border-[#14213D]/10 pb-3">
           <input
