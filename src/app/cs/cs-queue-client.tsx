@@ -1202,6 +1202,27 @@ export function CsQueueClient({
     setMessage(data.message || "اتفتح الشيت.");
   }
 
+  async function printCourierSheet() {
+    if (printing || !courierPrintPick) return;
+    setPrinting(true);
+    setMessage("");
+    const filters = { ...applied, query: draft.query };
+    const copies = sheetCopyCount();
+    const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
+    if (singleDay) {
+      const recorded = await recordSheetPrint(singleDay, copies);
+      if (!recorded.ok) {
+        setPrinting(false);
+        return;
+      }
+      if (recorded.message) setMessage(recorded.message);
+    }
+    setSheetPrintRows(null);
+    setPrintCopyCount(copies);
+    setPrintingCourierId(Number(courierPrintPick));
+    setPrintMode("sheet");
+  }
+
   async function printApplied() {
     if (printing) return;
     setPrinting(true);
@@ -1498,7 +1519,9 @@ export function CsQueueClient({
                     className="h-9 w-14 rounded-xl border border-[#E5E5E5] bg-white px-2 text-center text-xs font-extrabold"
                   />
                 </span>
-                <span className="text-[10px] font-bold text-[#14213D]/70">أي يوم: 4 أو 5 نسخ = قفل · أو 4 طباعات</span>
+                <span className="text-[10px] font-bold text-[#14213D]/70">
+                  خانة عدد النسخ هنا (≥4) أو 4 ضغطات طباعة = قفل. نسخ حوار الطابعة مش بتتحسب.
+                </span>
               </label>
             ) : null}
           <button
@@ -1540,12 +1563,7 @@ export function CsQueueClient({
                 type="button"
                 disabled={printing || !courierPrintPick}
                 onClick={() => {
-                  if (printing) return;
-                  setPrinting(true);
-                  setSheetPrintRows(null);
-                  setPrintCopyCount(1);
-                  setPrintingCourierId(Number(courierPrintPick));
-                  setPrintMode("sheet");
+                  void printCourierSheet();
                 }}
                 className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50 sm:py-2.5 sm:text-sm"
               >
