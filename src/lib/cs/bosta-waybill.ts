@@ -79,7 +79,7 @@ function partyFromAnswers(input: {
     datePaid: snap.datePaid == null ? null : String(snap.datePaid),
     paymentState: snap.paymentState === "paid" || snap.paymentState === "awaiting_payment" || snap.paymentState === "cod" ? snap.paymentState : null,
   });
-  const total = Number(String(snap.total || "").replace(/,/g, ""));
+  const total = Number(String(snap.wooTotal || snap.total || "").replace(/,/g, ""));
   const delta = Number(input.orderTotalDelta);
   const adjusted = Math.max(0, (Number.isFinite(total) ? total : 0) + (Number.isFinite(delta) ? delta : 0));
   const depositApproved =

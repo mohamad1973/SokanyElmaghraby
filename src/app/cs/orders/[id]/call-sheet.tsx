@@ -356,7 +356,12 @@ export function CsCallSheet({
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
   const lockedShipping =
-    shippingCompany === "bosta" || shippingCompany === "sayed_temima" ? shippingCompany : null;
+    shippingCompany === "bosta" ||
+    shippingCompany === "sayed_temima" ||
+    shippingCompany === "eid" ||
+    shippingCompany === "momen"
+      ? shippingCompany
+      : null;
 
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [answers, setAnswers] = useState(() => {
@@ -622,8 +627,8 @@ export function CsCallSheet({
       if (!validation.ok) {
         setSaving(false);
         setMessage(
-          lockedShipping === "bosta"
-            ? "لازم شركة الشحن تكون بوسطة قبل الحفظ النهائي."
+          lockedShipping === "bosta" || lockedShipping === "eid" || lockedShipping === "momen"
+            ? "لازم شركة الشحن تكون محددة قبل الحفظ النهائي."
             : "استكمل البنود الناقصة قبل الحفظ النهائي.",
         );
         return;

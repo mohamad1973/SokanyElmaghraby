@@ -32,6 +32,8 @@ export type CsQueueItem = {
   wooOrderNumber: string;
   status: string;
   shippingCompany?: string | null;
+  monaCourierId?: number | null;
+  monaCourierName?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
   depositAmount?: number | null;
@@ -1021,12 +1023,24 @@ export function CsQueueClient({
     void markSupervisorResult(id, action);
   }
 
-  async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima") {
+  async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima" | "eid" | "momen") {
     if (savingShipId) return;
     setSavingShipId(id);
     setMessage("");
     // Optimistic UI
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, shippingCompany } : item)));
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              shippingCompany,
+              ...(shippingCompany === "bosta" || shippingCompany === "sayed_temima"
+                ? { monaCourierId: null, monaCourierName: null }
+                : {}),
+            }
+          : item,
+      ),
+    );
     const res = await fetch(`/api/cs/confirmations/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1044,6 +1058,7 @@ export function CsQueueClient({
         item.id === id ? { ...item, shippingCompany: data.shippingCompany || shippingCompany } : item,
       ),
     );
+    router.refresh();
   }
 
   async function setHanded(id: number, handedToCarrier: boolean) {
@@ -1654,6 +1669,8 @@ export function CsQueueClient({
             <option value="all">كل شركات الشحن</option>
             <option value="bosta">بوسطة</option>
             <option value="sayed_temima">سيد تميمة</option>
+            <option value="eid">عيد</option>
+            <option value="momen">مؤمن</option>
           </select>
           )}
           {isCourierSupervisor || !temimaDateMode(draft) ? null : (
@@ -1904,7 +1921,13 @@ export function CsQueueClient({
             const isAwaiting = paymentState === "awaiting_payment";
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
-            const ship = item.shippingCompany === "sayed_temima" ? "sayed_temima" : "bosta";
+            const ship =
+              item.shippingCompany === "sayed_temima" ||
+              item.shippingCompany === "eid" ||
+              item.shippingCompany === "momen" ||
+              item.shippingCompany === "bosta"
+                ? item.shippingCompany
+                : "bosta";
             const dup = dupMeta.get(item.id);
             const returnedPostponed =
               isCourierSupervisor && !item.courierAgentId && item.courierOutcome === "postponed";
@@ -2124,27 +2147,51 @@ export function CsQueueClient({
                     ) : null}
                   </div>
                   {isSupervisor ? (
-                    <div className="flex items-center justify-center gap-2 self-center">
-                      <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
-                        <input
-                          type="checkbox"
-                          className="size-3.5 accent-[#FCA311]"
-                          checked={ship === "bosta"}
-                          disabled={savingShipId === item.id}
-                          onChange={() => void setShipping(item.id, "bosta")}
-                        />
-                        بوسطة
-                      </label>
-                      <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
-                        <input
-                          type="checkbox"
-                          className="size-3.5 accent-[#FCA311]"
-                          checked={ship === "sayed_temima"}
-                          disabled={savingShipId === item.id}
-                          onChange={() => void setShipping(item.id, "sayed_temima")}
-                        />
-                        تميمة
-                      </label>
+                    <div className="flex flex-col items-center justify-center gap-1 self-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-[#FCA311]"
+                            checked={ship === "bosta"}
+                            disabled={savingShipId === item.id}
+                            onChange={() => void setShipping(item.id, "bosta")}
+                          />
+                          بوسطة
+                        </label>
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-[#FCA311]"
+                            checked={ship === "sayed_temima"}
+                            disabled={savingShipId === item.id}
+                            onChange={() => void setShipping(item.id, "sayed_temima")}
+                          />
+                          تميمة
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-[#FCA311]"
+                            checked={ship === "eid"}
+                            disabled={savingShipId === item.id}
+                            onChange={() => void setShipping(item.id, "eid")}
+                          />
+                          عيد
+                        </label>
+                        <label className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-[#FCA311]"
+                            checked={ship === "momen"}
+                            disabled={savingShipId === item.id}
+                            onChange={() => void setShipping(item.id, "momen")}
+                          />
+                          مؤمن
+                        </label>
+                      </div>
                       {savingShipId === item.id ? (
                         <span className="text-[10px] font-extrabold text-[#14213D]">جاري التحميل</span>
                       ) : null}

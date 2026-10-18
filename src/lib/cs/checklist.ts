@@ -81,15 +81,24 @@ export const CS_CHECKLIST_ITEMS: CsChecklistItemDef[] = [
   {
     key: "shipping_company",
     label: "شركة الشحن",
-    help: "تحددها المشرفة من قائمة الأوردرات (بوسطة أو سيد تميمة).",
+    help: "تحددها المشرفة من قائمة الأوردرات (بوسطة / تميمة / عيد / مؤمن).",
     type: "choice",
     required: true,
     choices: [
       { value: "bosta", label: "بوسطة" },
       { value: "sayed_temima", label: "سيد تميمة" },
+      { value: "eid", label: "عيد" },
+      { value: "momen", label: "مؤمن" },
     ],
   },
 ];
+
+export const CS_SHIPPING_COMPANIES = ["bosta", "sayed_temima", "eid", "momen"] as const;
+export type CsShippingCompany = (typeof CS_SHIPPING_COMPANIES)[number];
+
+export function isCsShippingCompany(value: unknown): value is CsShippingCompany {
+  return CS_SHIPPING_COMPANIES.includes(String(value || "") as CsShippingCompany);
+}
 
 /** Optional post-confirmation follow-up cards (not required for first finalize). */
 export const CS_FOLLOWUP_ITEMS: CsChecklistItemDef[] = [
@@ -119,6 +128,8 @@ export const CS_FOLLOWUP_ITEMS: CsChecklistItemDef[] = [
 export const SHIPPING_COMPANY_LABEL: Record<string, string> = {
   bosta: "بوسطة",
   sayed_temima: "سيد تميمة",
+  eid: "عيد",
+  momen: "مؤمن",
 };
 
 export type CsChecklistAnswerInput = {
@@ -149,12 +160,13 @@ export function validateChecklistAnswers(
       .trim()
       .toLowerCase() || null;
 
-  if (shipping === "bosta") {
-    if (opts?.shippingCompany === "bosta") {
+  if (shipping === "bosta" || shipping === "eid" || shipping === "momen") {
+    // Bosta / Eid / Moamen: shipping company alone is enough to finalize (no full card checklist).
+    if (opts?.shippingCompany === shipping) {
       return { ok: true, missing: [] as string[] };
     }
     const ship = byKey.get("shipping_company");
-    if (!ship?.confirmed || String(ship.value || "").trim() !== "bosta") {
+    if (!ship?.confirmed || String(ship.value || "").trim().toLowerCase() !== shipping) {
       return { ok: false, missing: ["shipping_company"] };
     }
     return { ok: true, missing: [] as string[] };

@@ -28,7 +28,7 @@ type Body = {
   depositToPhone?: string | null;
   depositToMethod?: string | null;
   orderTotalDelta?: number | string | null;
-  shippingCompany?: "bosta" | "sayed_temima" | "" | null;
+  shippingCompany?: "bosta" | "sayed_temima" | "eid" | "momen" | "" | null;
   salesOrderNumber?: string | null;
   invoiceNumber?: string | null;
   handedToCarrier?: boolean;
@@ -125,7 +125,10 @@ export async function PUT(request: Request, context: Context) {
       return NextResponse.json({ message: "للمشرفة فقط." }, { status: 403 });
     }
     const company =
-      body.shippingCompany === "bosta" || body.shippingCompany === "sayed_temima"
+      body.shippingCompany === "bosta" ||
+      body.shippingCompany === "sayed_temima" ||
+      body.shippingCompany === "eid" ||
+      body.shippingCompany === "momen"
         ? body.shippingCompany
         : null;
     const result = await setCsShippingCompany({

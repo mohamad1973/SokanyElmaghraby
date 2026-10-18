@@ -258,6 +258,13 @@ async function addMonaLargeColumn() {
   }
 }
 
+export function monaCourierBucketFromName(name: string): "eid" | "momen" | null {
+  const text = String(name || "").replace(/\s+/g, "");
+  if (text.includes("مؤمن")) return "momen";
+  if (text.includes("عيد") && !text.includes("بورسعيد")) return "eid";
+  return null;
+}
+
 export async function listMonaCourierAgents() {
   const prisma = getPrismaClient();
   if (!prisma) return [];
@@ -269,6 +276,13 @@ export async function listMonaCourierAgents() {
   return rows
     .filter((row) => parseCsRoles(row).includes("mona_courier"))
     .map((row) => ({ id: Number(row.id), name: row.name }));
+}
+
+/** Resolve the mona_courier agent id for shippingCompany eid | momen (by name). */
+export async function resolveMonaCourierIdForShipping(company: "eid" | "momen") {
+  const agents = await listMonaCourierAgents();
+  const match = agents.find((agent) => monaCourierBucketFromName(agent.name) === company);
+  return match ? match.id : null;
 }
 
 async function loadAssignedOrders(courierId?: number, dayYmd?: string | null) {
@@ -628,18 +642,25 @@ export async function assignMonaOrder(orderNumber: string, courierId: number) {
   if (row.shippingCompany === "sayed_temima") {
     return { ok: false as const, message: "تم توزيعه الى سيد تميمة" };
   }
+  if (row.shippingCompany === "bosta") {
+    return { ok: false as const, message: "الأوردر على بوسطة" };
+  }
   if (row.monaCourierId && row.monaCourierId !== courierId) {
     return { ok: false as const, message: "الأوردر متضاف لمندوب تاني." };
   }
   if (row.monaCourierId === courierId) {
     return { ok: true as const, message: "الأوردر موجود عند المندوب." };
   }
+  const courier = couriers.find((entry) => entry.id === courierId);
+  const bucket = monaCourierBucketFromName(courier?.name || "");
+  const shipCompany = bucket === "eid" || bucket === "momen" ? bucket : null;
   const changed = await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
     SET monaCourierId = ${courierId}, monaAssignedAt = NOW(3),
-        monaOutcome = NULL, monaRefusalReason = NULL
+        monaOutcome = NULL, monaRefusalReason = NULL,
+        shippingCompany = COALESCE(${shipCompany}, shippingCompany)
     WHERE id = ${row.id} AND monaCourierId IS NULL
-      AND (shippingCompany IS NULL OR shippingCompany <> 'sayed_temima')
+      AND (shippingCompany IS NULL OR shippingCompany NOT IN ('sayed_temima', 'bosta'))
   `;
   if (!Number(changed)) {
     return { ok: false as const, message: "تم توزيعه الى سيد تميمة" };

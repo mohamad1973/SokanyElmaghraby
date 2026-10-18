@@ -7,7 +7,9 @@ import {
   CS_CHECKLIST_ITEMS,
   CS_CONFIRMATION_STATUS,
   CS_FOLLOWUP_ITEMS,
+  isCsShippingCompany,
   type CsChecklistAnswerInput,
+  type CsShippingCompany,
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { ensureCsTables } from "@/lib/cs/agents";
@@ -27,14 +29,21 @@ import {
 } from "@/lib/cs/order-window";
 import { getShipmentsByOrderIds } from "@/lib/shipping/shipments";
 import { looksLikeLocationCode, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
+import {
+  monaCourierBucketFromName,
+  resolveMonaCourierIdForShipping,
+} from "@/lib/cs/mona-courier";
 
 export type CsQueueSnapshot = {
   customerName?: string;
   phone?: string;
   address?: string;
+  addressFull?: string;
   governorate?: string;
   area?: string;
   total?: string;
+  wooTotal?: string;
+  waybillTotal?: string;
   dateCreated?: string;
   paymentMethod?: string;
   paymentMethodId?: string | null;
@@ -741,9 +750,30 @@ export async function listCsQueuePage(opts: {
     );
     params.push(payment);
   }
-  if (opts.shipping === "bosta" || opts.shipping === "sayed_temima") {
-    where.push("shippingCompany = ?");
-    params.push(opts.shipping);
+  if (
+    opts.shipping === "bosta" ||
+    opts.shipping === "sayed_temima" ||
+    opts.shipping === "eid" ||
+    opts.shipping === "momen"
+  ) {
+    if (opts.shipping === "eid" || opts.shipping === "momen") {
+      const { listMonaCourierAgents } = await import("@/lib/cs/mona-courier");
+      const courierIds = (await listMonaCourierAgents())
+        .filter((agent) => monaCourierBucketFromName(agent.name) === opts.shipping)
+        .map((agent) => agent.id);
+      if (courierIds.length) {
+        where.push(
+          `(shippingCompany = ? OR monaCourierId IN (${courierIds.map(() => "?").join(",")}))`,
+        );
+        params.push(opts.shipping, ...courierIds);
+      } else {
+        where.push("shippingCompany = ?");
+        params.push(opts.shipping);
+      }
+    } else {
+      where.push("shippingCompany = ?");
+      params.push(opts.shipping);
+    }
   }
   if (opts.agentFilterId && opts.agentFilterId > 0) {
     where.push("assignedAgentId = ?");
@@ -779,8 +809,16 @@ export async function listCsQueuePage(opts: {
     .map((id) => byId.get(id))
     .filter((row): row is NonNullable<typeof row> => Boolean(row));
   await attachDistributedAt(ordered);
+  const monaMeta = await loadMonaCourierMeta(ordered.map((row) => row.id));
   return {
-    items: ordered.map((row) => serializeCsQueueItem(row)),
+    items: ordered.map((row) => {
+      const mona = monaMeta.get(row.id);
+      return serializeCsQueueItem({
+        ...row,
+        monaCourierId: mona?.monaCourierId ?? null,
+        monaCourierName: mona?.monaCourierName ?? null,
+      });
+    }),
     total,
     page,
     pageSize,
@@ -813,6 +851,8 @@ export function serializeCsQueueItem(row: {
   wooOrderNumber: string;
   status: string;
   shippingCompany?: string | null;
+  monaCourierId?: number | null;
+  monaCourierName?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean | null;
   depositAmount?: unknown;
@@ -858,7 +898,12 @@ export function serializeCsQueueItem(row: {
   const paidOnlineHighlight = paymentState === "paid";
 
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
-  const shippingCompany = row.shippingCompany || shippingFromAnswer || "bosta";
+  const monaBucket = monaCourierBucketFromName(String(row.monaCourierName || ""));
+  const shippingCompany =
+    (isCsShippingCompany(row.shippingCompany) ? row.shippingCompany : null) ||
+    (isCsShippingCompany(shippingFromAnswer) ? shippingFromAnswer : null) ||
+    (monaBucket === "eid" || monaBucket === "momen" ? monaBucket : null) ||
+    "bosta";
   const trackingNumber =
     (row.trackingNumber && String(row.trackingNumber).trim()) ||
     (raw?.trackingNumber && String(raw.trackingNumber).trim()) ||
@@ -872,6 +917,7 @@ export function serializeCsQueueItem(row: {
   const addressOnly = loc.address || raw?.address || "";
   const govOk = Boolean(loc.governorate);
   const areaOk = Boolean(loc.area);
+  const displayTotal = String(raw?.waybillTotal || raw?.total || "");
 
   return {
     id: row.id,
@@ -879,6 +925,8 @@ export function serializeCsQueueItem(row: {
     wooOrderNumber: row.wooOrderNumber,
     status: row.status,
     shippingCompany,
+    monaCourierId: row.monaCourierId ?? null,
+    monaCourierName: row.monaCourierName ? String(row.monaCourierName) : null,
     trackingNumber,
     waybillPrinted: Boolean(row.waybillPrinted),
     depositAmount: serializeDepositAmount(row.depositAmount),
@@ -929,10 +977,12 @@ export function serializeCsQueueItem(row: {
           // Empty when unresolved codes (EG / 25 / …) so UI can hide the columns
           area: areaOk ? loc.area : "",
           governorate: govOk ? loc.governorate : "",
-          addressFull: [addressOnly, areaOk ? loc.area : "", govOk ? loc.governorate : ""]
-            .filter(Boolean)
-            .join(" — "),
-          total: raw.total,
+          addressFull:
+            String(raw.addressFull || "").trim() ||
+            [addressOnly, areaOk ? loc.area : "", govOk ? loc.governorate : ""]
+              .filter(Boolean)
+              .join(" — "),
+          total: displayTotal || raw.total,
           dateCreated: raw.dateCreated,
           paymentMethod: raw.paymentMethod,
           paymentMethodId: raw.paymentMethodId || null,
@@ -1074,7 +1124,11 @@ export async function startCsConfirmation(id: number, agentId: number) {
   return { ok: true as const, confirmation: updated };
 }
 
-function waybillSnapshot(snapshot: Record<string, unknown>, answers: CsChecklistAnswerInput[]) {
+function waybillSnapshot(
+  snapshot: Record<string, unknown>,
+  answers: CsChecklistAnswerInput[],
+  opts?: { orderTotalDelta?: number | null },
+) {
   const text = (key: string) => {
     const item = answers.find((answer) => answer.itemKey === key);
     return String(item?.value || "").trim();
@@ -1085,19 +1139,66 @@ function waybillSnapshot(snapshot: Record<string, unknown>, answers: CsChecklist
   const address = text("address_complete");
   const governorate = text("governorate_confirm");
   const area = text("area_confirm");
+  const invoiceTotal = text("invoice_total");
   if (name) next.customerName = name;
   if (phone) next.phone = phone;
   if (address) next.address = address;
   if (governorate) next.governorate = governorate;
   if (area) next.area = area;
+  const addr = String(next.address || "").trim();
+  const gov = String(next.governorate || "").trim();
+  const ar = String(next.area || "").trim();
+  next.addressFull = [addr, ar, gov].filter(Boolean).join(" · ");
+
+  // Keep original Woo total for COD/delta math; expose waybillTotal for local print.
+  const rawBase = Number(String(next.wooTotal || next.total || "").replace(/,/g, ""));
+  if (Number.isFinite(rawBase) && !next.wooTotal) next.wooTotal = String(rawBase);
+  if (invoiceTotal) {
+    const absolute = Number(invoiceTotal.replace(/,/g, ""));
+    if (Number.isFinite(absolute)) next.waybillTotal = String(Math.max(0, absolute));
+  } else {
+    const base = Number(String(next.wooTotal || next.total || "").replace(/,/g, ""));
+    const delta = Number(opts?.orderTotalDelta);
+    if (Number.isFinite(base)) {
+      const adjusted = Math.max(0, base + (Number.isFinite(delta) ? delta : 0));
+      next.waybillTotal = String(adjusted);
+    }
+  }
   return next;
 }
 
-function shippingCompanyFromAnswers(answers: CsChecklistAnswerInput[]) {
+function shippingCompanyFromAnswers(answers: CsChecklistAnswerInput[]): CsShippingCompany | null {
   const item = answers.find((a) => a.itemKey === "shipping_company");
   const value = String(item?.value || "").trim();
-  if (value === "bosta" || value === "sayed_temima") return value;
-  return null;
+  return isCsShippingCompany(value) ? value : null;
+}
+
+async function loadMonaCourierMeta(ids: number[]) {
+  const prisma = getPrismaClient();
+  const map = new Map<number, { monaCourierId: number | null; monaCourierName: string | null }>();
+  if (!prisma || !ids.length) return map;
+  const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  for (let i = 0; i < unique.length; i += 400) {
+    const chunk = unique.slice(i, i + 400);
+    if (!chunk.length) continue;
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ id: number | bigint; monaCourierId: number | bigint | null; courierName: string | null }>
+    >(
+      `SELECT c.id, c.monaCourierId, a.name AS courierName
+       FROM CsOrderConfirmation c
+       LEFT JOIN CsAgent a ON a.id = c.monaCourierId
+       WHERE c.id IN (${chunk.map(() => "?").join(",")})`,
+      ...chunk,
+    );
+    for (const row of rows) {
+      const courierId = row.monaCourierId == null ? null : Number(row.monaCourierId);
+      map.set(Number(row.id), {
+        monaCourierId: courierId && courierId > 0 ? courierId : null,
+        monaCourierName: row.courierName ? String(row.courierName) : null,
+      });
+    }
+  }
+  return map;
 }
 
 async function persistChecklistAnswers(confirmationId: number, answers: CsChecklistAnswerInput[]) {
@@ -1429,11 +1530,16 @@ export async function saveCsConfirmation(input: {
       note: answer.note,
     }));
     const followAnswers = editSaved && input.answers?.length ? input.answers : storedAnswers;
+    const followDelta =
+      input.orderTotalDelta !== undefined
+        ? parseOrderTotalDelta(input.orderTotalDelta)
+        : parseOrderTotalDelta(typed.orderTotalDelta);
     const followSnapshot = post?.refundPaid
       ? { ...snap, ...((data.customerSnapshot as Record<string, unknown> | undefined) || {}) }
       : waybillSnapshot(
           { ...snap, ...((data.customerSnapshot as Record<string, unknown> | undefined) || {}) },
           followAnswers,
+          { orderTotalDelta: followDelta },
         );
     if (!post?.refundPaid) data.customerSnapshot = followSnapshot;
     await prisma.csOrderConfirmation.update({
@@ -1512,11 +1618,17 @@ export async function saveCsConfirmation(input: {
 
   await persistChecklistAnswers(input.id, input.answers);
 
-  const shippingFromRow =
-    row.shippingCompany === "bosta" || row.shippingCompany === "sayed_temima"
-      ? row.shippingCompany
-      : null;
+  const shippingFromRow = isCsShippingCompany(row.shippingCompany) ? row.shippingCompany : null;
   const shippingCompany = shippingFromRow || shippingCompanyFromAnswers(input.answers);
+  const snapshotDelta =
+    input.orderTotalDelta !== undefined
+      ? parseOrderTotalDelta(input.orderTotalDelta)
+      : parseOrderTotalDelta(typed.orderTotalDelta);
+  const nextSnapshot = waybillSnapshot(
+    { ...snap, ...(nextTracking ? { trackingNumber: nextTracking } : {}) },
+    input.answers,
+    { orderTotalDelta: snapshotDelta },
+  );
 
   if (!input.finalize) {
     await prisma.csOrderConfirmation.update({
@@ -1526,11 +1638,12 @@ export async function saveCsConfirmation(input: {
         assignedAgentId: input.agentId,
         ...shippingMetaPatch,
         ...salesOrderPatch,
+        customerSnapshot: nextSnapshot,
       } as never,
     });
     const draftFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
     const draftBosta = await pushBostaIfNeeded({
-      row,
+      row: { ...row, customerSnapshot: nextSnapshot },
       answers: input.answers,
       shippingCompany,
       trackingNumber: nextTracking,
@@ -1639,12 +1752,13 @@ export async function saveCsConfirmation(input: {
       failReason: null,
       ...shippingMetaPatch,
       ...salesOrderPatch,
+      customerSnapshot: nextSnapshot,
     } as never,
   });
 
   const savedFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
   const bosta = await pushBostaIfNeeded({
-    row: { ...row, shippingCompany },
+    row: { ...row, shippingCompany, customerSnapshot: nextSnapshot },
     answers: input.answers,
     shippingCompany,
     trackingNumber: nextTracking,
@@ -1724,7 +1838,7 @@ export async function setCsHandedToCarrier(input: {
 
 export async function setCsShippingCompany(input: {
   id: number;
-  shippingCompany: "bosta" | "sayed_temima" | null;
+  shippingCompany: CsShippingCompany | null;
   agentId: number;
 }) {
   const prisma = getPrismaClient();
@@ -1739,31 +1853,42 @@ export async function setCsShippingCompany(input: {
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
-  if (input.shippingCompany === "sayed_temima") {
-    const held = await prisma.$queryRaw<Array<{ name: string | null }>>`
-      SELECT a.name AS name
-      FROM CsOrderConfirmation c
-      LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-      WHERE c.id = ${input.id} AND c.monaCourierId IS NOT NULL
-      LIMIT 1
-    `;
-    if (held[0]) {
-      const name = String(held[0].name || "").trim() || "مندوب المشرفة";
-      return { ok: false as const, message: `تم توزيع الأوردر الى ${name}` };
-    }
-  }
+  const company = input.shippingCompany && isCsShippingCompany(input.shippingCompany) ? input.shippingCompany : null;
 
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {
-      shippingCompany: input.shippingCompany,
-      ...(row.shippingCompany !== input.shippingCompany
-        ? { shippingAssignedAt: input.shippingCompany ? new Date() : null }
-        : {}),
+      shippingCompany: company,
+      ...(row.shippingCompany !== company ? { shippingAssignedAt: company ? new Date() : null } : {}),
     },
   });
 
-  if (input.shippingCompany) {
+  if (company === "eid" || company === "momen") {
+    const courierId = await resolveMonaCourierIdForShipping(company);
+    if (courierId) {
+      await prisma.$executeRaw`
+        UPDATE CsOrderConfirmation
+        SET monaCourierId = ${courierId},
+            monaAssignedAt = COALESCE(monaAssignedAt, NOW(3))
+        WHERE id = ${input.id}
+      `;
+    } else {
+      await prisma.$executeRaw`
+        UPDATE CsOrderConfirmation
+        SET monaCourierId = NULL, monaAssignedAt = NULL
+        WHERE id = ${input.id}
+      `;
+    }
+  } else {
+    // Bosta / Temima / clear: drop Mona assignment so sheets stay exclusive.
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaCourierId = NULL, monaAssignedAt = NULL
+      WHERE id = ${input.id}
+    `;
+  }
+
+  if (company) {
     await prisma.csChecklistAnswer.upsert({
       where: {
         confirmationId_itemKey: {
@@ -1775,16 +1900,16 @@ export async function setCsShippingCompany(input: {
         confirmationId: input.id,
         itemKey: "shipping_company",
         confirmed: true,
-        value: input.shippingCompany,
+        value: company,
       },
       update: {
         confirmed: true,
-        value: input.shippingCompany,
+        value: company,
       },
     });
   }
 
-  if (input.shippingCompany === "sayed_temima" && !String(row.trackingNumber || "").trim()) {
+  if (company === "sayed_temima" && !String(row.trackingNumber || "").trim()) {
     await attachBostaWaybillByOrderReference({
       confirmationId: row.id,
       wooOrderId: row.wooOrderId,
@@ -1794,7 +1919,7 @@ export async function setCsShippingCompany(input: {
     });
   }
 
-  return { ok: true as const, shippingCompany: input.shippingCompany };
+  return { ok: true as const, shippingCompany: company };
 }
 
 export async function isOrderCsConfirmed(wooOrderId: number) {
