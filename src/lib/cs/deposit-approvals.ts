@@ -228,43 +228,54 @@ export async function decideDepositApproval(input: {
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  await ensureCsTables();
-
-  const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
-  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
-
-  const current = normalizeDepositApprovalStatus(
-    (row as { depositApprovalStatus?: string | null }).depositApprovalStatus,
-  );
-  if (current !== "pending") {
-    return { ok: false as const, message: "لا يوجد طلب موافقة معلّق لهذا الأوردر." };
-  }
-
-  const now = new Date();
-  const approved = input.decision === "approved";
-  await prisma.csOrderConfirmation.update({
-    where: { id: input.id },
-    data: {
-      depositApprovalStatus: approved ? "approved" : "rejected",
-      depositPaid: approved,
-      depositApprovalDecidedAt: now,
-      depositAgentDecisionSeenAt: null,
-    } as never,
-  });
 
   try {
-    await markDepositApprovalNotificationsDone(input.id);
-  } catch (error) {
-    console.error("[deposit-approvals] notification done failed", error);
-  }
+    await ensureCsTables();
 
-  try {
-    await syncConfirmationMoneyToBosta(input.id);
-  } catch (error) {
-    console.error("[deposit-approvals] bosta money sync failed", error);
-  }
+    const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
+    if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
-  return { ok: true as const, status: approved ? ("approved" as const) : ("rejected" as const) };
+    const current = normalizeDepositApprovalStatus(
+      (row as { depositApprovalStatus?: string | null }).depositApprovalStatus,
+    );
+    if (current !== "pending") {
+      return { ok: false as const, message: "لا يوجد طلب موافقة معلّق لهذا الأوردر." };
+    }
+
+    const now = new Date();
+    const approved = input.decision === "approved";
+    await prisma.csOrderConfirmation.update({
+      where: { id: input.id },
+      data: {
+        depositApprovalStatus: approved ? "approved" : "rejected",
+        depositPaid: approved,
+        depositApprovalDecidedAt: now,
+        depositAgentDecisionSeenAt: null,
+      },
+    });
+
+    try {
+      await markDepositApprovalNotificationsDone(input.id);
+    } catch (error) {
+      console.error("[deposit-approvals] notification done failed", error);
+    }
+
+    try {
+      await syncConfirmationMoneyToBosta(input.id);
+    } catch (error) {
+      console.error("[deposit-approvals] bosta money sync failed", error);
+    }
+
+    return { ok: true as const, status: approved ? ("approved" as const) : ("rejected" as const) };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("[deposit-approvals] decide failed", detail);
+    return {
+      ok: false as const,
+      message: "تعذر حفظ القرار بسبب خطأ في قاعدة البيانات. حاول مرة أخرى.",
+      detail: detail.slice(0, 200),
+    };
+  }
 }
 
 export async function listUnseenDepositDecisionsForAgent(opts: {

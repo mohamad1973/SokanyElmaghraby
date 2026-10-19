@@ -303,9 +303,10 @@ function CsNotificationsBell() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision }),
       });
-      const body = (await res.json()) as { message?: string };
+      const body = (await res.json().catch(() => null)) as { message?: string; detail?: string } | null;
       if (!res.ok) {
-        setDecideMessage(body.message || "تعذر حفظ القرار.");
+        const base = body?.message || "تعذر حفظ القرار.";
+        setDecideMessage(body?.detail ? `${base} (${body.detail})` : base);
         setDecideBusy(false);
         return;
       }
@@ -348,9 +349,10 @@ function CsNotificationsBell() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision }),
       });
-      const body = (await res.json()) as { message?: string };
+      const body = (await res.json().catch(() => null)) as { message?: string; detail?: string } | null;
       if (!res.ok) {
-        setDecideMessage(body.message || "تعذر حفظ القرار.");
+        const base = body?.message || "تعذر حفظ القرار.";
+        setDecideMessage(body?.detail ? `${base} (${body.detail})` : base);
         setDecideBusy(false);
         return;
       }

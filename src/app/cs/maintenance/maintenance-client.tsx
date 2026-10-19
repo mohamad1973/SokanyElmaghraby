@@ -540,17 +540,23 @@ export function MaintenanceClient({
       params.set("variance", "1");
       const suffix = `?${params.toString()}`;
       const response = await fetch(`/api/cs/maintenance/returns${suffix}`, { cache: "no-store" });
-      const body = (await response.json()) as Payload & { message?: string };
-      if (!response.ok) {
-        setError(body.message || "تعذر تحميل المرتجعات.");
+      const body = (await response.json().catch(() => null)) as
+        | (Payload & { message?: string; detail?: string; partial?: boolean })
+        | null;
+      if (!response.ok || !body) {
+        const base = body?.message || "تعذر تحميل المرتجعات.";
+        setError(body?.detail ? `${base} (${body.detail})` : base);
         return null;
       }
       setData(body);
       setFrom(body.from);
       setTo(body.to);
+      if (body.message && body.partial) {
+        setError(body.detail ? `${body.message} (${body.detail})` : body.message);
+      }
       return body;
     } catch {
-      setError("تعذر تحميل المرتجعات.");
+      setError("تعذر تحميل المرتجعات. تحقق من الاتصال وحاول مرة أخرى.");
       return null;
     } finally {
       setLoading(false);

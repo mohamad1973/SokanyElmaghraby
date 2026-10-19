@@ -254,6 +254,7 @@ model CsAgent {
   courierAreas  String?                @db.Text
   confirmations CsOrderConfirmation[]  @relation("AssignedAgent")
   courierOrders CsOrderConfirmation[]  @relation("TemimaCourier")
+  monaCourierOrders CsOrderConfirmation[] @relation("MonaCourier")
   assignments   CsOrderAssignment[]    @relation("AssignmentAgent")
   createdAssignments CsOrderAssignment[] @relation("AssignmentCreator")
 }
@@ -313,6 +314,15 @@ model CsOrderConfirmation {
   discountApprovalRequestedAt DateTime?
   discountApprovalDecidedAt DateTime?
   discountAgentDecisionSeenAt DateTime?
+  monaCourierId        Int?
+  monaCourier          CsAgent?            @relation("MonaCourier", fields: [monaCourierId], references: [id], onDelete: SetNull)
+  monaAssignedAt       DateTime?
+  monaOutcome          String?             @db.VarChar(16)
+  monaRefusalReason    String?             @db.Text
+  monaSupervisorResult String?             @db.VarChar(16)
+  monaIsLarge          Boolean             @default(false)
+  temimaSupervisorResult String?           @db.VarChar(16)
+  settlementDepositOverride Decimal?       @db.Decimal(12, 2)
   parentConfirmationId Int?
   fulfillmentKind      String?             @db.VarChar(16)
   createdAt            DateTime            @default(now())
@@ -323,6 +333,7 @@ model CsOrderConfirmation {
   @@index([status])
   @@index([assignedAgentId])
   @@index([courierAgentId])
+  @@index([monaCourierId])
   @@index([createdAt])
   @@index([shippingCompany])
   @@index([trackingNumber])
@@ -492,4 +503,151 @@ model CsTemimaSheetEdit {
 
   @@unique([dayYmd, confirmationId])
   @@index([dayYmd])
+}
+
+model CsAssignmentRestamp {
+  dayYmd    String   @id @db.VarChar(10)
+  createdAt DateTime @default(now())
+}
+
+model CsOrderSyncState {
+  id          Int      @id
+  nextPage    Int      @default(1)
+  slowPage    Int      @default(1)
+  historyDone Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+}
+
+model CsTemimaSheetFreezeDay {
+  dayYmd    String   @id @db.VarChar(10)
+  createdAt DateTime @default(now())
+}
+
+model CsTemimaSheetFreeze {
+  dayYmd         String  @db.VarChar(10)
+  confirmationId Int
+  serial         Int?
+
+  @@id([dayYmd, confirmationId])
+  @@index([dayYmd])
+}
+
+model CsTemimaSheetPrintCount {
+  dayYmd    String   @id @db.VarChar(10)
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model CsOrderItemAdd {
+  id             Int       @id @default(autoincrement())
+  confirmationId Int
+  wooProductId   Int
+  kind           String    @default("add") @db.VarChar(16)
+  productName    String    @db.VarChar(191)
+  quantity       Int
+  unitPrice      Decimal   @db.Decimal(12, 2)
+  lineTotal      Decimal   @db.Decimal(12, 2)
+  status         String    @default("pending") @db.VarChar(16)
+  createdAt      DateTime  @default(now())
+  decidedAt      DateTime?
+
+  @@index([confirmationId])
+  @@index([status])
+}
+
+model CsMonaCourierAdjust {
+  courierAgentId  Int      @id
+  collectedAmount Decimal? @db.Decimal(12, 2)
+  shippingAmount  Decimal? @db.Decimal(12, 2)
+  remittedAmount  Decimal? @db.Decimal(12, 2)
+  updatedAt       DateTime @updatedAt
+}
+
+model CsMonaCourierRemit {
+  id             Int      @id @default(autoincrement())
+  courierAgentId Int
+  amount         Decimal  @db.Decimal(12, 2)
+  createdAt      DateTime @default(now())
+
+  @@index([courierAgentId])
+}
+
+model CsMonaDayAccount {
+  courierAgentId  Int
+  dayYmd          String   @db.VarChar(10)
+  collectedAmount Decimal? @db.Decimal(12, 2)
+  shippingAmount  Decimal? @db.Decimal(12, 2)
+  remittedAmount  Decimal? @db.Decimal(12, 2)
+  updatedAt       DateTime @updatedAt
+
+  @@id([courierAgentId, dayYmd])
+}
+
+model CsBostaReturnCapture {
+  trackingNumber    String    @id @db.VarChar(64)
+  seenDay           String    @db.Char(10)
+  kind              String    @db.VarChar(16)
+  reasonText        String    @default("") @db.VarChar(191)
+  customerName      String    @default("") @db.VarChar(191)
+  phone             String    @default("") @db.VarChar(32)
+  businessReference String    @default("") @db.VarChar(191)
+  wooOrderNumber    String    @default("") @db.VarChar(64)
+  confirmationId    Int?
+  note              String?   @db.Text
+  openedAt          DateTime?
+  capturedAt        DateTime  @default(now())
+
+  @@index([seenDay])
+}
+
+model CsBostaReturnReview {
+  trackingNumber              String    @id @db.VarChar(64)
+  condition                   String    @db.VarChar(16)
+  defects                     String    @default("") @db.VarChar(64)
+  destination                 String    @db.VarChar(32)
+  bostaClaim                  Boolean   @default(false)
+  usage                       String?   @db.VarChar(16)
+  deliveredToMaintenanceAt    DateTime?
+  grade                       String?   @db.VarChar(16)
+  techNote                    String?   @db.Text
+  receivedFromMaintenanceAt   DateTime?
+  shelfAt                     DateTime?
+  updatedAt                   DateTime  @updatedAt
+}
+
+model CsBostaReturnProduct {
+  trackingNumber String   @db.VarChar(64)
+  productId      Int
+  productName    String   @db.VarChar(191)
+  productCode    String   @default("") @db.VarChar(64)
+  updatedAt      DateTime @updatedAt
+
+  @@id([trackingNumber, productId])
+}
+
+model CsWarehouseSheet {
+  warehouse String   @id @db.VarChar(20)
+  fileName  String   @db.VarChar(255)
+  rowsJson  String   @db.MediumText
+  updatedAt DateTime @updatedAt
+}
+
+model ThemeSettings {
+  id        String   @id @db.VarChar(64)
+  settings  String   @db.LongText
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdminMediaAsset {
+  id        Int      @id @default(autoincrement())
+  filename  String   @db.VarChar(255)
+  mimeType  String   @db.VarChar(100)
+  size      Int
+  purpose   String   @db.VarChar(191)
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([purpose])
+  @@index([createdAt])
 }

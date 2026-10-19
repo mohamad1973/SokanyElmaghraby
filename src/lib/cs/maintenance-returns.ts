@@ -195,68 +195,78 @@ const KIND_LABEL: Record<BostaHeadingKind, string> = {
 };
 
 export async function listBostaReceivedReturns(from: string, to: string) {
-  await ensureMaintenanceLifecycleColumns();
-  const stored = await listCapturedBostaReturns(from, to);
-  const trackings = stored.map((row) => row.trackingNumber);
-  const [matched, reviews, linkedProducts, extras] = await Promise.all([
-    matchLocalOrders(stored),
-    listBostaReturnReviews(trackings),
-    listBostaReturnProducts(trackings),
-    listCaptureExtras(trackings),
-  ]);
-  const rows = stored
-    .map((row) => {
-      const local = matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
-      const snap = local?.snap || {};
-      const orderProduct = productLabel(snap.items);
-      const linked = linkedProducts.get(row.trackingNumber) || [];
-      const product = linked.length ? linkedProductLabel(linked) : orderProduct;
-      const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
-      const customerName = snap.customerName || row.customerName;
-      const phone = snap.phone || row.phone;
-      const extra = extras.get(row.trackingNumber);
-      const review = reviews.get(row.trackingNumber) || null;
-      return {
-        trackingNumber: row.trackingNumber,
-        confirmationId: local?.id ?? row.confirmationId,
-        day: row.seenDay,
-        wooOrderNumber,
-        customerName,
-        phone,
-        product,
-        orderProduct,
-        linkedProducts: linked,
-        kind: row.kind,
-        statusLabel: KIND_LABEL[row.kind],
-        reasonText: row.reasonText,
-        note: extra?.note || "",
-        openedAt: extra?.openedAt || null,
-        review,
-        searchText: searchBlob([
-          row.trackingNumber,
-          row.businessReference,
+  try {
+    await ensureMaintenanceLifecycleColumns();
+    const stored = await listCapturedBostaReturns(from, to);
+    const trackings = stored.map((row) => row.trackingNumber);
+    const [matched, reviews, linkedProducts, extras] = await Promise.all([
+      matchLocalOrders(stored),
+      listBostaReturnReviews(trackings),
+      listBostaReturnProducts(trackings),
+      listCaptureExtras(trackings),
+    ]);
+    const rows = stored
+      .map((row) => {
+        const local =
+          matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
+        const snap = local?.snap || {};
+        const orderProduct = productLabel(snap.items);
+        const linked = linkedProducts.get(row.trackingNumber) || [];
+        const product = linked.length ? linkedProductLabel(linked) : orderProduct;
+        const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
+        const customerName = snap.customerName || row.customerName;
+        const phone = snap.phone || row.phone;
+        const extra = extras.get(row.trackingNumber);
+        const review = reviews.get(row.trackingNumber) || null;
+        return {
+          trackingNumber: row.trackingNumber,
+          confirmationId: local?.id ?? row.confirmationId,
+          day: row.seenDay,
           wooOrderNumber,
           customerName,
           phone,
-          row.phone,
           product,
-          KIND_LABEL[row.kind],
-          review?.label,
-          row.reasonText,
-          extra?.note,
-          review?.techNote,
-          snap.address,
-          snap.addressFull,
-          snap.area,
-          snap.governorate,
-          snap.trackingNumber,
-          local?.invoiceNumber,
-          local?.trackingNumber,
-        ]),
-      };
-    })
-    .sort((left, right) => right.day.localeCompare(left.day) || right.trackingNumber.localeCompare(left.trackingNumber));
-  return { rows, error: null as string | null };
+          orderProduct,
+          linkedProducts: linked,
+          kind: row.kind,
+          statusLabel: KIND_LABEL[row.kind],
+          reasonText: row.reasonText,
+          note: extra?.note || "",
+          openedAt: extra?.openedAt || null,
+          review,
+          searchText: searchBlob([
+            row.trackingNumber,
+            row.businessReference,
+            wooOrderNumber,
+            customerName,
+            phone,
+            row.phone,
+            product,
+            KIND_LABEL[row.kind],
+            review?.label,
+            row.reasonText,
+            extra?.note,
+            review?.techNote,
+            snap.address,
+            snap.addressFull,
+            snap.area,
+            snap.governorate,
+            snap.trackingNumber,
+            local?.invoiceNumber,
+            local?.trackingNumber,
+          ]),
+        };
+      })
+      .sort(
+        (left, right) =>
+          right.day.localeCompare(left.day) || right.trackingNumber.localeCompare(left.trackingNumber),
+      );
+    return { rows, error: null as string | null };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("[maintenance-returns] listBostaReceivedReturns", detail);
+    return { rows: [], error: "تعذر تحميل مرتجعات بوسطة. حاول مرة أخرى." as string | null };
+  }
 }
 
 export async function listTemimaReturns(from: string, to: string) {

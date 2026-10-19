@@ -64,10 +64,22 @@ export async function POST(request: Request, context: Context) {
     return NextResponse.json({ message: "قرار غير صالح." }, { status: 400 });
   }
 
-  const result = await decideDepositApproval({ id: numericId, decision });
-  if (!result.ok) {
-    return NextResponse.json({ message: result.message }, { status: 400 });
-  }
+  try {
+    const result = await decideDepositApproval({ id: numericId, decision });
+    if (!result.ok) {
+      return NextResponse.json(
+        { message: result.message, detail: "detail" in result ? result.detail : undefined },
+        { status: 400 },
+      );
+    }
 
-  return NextResponse.json({ ok: true, status: result.status });
+    return NextResponse.json({ ok: true, status: result.status });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("[cs/deposit-approvals] decide", detail);
+    return NextResponse.json(
+      { message: "تعذر حفظ القرار بسبب خطأ في السيرفر. حاول مرة أخرى.", detail: detail.slice(0, 200) },
+      { status: 500 },
+    );
+  }
 }

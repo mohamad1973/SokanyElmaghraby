@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إصلاح ديبوزت ومرتجعات الصيانة | إرجاع أعمدة Mona وجداول المرتجعات للسكيمة؛ try/catch + رسائل أوضح لموافقة الديبوزت وتحميل المرتجعات | `schema.prisma`, `deposit-approvals.ts`, `maintenance/returns/route.ts` |
 | استبدال/استرجاع تميمة وعيد ومؤمن | من صفحة الأوردر: إنشاء ابن + بوليصة بوسطة للطباعة؛ يظهر بالبحث بالتليفون؛ رسوم 75 عند تم بنجاح | `fulfillment-return.ts`, `fulfillment/route.ts`, `call-sheet.tsx`, `mona-courier.ts` |
 | حد طلب افتراضي 10 | منتجات بدون `low_stock_amount` في Woo تظهر حد طلب 10 في التحويلات والتنبيهات؛ الموظف يقدر يعدّل ويحفظ | `reorder-report.ts` |
 | مزامنة خصم/ديبوزت لكل الأسطح | بعد الموافقة نفس الإجمالي/الصافي يظهر في تميمة وعيد ومؤمن والطابور عبر waybillTotal وsheetCollectedSplit | `order-window.ts`, `temima-settlement.ts`, `mona-courier.ts`, `courier-dispatch.ts`, `cs-queue-client.tsx` |

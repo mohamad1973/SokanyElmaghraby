@@ -216,9 +216,10 @@ export function AdminNotificationsBell() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision }),
       });
-      const data = (await res.json()) as { message?: string };
+      const data = (await res.json().catch(() => null)) as { message?: string; detail?: string } | null;
       if (!res.ok) {
-        setDecideMessage(data.message || "تعذر حفظ القرار.");
+        const base = data?.message || "تعذر حفظ القرار.";
+        setDecideMessage(data?.detail ? `${base} (${data.detail})` : base);
         setDecideBusy(false);
         return;
       }

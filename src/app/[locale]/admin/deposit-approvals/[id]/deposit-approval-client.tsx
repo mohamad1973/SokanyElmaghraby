@@ -44,10 +44,15 @@ export function DepositApprovalClient({ item }: { item: Item }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ decision }),
     });
-    const data = (await res.json()) as { message?: string; status?: string };
+    const data = (await res.json().catch(() => null)) as {
+      message?: string;
+      detail?: string;
+      status?: string;
+    } | null;
     setBusy(false);
-    if (!res.ok) {
-      setMessage(data.message || "تعذر حفظ القرار.");
+    if (!res.ok || !data) {
+      const base = data?.message || "تعذر حفظ القرار.";
+      setMessage(data?.detail ? `${base} (${data.detail})` : base);
       return;
     }
     setStatus(data.status || decision);
