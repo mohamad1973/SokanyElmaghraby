@@ -4,7 +4,13 @@ import { Prisma } from "@prisma/client";
 
 import { parseCsRoles } from "@/lib/cs/agents";
 import { getPrismaClient } from "@/lib/db";
-import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso, effectivePaymentState } from "@/lib/cs/order-window";
+import {
+  cairoTodayYmd,
+  cairoYmdBounds,
+  cairoYmdFromIso,
+  sheetCollectedSplit,
+  sheetSplitFromConfirmation,
+} from "@/lib/cs/order-window";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 
 export const MONA_COURIER_FEE = 75;
@@ -26,6 +32,9 @@ type OrderRow = {
   customerSnapshot: unknown;
   depositAmount: unknown;
   depositPaid: boolean | number | null;
+  depositApprovalStatus?: string | null;
+  orderTotalDelta?: unknown;
+  discountApprovalStatus?: string | null;
   monaCourierId: number | null;
   monaAssignedAt: Date | string | null;
   monaOutcome: string | null;
@@ -124,6 +133,8 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     governorate?: string;
     area?: string;
     total?: string;
+    waybillTotal?: string;
+    wooTotal?: string;
     paymentMethod?: string;
     paymentMethodId?: string | null;
     wooStatus?: string;
@@ -142,6 +153,18 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     row.monaSupervisorResult === "delivered" || row.monaSupervisorResult === "refused" || row.monaSupervisorResult === "postponed"
       ? row.monaSupervisorResult
       : null;
+  const moneySplit = sheetCollectedSplit(
+    sheetSplitFromConfirmation({
+      customerSnapshot: snap,
+      depositAmount: row.depositAmount,
+      depositPaid: Boolean(row.depositPaid),
+      depositApprovalStatus: row.depositApprovalStatus,
+      orderTotalDelta: row.orderTotalDelta,
+      discountApprovalStatus: row.discountApprovalStatus,
+      freshPaymentState: true,
+    }),
+  );
+  const orderTotal = moneySplit.deposit + moneySplit.net;
   return {
     id,
     wooOrderNumber: row.wooOrderNumber,
@@ -169,11 +192,14 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
         return { name, quantity, price, lineTotal: lineTotal || price * quantity };
       })
       .filter((item) => item.name),
-    total: String(snap.total || ""),
+    total: String(orderTotal || snap.waybillTotal || snap.total || ""),
     cashAmount: cashAmountOf({
-      customerSnapshot: snapshotOf(row.customerSnapshot),
+      customerSnapshot: snap,
       depositAmount: row.depositAmount,
       depositPaid: Boolean(row.depositPaid),
+      depositApprovalStatus: row.depositApprovalStatus,
+      orderTotalDelta: row.orderTotalDelta,
+      discountApprovalStatus: row.discountApprovalStatus,
     }),
     outcome,
     official,
@@ -181,42 +207,14 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     courierId,
     courierName: row.courierName || "",
     assignedDay: assignedDayOf(row.monaAssignedAt),
-    orderTotal: moneyNumber(snap.total),
-    depositAmount: monaDepositAmount(row, snap),
+    orderTotal,
+    depositAmount: moneySplit.deposit,
     productNames: (snap.items || [])
       .map((item) => String(item.name || "").trim())
       .filter(Boolean)
       .join("، "),
     isLarge: (official === "delivered" || outcome === "delivered") && Boolean(row.monaIsLarge),
   };
-}
-
-function moneyNumber(value: unknown) {
-  const amount = Number(String(value ?? "").replace(/[^\d.]/g, ""));
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function monaDepositAmount(
-  row: OrderRow,
-  snap: {
-    total?: string;
-    paymentMethod?: string;
-    paymentMethodId?: string | null;
-    wooStatus?: string;
-    datePaid?: string | null;
-    paymentState?: "awaiting_payment" | "paid" | "cod";
-  },
-) {
-  const total = moneyNumber(snap.total);
-  const state = effectivePaymentState({
-    paymentMethod: snap.paymentMethod,
-    paymentMethodId: snap.paymentMethodId,
-    wooStatus: snap.wooStatus,
-    datePaid: snap.datePaid,
-    paymentState: snap.paymentState,
-  });
-  if (state === "paid") return total;
-  return row.depositPaid ? moneyNumber(row.depositAmount) : 0;
 }
 
 function monaSheetNet(card: { orderTotal: number; depositAmount: number }) {
@@ -230,6 +228,7 @@ function assignedDayOf(value: Date | string | null | undefined) {
 }
 
 const ORDER_COLUMNS = `c.id, c.wooOrderNumber, c.invoiceNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
+               c.depositApprovalStatus, c.orderTotalDelta, c.discountApprovalStatus,
                c.monaCourierId, c.monaAssignedAt, c.monaOutcome, c.monaSupervisorResult,
                c.monaRefusalReason, c.monaIsLarge, a.name AS courierName`;
 

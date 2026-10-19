@@ -1,7 +1,11 @@
 import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
-import { effectivePaymentState, isFawryMethod, resolvePaymentState, sheetCollectedSplit } from "@/lib/cs/order-window";
+import {
+  isFawryMethod,
+  sheetCollectedSplit,
+  sheetSplitFromConfirmation,
+} from "@/lib/cs/order-window";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
@@ -104,34 +108,13 @@ export function cashAmountOf(row: {
   customerSnapshot: unknown;
   depositAmount: unknown;
   depositPaid: boolean | null;
+  depositApprovalStatus?: string | null;
   orderTotalDelta?: unknown;
   discountApprovalStatus?: string | null;
 }) {
-  const snap = (row.customerSnapshot || {}) as {
-    total?: string;
-    paymentMethod?: string;
-    paymentMethodId?: string | null;
-    wooStatus?: string;
-    datePaid?: string | null;
-    paymentState?: "awaiting_payment" | "paid" | "cod";
-  };
-  const state =
-    snap.paymentState ||
-    resolvePaymentState({
-      paymentMethod: snap.paymentMethod,
-      paymentMethodId: snap.paymentMethodId,
-      wooStatus: snap.wooStatus,
-      datePaid: snap.datePaid,
-    });
-  if (state !== "cod") return 0;
-  const delta = Number(row.orderTotalDelta);
-  const discountOk =
-    String(row.discountApprovalStatus || "").toLowerCase() === "approved" &&
-    Number.isFinite(delta) &&
-    delta < 0;
-  const total = Math.max(0, money(snap.total) + (discountOk ? delta : 0));
-  const deposit = row.depositPaid ? money(row.depositAmount) : 0;
-  return Math.max(0, total - deposit);
+  const splitInput = sheetSplitFromConfirmation(row);
+  if (splitInput.paymentState !== "cod") return 0;
+  return sheetCollectedSplit(splitInput).net;
 }
 
 function settlementSplit(
@@ -140,44 +123,37 @@ function settlementSplit(
     depositAmount: unknown;
     depositPaid: boolean | null;
     depositApprovalStatus?: string | null;
+    orderTotalDelta?: unknown;
+    discountApprovalStatus?: string | null;
   },
   override: number | null,
   freshFawry: boolean,
   keepCancelledValue = false,
 ) {
-  const snap = (row.customerSnapshot || {}) as {
-    total?: string;
-    paymentMethod?: string;
-    paymentMethodId?: string | null;
-    wooStatus?: string;
-    datePaid?: string | null;
-    paymentState?: "awaiting_payment" | "paid" | "cod";
-  };
-  const state = freshFawry
-    ? effectivePaymentState({
-        paymentMethod: snap.paymentMethod,
-        paymentMethodId: snap.paymentMethodId,
-        wooStatus: snap.wooStatus,
-        datePaid: snap.datePaid,
-        paymentState: snap.paymentState,
-      })
-    : snap.paymentState ||
-      resolvePaymentState({
-        paymentMethod: snap.paymentMethod,
-        paymentMethodId: snap.paymentMethodId,
-        wooStatus: snap.wooStatus,
-        datePaid: snap.datePaid,
-      });
-  return sheetCollectedSplit({
-    total: money(snap.total),
-    wooStatus: snap.wooStatus,
-    paymentState: state,
-    depositAmount: money(row.depositAmount),
-    depositPaid: row.depositPaid,
-    depositApprovalStatus: row.depositApprovalStatus,
-    settlementDepositOverride: override,
-    keepCancelledValue,
-  });
+  return sheetCollectedSplit(
+    sheetSplitFromConfirmation({
+      ...row,
+      settlementDepositOverride: override,
+      keepCancelledValue,
+      freshPaymentState: freshFawry,
+    }),
+  );
+}
+
+function orderTotalOf(
+  row: {
+    customerSnapshot: unknown;
+    depositAmount: unknown;
+    depositPaid: boolean | null;
+    depositApprovalStatus?: string | null;
+    orderTotalDelta?: unknown;
+    discountApprovalStatus?: string | null;
+  },
+  override: number | null,
+  freshFawry: boolean,
+) {
+  const split = settlementSplit(row, override, freshFawry, true);
+  return split.deposit + split.net;
 }
 
 async function depositOverrides(ids: number[]) {
@@ -377,6 +353,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
             depositAmount: true,
             depositPaid: true,
             depositApprovalStatus: true,
+            orderTotalDelta: true,
+            discountApprovalStatus: true,
             ...SHEET_DAY_SELECT,
           },
         })
@@ -390,6 +368,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       const order = snapById.get(line.confirmationId);
       const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
       const carried = Boolean(line.resolvesLineId);
+      const override = overrides.get(line.confirmationId) ?? null;
       return {
         confirmationId: line.confirmationId,
         wooOrderNumber: line.wooOrderNumber,
@@ -397,8 +376,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         productNames: productNamesOf(order?.customerSnapshot),
         ...contactOf(order?.customerSnapshot),
         cashAmount: Number(line.cashAmount),
-        depositAmount: order ? settlementSplit(order, overrides.get(line.confirmationId) ?? null, false).deposit : 0,
-        orderTotal: money(snap.total),
+        depositAmount: order ? settlementSplit(order, override, false).deposit : 0,
+        orderTotal: order ? orderTotalOf(order, override, false) : money(snap.total),
         fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
         disposition: storedDisposition(line.disposition),
         isLarge: line.isLarge,
@@ -444,6 +423,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
           depositAmount: true,
           depositPaid: true,
           depositApprovalStatus: true,
+          orderTotalDelta: true,
+          discountApprovalStatus: true,
           shippingAssignedAt: true,
           createdAt: true,
           ...SHEET_DAY_SELECT,
@@ -464,7 +445,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     if (settledIds.has(order.id) || postponeIds.has(order.id)) continue;
     const saved = draft.get(order.id);
     const snap = (order.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-    const split = settlementSplit(order, overrides.get(order.id) ?? null, true, true);
+    const override = overrides.get(order.id) ?? null;
+    const split = settlementSplit(order, override, true, true);
     rows.push({
       confirmationId: order.id,
       wooOrderNumber: order.wooOrderNumber,
@@ -473,7 +455,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       ...contactOf(order.customerSnapshot),
       cashAmount: split.net,
       depositAmount: split.deposit,
-      orderTotal: money(snap.total),
+      orderTotal: split.deposit + split.net,
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition: storedDisposition(saved?.disposition),
       isLarge: saved?.isLarge || false,
@@ -487,6 +469,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const saved = draft.get(carried.confirmationId);
     const order = orders.find((row) => row.id === carried.confirmationId);
     const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
+    const override = overrides.get(carried.confirmationId) ?? null;
     rows.push({
       confirmationId: carried.confirmationId,
       wooOrderNumber: carried.wooOrderNumber,
@@ -494,8 +477,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       productNames: order ? productNamesOf(order.customerSnapshot) : "—",
       ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
       cashAmount: carried.cashAmount,
-      depositAmount: order ? settlementSplit(order, overrides.get(carried.confirmationId) ?? null, true).deposit : 0,
-      orderTotal: money(snap.total),
+      depositAmount: order ? settlementSplit(order, override, true).deposit : 0,
+      orderTotal: order ? orderTotalOf(order, override, true) : money(snap.total),
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition: (saved?.disposition as TemimaDisposition) || "postpone",
       isLarge: saved?.isLarge ?? carried.isLarge,
@@ -764,6 +747,8 @@ export async function applySupervisorOrderResult(input: {
       depositAmount: true,
       depositPaid: true,
       depositApprovalStatus: true,
+      orderTotalDelta: true,
+      discountApprovalStatus: true,
       ...SHEET_DAY_SELECT,
     },
   });
@@ -852,7 +837,15 @@ export async function setFawrySettlementDeposit(input: { confirmationId: number;
   await ensureCsTables();
   const row = await prisma.csOrderConfirmation.findUnique({
     where: { id: input.confirmationId },
-    select: { id: true, customerSnapshot: true },
+    select: {
+      id: true,
+      customerSnapshot: true,
+      depositAmount: true,
+      depositPaid: true,
+      depositApprovalStatus: true,
+      orderTotalDelta: true,
+      discountApprovalStatus: true,
+    },
   });
   if (!row) return { ok: false as const, message: "الأوردر غير موجود." };
   const snap = (row.customerSnapshot || {}) as { paymentMethod?: string; paymentMethodId?: string | null; total?: string };
@@ -869,7 +862,7 @@ export async function setFawrySettlementDeposit(input: { confirmationId: number;
     LIMIT 1
   `;
   if (closed.length) return { ok: false as const, message: "الأسبوع مقفل." };
-  const total = money(snap.total);
+  const total = orderTotalOf(row, null, true);
   const amount =
     input.amount == null || !Number.isFinite(input.amount) ? null : Math.min(total, Math.max(0, input.amount));
   if (amount == null) {

@@ -74,6 +74,9 @@ function cardFromRow(row: {
   courierRefusalReason: string | null;
   depositAmount: unknown;
   depositPaid: boolean | null;
+  depositApprovalStatus?: string | null;
+  orderTotalDelta?: unknown;
+  discountApprovalStatus?: string | null;
   answers: AnswerRow[];
   courierAgent: { id: number; name: string } | null;
 }): Omit<CourierOrderCard, "matches"> {
@@ -84,6 +87,7 @@ function cardFromRow(row: {
     governorate?: string;
     area?: string;
     total?: string;
+    waybillTotal?: string;
     items?: Array<{ name?: string; quantity?: number }>;
   };
   const extra = row.answers.find((item) => item.itemKey === "extra_phone");
@@ -91,6 +95,14 @@ function cardFromRow(row: {
   const altPhone =
     String(extra?.value || "").trim() ||
     (legacy && legacy.value !== "no" ? String(legacy.note || "").trim() : "");
+  const cashAmount = cashAmountOf({
+    customerSnapshot: row.customerSnapshot,
+    depositAmount: row.depositAmount,
+    depositPaid: row.depositPaid,
+    depositApprovalStatus: row.depositApprovalStatus,
+    orderTotalDelta: row.orderTotalDelta,
+    discountApprovalStatus: row.discountApprovalStatus,
+  });
   return {
     id: row.id,
     wooOrderNumber: row.wooOrderNumber,
@@ -105,12 +117,8 @@ function cardFromRow(row: {
     items: (snap.items || [])
       .map((item) => ({ name: String(item.name || "").trim(), quantity: Number(item.quantity || 1) }))
       .filter((item) => item.name),
-    total: String(snap.total || ""),
-    cashAmount: cashAmountOf({
-      customerSnapshot: row.customerSnapshot,
-      depositAmount: row.depositAmount,
-      depositPaid: row.depositPaid,
-    }),
+    total: String(snap.waybillTotal || snap.total || ""),
+    cashAmount,
     delivered: row.courierOutcome === "delivered" || Boolean(row.deliveredToCustomer),
     outcome:
       row.courierOutcome === "delivered" || row.courierOutcome === "refused" || row.courierOutcome === "postponed"
@@ -165,6 +173,9 @@ async function loadSheetRows(today: string) {
       courierRefusalReason: true,
       depositAmount: true,
       depositPaid: true,
+      depositApprovalStatus: true,
+      orderTotalDelta: true,
+      discountApprovalStatus: true,
       confirmedAt: true,
       handedToCarrierAt: true,
       courierAssignedAt: true,
@@ -225,6 +236,9 @@ async function loadCourierDay(courierId: number, dayYmd?: string) {
       courierRefusalReason: true,
       depositAmount: true,
       depositPaid: true,
+      depositApprovalStatus: true,
+      orderTotalDelta: true,
+      discountApprovalStatus: true,
       confirmedAt: true,
       handedToCarrierAt: true,
       courierAssignedAt: true,

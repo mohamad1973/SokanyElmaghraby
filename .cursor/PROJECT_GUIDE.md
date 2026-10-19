@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مزامنة خصم/ديبوزت لكل الأسطح | بعد الموافقة نفس الإجمالي/الصافي يظهر في تميمة وعيد ومؤمن والطابور عبر waybillTotal وsheetCollectedSplit | `order-window.ts`, `temima-settlement.ts`, `mona-courier.ts`, `courier-dispatch.ts`, `cs-queue-client.tsx` |
 | موافقة ديبوزت/خصم مرة واحدة | رفض إعادة الطلب وهو pending؛ شيل «إعادة إرسال» للخصم؛ الزر «بانتظار الرد…» مثل الديبوزت | `deposit-approvals.ts`, `discount-approvals.ts`, `call-sheet.tsx` |
 | إشعارات خصم لجرس أدمن CS | `/api/cs/notifications` يرجع `pendingDiscounts`؛ قرار موافقة/رفض من `/api/cs/discount-approvals/[id]`؛ جرس `cs-shell` يعرض ويصوّت؛ نص «إعادة إرسال» مختصر في call-sheet | `notifications/route.ts`, `discount-approvals/[id]/route.ts`, `cs-shell.tsx`, `call-sheet.tsx` |
 | دورة صيانة مرتجعات كاملة | تقرير تسليم بتوقيع + ملاحظة + تواريخ فتح/تسليم؛ فني (فرز أول/ثاني/هالك)؛ استلام وفروقات؛ حسابات (صلاحية حسابات) تطبع قوائم ERP لأوتليت/هالك | `bosta-return-lifecycle.ts`, `bosta-return-review.ts`, `maintenance-client.tsx`, `maintenance-panels.tsx`, `agents.ts` |

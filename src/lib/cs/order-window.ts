@@ -189,6 +189,87 @@ export function isPaidOnlineHighlight(paymentMethod: string, paymentMethodId?: s
 
 export type CsPaymentState = "awaiting_payment" | "paid" | "cod";
 
+export function parseMoneyAmount(value: unknown): number {
+  const n = Number(String(value ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+export function hasWaybillTotal(snap: { waybillTotal?: unknown } | null | undefined): boolean {
+  if (!snap) return false;
+  if (snap.waybillTotal == null) return false;
+  return String(snap.waybillTotal).trim() !== "";
+}
+
+/** Prefer waybillTotal (post-discount COD base) when set; else wooTotal/total. */
+export function baseTotalFromSnapshot(
+  snap: { waybillTotal?: unknown; wooTotal?: unknown; total?: unknown } | null | undefined,
+): number {
+  if (!snap) return 0;
+  if (hasWaybillTotal(snap)) return parseMoneyAmount(snap.waybillTotal);
+  return parseMoneyAmount(snap.wooTotal ?? snap.total);
+}
+
+/**
+ * Build sheetCollectedSplit inputs from a confirmation snapshot + money columns.
+ * When waybillTotal is present it already includes an approved discount — do not re-apply delta.
+ */
+export function sheetSplitFromConfirmation(input: {
+  customerSnapshot: unknown;
+  depositAmount?: unknown;
+  depositPaid?: boolean | null;
+  depositApprovalStatus?: string | null;
+  orderTotalDelta?: unknown;
+  discountApprovalStatus?: string | null;
+  settlementDepositOverride?: number | null;
+  keepCancelledValue?: boolean;
+  /** Recompute Fawry/online state from Woo fields instead of trusting snap.paymentState. */
+  freshPaymentState?: boolean;
+}) {
+  const snap = (input.customerSnapshot || {}) as {
+    waybillTotal?: unknown;
+    wooTotal?: unknown;
+    total?: unknown;
+    paymentMethod?: string;
+    paymentMethodId?: string | null;
+    wooStatus?: string;
+    datePaid?: string | null;
+    paymentState?: CsPaymentState;
+  };
+  const paymentState = input.freshPaymentState
+    ? effectivePaymentState({
+        paymentMethod: snap.paymentMethod,
+        paymentMethodId: snap.paymentMethodId,
+        wooStatus: snap.wooStatus,
+        datePaid: snap.datePaid,
+        paymentState: snap.paymentState,
+      })
+    : snap.paymentState ||
+      resolvePaymentState({
+        paymentMethod: snap.paymentMethod,
+        paymentMethodId: snap.paymentMethodId,
+        wooStatus: snap.wooStatus,
+        datePaid: snap.datePaid,
+      });
+
+  const waybillSet = hasWaybillTotal(snap);
+  const deltaRaw = Number(input.orderTotalDelta);
+  const delta =
+    !waybillSet && Number.isFinite(deltaRaw) ? deltaRaw : null;
+
+  return {
+    total: baseTotalFromSnapshot(snap),
+    wooStatus: snap.wooStatus,
+    paymentState,
+    depositAmount: parseMoneyAmount(input.depositAmount),
+    depositPaid: input.depositPaid ?? null,
+    depositApprovalStatus: input.depositApprovalStatus,
+    orderTotalDelta: delta,
+    discountApprovalStatus: waybillSet ? null : input.discountApprovalStatus,
+    settlementDepositOverride: input.settlementDepositOverride,
+    keepCancelledValue: input.keepCancelledValue,
+  };
+}
+
 /** Deposit is money already collected. Net is what shipping still collects. */
 export function sheetCollectedSplit(input: {
   total: number;

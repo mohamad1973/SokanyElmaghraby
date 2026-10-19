@@ -104,6 +104,8 @@ function sheetPieceCount(item: CsQueueItem) {
 }
 
 function sheetDepositNet(item: CsQueueItem) {
+  // Queue API already maps waybillTotal → customerSnapshot.total after discount sync,
+  // so do not re-apply orderTotalDelta here (would double-discount).
   return sheetCollectedSplit({
     total: parseOrderTotal(item.customerSnapshot?.total),
     wooStatus: item.customerSnapshot?.wooStatus,
@@ -115,16 +117,8 @@ function sheetDepositNet(item: CsQueueItem) {
 }
 
 function temimaMoney(item: CsQueueItem) {
-  const total = parseOrderTotal(item.customerSnapshot?.total);
-  const deposit =
-    item.depositPaid && item.depositAmount && item.depositAmount > 0 ? Number(item.depositAmount) : 0;
-  if (deposit > 0) {
-    return { paid: deposit, remainder: Math.max(0, total - deposit) };
-  }
-  if (itemPaymentState(item) === "paid") {
-    return { paid: total, remainder: 0 };
-  }
-  return { paid: 0, remainder: total };
+  const split = sheetDepositNet(item);
+  return { paid: split.deposit, remainder: split.net };
 }
 
 function parseOrderTotal(value: string | null | undefined) {
