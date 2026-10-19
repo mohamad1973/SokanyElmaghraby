@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { canAccessTransfers, isTransfersRole } from "@/lib/cs/agents";
 import { listPendingDepositApprovals } from "@/lib/cs/deposit-approvals";
+import { listPendingDiscountApprovals } from "@/lib/cs/discount-approvals";
 import { listPendingOrderItemAdds } from "@/lib/cs/order-item-adds";
 import { getCsNotificationsForAgent } from "@/lib/cs/notifications";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
@@ -38,10 +39,11 @@ export async function GET() {
   const stockAlerts = showTransfers || isCsAdmin ? await listOpenStockAlerts() : [];
   const stockMapped = mapStockAlerts(stockAlerts);
 
-  // CS store admin: only pending deposit approvals + stock threshold (no agent follow-ups)
+  // CS store admin: pending deposit/discount approvals + item adds + stock (no agent follow-ups)
   if (isCsAdmin) {
-    const [pendingDeposits, pendingItemAdds] = await Promise.all([
+    const [pendingDeposits, pendingDiscounts, pendingItemAdds] = await Promise.all([
       listPendingDepositApprovals(),
+      listPendingDiscountApprovals(),
       listPendingOrderItemAdds(),
     ]);
     return NextResponse.json({
@@ -50,6 +52,7 @@ export async function GET() {
       followUpDue: [],
       depositDecisions: [],
       pendingDeposits,
+      pendingDiscounts,
       pendingItemAdds,
       stockAlerts: stockMapped,
       totals: {
@@ -58,9 +61,14 @@ export async function GET() {
         followUpDue: 0,
         depositDecisions: 0,
         pendingDeposits: pendingDeposits.length,
+        pendingDiscounts: pendingDiscounts.length,
         pendingItemAdds: pendingItemAdds.length,
         stockAlerts: stockMapped.length,
-        all: pendingDeposits.length + pendingItemAdds.length + stockMapped.length,
+        all:
+          pendingDeposits.length +
+          pendingDiscounts.length +
+          pendingItemAdds.length +
+          stockMapped.length,
       },
     });
   }

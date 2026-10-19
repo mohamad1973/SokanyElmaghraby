@@ -1221,7 +1221,7 @@ export function CsCallSheet({
           </p>
           <div className="mt-1 rounded-lg bg-white/70 px-2 py-1 text-[10px] font-bold text-[#14213D]">
             {discountApprovalStatus === "pending"
-              ? "بانتظار موافقة الأدمن — لو مهنج اضغطي إعادة إرسال"
+              ? "بانتظار موافقة الأدمن"
               : discountApprovalStatus === "approved"
                 ? "معتمد"
                 : discountApprovalStatus === "rejected"
@@ -1239,7 +1239,7 @@ export function CsCallSheet({
             {requestingDiscountApproval
               ? "جاري التحميل"
               : discountApprovalStatus === "pending"
-                ? "إعادة إرسال الموافقة"
+                ? "إعادة إرسال"
                 : "طلب موافقه"}
           </button>
           {discountApprovalStatus === "pending" ? (

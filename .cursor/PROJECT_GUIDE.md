@@ -430,6 +430,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إشعارات خصم لجرس أدمن CS | `/api/cs/notifications` يرجع `pendingDiscounts`؛ قرار موافقة/رفض من `/api/cs/discount-approvals/[id]`؛ جرس `cs-shell` يعرض ويصوّت؛ نص «إعادة إرسال» مختصر في call-sheet | `notifications/route.ts`, `discount-approvals/[id]/route.ts`, `cs-shell.tsx`, `call-sheet.tsx` |
 | دورة صيانة مرتجعات كاملة | تقرير تسليم بتوقيع + ملاحظة + تواريخ فتح/تسليم؛ فني (فرز أول/ثاني/هالك)؛ استلام وفروقات؛ حسابات (صلاحية حسابات) تطبع قوائم ERP لأوتليت/هالك | `bosta-return-lifecycle.ts`, `bosta-return-review.ts`, `maintenance-client.tsx`, `maintenance-panels.tsx`, `agents.ts` |
 | دمج حسابات الصيانة | تبويب حسابات الصيانة ضمن صلاحية حسابات؛ إلغاء دور maintenance_accounting المستقل | `agents.ts`, `cs-shell.tsx`, `users-client.tsx`, `maintenance/page.tsx` |
 | حفظ بوسطة بدون شرط الطباعة | الحفظ النهائي يقبل بدون طباعة عشان العنوان ينزل على بوسطة؛ الطباعة بعد الحفظ؛ كارت الخصم على الأوردر المحفوظ بموافقة أدمن | `call-sheet.tsx`, `confirmations.ts` |
