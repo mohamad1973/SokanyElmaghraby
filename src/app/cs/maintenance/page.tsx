@@ -14,7 +14,7 @@ export default async function CsMaintenancePage() {
     <MaintenanceClient
       canInspect={Boolean(viewer.isMaintenance || viewer.isAdmin)}
       canTech={Boolean(viewer.isMaintenanceTech || viewer.isAdmin)}
-      canAccounting={Boolean(viewer.isMaintenanceAccounting || viewer.isAdmin)}
+      canAccounting={Boolean(viewer.isAccounting || viewer.isAdmin)}
     />
   );
 }

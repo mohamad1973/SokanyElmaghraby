@@ -658,12 +658,10 @@ function CsHeader() {
   const isAdmin = roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
   const isTransfers = roles.includes("transfers") || Boolean(session?.user?.csIsTransfers);
   const isShipping = roles.includes("shipping");
-  const isAccounting = roles.includes("accounting");
+  const isAccounting = roles.includes("accounting") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
   const isMaintenance = roles.includes("maintenance") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
   const isMaintenanceTech = roles.includes("maintenance_tech") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
-  const isMaintenanceAccounting =
-    roles.includes("maintenance_accounting") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
-  const canMaintenanceHub = isMaintenance || isMaintenanceTech || isMaintenanceAccounting;
+  const canMaintenanceHub = isMaintenance || isMaintenanceTech || isAccounting;
   const isCourierSupervisor = roles.includes("courier_supervisor");
   const isCourier = roles.includes("courier");
   const isMonaCourier = roles.includes("mona_courier");
@@ -698,14 +696,12 @@ function CsHeader() {
                 ? "التحويلات · مخزون الموقع وحد الطلب"
                 : isShipping
                   ? "حساب شحن · تصفية سيد تميمة"
-                  : isAccounting
+                  : isAccounting && !isMaintenance && !isMaintenanceTech
                     ? "حسابات · كل الأوردرات"
                     : canMaintenanceHub && !canSeeOrders && !isTransfers && !isShipping
                       ? isMaintenanceTech && !isMaintenance
                         ? "فني الصيانة · المسلم للصيانة"
-                        : isMaintenanceAccounting && !isMaintenance
-                          ? "حسابات الصيانة · ترحيل ERP"
-                          : "الصيانة · المرتجعات"
+                        : "الصيانة · المرتجعات"
                       : "خدمة العملاء · الأوردرات والتحويلات"}
             </p>
           </div>
@@ -750,11 +746,7 @@ function CsHeader() {
           ) : null}
           {canMaintenanceHub ? (
             <Link href="/cs/maintenance" className={navClass(pathname.startsWith("/cs/maintenance"))}>
-              {isMaintenanceTech && !isMaintenance && !isMaintenanceAccounting
-                ? "فني الصيانة"
-                : isMaintenanceAccounting && !isMaintenance
-                  ? "حسابات الصيانة"
-                  : "الصيانة"}
+              {isMaintenanceTech && !isMaintenance && !isAccounting ? "فني الصيانة" : "الصيانة"}
             </Link>
           ) : null}
           {isSupervisor ? (

@@ -57,7 +57,7 @@ export async function GET(request: Request) {
     viewer: {
       isMaintenance: viewer.isMaintenance,
       isMaintenanceTech: viewer.isMaintenanceTech,
-      isMaintenanceAccounting: viewer.isMaintenanceAccounting,
+      isAccounting: viewer.isAccounting,
       isAdmin: viewer.isAdmin,
     },
   });

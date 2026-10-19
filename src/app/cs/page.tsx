@@ -34,7 +34,7 @@ export default async function CsHomePage() {
   if (!viewer.canSeeOrders && (viewer.isShipping || isShippingRole(session.user.csRole))) {
     redirect("/cs/settlement");
   }
-  if (!viewer.canSeeOrders && (viewer.isMaintenance || viewer.isMaintenanceTech || viewer.isMaintenanceAccounting)) {
+  if (!viewer.canSeeOrders && (viewer.isMaintenance || viewer.isMaintenanceTech)) {
     redirect("/cs/maintenance");
   }
 

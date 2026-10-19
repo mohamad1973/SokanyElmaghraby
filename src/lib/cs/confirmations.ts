@@ -2022,7 +2022,6 @@ export async function resolveCsViewer(agentId: number) {
       isAccounting: false,
       isMaintenance: false,
       isMaintenanceTech: false,
-      isMaintenanceAccounting: false,
       canAccessTransfers: false,
       canSeeOrders: true,
       canAccessMaintenanceHub: false,

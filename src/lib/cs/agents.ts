@@ -12,7 +12,6 @@ export type CsRole =
   | "accounting"
   | "maintenance"
   | "maintenance_tech"
-  | "maintenance_accounting"
   | "courier_supervisor"
   | "courier"
   | "mona_courier";
@@ -26,7 +25,6 @@ export const CS_ROLES: CsRole[] = [
   "accounting",
   "maintenance",
   "maintenance_tech",
-  "maintenance_accounting",
   "courier_supervisor",
   "courier",
   "mona_courier",
@@ -86,12 +84,12 @@ const ADMIN_ALL_ROLES: CsRole[] = [
   "accounting",
   "maintenance",
   "maintenance_tech",
-  "maintenance_accounting",
 ];
 
 export function csFlagsFromRoles(roles: CsRole[]) {
   const hasAdmin = roles.includes("admin");
   const list = hasAdmin ? ADMIN_ALL_ROLES : roles.length ? roles : (["agent"] as CsRole[]);
+  const isAccounting = hasAdmin || list.includes("accounting");
   return {
     roles: list,
     role: hasAdmin ? ("admin" as const) : list[0],
@@ -99,10 +97,9 @@ export function csFlagsFromRoles(roles: CsRole[]) {
     isAdmin: hasAdmin,
     isTransfers: hasAdmin || list.includes("transfers"),
     isShipping: hasAdmin || list.includes("shipping"),
-    isAccounting: hasAdmin || list.includes("accounting"),
+    isAccounting,
     isMaintenance: hasAdmin || list.includes("maintenance"),
     isMaintenanceTech: hasAdmin || list.includes("maintenance_tech"),
-    isMaintenanceAccounting: hasAdmin || list.includes("maintenance_accounting"),
     isCourierSupervisor: list.includes("courier_supervisor"),
     isCourier: list.includes("courier"),
     isMonaCourier: list.includes("mona_courier"),
@@ -114,7 +111,7 @@ export function csFlagsFromRoles(roles: CsRole[]) {
       hasAdmin ||
       list.includes("maintenance") ||
       list.includes("maintenance_tech") ||
-      list.includes("maintenance_accounting"),
+      isAccounting,
   };
 }
 
@@ -609,7 +606,7 @@ async function runEnsureCsTables() {
     `);
     await prisma.$executeRawUnsafe(`
       UPDATE \`CsAgent\` SET \`role\` = 'admin',
-        \`roles\` = 'admin,agent,supervisor,transfers,shipping,accounting,maintenance,maintenance_tech,maintenance_accounting',
+        \`roles\` = 'admin,agent,supervisor,transfers,shipping,accounting,maintenance,maintenance_tech',
         \`isSupervisor\` = true
       WHERE LOWER(COALESCE(\`username\`, '')) = 'mm'
         OR \`role\` = 'admin'
