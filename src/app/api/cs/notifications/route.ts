@@ -1,26 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { canAccessTransfers, isTransfersRole } from "@/lib/cs/agents";
+import { isTransfersRole } from "@/lib/cs/agents";
 import { listPendingDepositApprovals } from "@/lib/cs/deposit-approvals";
 import { listPendingDiscountApprovals } from "@/lib/cs/discount-approvals";
 import { listPendingOrderItemAdds } from "@/lib/cs/order-item-adds";
 import { getCsNotificationsForAgent } from "@/lib/cs/notifications";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { listOpenStockAlerts } from "@/lib/cs/stock-alerts";
 import { requireCsSession } from "@/lib/session-guards";
-
-function mapStockAlerts(
-  stockAlerts: Awaited<ReturnType<typeof listOpenStockAlerts>>,
-) {
-  return stockAlerts.map((a) => ({
-    id: a.id,
-    productId: a.productId,
-    productName: a.productName,
-    model: a.model,
-    stockQuantity: a.stockQuantity,
-    threshold: a.threshold,
-  }));
-}
 
 export async function GET() {
   const session = await requireCsSession();
@@ -32,14 +18,12 @@ export async function GET() {
   const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
   const isCsAdmin =
     Boolean(session.user.csIsAdmin) || viewer.role === "admin" || session.user.csRole === "admin";
-  const showTransfers =
-    viewer.canAccessTransfers || canAccessTransfers(session.user.csRole) || Boolean(session.user.csCanAccessTransfers);
   const transfersOnly = isTransfersRole(viewer.role) || Boolean(session.user.csIsTransfers);
 
-  const stockAlerts = showTransfers || isCsAdmin ? await listOpenStockAlerts() : [];
-  const stockMapped = mapStockAlerts(stockAlerts);
+  // Stock threshold is report-only — never surface in the CS notification bell.
+  const emptyStock = [] as const;
 
-  // CS store admin: pending deposit/discount approvals + item adds + stock (no agent follow-ups)
+  // CS store admin: pending deposit/discount approvals + item adds (no agent follow-ups)
   if (isCsAdmin) {
     const [pendingDeposits, pendingDiscounts, pendingItemAdds] = await Promise.all([
       listPendingDepositApprovals(),
@@ -54,7 +38,7 @@ export async function GET() {
       pendingDeposits,
       pendingDiscounts,
       pendingItemAdds,
-      stockAlerts: stockMapped,
+      stockAlerts: emptyStock,
       totals: {
         handedToCarrier: 0,
         confirmDelivery: 0,
@@ -63,12 +47,8 @@ export async function GET() {
         pendingDeposits: pendingDeposits.length,
         pendingDiscounts: pendingDiscounts.length,
         pendingItemAdds: pendingItemAdds.length,
-        stockAlerts: stockMapped.length,
-        all:
-          pendingDeposits.length +
-          pendingDiscounts.length +
-          pendingItemAdds.length +
-          stockMapped.length,
+        stockAlerts: 0,
+        all: pendingDeposits.length + pendingDiscounts.length + pendingItemAdds.length,
       },
     });
   }
@@ -80,15 +60,15 @@ export async function GET() {
       followUpDue: [],
       depositDecisions: [],
       pendingDeposits: [],
-      stockAlerts: stockMapped,
+      stockAlerts: emptyStock,
       totals: {
         handedToCarrier: 0,
         confirmDelivery: 0,
         followUpDue: 0,
         depositDecisions: 0,
         pendingDeposits: 0,
-        stockAlerts: stockMapped.length,
-        all: stockMapped.length,
+        stockAlerts: 0,
+        all: 0,
       },
     });
   }
@@ -101,12 +81,12 @@ export async function GET() {
   return NextResponse.json({
     ...data,
     pendingDeposits: [],
-    stockAlerts: stockMapped,
+    stockAlerts: emptyStock,
     totals: {
       ...data.totals,
       pendingDeposits: 0,
-      stockAlerts: stockMapped.length,
-      all: data.totals.all + stockMapped.length,
+      stockAlerts: 0,
+      all: data.totals.all,
     },
   });
 }
