@@ -856,6 +856,8 @@ export function serializeCsQueueItem(row: {
   monaCourierName?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean | null;
+  fulfillmentKind?: string | null;
+  parentConfirmationId?: number | null;
   depositAmount?: unknown;
   depositPaid?: boolean | null;
   depositPayMethod?: string | null;
@@ -919,6 +921,21 @@ export function serializeCsQueueItem(row: {
   const govOk = Boolean(loc.governorate);
   const areaOk = Boolean(loc.area);
   const displayTotal = String(raw?.waybillTotal || raw?.total || "");
+  const snapKind = String((raw as { fulfillmentKind?: string } | null)?.fulfillmentKind || "").trim();
+  const fulfillmentKind =
+    row.fulfillmentKind === "exchange" || snapKind === "exchange"
+      ? ("exchange" as const)
+      : row.fulfillmentKind === "return" || snapKind === "return"
+        ? ("return" as const)
+        : null;
+  const parentConfirmationId =
+    row.parentConfirmationId ??
+    (typeof (raw as { parentConfirmationId?: number } | null)?.parentConfirmationId === "number"
+      ? (raw as { parentConfirmationId?: number }).parentConfirmationId!
+      : null);
+  const parentWooOrderNumber = String(
+    (raw as { parentWooOrderNumber?: string } | null)?.parentWooOrderNumber || "",
+  ).trim() || null;
 
   return {
     id: row.id,
@@ -930,6 +947,9 @@ export function serializeCsQueueItem(row: {
     monaCourierName: row.monaCourierName ? String(row.monaCourierName) : null,
     trackingNumber,
     waybillPrinted: Boolean(row.waybillPrinted),
+    fulfillmentKind,
+    parentConfirmationId: parentConfirmationId || null,
+    parentWooOrderNumber,
     depositAmount: serializeDepositAmount(row.depositAmount),
     depositPaid: Boolean(row.depositPaid),
     depositPayMethod: normalizeDepositPayMethod(row.depositPayMethod),

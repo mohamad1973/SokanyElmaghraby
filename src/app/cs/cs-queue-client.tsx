@@ -36,6 +36,9 @@ export type CsQueueItem = {
   monaCourierName?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
+  fulfillmentKind?: "return" | "exchange" | null;
+  parentConfirmationId?: number | null;
+  parentWooOrderNumber?: string | null;
   depositAmount?: number | null;
   depositPaid?: boolean;
   depositApprovalStatus?: string | null;
@@ -2000,8 +2003,14 @@ export function CsQueueClient({
                     {returnedPostponed ? (
                       <span className="text-xs font-extrabold text-orange-800">مؤجل</span>
                     ) : null}
-                    <span className="flex items-center gap-2 text-base font-extrabold">
+                    <span className="flex flex-wrap items-center gap-2 text-base font-extrabold">
                       #{item.wooOrderNumber}
+                      {item.fulfillmentKind ? (
+                        <span className="rounded-full bg-[#FCA311]/25 px-2 py-0.5 text-[10px] font-extrabold text-[#14213D]">
+                          {item.fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"}
+                          {item.parentWooOrderNumber ? ` · #${item.parentWooOrderNumber}` : ""}
+                        </span>
+                      ) : null}
                       {isCourierSupervisor ? (
                         canEditTemimaSheet && sheetDay && item.sheetSerial ? (
                           <input

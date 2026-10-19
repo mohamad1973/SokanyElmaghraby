@@ -47,6 +47,9 @@ type Snapshot = {
   freeShippingHint?: string;
   dateCreated?: string;
   items?: Array<{ name: string; quantity: number; total: string; sku?: string }>;
+  fulfillmentKind?: string;
+  parentConfirmationId?: number;
+  parentWooOrderNumber?: string;
 };
 
 type AnswerState = {
@@ -796,6 +799,401 @@ export function CsCallSheet({
   const [printingWaybill, setPrintingWaybill] = useState(false);
   const [waybillCreatePrompt, setWaybillCreatePrompt] = useState(false);
   const [creatingWaybill, setCreatingWaybill] = useState(false);
+
+  const isFulfillmentChild = Boolean(
+    snapshot &&
+      ((snapshot as Snapshot).parentConfirmationId ||
+        (snapshot as Snapshot).fulfillmentKind === "return" ||
+        (snapshot as Snapshot).fulfillmentKind === "exchange"),
+  );
+  const canCreateFulfillment =
+    !isFulfillmentChild &&
+    Boolean(confirmed) &&
+    (lockedShipping === "sayed_temima" ||
+      lockedShipping === "eid" ||
+      lockedShipping === "momen" ||
+      Boolean(shippingCompany === "eid" || shippingCompany === "momen" || shippingCompany === "sayed_temima"));
+
+  type FulfillmentChild = {
+    id: number;
+    wooOrderNumber: string;
+    kind: "return" | "exchange";
+    trackingNumber: string | null;
+    shippingCompany: string | null;
+  };
+  type MonaCourierOpt = { id: number; name: string; bucket: "eid" | "momen" | null };
+  const [fulfillmentKind, setFulfillmentKind] = useState<"return" | "exchange">("exchange");
+  const [fulfillmentDesk, setFulfillmentDesk] = useState<"sayed_temima" | "eid" | "momen">(
+    lockedShipping === "eid" || lockedShipping === "momen" || lockedShipping === "sayed_temima"
+      ? lockedShipping
+      : "sayed_temima",
+  );
+  const [fulfillmentCourierId, setFulfillmentCourierId] = useState("");
+  const [fulfillmentCollect, setFulfillmentCollect] = useState("");
+  const [fulfillmentOutboundQ, setFulfillmentOutboundQ] = useState("");
+  const [fulfillmentReturnQ, setFulfillmentReturnQ] = useState("");
+  const [fulfillmentOutbound, setFulfillmentOutbound] = useState<{
+    productId: number | null;
+    name: string;
+    sku: string;
+  } | null>(null);
+  const [fulfillmentReturning, setFulfillmentReturning] = useState<{
+    productId: number | null;
+    name: string;
+    sku: string;
+  } | null>(null);
+  const [fulfillmentHits, setFulfillmentHits] = useState<
+    Array<{ id: number; name: string; sku: string; price: string }>
+  >([]);
+  const [fulfillmentHitTarget, setFulfillmentHitTarget] = useState<"out" | "back" | null>(null);
+  const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
+  const [fulfillmentChildren, setFulfillmentChildren] = useState<FulfillmentChild[]>([]);
+  const [monaCouriers, setMonaCouriers] = useState<MonaCourierOpt[]>([]);
+
+  useEffect(() => {
+    if (!canCreateFulfillment) return;
+    void fetch(`/api/cs/confirmations/${confirmationId}/fulfillment`)
+      .then((res) => res.json())
+      .then(
+        (data: {
+          items?: FulfillmentChild[];
+          couriers?: MonaCourierOpt[];
+        }) => {
+          setFulfillmentChildren(data.items || []);
+          setMonaCouriers(data.couriers || []);
+        },
+      )
+      .catch(() => {
+        // ignore
+      });
+  }, [canCreateFulfillment, confirmationId]);
+
+  useEffect(() => {
+    const query = fulfillmentHitTarget === "out" ? fulfillmentOutboundQ : fulfillmentReturnQ;
+    if (!fulfillmentHitTarget || query.trim().length < 2) {
+      setFulfillmentHits([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/products/search?q=${encodeURIComponent(query.trim())}`)
+        .then((res) => res.json())
+        .then((data: { products?: Array<{ id: number; name: string; price: string; sku?: string }> }) => {
+          setFulfillmentHits(
+            (data.products || []).slice(0, 8).map((product) => ({
+              id: product.id,
+              name: product.name,
+              sku: product.sku || "",
+              price: String(product.price || "0"),
+            })),
+          );
+        })
+        .catch(() => setFulfillmentHits([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [fulfillmentHitTarget, fulfillmentOutboundQ, fulfillmentReturnQ]);
+
+  async function printFulfillmentWaybill(childId: number, tracking: string | null) {
+    const preview = window.open("", "bosta-awb");
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${childId}/bosta-awb`);
+    if (!res.ok) {
+      preview?.close();
+      const data = (await res.json().catch(() => null)) as { message?: string } | null;
+      setMessage(data?.message || "تعذر طباعة بوليصة الاستبدال/الاسترجاع.");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    if (preview) {
+      preview.location.href = url;
+      preview.focus();
+    } else {
+      window.open(url, "_blank");
+    }
+    void fetch(`/api/cs/confirmations/${childId}/bosta-awb`, { method: "POST" });
+    if (!tracking) {
+      // ignore
+    }
+  }
+
+  async function submitFulfillment() {
+    setFulfillmentBusy(true);
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}/fulfillment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: fulfillmentKind,
+        desk: fulfillmentDesk,
+        monaCourierId: fulfillmentCourierId ? Number(fulfillmentCourierId) : null,
+        collectAmount: fulfillmentCollect.trim() || "0",
+        outbound:
+          fulfillmentKind === "exchange" && fulfillmentOutbound
+            ? {
+                productId: fulfillmentOutbound.productId,
+                name: fulfillmentOutbound.name,
+                sku: fulfillmentOutbound.sku,
+                quantity: 1,
+              }
+            : null,
+        returning: fulfillmentReturning
+          ? {
+              productId: fulfillmentReturning.productId,
+              name: fulfillmentReturning.name,
+              sku: fulfillmentReturning.sku,
+              quantity: 1,
+            }
+          : null,
+        phone: snapshot?.phone || answers.primary_phone?.value || "",
+        address: snapshot?.address || answers.address_complete?.value || "",
+        governorate: snapshot?.governorate || answers.governorate_confirm?.value || "",
+        area: snapshot?.area || answers.area_confirm?.value || "",
+        customerName: snapshot?.customerName || answers.customer_name?.value || "",
+      }),
+    });
+    const data = (await res.json()) as {
+      message?: string;
+      confirmationId?: number;
+      wooOrderNumber?: string;
+      trackingNumber?: string | null;
+      waybillWarning?: string | null;
+      kind?: "return" | "exchange";
+    };
+    setFulfillmentBusy(false);
+    if (!res.ok || !data.confirmationId) {
+      setMessage(data.message || "تعذر إنشاء الاستبدال/الاسترجاع.");
+      return;
+    }
+    setFulfillmentChildren((prev) => [
+      {
+        id: data.confirmationId!,
+        wooOrderNumber: data.wooOrderNumber || String(data.confirmationId),
+        kind: data.kind || fulfillmentKind,
+        trackingNumber: data.trackingNumber || null,
+        shippingCompany: fulfillmentDesk,
+      },
+      ...prev,
+    ]);
+    setMessage(
+      data.waybillWarning
+        ? `تم الحفظ. تحذير البوليصة: ${data.waybillWarning}`
+        : `تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber}`,
+    );
+    if (data.trackingNumber) {
+      void printFulfillmentWaybill(data.confirmationId, data.trackingNumber);
+    }
+  }
+
+  function fulfillmentCard() {
+    if (!canCreateFulfillment) return null;
+    const deskCouriers = monaCouriers.filter((row) => row.bucket === fulfillmentDesk);
+    const originalItems = snapshot?.items || [];
+    return (
+      <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
+        <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
+        <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
+          ينشئ أوردر جديد ببوليصة بوسطة للطباعة ويظهر في حساب تميمة أو عيد أو مؤمن — رسوم الشحن عند تم بنجاح.
+        </p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["exchange", "استبدال"],
+                ["return", "استرجاع"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFulfillmentKind(value)}
+                className={`${compactBtn} ${
+                  fulfillmentKind === value ? "bg-[#14213D] text-white" : "bg-white text-[#14213D] ring-1 ring-[#E5E5E5]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(
+              [
+                ["sayed_temima", "سيد تميمة"],
+                ["eid", "عيد"],
+                ["momen", "مؤمن"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setFulfillmentDesk(value);
+                  setFulfillmentCourierId("");
+                }}
+                className={`${compactBtn} ${
+                  fulfillmentDesk === value ? "bg-[#FCA311] text-black" : "bg-white text-[#14213D] ring-1 ring-[#E5E5E5]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {fulfillmentDesk === "eid" || fulfillmentDesk === "momen" ? (
+          <label className="mt-2 block text-[11px] font-extrabold text-[#14213D]">
+            المندوب
+            <select
+              value={fulfillmentCourierId}
+              onChange={(e) => setFulfillmentCourierId(e.target.value)}
+              className={`${inputCls} mt-1`}
+            >
+              <option value="">اختَر المندوب</option>
+              {deskCouriers.map((courier) => (
+                <option key={courier.id} value={String(courier.id)}>
+                  {courier.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <label className="mt-2 block text-[11px] font-extrabold text-[#14213D]">
+          قيمة التحصيل من العميل
+          <input
+            dir="ltr"
+            inputMode="decimal"
+            value={fulfillmentCollect}
+            onChange={(e) => setFulfillmentCollect(e.target.value.replace(/[^\d.]/g, ""))}
+            placeholder="0"
+            className={`${inputCls} mt-1`}
+          />
+        </label>
+        {fulfillmentKind === "exchange" ? (
+          <div className="mt-2">
+            <p className="text-[11px] font-extrabold text-[#14213D]">منتج خارج (هيستبدل به)</p>
+            <input
+              value={fulfillmentOutboundQ}
+              onChange={(e) => {
+                setFulfillmentOutboundQ(e.target.value);
+                setFulfillmentHitTarget("out");
+              }}
+              placeholder="ابحث باسم المنتج"
+              className={`${inputCls} mt-1`}
+            />
+            {fulfillmentOutbound ? (
+              <p className="mt-1 text-[11px] font-bold text-emerald-800">{fulfillmentOutbound.name}</p>
+            ) : null}
+            {fulfillmentHitTarget === "out" && fulfillmentHits.length ? (
+              <ul className="mt-1 max-h-36 overflow-y-auto rounded-lg bg-white ring-1 ring-[#E5E5E5]">
+                {fulfillmentHits.map((hit) => (
+                  <li key={`out-${hit.id}`}>
+                    <button
+                      type="button"
+                      className="block w-full px-2 py-1.5 text-right text-[11px] font-bold hover:bg-[#F5F5F0]"
+                      onClick={() => {
+                        setFulfillmentOutbound({ productId: hit.id, name: hit.name, sku: hit.sku });
+                        setFulfillmentOutboundQ(hit.name);
+                        setFulfillmentHits([]);
+                        setFulfillmentHitTarget(null);
+                      }}
+                    >
+                      {hit.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="mt-2">
+          <p className="text-[11px] font-extrabold text-[#14213D]">منتج راجع من العميل</p>
+          {originalItems.length ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {originalItems.map((item, index) => (
+                <button
+                  key={`orig-${index}`}
+                  type="button"
+                  onClick={() =>
+                    setFulfillmentReturning({
+                      productId: null,
+                      name: item.name,
+                      sku: item.sku || "",
+                    })
+                  }
+                  className={`${compactBtn} bg-white text-[#14213D] ring-1 ring-[#E5E5E5]`}
+                >
+                  {item.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <input
+            value={fulfillmentReturnQ}
+            onChange={(e) => {
+              setFulfillmentReturnQ(e.target.value);
+              setFulfillmentHitTarget("back");
+            }}
+            placeholder="أو ابحث عن منتج تاني"
+            className={`${inputCls} mt-1`}
+          />
+          {fulfillmentReturning ? (
+            <p className="mt-1 text-[11px] font-bold text-emerald-800">{fulfillmentReturning.name}</p>
+          ) : null}
+          {fulfillmentHitTarget === "back" && fulfillmentHits.length ? (
+            <ul className="mt-1 max-h-36 overflow-y-auto rounded-lg bg-white ring-1 ring-[#E5E5E5]">
+              {fulfillmentHits.map((hit) => (
+                <li key={`back-${hit.id}`}>
+                  <button
+                    type="button"
+                    className="block w-full px-2 py-1.5 text-right text-[11px] font-bold hover:bg-[#F5F5F0]"
+                    onClick={() => {
+                      setFulfillmentReturning({ productId: hit.id, name: hit.name, sku: hit.sku });
+                      setFulfillmentReturnQ(hit.name);
+                      setFulfillmentHits([]);
+                      setFulfillmentHitTarget(null);
+                    }}
+                  >
+                    {hit.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+        <p className="mt-2 text-[10px] font-bold text-[#14213D]/60" dir="ltr">
+          {snapshot?.phone || answers.primary_phone?.value || "—"} ·{" "}
+          {snapshot?.customerName || answers.customer_name?.value || "—"}
+        </p>
+        <button
+          type="button"
+          disabled={fulfillmentBusy}
+          onClick={() => void submitFulfillment()}
+          className="mt-2 w-full rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+        >
+          {fulfillmentBusy ? "جاري الحفظ…" : "حفظ وطباعة البوليصة"}
+        </button>
+        {fulfillmentChildren.length ? (
+          <ul className="mt-2 space-y-1">
+            {fulfillmentChildren.map((child) => (
+              <li
+                key={child.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 text-[11px] font-bold"
+              >
+                <Link href={`/cs/orders/${child.id}`} className="underline">
+                  #{child.wooOrderNumber} · {child.kind === "exchange" ? "استبدال" : "استرجاع"}
+                </Link>
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white"
+                  onClick={() => void printFulfillmentWaybill(child.id, child.trackingNumber)}
+                >
+                  طباعة
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
 
   async function printWaybillPdf(currentTracking: string) {
     if (!currentTracking.trim()) {
@@ -1774,6 +2172,8 @@ export function CsCallSheet({
           </label>
         </div>
       )}
+
+      {fulfillmentCard()}
 
       {/* Bottom row: shipping + deposit + tracking + waybill */}
       <div className="grid shrink-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-3">

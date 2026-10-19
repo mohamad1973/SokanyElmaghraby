@@ -35,6 +35,8 @@ type OrderRow = {
   depositApprovalStatus?: string | null;
   orderTotalDelta?: unknown;
   discountApprovalStatus?: string | null;
+  fulfillmentKind?: string | null;
+  parentConfirmationId?: number | null;
   monaCourierId: number | null;
   monaAssignedAt: Date | string | null;
   monaOutcome: string | null;
@@ -75,6 +77,9 @@ export type MonaOrderCard = {
   depositAmount: number;
   productNames: string;
   isLarge: boolean;
+  fulfillmentKind?: "return" | "exchange" | null;
+  parentConfirmationId?: number | null;
+  parentWooOrderNumber?: string | null;
 };
 
 export type MonaDayAccount = {
@@ -140,6 +145,9 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
     wooStatus?: string;
     datePaid?: string | null;
     paymentState?: "awaiting_payment" | "paid" | "cod";
+    fulfillmentKind?: string;
+    parentConfirmationId?: number;
+    parentWooOrderNumber?: string;
     items?: Array<{ name?: string; quantity?: number; price?: number | string; total?: number | string }>;
   };
   const id = Number(row.id);
@@ -214,6 +222,17 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
       .filter(Boolean)
       .join("، "),
     isLarge: (official === "delivered" || outcome === "delivered") && Boolean(row.monaIsLarge),
+    fulfillmentKind:
+      row.fulfillmentKind === "exchange" || snap.fulfillmentKind === "exchange"
+        ? "exchange"
+        : row.fulfillmentKind === "return" || snap.fulfillmentKind === "return"
+          ? "return"
+          : null,
+    parentConfirmationId:
+      row.parentConfirmationId == null && snap.parentConfirmationId == null
+        ? null
+        : Number(row.parentConfirmationId ?? snap.parentConfirmationId) || null,
+    parentWooOrderNumber: String(snap.parentWooOrderNumber || "").trim() || null,
   };
 }
 
@@ -229,6 +248,7 @@ function assignedDayOf(value: Date | string | null | undefined) {
 
 const ORDER_COLUMNS = `c.id, c.wooOrderNumber, c.invoiceNumber, c.customerSnapshot, c.depositAmount, c.depositPaid,
                c.depositApprovalStatus, c.orderTotalDelta, c.discountApprovalStatus,
+               c.fulfillmentKind, c.parentConfirmationId,
                c.monaCourierId, c.monaAssignedAt, c.monaOutcome, c.monaSupervisorResult,
                c.monaRefusalReason, c.monaIsLarge, a.name AS courierName`;
 

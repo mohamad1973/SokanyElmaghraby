@@ -29,6 +29,9 @@ type OrderCard = {
   depositAmount: number;
   productNames: string;
   isLarge: boolean;
+  fulfillmentKind?: "return" | "exchange" | null;
+  parentConfirmationId?: number | null;
+  parentWooOrderNumber?: string | null;
 };
 
 type LedgerLine = {
@@ -576,8 +579,14 @@ function CourierInvoice({
                         {serials.get(order.id) || ""}
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <span dir="ltr">{order.wooOrderNumber}</span>
+                          {order.fulfillmentKind ? (
+                            <span className="rounded-full bg-[#FCA311]/25 px-2 py-0.5 text-[10px] font-extrabold text-[#14213D]">
+                              {order.fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"}
+                              {order.parentWooOrderNumber ? ` · #${order.parentWooOrderNumber}` : ""}
+                            </span>
+                          ) : null}
                           {canEditMoney && onUnassign ? (
                             <button
                               type="button"

@@ -313,6 +313,8 @@ model CsOrderConfirmation {
   discountApprovalRequestedAt DateTime?
   discountApprovalDecidedAt DateTime?
   discountAgentDecisionSeenAt DateTime?
+  parentConfirmationId Int?
+  fulfillmentKind      String?             @db.VarChar(16)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   answers              CsChecklistAnswer[]
@@ -327,6 +329,8 @@ model CsOrderConfirmation {
   @@index([waybillPrinted])
   @@index([depositApprovalStatus])
   @@index([discountApprovalStatus])
+  @@index([parentConfirmationId])
+  @@index([fulfillmentKind])
 }
 
 model CsChecklistAnswer {
