@@ -92,7 +92,16 @@ export async function POST(request: Request, context: Context) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ message: result.message }, { status: 400 });
+    return NextResponse.json(
+      {
+        message: result.message,
+        confirmationId: "confirmationId" in result ? result.confirmationId : undefined,
+        wooOrderNumber: "wooOrderNumber" in result ? result.wooOrderNumber : undefined,
+        kind: "kind" in result ? result.kind : undefined,
+        desk: "desk" in result ? result.desk : undefined,
+      },
+      { status: 400 },
+    );
   }
 
   return NextResponse.json(result);

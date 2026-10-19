@@ -8,6 +8,7 @@ import { getPrismaClient } from "@/lib/db";
 
 export type FulfillmentKind = "return" | "exchange";
 export type FulfillmentDesk = "sayed_temima" | "eid" | "momen";
+export type SettlementDirection = "collect" | "refund" | "none";
 
 export type FulfillmentLine = {
   productId?: number | null;
@@ -16,9 +17,26 @@ export type FulfillmentLine = {
   quantity?: number | null;
 };
 
-function money(value: unknown) {
-  const n = Number(String(value ?? "").replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? Math.max(0, n) : 0;
+/** Signed settlement: + collect from customer, − refund to customer, 0 none. */
+function signedMoney(value: unknown) {
+  const raw = String(value ?? "")
+    .trim()
+    .replace(/,/g, "")
+    .replace(/[^\d.\-]/g, "");
+  if (!raw || raw === "-" || raw === "." || raw === "-.") return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-999_999, Math.min(999_999, Math.round(n * 100) / 100));
+}
+
+function settlementOf(amount: number): {
+  signed: number;
+  abs: number;
+  direction: SettlementDirection;
+} {
+  if (amount > 0) return { signed: amount, abs: amount, direction: "collect" };
+  if (amount < 0) return { signed: amount, abs: Math.abs(amount), direction: "refund" };
+  return { signed: 0, abs: 0, direction: "none" };
 }
 
 function cleanLine(line: FulfillmentLine | null | undefined): FulfillmentLine | null {
@@ -43,6 +61,49 @@ function parentEligible(shippingCompany: string | null | undefined, monaCourierI
 async function nextSyntheticWoo(parentId: number, seq: number) {
   const base = 1_800_000_000 + (parentId % 1_000_000) * 100 + Math.min(99, Math.max(1, seq));
   return base;
+}
+
+async function restoreDeskOwnership(input: {
+  confirmationId: number;
+  desk: FulfillmentDesk;
+  monaCourierId: number | null;
+  assignedAt: Date;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.csOrderConfirmation.update({
+    where: { id: input.confirmationId },
+    data: {
+      shippingCompany: input.desk,
+      ...(input.monaCourierId
+        ? {
+            monaCourierId: input.monaCourierId,
+            monaAssignedAt: input.assignedAt,
+          }
+        : {
+            monaCourierId: null,
+            monaAssignedAt: null,
+          }),
+    },
+  });
+  await prisma.csChecklistAnswer.upsert({
+    where: {
+      confirmationId_itemKey: {
+        confirmationId: input.confirmationId,
+        itemKey: "shipping_company",
+      },
+    },
+    create: {
+      confirmationId: input.confirmationId,
+      itemKey: "shipping_company",
+      confirmed: true,
+      value: input.desk,
+    },
+    update: {
+      confirmed: true,
+      value: input.desk,
+    },
+  });
 }
 
 export async function createFulfillmentFromOrder(input: {
@@ -141,14 +202,22 @@ export async function createFulfillmentFromOrder(input: {
     return { ok: false as const, message: "بيانات العميل ناقصة (الاسم/التليفون/العنوان/المحافظة)." };
   }
 
-  const collectAmount = money(input.collectAmount);
+  const settlement = settlementOf(signedMoney(input.collectAmount));
   const siblingCount = await prisma.csOrderConfirmation.count({
-    where: { parentConfirmationId: parent.id } as never,
+    where: { parentConfirmationId: parent.id },
   });
   const seq = siblingCount + 1;
   const suffix = input.kind === "exchange" ? "X" : "R";
   const wooOrderNumber = `${parent.wooOrderNumber}-${suffix}${seq}`;
   const wooOrderId = await nextSyntheticWoo(parent.id, seq);
+
+  const kindLabel = input.kind === "exchange" ? "استبدال" : "استرجاع";
+  const settlementNote =
+    settlement.direction === "refund"
+      ? `رد فرق ${settlement.abs} ج.م للعميل`
+      : settlement.direction === "collect"
+        ? `تحصيل ${settlement.abs} ج.م`
+        : "بدون تحصيل";
 
   const items = [
     ...(outbound
@@ -157,7 +226,7 @@ export async function createFulfillmentFromOrder(input: {
             name: `${outbound.name} (خارج)`,
             quantity: outbound.quantity || 1,
             sku: outbound.sku || "",
-            total: String(collectAmount || 0),
+            total: String(settlement.direction === "collect" ? settlement.abs : 0),
             productId: outbound.productId,
             role: "outbound",
           },
@@ -173,7 +242,6 @@ export async function createFulfillmentFromOrder(input: {
     },
   ];
 
-  const kindLabel = input.kind === "exchange" ? "استبدال" : "استرجاع";
   const now = new Date();
   const snapshot = {
     customerName,
@@ -182,9 +250,11 @@ export async function createFulfillmentFromOrder(input: {
     governorate,
     area,
     addressFull: [address, area, governorate].filter(Boolean).join(" — "),
-    total: String(collectAmount),
-    wooTotal: String(collectAmount),
-    waybillTotal: String(collectAmount),
+    total: String(settlement.signed),
+    wooTotal: String(Math.max(0, settlement.signed)),
+    waybillTotal: String(settlement.signed),
+    settlementDirection: settlement.direction,
+    settlementAbs: settlement.abs,
     paymentMethod: "الدفع عند الاستلام",
     paymentMethodId: "cod",
     paymentState: "cod" as const,
@@ -195,7 +265,7 @@ export async function createFulfillmentFromOrder(input: {
     fulfillmentKind: input.kind,
     parentConfirmationId: parent.id,
     parentWooOrderNumber: parent.wooOrderNumber,
-    note: `${kindLabel} لأوردر #${parent.wooOrderNumber}`,
+    note: `${kindLabel} لأوردر #${parent.wooOrderNumber} — ${settlementNote}`,
   };
 
   const created = await prisma.csOrderConfirmation.create({
@@ -218,7 +288,7 @@ export async function createFulfillmentFromOrder(input: {
             monaAssignedAt: now,
           }
         : {}),
-    } as never,
+    },
   });
 
   const answerRows: Array<{ itemKey: string; value: string }> = [
@@ -230,7 +300,7 @@ export async function createFulfillmentFromOrder(input: {
     { itemKey: "shipping_company", value: input.desk },
     {
       itemKey: "address_landmarks",
-      value: `${kindLabel} لأوردر #${parent.wooOrderNumber}`,
+      value: `${kindLabel} لأوردر #${parent.wooOrderNumber} — ${settlementNote}`,
     },
   ];
   for (const row of answerRows) {
@@ -244,31 +314,41 @@ export async function createFulfillmentFromOrder(input: {
     });
   }
 
-  const waybill = await ensureCsBostaWaybill(created.id);
-  // Keep desk company (Temima/Eid/Momen); Bosta create may briefly set shippingCompany=bosta.
-  await prisma.csOrderConfirmation.update({
-    where: { id: created.id },
-    data: {
-      shippingCompany: input.desk,
-      ...(monaCourierId
-        ? {
-            monaCourierId,
-            monaAssignedAt: now,
-          }
-        : {
-            monaCourierId: null,
-            monaAssignedAt: null,
-          }),
-    } as never,
-  });
+  let waybill: Awaited<ReturnType<typeof ensureCsBostaWaybill>> | null = null;
+  let waybillCrash: string | null = null;
+  try {
+    waybill = await ensureCsBostaWaybill(created.id, { preserveShippingCompany: true });
+  } catch (error) {
+    waybillCrash = error instanceof Error ? error.message : String(error);
+  } finally {
+    await restoreDeskOwnership({
+      confirmationId: created.id,
+      desk: input.desk,
+      monaCourierId,
+      assignedAt: now,
+    });
+  }
 
-  if (!waybill.ok) {
+  if (!waybill || !waybill.ok) {
     return {
-      ok: true as const,
+      ok: false as const,
+      message: waybillCrash
+        ? `تعذر إنشاء بوليصة بوسطة: ${waybillCrash.slice(0, 180)}`
+        : !waybill
+          ? "تعذر إنشاء بوليصة بوسطة للطباعة."
+          : `تعذر إنشاء بوليصة بوسطة: ${waybill.message}`,
       confirmationId: created.id,
       wooOrderNumber,
-      trackingNumber: null,
-      waybillWarning: waybill.message,
+      kind: input.kind,
+      desk: input.desk,
+    };
+  }
+  if (!waybill.state.trackingNumber) {
+    return {
+      ok: false as const,
+      message: "تعذر إنشاء بوليصة بوسطة للطباعة.",
+      confirmationId: created.id,
+      wooOrderNumber,
       kind: input.kind,
       desk: input.desk,
     };
@@ -283,6 +363,8 @@ export async function createFulfillmentFromOrder(input: {
     kind: input.kind,
     desk: input.desk,
     createdWaybill: waybill.created,
+    settlementDirection: settlement.direction,
+    settlementAbs: settlement.abs,
   };
 }
 
@@ -291,7 +373,7 @@ export async function listFulfillmentChildren(parentId: number) {
   if (!prisma) return [];
   await ensureCsTables();
   const rows = await prisma.csOrderConfirmation.findMany({
-    where: { parentConfirmationId: parentId } as never,
+    where: { parentConfirmationId: parentId },
     orderBy: { id: "desc" },
     select: {
       id: true,
@@ -300,24 +382,14 @@ export async function listFulfillmentChildren(parentId: number) {
       trackingNumber: true,
       shippingCompany: true,
       createdAt: true,
-    } as never,
+    },
   });
-  return rows.map((row) => {
-    const typed = row as {
-      id: number;
-      wooOrderNumber: string;
-      fulfillmentKind?: string | null;
-      trackingNumber?: string | null;
-      shippingCompany?: string | null;
-      createdAt: Date;
-    };
-    return {
-      id: typed.id,
-      wooOrderNumber: typed.wooOrderNumber,
-      kind: typed.fulfillmentKind === "exchange" ? ("exchange" as const) : ("return" as const),
-      trackingNumber: typed.trackingNumber || null,
-      shippingCompany: typed.shippingCompany || null,
-      createdAt: typed.createdAt.toISOString(),
-    };
-  });
+  return rows.map((row) => ({
+    id: row.id,
+    wooOrderNumber: row.wooOrderNumber,
+    kind: row.fulfillmentKind === "exchange" ? ("exchange" as const) : ("return" as const),
+    trackingNumber: row.trackingNumber || null,
+    shippingCompany: row.shippingCompany || null,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }

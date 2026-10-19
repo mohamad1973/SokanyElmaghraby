@@ -893,6 +893,10 @@ export function CsCallSheet({
   }, [fulfillmentHitTarget, fulfillmentOutboundQ, fulfillmentReturnQ]);
 
   async function printFulfillmentWaybill(childId: number, tracking: string | null) {
+    if (!tracking) {
+      setMessage("مفيش رقم تتبع بوسطة للطباعة. حاول الحفظ مرة أخرى بعد إنشاء البوليصة.");
+      return;
+    }
     const preview = window.open("", "bosta-awb");
     setMessage("");
     const res = await fetch(`/api/cs/confirmations/${childId}/bosta-awb`);
@@ -911,9 +915,6 @@ export function CsCallSheet({
       window.open(url, "_blank");
     }
     void fetch(`/api/cs/confirmations/${childId}/bosta-awb`, { method: "POST" });
-    if (!tracking) {
-      // ignore
-    }
   }
 
   async function submitFulfillment() {
@@ -951,37 +952,39 @@ export function CsCallSheet({
         customerName: snapshot?.customerName || answers.customer_name?.value || "",
       }),
     });
-    const data = (await res.json()) as {
+    const data = (await res.json().catch(() => null)) as {
       message?: string;
       confirmationId?: number;
       wooOrderNumber?: string;
       trackingNumber?: string | null;
-      waybillWarning?: string | null;
       kind?: "return" | "exchange";
-    };
+    } | null;
     setFulfillmentBusy(false);
-    if (!res.ok || !data.confirmationId) {
-      setMessage(data.message || "تعذر إنشاء الاستبدال/الاسترجاع.");
+    if (data?.confirmationId) {
+      setFulfillmentChildren((prev) => [
+        {
+          id: data.confirmationId!,
+          wooOrderNumber: data.wooOrderNumber || String(data.confirmationId),
+          kind: data.kind || fulfillmentKind,
+          trackingNumber: data.trackingNumber || null,
+          shippingCompany: fulfillmentDesk,
+        },
+        ...prev.filter((row) => row.id !== data.confirmationId),
+      ]);
+    }
+    if (!res.ok || !data?.confirmationId || !data.trackingNumber) {
+      setMessage(
+        data?.message ||
+          (!data?.trackingNumber && data?.confirmationId
+            ? "تم حفظ الأوردر لكن تعذر إنشاء بوليصة بوسطة — لا يمكن الطباعة."
+            : "تعذر إنشاء الاستبدال/الاسترجاع."),
+      );
       return;
     }
-    setFulfillmentChildren((prev) => [
-      {
-        id: data.confirmationId!,
-        wooOrderNumber: data.wooOrderNumber || String(data.confirmationId),
-        kind: data.kind || fulfillmentKind,
-        trackingNumber: data.trackingNumber || null,
-        shippingCompany: fulfillmentDesk,
-      },
-      ...prev,
-    ]);
     setMessage(
-      data.waybillWarning
-        ? `تم الحفظ. تحذير البوليصة: ${data.waybillWarning}`
-        : `تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber}`,
+      `تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber} وبوليصة بوسطة.`,
     );
-    if (data.trackingNumber) {
-      void printFulfillmentWaybill(data.confirmationId, data.trackingNumber);
-    }
+    void printFulfillmentWaybill(data.confirmationId, data.trackingNumber);
   }
 
   function fulfillmentCard() {
@@ -1056,15 +1059,22 @@ export function CsCallSheet({
           </label>
         ) : null}
         <label className="mt-2 block text-[11px] font-extrabold text-[#14213D]">
-          قيمة التحصيل من العميل
+          قيمة التحصيل (+) أو رد الفرق (−)
           <input
             dir="ltr"
             inputMode="decimal"
             value={fulfillmentCollect}
-            onChange={(e) => setFulfillmentCollect(e.target.value.replace(/[^\d.]/g, ""))}
-            placeholder="0"
+            onChange={(e) => {
+              const raw = e.target.value.replace(/[^\d.\-]/g, "");
+              const cleaned = raw.replace(/(?!^)-/g, "").replace(/(\..*)\./g, "$1");
+              setFulfillmentCollect(cleaned);
+            }}
+            placeholder="0 أو -150"
             className={`${inputCls} mt-1`}
           />
+          <span className="mt-0.5 block text-[10px] font-bold text-[#14213D]/65">
+            موجب = تحصيل من العميل على بوليصة بوسطة · سالب = رد فرق (COD صفر + ملاحظة على البوليصة)
+          </span>
         </label>
         {fulfillmentKind === "exchange" ? (
           <div className="mt-2">
@@ -1182,10 +1192,11 @@ export function CsCallSheet({
                 </Link>
                 <button
                   type="button"
-                  className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white"
+                  disabled={!child.trackingNumber}
+                  className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white disabled:opacity-40"
                   onClick={() => void printFulfillmentWaybill(child.id, child.trackingNumber)}
                 >
-                  طباعة
+                  {child.trackingNumber ? "طباعة" : "بدون بوليصة"}
                 </button>
               </li>
             ))}

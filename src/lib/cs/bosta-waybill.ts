@@ -72,6 +72,35 @@ function partyFromAnswers(input: {
   if (!name || !phone || !address || !governorate) {
     return { ok: false, message: "بيانات البوليصة ناقصة: الاسم أو التليفون أو العنوان أو المحافظة." };
   }
+  const fulfillmentKind = String(snap.fulfillmentKind || "").trim();
+  if (fulfillmentKind === "return" || fulfillmentKind === "exchange") {
+    const direction = String(snap.settlementDirection || "").trim();
+    const absRaw = Number(snap.settlementAbs ?? Math.abs(Number(String(snap.waybillTotal || snap.total || "").replace(/,/g, "")) || 0));
+    const abs = Number.isFinite(absRaw) ? Math.max(0, absRaw) : 0;
+    const cod = direction === "collect" ? abs : 0;
+    const noteParts = [
+      String(snap.note || `طلب #${input.wooOrderNumber}`).trim(),
+      direction === "refund" && abs > 0 ? `رد فرق ${abs} ج.م للعميل` : null,
+      direction === "collect" && abs > 0 ? `تحصيل ${abs} ج.م` : null,
+      landmarks || null,
+    ].filter(Boolean);
+    return {
+      ok: true,
+      party: {
+        name,
+        phone,
+        secondPhone: secondPhoneFromAnswers(input.answers) || undefined,
+        governorate,
+        area,
+        address,
+        landmarks,
+        cod,
+        reference: String(input.wooOrderId),
+        notes: noteParts.join(" — "),
+      },
+    };
+  }
+
   const paymentState = effectivePaymentState({
     paymentMethod: String(snap.paymentMethod || ""),
     paymentMethodId: snap.paymentMethodId == null ? null : String(snap.paymentMethodId),
@@ -410,8 +439,10 @@ export async function syncCsBostaWaybill(input: {
   depositAmount?: number | null;
   depositPaid?: boolean | null;
   depositApprovalStatus?: string | null;
+  /** When true, create/update AWB without forcing shippingCompany=bosta (desk-owned fulfillment). */
+  preserveShippingCompany?: boolean;
 }): Promise<BostaWaybillState> {
-  if (input.shippingCompany !== "bosta") {
+  if (input.shippingCompany !== "bosta" && !input.preserveShippingCompany) {
     return present({ trackingNumber: input.trackingNumber, bostaStatus: input.bostaStatus, bostaShippingFee: input.bostaShippingFee });
   }
 
@@ -593,7 +624,7 @@ export async function syncCsBostaWaybill(input: {
     bostaStatus: status,
     bostaShippingFee: fee,
     bostaSyncError: null,
-    shippingCompany: "bosta",
+    ...(input.preserveShippingCompany ? {} : { shippingCompany: "bosta" }),
   });
   await rememberShipment({
     wooOrderId: input.wooOrderId,
@@ -753,10 +784,10 @@ export async function syncConfirmationMoneyToBosta(confirmationId: number): Prom
  * Link an existing Bosta delivery by order reference, or create one and attach tracking.
  * Used when the agent wants to print an AWB but none exists yet.
  */
-export async function ensureCsBostaWaybill(confirmationId: number): Promise<
-  | { ok: true; created: boolean; state: BostaWaybillState }
-  | { ok: false; message: string }
-> {
+export async function ensureCsBostaWaybill(
+  confirmationId: number,
+  opts?: { preserveShippingCompany?: boolean },
+): Promise<{ ok: true; created: boolean; state: BostaWaybillState } | { ok: false; message: string }> {
   const prisma = getPrismaClient();
   if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) {
     return { ok: false, message: "الطلب غير موجود." };
@@ -775,6 +806,7 @@ export async function ensureCsBostaWaybill(confirmationId: number): Promise<
     depositAmount?: unknown;
     depositPaid?: boolean | null;
     depositApprovalStatus?: string | null;
+    shippingCompany?: string | null;
   };
   const answers: CsChecklistAnswerInput[] = row.answers.map((answer) => ({
     itemKey: answer.itemKey,
@@ -787,6 +819,7 @@ export async function ensureCsBostaWaybill(confirmationId: number): Promise<
     typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
       ? null
       : Number(typed.bostaShippingFee);
+  const preserveShippingCompany = Boolean(opts?.preserveShippingCompany);
 
   const existingTracking = String(typed.trackingNumber || "").trim();
   if (existingTracking) {
@@ -804,7 +837,7 @@ export async function ensureCsBostaWaybill(confirmationId: number): Promise<
     confirmationId,
     wooOrderId: row.wooOrderId,
     wooOrderNumber: row.wooOrderNumber,
-    shippingCompany: "bosta",
+    shippingCompany: preserveShippingCompany ? typed.shippingCompany || "bosta" : "bosta",
     trackingNumber: null,
     bostaStatus: typed.bostaStatus || null,
     bostaShippingFee: fee,
@@ -814,6 +847,7 @@ export async function ensureCsBostaWaybill(confirmationId: number): Promise<
     depositAmount: typed.depositAmount == null ? null : Number(typed.depositAmount),
     depositPaid: Boolean(typed.depositPaid),
     depositApprovalStatus: typed.depositApprovalStatus || null,
+    preserveShippingCompany,
   });
 
   if (!state.trackingNumber) {
