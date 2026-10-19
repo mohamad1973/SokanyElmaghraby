@@ -995,7 +995,7 @@ export function CsCallSheet({
       <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
         <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
         <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
-          ينشئ أوردر جديد ببوليصة بوسطة للطباعة ويظهر في حساب تميمة أو عيد أو مؤمن — رسوم الشحن عند تم بنجاح.
+          لا يغيّر الأوردر الأصلي — ينشئ بوليصة مرتبطة فقط ويطبعها من بوسطة، وتظهر في حساب تميمة أو عيد أو مؤمن. رسوم الشحن عند تم بنجاح.
         </p>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <div className="flex flex-wrap gap-1">

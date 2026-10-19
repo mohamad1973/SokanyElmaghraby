@@ -63,6 +63,7 @@ async function nextSyntheticWoo(parentId: number, seq: number) {
   return base;
 }
 
+/** Writes only to the child confirmation id — never the original order. */
 async function restoreDeskOwnership(input: {
   confirmationId: number;
   desk: FulfillmentDesk;
@@ -106,6 +107,59 @@ async function restoreDeskOwnership(input: {
   });
 }
 
+type ParentFingerprint = {
+  shippingCompany: string | null;
+  trackingNumber: string | null;
+  monaCourierId: number | null;
+  fulfillmentKind: string | null;
+  parentConfirmationId: number | null;
+  snapshotJson: string;
+  answersCount: number;
+};
+
+async function fingerprintParent(parentId: number): Promise<ParentFingerprint | null> {
+  const prisma = getPrismaClient();
+  if (!prisma) return null;
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: parentId },
+    select: {
+      shippingCompany: true,
+      trackingNumber: true,
+      monaCourierId: true,
+      fulfillmentKind: true,
+      parentConfirmationId: true,
+      customerSnapshot: true,
+      _count: { select: { answers: true } },
+    },
+  });
+  if (!row) return null;
+  return {
+    shippingCompany: row.shippingCompany || null,
+    trackingNumber: row.trackingNumber || null,
+    monaCourierId: row.monaCourierId == null ? null : Number(row.monaCourierId),
+    fulfillmentKind: row.fulfillmentKind || null,
+    parentConfirmationId: row.parentConfirmationId == null ? null : Number(row.parentConfirmationId),
+    snapshotJson: JSON.stringify(row.customerSnapshot ?? null),
+    answersCount: row._count.answers,
+  };
+}
+
+function parentChanged(before: ParentFingerprint, after: ParentFingerprint | null) {
+  if (!after) return "الأوردر الأصلي اختفى أثناء إنشاء الاستبدال.";
+  if (before.shippingCompany !== after.shippingCompany) return "تغيرت شركة الشحن على الأوردر الأصلي.";
+  if (before.trackingNumber !== after.trackingNumber) return "تغير رقم التتبع على الأوردر الأصلي.";
+  if (before.monaCourierId !== after.monaCourierId) return "تغير مندوب الأوردر الأصلي.";
+  if (before.fulfillmentKind !== after.fulfillmentKind) return "تغير نوع الاستبدال على الأوردر الأصلي.";
+  if (before.parentConfirmationId !== after.parentConfirmationId) return "تغير ربط الأوردر الأصلي.";
+  if (before.snapshotJson !== after.snapshotJson) return "تغيرت لقطة العميل على الأوردر الأصلي.";
+  if (before.answersCount !== after.answersCount) return "تغيرت إجابات الأوردر الأصلي.";
+  return null;
+}
+
+/**
+ * Creates a linked child confirmation + Bosta waybill for print.
+ * The original order is read-only: never update/upsert parent confirmation or its answers.
+ */
 export async function createFulfillmentFromOrder(input: {
   parentId: number;
   agentId: number;
@@ -152,6 +206,9 @@ export async function createFulfillmentFromOrder(input: {
   if (!parentEligible(parentTyped.shippingCompany, parentTyped.monaCourierId)) {
     return { ok: false as const, message: "الاستبدال/الاسترجاع لتميمة وعيد ومؤمن فقط." };
   }
+
+  const parentBefore = await fingerprintParent(parent.id);
+  if (!parentBefore) return { ok: false as const, message: "الأوردر الأصلي غير موجود." };
 
   const outbound = input.kind === "exchange" ? cleanLine(input.outbound) : null;
   const returning = cleanLine(input.returning);
@@ -317,6 +374,7 @@ export async function createFulfillmentFromOrder(input: {
   let waybill: Awaited<ReturnType<typeof ensureCsBostaWaybill>> | null = null;
   let waybillCrash: string | null = null;
   try {
+    // Waybill + desk restore target the child only (created.id).
     waybill = await ensureCsBostaWaybill(created.id, { preserveShippingCompany: true });
   } catch (error) {
     waybillCrash = error instanceof Error ? error.message : String(error);
@@ -327,6 +385,24 @@ export async function createFulfillmentFromOrder(input: {
       monaCourierId,
       assignedAt: now,
     });
+  }
+
+  const parentAfter = await fingerprintParent(parent.id);
+  const parentDrift = parentChanged(parentBefore, parentAfter);
+  if (parentDrift) {
+    console.error("[fulfillment-return] parent mutated unexpectedly", {
+      parentId: parent.id,
+      childId: created.id,
+      parentDrift,
+    });
+    return {
+      ok: false as const,
+      message: `توقف الاستبدال لأن الأوردر الأصلي اتغيّر بالخطأ: ${parentDrift}`,
+      confirmationId: created.id,
+      wooOrderNumber,
+      kind: input.kind,
+      desk: input.desk,
+    };
   }
 
   if (!waybill || !waybill.ok) {
