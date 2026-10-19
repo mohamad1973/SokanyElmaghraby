@@ -28,10 +28,15 @@ export function resolveFulfillmentMode(governorate: string): FulfillmentMode {
 
 export const BOSTA_CITY_MAP: Record<string, { code: string; nameAr: string }> = {
   "القاهرة": { code: "EG-01", nameAr: "القاهرة" },
+  "القاهره": { code: "EG-01", nameAr: "القاهرة" },
   cairo: { code: "EG-01", nameAr: "القاهرة" },
   "الجيزة": { code: "EG-02", nameAr: "الجيزة" },
+  "الجيزه": { code: "EG-02", nameAr: "الجيزة" },
   giza: { code: "EG-02", nameAr: "الجيزة" },
   "الإسكندرية": { code: "EG-03", nameAr: "الإسكندرية" },
+  "الاسكندرية": { code: "EG-03", nameAr: "الإسكندرية" },
+  "الإسكندريه": { code: "EG-03", nameAr: "الإسكندرية" },
+  "الاسكندريه": { code: "EG-03", nameAr: "الإسكندرية" },
   alexandria: { code: "EG-03", nameAr: "الإسكندرية" },
   "الدقهلية": { code: "EG-04", nameAr: "الدقهلية" },
   dakahlia: { code: "EG-04", nameAr: "الدقهلية" },
@@ -77,16 +82,32 @@ export const BOSTA_CITY_MAP: Record<string, { code: string; nameAr: string }> = 
   luxor: { code: "EG-26", nameAr: "الأقصر" },
 };
 
-export function findBostaCity(governorate: string): { code: string; nameAr: string } | null {
-  const normalized = governorate.trim().toLowerCase();
-  if (!normalized) return null;
+/** Collapse Arabic ta-marbuta / ha so «القاهرة» and «القاهره» match the same city. */
+function normalizeArabicCityKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/ة/g, "ه")
+    .replace(/[أإآ]/g, "ا");
+}
 
-  if (BOSTA_CITY_MAP[normalized]) {
-    return BOSTA_CITY_MAP[normalized];
+export function findBostaCity(governorate: string): { code: string; nameAr: string } | null {
+  const raw = governorate.trim().toLowerCase();
+  if (!raw) return null;
+
+  if (BOSTA_CITY_MAP[raw]) {
+    return BOSTA_CITY_MAP[raw];
   }
 
+  const normalized = normalizeArabicCityKey(raw);
   for (const [key, value] of Object.entries(BOSTA_CITY_MAP)) {
-    if (normalized.includes(key) || (key.length >= 3 && key.includes(normalized))) {
+    const keyNorm = normalizeArabicCityKey(key);
+    if (
+      keyNorm === normalized ||
+      normalized.includes(keyNorm) ||
+      (keyNorm.length >= 3 && keyNorm.includes(normalized))
+    ) {
       return value;
     }
   }
