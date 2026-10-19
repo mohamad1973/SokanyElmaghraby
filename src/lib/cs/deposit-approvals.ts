@@ -54,6 +54,13 @@ export async function requestDepositApproval(input: {
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
+  const current = normalizeDepositApprovalStatus(
+    (row as { depositApprovalStatus?: string | null }).depositApprovalStatus,
+  );
+  if (current === "pending") {
+    return { ok: false as const, message: "طلب الموافقة مرسل بالفعل وبانتظار رد الأدمن." };
+  }
+
   const amount = parseDepositAmount(input.depositAmount);
   const proofUrl = String(input.depositProofUrl || "").trim() || null;
   const paidAtRaw = String(input.depositPaidAt || "").trim();

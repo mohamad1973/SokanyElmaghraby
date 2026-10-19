@@ -1157,10 +1157,11 @@ export function CsCallSheet({
     const canSendDiscount =
       !locked &&
       !requestingDiscountApproval &&
+      discountApprovalStatus !== "pending" &&
       Boolean(discountAmount.trim()) &&
       Number(discountAmount.replace(/,/g, "")) > 0;
 
-    async function sendDiscountApproval(resend: boolean) {
+    async function sendDiscountApproval() {
       setRequestingDiscountApproval(true);
       setMessage("");
       const res = await fetch(`/api/cs/confirmations/${confirmationId}/discount-approval`, {
@@ -1175,7 +1176,7 @@ export function CsCallSheet({
         return;
       }
       setDiscountApprovalStatus("pending");
-      setMessage(resend ? "تم إعادة إرسال طلب الخصم (طلب واحد للأدمن)." : "تم إرسال طلب الخصم للأدمن.");
+      setMessage("تم إرسال طلب الخصم للأدمن.");
     }
 
     async function cancelPendingDiscount() {
@@ -1233,13 +1234,13 @@ export function CsCallSheet({
           <button
             type="button"
             disabled={!canSendDiscount}
-            onClick={() => void sendDiscountApproval(discountApprovalStatus === "pending")}
+            onClick={() => void sendDiscountApproval()}
             className="w-full rounded-lg bg-[#FCA311] px-2 py-1.5 text-[11px] font-extrabold text-black disabled:opacity-50"
           >
             {requestingDiscountApproval
               ? "جاري التحميل"
               : discountApprovalStatus === "pending"
-                ? "إعادة إرسال"
+                ? "بانتظار الرد…"
                 : "طلب موافقه"}
           </button>
           {discountApprovalStatus === "pending" ? (

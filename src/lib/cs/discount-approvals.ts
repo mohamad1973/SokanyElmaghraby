@@ -46,6 +46,13 @@ export async function requestDiscountApproval(input: {
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
+  const current = normalizeDiscountApprovalStatus(
+    (row as { discountApprovalStatus?: string | null }).discountApprovalStatus,
+  );
+  if (current === "pending") {
+    return { ok: false as const, message: "طلب الموافقة مرسل بالفعل وبانتظار رد الأدمن." };
+  }
+
   const raw = Number(String(input.discountAmount ?? "").replace(/,/g, "").trim());
   if (!Number.isFinite(raw) || raw <= 0) {
     return { ok: false as const, message: "أدخل قيمة الخصم." };
