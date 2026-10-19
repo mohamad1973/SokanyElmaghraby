@@ -1294,7 +1294,7 @@ async function pushBostaIfNeeded(input: {
     input.depositApprovalStatus !== undefined
       ? input.depositApprovalStatus
       : input.row.depositApprovalStatus || null;
-  return syncCsBostaWaybill({
+  const state = await syncCsBostaWaybill({
     confirmationId: input.row.id,
     wooOrderId: input.row.wooOrderId,
     wooOrderNumber: input.row.wooOrderNumber,
@@ -1309,6 +1309,16 @@ async function pushBostaIfNeeded(input: {
     depositPaid,
     depositApprovalStatus,
   });
+  if (state?.trackingNumber && !state.bostaSyncError) {
+    const prisma = getPrismaClient();
+    if (prisma) {
+      await prisma.csOrderConfirmation.update({
+        where: { id: input.row.id },
+        data: { waybillPrinted: false } as never,
+      });
+    }
+  }
+  return state;
 }
 
 export async function saveCsConfirmation(input: {

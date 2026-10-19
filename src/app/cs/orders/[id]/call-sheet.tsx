@@ -635,11 +635,6 @@ export function CsCallSheet({
         );
         return;
       }
-      if (lockedShipping === "bosta" && !waybillPrinted) {
-        setSaving(false);
-        setMessage("اطبعي البوليصة قبل الحفظ النهائي.");
-        return;
-      }
     }
 
     const to = parseDepositToKey(depositToKey);
@@ -775,6 +770,7 @@ export function CsCallSheet({
       setMessage(data.bostaMessage || data.bostaSyncError);
       return;
     }
+    if (data.bostaMessage || data.trackingNumber) setWaybillPrinted(false);
     const bostaNote = data.bostaMessage ? ` ${data.bostaMessage}` : "";
 
     if (showFollowUp) {
@@ -1585,7 +1581,7 @@ export function CsCallSheet({
           </p>
           {lockedShipping === "bosta" && !showFollowUp ? (
             <p className="text-xs font-bold text-[#14213D]/70">
-              بوسطة: الحفظ من الصفحة دي، ومش لازم تعليم كل الكروت — اطبعي البوليصة وبعدين حفظ نهائي.
+              بوسطة: احفظ أولًا عشان العنوان والتفاصيل تنزل على بوسطة، وبعدين اطبع البوليصة.
             </p>
           ) : null}
           {savedWhen ? (
@@ -2007,6 +2003,7 @@ export function CsCallSheet({
       {showFollowUp ? (
         <section className="grid content-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {infoCards(lockRecorded)}
+          {discountCard(false)}
           {depositCard()}
         </section>
       ) : null}
