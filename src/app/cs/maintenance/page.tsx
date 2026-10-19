@@ -9,6 +9,12 @@ export default async function CsMaintenancePage() {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isMaintenance) redirect("/cs");
-  return <MaintenanceClient />;
+  if (!viewer.canAccessMaintenanceHub && !viewer.isMaintenance) redirect("/cs");
+  return (
+    <MaintenanceClient
+      canInspect={Boolean(viewer.isMaintenance || viewer.isAdmin)}
+      canTech={Boolean(viewer.isMaintenanceTech || viewer.isAdmin)}
+      canAccounting={Boolean(viewer.isMaintenanceAccounting || viewer.isAdmin)}
+    />
+  );
 }

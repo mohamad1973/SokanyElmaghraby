@@ -20,6 +20,8 @@ const PERMISSIONS = [
   { id: "shipping", label: "شحن تميمة" },
   { id: "accounting", label: "حسابات" },
   { id: "maintenance", label: "الصيانة" },
+  { id: "maintenance_tech", label: "فني الصيانة" },
+  { id: "maintenance_accounting", label: "حسابات الصيانة" },
   { id: "courier_supervisor", label: "مشرف مناديب" },
   { id: "courier", label: "مندوب" },
   { id: "mona_courier", label: "مندوب المشرفة" },

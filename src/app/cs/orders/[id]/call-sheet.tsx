@@ -95,6 +95,7 @@ type Props = {
   orderTotalDelta?: number | null;
   canApproveItems?: boolean;
   canEditSavedInfo?: boolean;
+  maintenanceTechNote?: string | null;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -352,6 +353,7 @@ export function CsCallSheet({
   orderTotalDelta: initialOrderTotalDelta,
   canApproveItems = false,
   canEditSavedInfo = false,
+  maintenanceTechNote = null,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
@@ -1529,6 +1531,12 @@ export function CsCallSheet({
 
   return (
     <div className="flex flex-col gap-3 p-3" dir="rtl">
+      {maintenanceTechNote ? (
+        <div className="rounded-2xl bg-[#FFF8E7] px-3 py-2 text-sm font-bold text-[#14213D] ring-1 ring-[#FCA311]/40">
+          <span className="font-extrabold">ملاحظة فني الصيانة: </span>
+          {maintenanceTechNote}
+        </div>
+      ) : null}
       {sheetDayPrompt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-4 text-[#14213D] shadow-lg">

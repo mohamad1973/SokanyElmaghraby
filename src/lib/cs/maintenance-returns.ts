@@ -11,6 +11,7 @@ import { openSettlementMarks } from "@/lib/cs/temima-settlement";
 import { listCapturedBostaReturns } from "@/lib/cs/bosta-return-capture";
 import { linkedProductLabel, listBostaReturnProducts, type LinkedReturnProduct } from "@/lib/cs/bosta-return-product";
 import { listBostaReturnReviews, type BostaReturnReview } from "@/lib/cs/bosta-return-review";
+import { ensureMaintenanceLifecycleColumns, listCaptureExtras } from "@/lib/cs/bosta-return-lifecycle";
 import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -38,6 +39,8 @@ export type MaintenanceBostaRow = {
   kind: BostaHeadingKind;
   statusLabel: string;
   reasonText: string;
+  note: string;
+  openedAt: string | null;
   review: BostaReturnReview | null;
   searchText: string;
 };
@@ -192,12 +195,14 @@ const KIND_LABEL: Record<BostaHeadingKind, string> = {
 };
 
 export async function listBostaReceivedReturns(from: string, to: string) {
+  await ensureMaintenanceLifecycleColumns();
   const stored = await listCapturedBostaReturns(from, to);
   const trackings = stored.map((row) => row.trackingNumber);
-  const [matched, reviews, linkedProducts] = await Promise.all([
+  const [matched, reviews, linkedProducts, extras] = await Promise.all([
     matchLocalOrders(stored),
     listBostaReturnReviews(trackings),
     listBostaReturnProducts(trackings),
+    listCaptureExtras(trackings),
   ]);
   const rows = stored
     .map((row) => {
@@ -209,6 +214,8 @@ export async function listBostaReceivedReturns(from: string, to: string) {
       const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
       const customerName = snap.customerName || row.customerName;
       const phone = snap.phone || row.phone;
+      const extra = extras.get(row.trackingNumber);
+      const review = reviews.get(row.trackingNumber) || null;
       return {
         trackingNumber: row.trackingNumber,
         confirmationId: local?.id ?? row.confirmationId,
@@ -222,7 +229,9 @@ export async function listBostaReceivedReturns(from: string, to: string) {
         kind: row.kind,
         statusLabel: KIND_LABEL[row.kind],
         reasonText: row.reasonText,
-        review: reviews.get(row.trackingNumber) || null,
+        note: extra?.note || "",
+        openedAt: extra?.openedAt || null,
+        review,
         searchText: searchBlob([
           row.trackingNumber,
           row.businessReference,
@@ -232,8 +241,10 @@ export async function listBostaReceivedReturns(from: string, to: string) {
           row.phone,
           product,
           KIND_LABEL[row.kind],
-          reviews.get(row.trackingNumber)?.label,
+          review?.label,
           row.reasonText,
+          extra?.note,
+          review?.techNote,
           snap.address,
           snap.addressFull,
           snap.area,

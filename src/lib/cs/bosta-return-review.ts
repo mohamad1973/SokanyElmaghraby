@@ -4,9 +4,10 @@ import { getPrismaClient } from "@/lib/db";
 import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 export type ReviewCondition = "sound" | "broken" | "defective";
-export type ReviewDefect = "break" | "power" | "disassembled" | "dented";
+export type ReviewDefect = "break" | "power" | "disassembled" | "dented" | "manufacturing";
 export type ReviewDestination = "online_warehouse" | "shelf" | "maintenance";
 export type ReviewUsage = "new" | "used";
+export type ReviewGrade = "first" | "second" | "scrap";
 
 export type BostaReturnReview = {
   condition: ReviewCondition;
@@ -15,18 +16,29 @@ export type BostaReturnReview = {
   bostaClaim: boolean;
   usage: ReviewUsage | null;
   label: string;
+  grade: ReviewGrade | null;
+  techNote: string;
+  deliveredToMaintenanceAt: string | null;
+  receivedFromMaintenanceAt: string | null;
+  shelfAt: string | null;
 };
 
-const DEFECTS: ReviewDefect[] = ["break", "power", "disassembled", "dented"];
-const DEFECT_LABEL: Record<ReviewDefect, string> = {
+const DEFECTS: ReviewDefect[] = ["break", "power", "disassembled", "dented", "manufacturing"];
+export const DEFECT_LABEL: Record<ReviewDefect, string> = {
   break: "كسر",
   power: "فاصل بور",
   disassembled: "مفكك",
   dented: "مخبوط",
+  manufacturing: "عيب صناعة",
 };
 const USAGE_LABEL: Record<ReviewUsage, string> = {
   new: "جديد",
   used: "مستخدم",
+};
+const GRADE_LABEL: Record<ReviewGrade, string> = {
+  first: "فرز أول",
+  second: "فرز ثاني",
+  scrap: "هالك",
 };
 
 let tableReady: Promise<void> | null = null;
@@ -39,6 +51,17 @@ export async function ensureBostaReturnReviewTable() {
     });
   }
   await tableReady;
+}
+
+async function addColumn(sql: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  try {
+    await prisma.$executeRawUnsafe(sql);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate column|already exists|1060/i.test(message)) throw error;
+  }
 }
 
 async function createBostaReturnReviewTable() {
@@ -57,20 +80,36 @@ async function createBostaReturnReviewTable() {
         \`destination\` VARCHAR(32) NOT NULL,
         \`bostaClaim\` TINYINT NOT NULL DEFAULT 0,
         \`usage\` VARCHAR(16) NULL,
+        \`deliveredToMaintenanceAt\` DATETIME(3) NULL,
+        \`grade\` VARCHAR(16) NULL,
+        \`techNote\` TEXT NULL,
+        \`receivedFromMaintenanceAt\` DATETIME(3) NULL,
+        \`shelfAt\` DATETIME(3) NULL,
         \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         PRIMARY KEY (\`trackingNumber\`)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
     return;
   }
-  try {
-    await prisma.$executeRawUnsafe(
-      "ALTER TABLE `CsBostaReturnReview` ADD COLUMN `usage` VARCHAR(16) NULL",
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/Duplicate column|already exists|1060/i.test(message)) throw error;
-  }
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `usage` VARCHAR(16) NULL");
+  await addColumn(
+    "ALTER TABLE `CsBostaReturnReview` ADD COLUMN `deliveredToMaintenanceAt` DATETIME(3) NULL",
+  );
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `grade` VARCHAR(16) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `techNote` TEXT NULL");
+  await addColumn(
+    "ALTER TABLE `CsBostaReturnReview` ADD COLUMN `receivedFromMaintenanceAt` DATETIME(3) NULL",
+  );
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `shelfAt` DATETIME(3) NULL");
+}
+
+function isoOrNull(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const text = String(value);
+  if (!text || text.startsWith("0000")) return null;
+  const d = new Date(text);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 export function reviewLabel(review: Omit<BostaReturnReview, "label">) {
@@ -83,7 +122,10 @@ export function reviewLabel(review: Omit<BostaReturnReview, "label">) {
     base = extra ? `صيانة · ${extra}` : "صيانة";
   }
   if (review.usage === "new" || review.usage === "used") {
-    return `${base} · ${USAGE_LABEL[review.usage]}`;
+    base = `${base} · ${USAGE_LABEL[review.usage]}`;
+  }
+  if (review.grade) {
+    base = `${base} · ${GRADE_LABEL[review.grade]}`;
   }
   return base;
 }
@@ -102,6 +144,11 @@ function packReview(row: {
   destination: string;
   bostaClaim: number | bigint | boolean;
   usage?: string | null;
+  grade?: string | null;
+  techNote?: string | null;
+  deliveredToMaintenanceAt?: Date | string | null;
+  receivedFromMaintenanceAt?: Date | string | null;
+  shelfAt?: Date | string | null;
 }): BostaReturnReview | null {
   const condition: ReviewCondition | "" =
     row.condition === "sound" || row.condition === "broken" || row.condition === "defective" ? row.condition : "";
@@ -111,12 +158,19 @@ function packReview(row: {
       : "";
   if (!condition || !destination) return null;
   const usage: ReviewUsage | null = row.usage === "new" || row.usage === "used" ? row.usage : null;
+  const grade: ReviewGrade | null =
+    row.grade === "first" || row.grade === "second" || row.grade === "scrap" ? row.grade : null;
   const review: Omit<BostaReturnReview, "label"> = {
     condition,
     defects: parseDefects(row.defects || ""),
     destination,
     bostaClaim: Number(row.bostaClaim) === 1,
     usage,
+    grade,
+    techNote: String(row.techNote || ""),
+    deliveredToMaintenanceAt: isoOrNull(row.deliveredToMaintenanceAt),
+    receivedFromMaintenanceAt: isoOrNull(row.receivedFromMaintenanceAt),
+    shelfAt: isoOrNull(row.shelfAt),
   };
   return { ...review, label: reviewLabel(review) };
 }
@@ -136,9 +190,15 @@ export async function listBostaReturnReviews(trackingNumbers: string[]) {
       destination: string;
       bostaClaim: number | bigint;
       usage: string | null;
+      grade: string | null;
+      techNote: string | null;
+      deliveredToMaintenanceAt: Date | string | null;
+      receivedFromMaintenanceAt: Date | string | null;
+      shelfAt: Date | string | null;
     }>
   >(
-    `SELECT trackingNumber, \`condition\`, defects, destination, bostaClaim, \`usage\`
+    `SELECT trackingNumber, \`condition\`, defects, destination, bostaClaim, \`usage\`,
+            grade, techNote, deliveredToMaintenanceAt, receivedFromMaintenanceAt, shelfAt
      FROM CsBostaReturnReview
      WHERE trackingNumber IN (${marks})`,
     ...trackings,
@@ -192,29 +252,65 @@ export async function saveBostaReturnReview(input: {
   const defects = [...new Set(parseDefects(input.defects.join(",")))];
   const decided = decidedReview(kind, condition, defects);
   if (!decided) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
-  const review = { ...decided, usage };
+  const prev = await prisma.$queryRawUnsafe<
+    Array<{
+      grade: string | null;
+      techNote: string | null;
+      deliveredToMaintenanceAt: Date | string | null;
+      receivedFromMaintenanceAt: Date | string | null;
+      shelfAt: Date | string | null;
+    }>
+  >(
+    `SELECT grade, techNote, deliveredToMaintenanceAt, receivedFromMaintenanceAt, shelfAt
+     FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
+    trackingNumber,
+  );
+  const prevRow = prev[0];
   await prisma.$executeRawUnsafe(
     `INSERT INTO \`CsBostaReturnReview\`
-      (\`trackingNumber\`, \`condition\`, \`defects\`, \`destination\`, \`bostaClaim\`, \`usage\`, \`updatedAt\`)
-     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
+      (\`trackingNumber\`, \`condition\`, \`defects\`, \`destination\`, \`bostaClaim\`, \`usage\`,
+       \`deliveredToMaintenanceAt\`, \`updatedAt\`)
+     VALUES (?, ?, ?, ?, ?, ?, IF(? = 'maintenance', CURRENT_TIMESTAMP(3), NULL), CURRENT_TIMESTAMP(3))
      ON DUPLICATE KEY UPDATE
       \`condition\` = ?,
       \`defects\` = ?,
       \`destination\` = ?,
       \`bostaClaim\` = ?,
       \`usage\` = ?,
+      \`deliveredToMaintenanceAt\` = IF(
+        ? = 'maintenance',
+        COALESCE(\`deliveredToMaintenanceAt\`, CURRENT_TIMESTAMP(3)),
+        \`deliveredToMaintenanceAt\`
+      ),
       \`updatedAt\` = CURRENT_TIMESTAMP(3)`,
     trackingNumber,
-    review.condition,
-    review.defects.join(","),
-    review.destination,
-    review.bostaClaim ? 1 : 0,
-    review.usage,
-    review.condition,
-    review.defects.join(","),
-    review.destination,
-    review.bostaClaim ? 1 : 0,
-    review.usage,
+    decided.condition,
+    decided.defects.join(","),
+    decided.destination,
+    decided.bostaClaim ? 1 : 0,
+    usage,
+    decided.destination,
+    decided.condition,
+    decided.defects.join(","),
+    decided.destination,
+    decided.bostaClaim ? 1 : 0,
+    usage,
+    decided.destination,
   );
-  return { ok: true as const, review: { ...review, label: reviewLabel(review) } };
+  const packed = packReview({
+    condition: decided.condition,
+    defects: decided.defects.join(","),
+    destination: decided.destination,
+    bostaClaim: decided.bostaClaim ? 1 : 0,
+    usage,
+    grade: prevRow?.grade,
+    techNote: prevRow?.techNote,
+    deliveredToMaintenanceAt:
+      decided.destination === "maintenance"
+        ? prevRow?.deliveredToMaintenanceAt || new Date()
+        : prevRow?.deliveredToMaintenanceAt || null,
+    receivedFromMaintenanceAt: prevRow?.receivedFromMaintenanceAt,
+    shelfAt: prevRow?.shelfAt,
+  });
+  return { ok: true as const, review: packed! };
 }

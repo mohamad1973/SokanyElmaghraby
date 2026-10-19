@@ -3,11 +3,26 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
+
+import {
+  AccountingPanel,
+  NoteModal,
+  ReceiveAndShelfPanel,
+  TechPanel,
+  VariancePanel,
+  defectsAr,
+  type PanelRow,
+  type VariancePayload,
+} from "./maintenance-panels";
+
 type Kind = "refused" | "return" | "exchange";
 type TabId = "bosta" | "temima" | "eid" | "momen";
+type HubTab = "inspect" | "tech" | "receive" | "accounting" | "variance";
 type Condition = "sound" | "broken" | "defective";
-type Defect = "break" | "power" | "disassembled" | "dented";
+type Defect = "break" | "power" | "disassembled" | "dented" | "manufacturing";
 type Usage = "new" | "used";
+type Grade = "first" | "second" | "scrap";
 type Destination = "online_warehouse" | "shelf" | "maintenance";
 type Phase = "choose" | "defects" | "usage" | "hand" | "claim" | "saved";
 type UsageFilter = "all" | "new" | "used" | "unset";
@@ -20,6 +35,11 @@ type Review = {
   bostaClaim: boolean;
   usage: Usage | null;
   label: string;
+  grade: Grade | null;
+  techNote: string;
+  deliveredToMaintenanceAt: string | null;
+  receivedFromMaintenanceAt: string | null;
+  shelfAt: string | null;
 };
 
 type LocalRow = {
@@ -44,6 +64,8 @@ type BostaRow = Omit<LocalRow, "confirmationId"> & {
   kind: Kind;
   statusLabel: string;
   reasonText: string;
+  note: string;
+  openedAt: string | null;
   review: Review | null;
   orderProduct: string;
   linkedProducts: LinkedProduct[];
@@ -61,6 +83,7 @@ type Payload = {
   temima: { rows: LocalRow[] };
   eid: CourierSection;
   momen: CourierSection;
+  variance?: VariancePayload | null;
 };
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -81,6 +104,7 @@ const DEFECTS: Array<{ id: Defect; label: string }> = [
   { id: "power", label: "فاصل بور" },
   { id: "disassembled", label: "مفكك" },
   { id: "dented", label: "مخبوط" },
+  { id: "manufacturing", label: "عيب صناعة" },
 ];
 
 const KIND_RANK: Record<Kind, number> = { refused: 0, exchange: 1, return: 2 };
@@ -477,18 +501,30 @@ function ReviewCards({
   );
 }
 
-export function MaintenanceClient() {
+export function MaintenanceClient({
+  canInspect = true,
+  canTech = false,
+  canAccounting = false,
+}: {
+  canInspect?: boolean;
+  canTech?: boolean;
+  canAccounting?: boolean;
+}) {
+  const defaultHub: HubTab = canInspect ? "inspect" : canTech ? "tech" : canAccounting ? "accounting" : "inspect";
   const [data, setData] = useState<Payload | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabId>("bosta");
+  const [hubTab, setHubTab] = useState<HubTab>(defaultHub);
   const [kinds, setKinds] = useState<Kind[]>(["refused", "exchange", "return"]);
   const [usageFilter, setUsageFilter] = useState<UsageFilter>("all");
   const [destinationFilter, setDestinationFilter] = useState<DestinationFilter>("all");
   const [grouped, setGrouped] = useState(false);
   const [active, setActive] = useState<BostaRow | null>(null);
   const [linking, setLinking] = useState<BostaRow | null>(null);
+  const [noteRow, setNoteRow] = useState<BostaRow | null>(null);
+  const [printMode, setPrintMode] = useState<"all" | "maintenance">("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -501,7 +537,8 @@ export function MaintenanceClient() {
       const params = new URLSearchParams();
       if (range?.from) params.set("from", range.from);
       if (range?.to) params.set("to", range.to);
-      const suffix = params.toString() ? `?${params.toString()}` : "";
+      params.set("variance", "1");
+      const suffix = `?${params.toString()}`;
       const response = await fetch(`/api/cs/maintenance/returns${suffix}`, { cache: "no-store" });
       const body = (await response.json()) as Payload & { message?: string };
       if (!response.ok) {
@@ -523,7 +560,7 @@ export function MaintenanceClient() {
   useEffect(() => {
     void (async () => {
       const first = await load();
-      // Pull live «متجه إليك» as soon as the page opens (don't wait for cron).
+      if (!canInspect) return;
       try {
         const response = await fetch("/api/cs/maintenance/returns/capture", { method: "POST" });
         const body = (await response.json()) as { message?: string; found?: number; saved?: number };
@@ -539,7 +576,43 @@ export function MaintenanceClient() {
         // keep the first load even if live pull fails
       }
     })();
-  }, [load]);
+  }, [load, canInspect]);
+
+  async function openReview(row: BostaRow) {
+    setActive(row);
+    if (!canInspect) return;
+    try {
+      const response = await fetch("/api/cs/maintenance/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "open", trackingNumber: row.trackingNumber }),
+      });
+      const body = (await response.json()) as { openedAt?: string | null };
+      if (response.ok && body.openedAt) {
+        setData((current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            bosta: {
+              ...current.bosta,
+              rows: current.bosta.rows.map((item) =>
+                item.trackingNumber === row.trackingNumber
+                  ? { ...item, openedAt: item.openedAt || body.openedAt || null }
+                  : item,
+              ),
+            },
+          };
+        });
+        setActive((current) =>
+          current && current.trackingNumber === row.trackingNumber
+            ? { ...current, openedAt: current.openedAt || body.openedAt || null }
+            : current,
+        );
+      }
+    } catch {
+      // ignore open stamp failures
+    }
+  }
 
   function onSearch(event: FormEvent) {
     event.preventDefault();
@@ -675,11 +748,43 @@ export function MaintenanceClient() {
       dest.id === "unreviewed" ? !row.review : row.review?.destination === dest.id,
     ),
   })).filter((group) => group.rows.length > 0);
+  const maintenancePrintRows = bostaSearched.filter((row) => row.review?.destination === "maintenance");
+  const panelRows: PanelRow[] = bostaSearched.map((row) => ({
+    trackingNumber: row.trackingNumber,
+    wooOrderNumber: row.wooOrderNumber,
+    customerName: row.customerName,
+    phone: row.phone,
+    product: row.product,
+    day: row.day,
+    note: row.note || "",
+    openedAt: row.openedAt,
+    statusLabel: row.statusLabel,
+    review: row.review
+      ? {
+          destination: row.review.destination,
+          grade: row.review.grade,
+          techNote: row.review.techNote || "",
+          deliveredToMaintenanceAt: row.review.deliveredToMaintenanceAt,
+          receivedFromMaintenanceAt: row.review.receivedFromMaintenanceAt,
+          shelfAt: row.review.shelfAt,
+          defects: row.review.defects,
+          label: row.review.label,
+          usage: row.review.usage,
+        }
+      : null,
+  }));
   const usageFilterLabel = USAGE_FILTERS.find((item) => item.id === usageFilter)?.label || "";
   const destFilterLabel = DEST_FILTERS.find((item) => item.id === destinationFilter)?.label || "";
   const temimaRows = visible(data?.temima.rows || []);
   const eidRows = visible(data?.eid.rows || []);
   const momenRows = visible(data?.momen.rows || []);
+  const hubTabs: Array<{ id: HubTab; label: string; show: boolean }> = [
+    { id: "inspect", label: "فحص المرتجع", show: canInspect },
+    { id: "tech", label: "فني الصيانة", show: canTech },
+    { id: "receive", label: "استلام من الصيانة", show: canInspect },
+    { id: "accounting", label: "حسابات الصيانة", show: canAccounting },
+    { id: "variance", label: "فروقات", show: canInspect || canTech },
+  ];
   const counts = {
     refused: bostaSearched.filter((row) => row.kind === "refused").length,
     exchange: bostaSearched.filter((row) => row.kind === "exchange").length,
@@ -688,20 +793,38 @@ export function MaintenanceClient() {
 
   return (
     <div className="space-y-4" dir="rtl">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex gap-2">
-          {TABS.map((item) => (
+      <div className="flex flex-wrap gap-2">
+        {hubTabs
+          .filter((item) => item.show)
+          .map((item) => (
             <button
               key={item.id}
               type="button"
-              onClick={() => setTab(item.id)}
+              onClick={() => setHubTab(item.id)}
               className={`rounded-full px-4 py-2 text-sm font-extrabold ${
-                tab === item.id ? "bg-[#14213D] text-white" : "bg-white text-[#14213D] ring-1 ring-black/10"
+                hubTab === item.id ? "bg-[#E6B325] text-black" : "bg-white text-[#14213D] ring-1 ring-black/10"
               }`}
             >
               {item.label}
             </button>
           ))}
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex gap-2">
+          {canInspect && hubTab === "inspect"
+            ? TABS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  className={`rounded-full px-4 py-2 text-sm font-extrabold ${
+                    tab === item.id ? "bg-[#14213D] text-white" : "bg-white text-[#14213D] ring-1 ring-black/10"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))
+            : null}
         </div>
         <form onSubmit={onSearch} className="flex flex-wrap items-end gap-2">
           <label className="text-xs font-extrabold text-[#14213D]">
@@ -743,7 +866,17 @@ export function MaintenanceClient() {
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
       {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{notice}</p> : null}
       <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
-        {tab === "bosta" ? (
+        {hubTab === "tech" && canTech ? (
+          <TechPanel rows={panelRows} onChanged={() => void load({ from, to })} />
+        ) : null}
+        {hubTab === "receive" && canInspect ? (
+          <ReceiveAndShelfPanel rows={panelRows} onChanged={() => void load({ from, to })} />
+        ) : null}
+        {hubTab === "accounting" && canAccounting ? <AccountingPanel rows={panelRows} /> : null}
+        {hubTab === "variance" && (canInspect || canTech) ? (
+          <VariancePanel variance={data?.variance || null} />
+        ) : null}
+        {hubTab === "inspect" && canInspect && tab === "bosta" ? (
           <>
             <header className="space-y-3 border-b border-black/10 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -761,14 +894,28 @@ export function MaintenanceClient() {
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      setPrintMode("all");
+                      window.setTimeout(() => window.print(), 50);
+                    }}
                     disabled={!bostaRows.length}
                     className="rounded-full bg-white px-4 py-2 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10 disabled:opacity-40"
                   >
                     طباعة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintMode("maintenance");
+                      window.setTimeout(() => window.print(), 50);
+                    }}
+                    disabled={!maintenancePrintRows.length}
+                    className="rounded-full bg-[#FCA311] px-4 py-2 text-xs font-extrabold text-black disabled:opacity-40"
+                  >
+                    طباعة تقرير الصيانة
                   </button>
                   <button
                     type="button"
@@ -825,6 +972,9 @@ export function MaintenanceClient() {
                         التصنيف{grouped ? " (مجمّع)" : ""}
                       </button>
                     </th>
+                    <th className="px-3 py-2">الفتح</th>
+                    <th className="px-3 py-2">التسليم</th>
+                    <th className="px-3 py-2">ملاحظة</th>
                     <th className="px-3 py-2">الفحص</th>
                   </tr>
                 </thead>
@@ -833,7 +983,7 @@ export function MaintenanceClient() {
                     bostaRows.map((row) => (
                       <tr
                         key={row.trackingNumber}
-                        onClick={() => setActive(row)}
+                        onClick={() => void openReview(row)}
                         className="cursor-pointer border-t border-black/5 hover:bg-[#F5F5F0]"
                       >
                         <td className="px-3 py-2">{row.day || "—"}</td>
@@ -874,12 +1024,26 @@ export function MaintenanceClient() {
                           </div>
                         </td>
                         <td className="px-3 py-2">{row.statusLabel}</td>
+                        <td className="px-3 py-2 text-xs">{formatCairoOrderDateTime(row.openedAt).absolute}</td>
+                        <td className="px-3 py-2 text-xs">
+                          {formatCairoOrderDateTime(row.review?.deliveredToMaintenanceAt).absolute}
+                        </td>
+                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setNoteRow(row)}
+                            className="rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10"
+                            title={row.note || "اضغط لكتابة ملاحظة"}
+                          >
+                            {row.note ? "ملاحظة ✓" : "ملاحظة"}
+                          </button>
+                        </td>
                         <td className="px-3 py-2">{row.review?.label || "—"}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
+                      <td colSpan={11} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
                         {loading
                           ? "جارٍ التحميل…"
                           : "مفيش مرتجعات في المدى ده. وسّع من/إلى (إمبارح موجود لو التاريخ يشمله) أو اضغط «حفظ ظاهر بوسطة»."}
@@ -891,10 +1055,10 @@ export function MaintenanceClient() {
             </div>
           </>
         ) : null}
-        {tab === "temima" ? (
+        {hubTab === "inspect" && canInspect && tab === "temima" ? (
           <LocalTable rows={temimaRows} loading={loading} empty="مفيش إلغاء على الشيت في المدى." />
         ) : null}
-        {tab === "eid" ? (
+        {hubTab === "inspect" && canInspect && tab === "eid" ? (
           <LocalTable
             rows={eidRows}
             loading={loading}
@@ -902,7 +1066,7 @@ export function MaintenanceClient() {
             missing={data && !data.eid.found ? "المندوب مش متسجل." : ""}
           />
         ) : null}
-        {tab === "momen" ? (
+        {hubTab === "inspect" && canInspect && tab === "momen" ? (
           <LocalTable
             rows={momenRows}
             loading={loading}
@@ -919,7 +1083,29 @@ export function MaintenanceClient() {
           onSaved={(product) => rememberProduct(linking.trackingNumber, product)}
         />
       ) : null}
-      {active ? (
+      {noteRow ? (
+        <NoteModal
+          key={`note-${noteRow.trackingNumber}`}
+          trackingNumber={noteRow.trackingNumber}
+          initial={noteRow.note || ""}
+          onClose={() => setNoteRow(null)}
+          onSaved={(note) => {
+            setData((current) => {
+              if (!current) return current;
+              return {
+                ...current,
+                bosta: {
+                  ...current.bosta,
+                  rows: current.bosta.rows.map((row) =>
+                    row.trackingNumber === noteRow.trackingNumber ? { ...row, note } : row,
+                  ),
+                },
+              };
+            });
+          }}
+        />
+      ) : null}
+      {active && canInspect ? (
         <ReviewCards
           key={active.trackingNumber}
           row={active}
@@ -927,7 +1113,7 @@ export function MaintenanceClient() {
           onSaved={(review) => rememberReview(active.trackingNumber, review)}
         />
       ) : null}
-      {tab === "bosta" ? (
+      {hubTab === "inspect" && canInspect && tab === "bosta" && printMode === "all" ? (
         <div className="print-only">
           <h1 className="text-center text-lg font-extrabold">
             مرتجعات بوسطة {from} — {to}
@@ -974,6 +1160,62 @@ export function MaintenanceClient() {
               </table>
             </section>
           ))}
+        </div>
+      ) : null}
+      {printMode === "maintenance" ? (
+        <div className="print-only">
+          <h1 className="text-center text-lg font-extrabold">تقرير تسليم للصيانة</h1>
+          <p className="mb-2 text-center text-xs font-bold">
+            {from} — {to} · عدد الصفوف: {maintenancePrintRows.length}
+          </p>
+          <table className="w-full border-collapse text-right text-xs">
+            <thead>
+              <tr>
+                <th className="border border-black px-1 py-1">اليوم</th>
+                <th className="border border-black px-1 py-1">البوليصة</th>
+                <th className="border border-black px-1 py-1">الأوردر</th>
+                <th className="border border-black px-1 py-1">العميل</th>
+                <th className="border border-black px-1 py-1">الموبايل</th>
+                <th className="border border-black px-1 py-1">النوع</th>
+                <th className="border border-black px-1 py-1">المنتج</th>
+                <th className="border border-black px-1 py-1">العيوب</th>
+                <th className="border border-black px-1 py-1">جديد/مستخدم</th>
+                <th className="border border-black px-1 py-1">الفتح</th>
+                <th className="border border-black px-1 py-1">التسليم</th>
+                <th className="border border-black px-1 py-1">الملاحظة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {maintenancePrintRows.map((item) => (
+                <tr key={item.trackingNumber}>
+                  <td className="border border-black px-1 py-1">{item.day}</td>
+                  <td className="border border-black px-1 py-1">{item.trackingNumber}</td>
+                  <td className="border border-black px-1 py-1">{item.wooOrderNumber}</td>
+                  <td className="border border-black px-1 py-1">{item.customerName}</td>
+                  <td className="border border-black px-1 py-1">{item.phone}</td>
+                  <td className="border border-black px-1 py-1">{item.statusLabel}</td>
+                  <td className="border border-black px-1 py-1">{item.product}</td>
+                  <td className="border border-black px-1 py-1">{defectsAr(item.review?.defects || [])}</td>
+                  <td className="border border-black px-1 py-1">
+                    {item.review?.usage === "new" ? "جديد" : item.review?.usage === "used" ? "مستخدم" : ""}
+                  </td>
+                  <td className="border border-black px-1 py-1">
+                    {item.openedAt ? formatCairoOrderDateTime(item.openedAt).absolute : ""}
+                  </td>
+                  <td className="border border-black px-1 py-1">
+                    {item.review?.deliveredToMaintenanceAt
+                      ? formatCairoOrderDateTime(item.review.deliveredToMaintenanceAt).absolute
+                      : ""}
+                  </td>
+                  <td className="border border-black px-1 py-1">{item.note || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-8 text-sm font-extrabold">
+            استلام مسئول الصيانة: ........................ &nbsp;&nbsp; التاريخ: ..../..../........ &nbsp;&nbsp;
+            التوقيع: ........................
+          </p>
         </div>
       ) : null}
       <style jsx global>{`

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ensureCsTables } from "@/lib/cs/agents";
+import { techNoteForConfirmation } from "@/lib/cs/bosta-return-lifecycle";
 import { getCsConfirmation, parseOrderTotalDelta, resolveCsViewer, serializeDepositAmount } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -50,12 +51,14 @@ export default async function CsOrderPage({ params }: Props) {
     orderTotalDelta?: unknown;
   };
   const bostaFee = row.bostaShippingFee == null ? null : Number(row.bostaShippingFee);
+  const maintenanceTechNote = await techNoteForConfirmation(confirmation.id);
 
   return (
     <CsCallSheet
       confirmationId={confirmation.id}
       status={confirmation.status}
       snapshot={snapshot}
+      maintenanceTechNote={maintenanceTechNote}
       shippingCompany={confirmation.shippingCompany}
       trackingNumber={row.trackingNumber || snapshot?.trackingNumber || null}
       bostaStatus={row.bostaStatus || null}

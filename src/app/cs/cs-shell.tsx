@@ -660,6 +660,10 @@ function CsHeader() {
   const isShipping = roles.includes("shipping");
   const isAccounting = roles.includes("accounting");
   const isMaintenance = roles.includes("maintenance") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
+  const isMaintenanceTech = roles.includes("maintenance_tech") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
+  const isMaintenanceAccounting =
+    roles.includes("maintenance_accounting") || roles.includes("admin") || Boolean(session?.user?.csIsAdmin);
+  const canMaintenanceHub = isMaintenance || isMaintenanceTech || isMaintenanceAccounting;
   const isCourierSupervisor = roles.includes("courier_supervisor");
   const isCourier = roles.includes("courier");
   const isMonaCourier = roles.includes("mona_courier");
@@ -696,8 +700,12 @@ function CsHeader() {
                   ? "حساب شحن · تصفية سيد تميمة"
                   : isAccounting
                     ? "حسابات · كل الأوردرات"
-                    : isMaintenance && !canSeeOrders && !isTransfers && !isShipping
-                      ? "الصيانة · المرتجعات"
+                    : canMaintenanceHub && !canSeeOrders && !isTransfers && !isShipping
+                      ? isMaintenanceTech && !isMaintenance
+                        ? "فني الصيانة · المسلم للصيانة"
+                        : isMaintenanceAccounting && !isMaintenance
+                          ? "حسابات الصيانة · ترحيل ERP"
+                          : "الصيانة · المرتجعات"
                       : "خدمة العملاء · الأوردرات والتحويلات"}
             </p>
           </div>
@@ -740,9 +748,13 @@ function CsHeader() {
               التحويلات
             </Link>
           ) : null}
-          {isMaintenance ? (
+          {canMaintenanceHub ? (
             <Link href="/cs/maintenance" className={navClass(pathname.startsWith("/cs/maintenance"))}>
-              الصيانة
+              {isMaintenanceTech && !isMaintenance && !isMaintenanceAccounting
+                ? "فني الصيانة"
+                : isMaintenanceAccounting && !isMaintenance
+                  ? "حسابات الصيانة"
+                  : "الصيانة"}
             </Link>
           ) : null}
           {isSupervisor ? (

@@ -41,22 +41,37 @@ async function createBostaReturnCaptureTable() {
     `SELECT 1 AS n FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsBostaReturnCapture' LIMIT 1`,
   );
-  if (ready.length) return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS \`CsBostaReturnCapture\` (
-      \`trackingNumber\` VARCHAR(64) NOT NULL,
-      \`seenDay\` CHAR(10) NOT NULL,
-      \`kind\` VARCHAR(16) NOT NULL,
-      \`reasonText\` VARCHAR(191) NOT NULL DEFAULT '',
-      \`customerName\` VARCHAR(191) NOT NULL DEFAULT '',
-      \`phone\` VARCHAR(32) NOT NULL DEFAULT '',
-      \`businessReference\` VARCHAR(191) NOT NULL DEFAULT '',
-      \`wooOrderNumber\` VARCHAR(64) NOT NULL DEFAULT '',
-      \`confirmationId\` INT NULL,
-      \`capturedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-      PRIMARY KEY (\`trackingNumber\`)
-    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-  `);
+  if (!ready.length) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`CsBostaReturnCapture\` (
+        \`trackingNumber\` VARCHAR(64) NOT NULL,
+        \`seenDay\` CHAR(10) NOT NULL,
+        \`kind\` VARCHAR(16) NOT NULL,
+        \`reasonText\` VARCHAR(191) NOT NULL DEFAULT '',
+        \`customerName\` VARCHAR(191) NOT NULL DEFAULT '',
+        \`phone\` VARCHAR(32) NOT NULL DEFAULT '',
+        \`businessReference\` VARCHAR(191) NOT NULL DEFAULT '',
+        \`wooOrderNumber\` VARCHAR(64) NOT NULL DEFAULT '',
+        \`confirmationId\` INT NULL,
+        \`note\` TEXT NULL,
+        \`openedAt\` DATETIME(3) NULL,
+        \`capturedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (\`trackingNumber\`)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    return;
+  }
+  for (const sql of [
+    "ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `note` TEXT NULL",
+    "ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `openedAt` DATETIME(3) NULL",
+  ]) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Duplicate column|already exists|1060/i.test(message)) throw error;
+    }
+  }
 }
 
 function orderDigits(value: string) {

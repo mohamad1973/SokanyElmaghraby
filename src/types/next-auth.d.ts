@@ -9,6 +9,8 @@ export type CsAgentRole =
   | "shipping"
   | "accounting"
   | "maintenance"
+  | "maintenance_tech"
+  | "maintenance_accounting"
   | "courier_supervisor"
   | "courier"
   | "mona_courier";
