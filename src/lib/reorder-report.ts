@@ -67,6 +67,8 @@ type CatalogCache = {
 };
 
 const CACHE_MS = 5 * 60 * 1000;
+/** Default low-stock / reorder threshold when Woo has no product-level amount. */
+const DEFAULT_REORDER_THRESHOLD = 10;
 let catalogCache: CatalogCache | null = null;
 
 function hasWooCredentials() {
@@ -171,13 +173,14 @@ function mapReorderProduct(product: WooStockProduct): ReorderProduct {
   const manageStock = Boolean(product.manage_stock);
   const stockQuantity = Number(product.stock_quantity ?? 0);
   const thresholdRaw = product.low_stock_amount;
-  const threshold =
-    thresholdRaw === null || thresholdRaw === undefined
-      ? 0
-      : Math.max(0, Number(thresholdRaw));
+  const parsed =
+    thresholdRaw === null || thresholdRaw === undefined ? NaN : Number(thresholdRaw);
+  // Unset / invalid Woo amount → default 10; explicit saved values (incl. 0) keep as-is.
+  const thresholdSafe = Number.isFinite(parsed)
+    ? Math.max(0, parsed)
+    : DEFAULT_REORDER_THRESHOLD;
 
   const qty = Number.isFinite(stockQuantity) ? stockQuantity : 0;
-  const thresholdSafe = Number.isFinite(threshold) ? threshold : 0;
   const isAtOrBelowThreshold = thresholdSafe > 0 && qty <= thresholdSafe;
   const suggestedTransferQty = isAtOrBelowThreshold ? Math.max(0, thresholdSafe - qty) : 0;
   const categories = product.categories || [];
