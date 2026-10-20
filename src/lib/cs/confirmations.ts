@@ -30,7 +30,7 @@ import {
   type CsPaymentState,
 } from "@/lib/cs/order-window";
 import { getShipmentsByOrderIds } from "@/lib/shipping/shipments";
-import { looksLikeLocationCode, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
+import { isDisplayablePlaceName, looksLikeLocationCode, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
 import {
   monaCourierBucketFromName,
   resolveMonaCourierIdForShipping,
@@ -1166,8 +1166,9 @@ function waybillSnapshot(
   if (name) next.customerName = name;
   if (phone) next.phone = phone;
   if (address) next.address = address;
-  if (governorate) next.governorate = governorate;
-  if (area) next.area = area;
+  // Keep Woo/site governorate & area; agent answers only fill when site value is unusable.
+  if (governorate && !isDisplayablePlaceName(String(next.governorate || ""))) next.governorate = governorate;
+  if (area && !isDisplayablePlaceName(String(next.area || ""))) next.area = area;
   const addr = String(next.address || "").trim();
   const gov = String(next.governorate || "").trim();
   const ar = String(next.area || "").trim();

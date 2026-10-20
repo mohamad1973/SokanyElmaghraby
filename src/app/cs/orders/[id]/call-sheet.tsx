@@ -422,18 +422,29 @@ export function CsCallSheet({
         if (data.cod !== undefined && data.cod !== null) setBostaCod(data.cod);
         if (data.lastEvent) setBostaLastEvent(data.lastEvent);
         setBostaEvents(Array.isArray(data.events) ? data.events : []);
-        const governorate = String(data.governorate || "").trim();
-        if (governorate) {
-          setAnswers((prev) => ({
-            ...prev,
-            governorate_confirm: {
-              confirmed: true,
-              value: governorate,
-              note: prev.governorate_confirm?.note || "",
-              yesNo: prev.governorate_confirm?.yesNo || "",
-            },
-          }));
-          setSnapshot((prev) => (prev ? { ...prev, governorate } : prev));
+        const bostaGov = String(data.governorate || "").trim();
+        if (bostaGov) {
+          // Prefer site/Woo governorate; only adopt Bosta label when site value is unusable.
+          let applied = false;
+          setSnapshot((prev) => {
+            if (!prev) return prev;
+            const siteGov = String(prev.governorate || "").trim();
+            const siteGovOk = Boolean(siteGov) && siteGov !== "غير محدد" && !/^EG-?\d/i.test(siteGov);
+            if (siteGovOk) return prev;
+            applied = true;
+            return { ...prev, governorate: bostaGov };
+          });
+          if (applied) {
+            setAnswers((prev) => ({
+              ...prev,
+              governorate_confirm: {
+                confirmed: true,
+                value: bostaGov,
+                note: prev.governorate_confirm?.note || "",
+                yesNo: prev.governorate_confirm?.yesNo || "",
+              },
+            }));
+          }
         }
         setBostaError(data.bostaSyncError || "");
       })
@@ -2079,8 +2090,8 @@ export function CsCallSheet({
         </div>
         <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-3">
           <span className="truncate">الشارع: {answers.address_complete?.value || snapshot?.address || "—"}</span>
-          <span className="truncate">المحافظة: {answers.governorate_confirm?.value || snapshot?.governorate || "—"}</span>
-          <span className="truncate">المنطقة: {answers.area_confirm?.value || snapshot?.area || "—"}</span>
+          <span className="truncate">المحافظة: {snapshot?.governorate || answers.governorate_confirm?.value || "—"}</span>
+          <span className="truncate">المنطقة: {snapshot?.area || answers.area_confirm?.value || "—"}</span>
         </div>
         <p className="mt-1 line-clamp-1 text-xs text-white/80">
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}

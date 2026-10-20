@@ -2,6 +2,7 @@ import "server-only";
 
 import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
 import { getPrismaClient } from "@/lib/db";
+import { isDisplayablePlaceName } from "@/lib/cs/resolve-location";
 import {
   createCsBostaDelivery,
   fetchCsBostaDelivery,
@@ -42,6 +43,26 @@ function textOf(answers: CsChecklistAnswerInput[], key: string) {
   return String(item?.value || "").trim();
 }
 
+/** Prefer Woo/site snapshot place names; agent answers only fill gaps. */
+function preferSiteLocation(snapValue: unknown, answerValue: string) {
+  const site = String(snapValue || "").trim();
+  if (isDisplayablePlaceName(site)) return site;
+  const answer = String(answerValue || "").trim();
+  if (isDisplayablePlaceName(answer)) return answer;
+  return site || answer;
+}
+
+/** Split Bosta placeLabel «مدينة - منطقة» when present. */
+function splitBostaPlaceLabel(placeLabel: string): { governorate: string; area: string } {
+  const raw = String(placeLabel || "").trim();
+  if (!raw) return { governorate: "", area: "" };
+  const parts = raw.split(/\s*[-–—·]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return { governorate: parts[0], area: parts.slice(1).join(" - ") };
+  }
+  return { governorate: raw, area: "" };
+}
+
 /** Extra phone from + on primary card; falls back to legacy alt_phone note. */
 export function secondPhoneFromAnswers(answers: CsChecklistAnswerInput[]) {
   const extra = answers.find((answer) => answer.itemKey === "extra_phone");
@@ -67,8 +88,8 @@ function partyFromAnswers(input: {
   const name = textOf(input.answers, "customer_name") || String(snap.customerName || "").trim();
   const phone = textOf(input.answers, "primary_phone") || String(snap.phone || "").trim();
   const address = textOf(input.answers, "address_complete") || String(snap.address || "").trim();
-  const governorate = textOf(input.answers, "governorate_confirm") || String(snap.governorate || "").trim();
-  const area = textOf(input.answers, "area_confirm") || String(snap.area || "").trim();
+  const governorate = preferSiteLocation(snap.governorate, textOf(input.answers, "governorate_confirm"));
+  const area = preferSiteLocation(snap.area, textOf(input.answers, "area_confirm"));
   const landmarks = textOf(input.answers, "address_landmarks");
   if (!name || !phone || !address || !governorate) {
     return { ok: false, message: "بيانات البوليصة ناقصة: الاسم أو التليفون أو العنوان أو المحافظة." };
@@ -215,16 +236,35 @@ async function writeConfirmation(input: {
   bostaShippingFee: number | null;
   bostaSyncError: string | null;
   governorate?: string | null;
+  area?: string | null;
   shippingCompany?: string | null;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return;
-  const governorate = String(input.governorate || "").trim();
-  const snap = {
-    ...(input.snapshot || {}),
+  const existing = (input.snapshot || {}) as Record<string, unknown>;
+  const siteGovGood = isDisplayablePlaceName(String(existing.governorate || ""));
+  const siteAreaGood = isDisplayablePlaceName(String(existing.area || ""));
+  const fromLabel = splitBostaPlaceLabel(String(input.governorate || ""));
+  const incomingGov = fromLabel.governorate;
+  const incomingArea = String(input.area || "").trim() || fromLabel.area;
+
+  const snap: Record<string, unknown> = {
+    ...existing,
     trackingNumber: input.trackingNumber,
-    ...(governorate ? { governorate } : {}),
   };
+  let wroteGov = false;
+  let wroteArea = false;
+  // Never overwrite a good site governorate with Bosta placeLabel.
+  if (!siteGovGood && isDisplayablePlaceName(incomingGov)) {
+    snap.governorate = incomingGov;
+    wroteGov = true;
+  }
+  // Fill area from Bosta only when the site snapshot has no usable area.
+  if (!siteAreaGood && isDisplayablePlaceName(incomingArea)) {
+    snap.area = incomingArea;
+    wroteArea = true;
+  }
+
   await prisma.csOrderConfirmation.update({
     where: { id: input.confirmationId },
     data: {
@@ -237,25 +277,48 @@ async function writeConfirmation(input: {
       ...(input.shippingCompany ? { shippingCompany: input.shippingCompany } : {}),
     } as never,
   });
-  if (!governorate) return;
-  await prisma.csChecklistAnswer.upsert({
-    where: {
-      confirmationId_itemKey: {
+  if (wroteGov) {
+    const governorate = String(snap.governorate || "").trim();
+    await prisma.csChecklistAnswer.upsert({
+      where: {
+        confirmationId_itemKey: {
+          confirmationId: input.confirmationId,
+          itemKey: "governorate_confirm",
+        },
+      },
+      create: {
         confirmationId: input.confirmationId,
         itemKey: "governorate_confirm",
+        confirmed: true,
+        value: governorate,
       },
-    },
-    create: {
-      confirmationId: input.confirmationId,
-      itemKey: "governorate_confirm",
-      confirmed: true,
-      value: governorate,
-    },
-    update: {
-      confirmed: true,
-      value: governorate,
-    },
-  });
+      update: {
+        confirmed: true,
+        value: governorate,
+      },
+    });
+  }
+  if (wroteArea) {
+    const area = String(snap.area || "").trim();
+    await prisma.csChecklistAnswer.upsert({
+      where: {
+        confirmationId_itemKey: {
+          confirmationId: input.confirmationId,
+          itemKey: "area_confirm",
+        },
+      },
+      create: {
+        confirmationId: input.confirmationId,
+        itemKey: "area_confirm",
+        confirmed: true,
+        value: area,
+      },
+      update: {
+        confirmed: true,
+        value: area,
+      },
+    });
+  }
 }
 
 async function persistLinkedDelivery(input: {
@@ -276,7 +339,7 @@ async function persistLinkedDelivery(input: {
   };
 }): Promise<BostaWaybillState> {
   const status = normalizeBostaStatus(input.found.status || "created");
-  const governorate = String(input.found.placeLabel || "").trim() || null;
+  const placeLabel = String(input.found.placeLabel || "").trim() || null;
   await writeConfirmation({
     confirmationId: input.confirmationId,
     snapshot: input.snapshot,
@@ -284,7 +347,7 @@ async function persistLinkedDelivery(input: {
     bostaStatus: status,
     bostaShippingFee: input.found.shippingFee,
     bostaSyncError: null,
-    governorate,
+    governorate: placeLabel,
     shippingCompany: "bosta",
   });
   const built = partyFromAnswers({
@@ -303,6 +366,8 @@ async function persistLinkedDelivery(input: {
       party: built.party,
     });
   }
+  const governorate =
+    preferSiteLocation(input.snapshot?.governorate, splitBostaPlaceLabel(placeLabel || "").governorate) || null;
   return present({
     trackingNumber: input.found.trackingNumber,
     bostaStatus: status,
@@ -915,16 +980,19 @@ export async function refreshCsBostaWaybill(confirmationId: number): Promise<Bos
   const details = readBostaLiveDetails(live.data);
   const status = normalizeBostaStatus(details.status || readBostaStatus(live.data) || typed.bostaStatus || "");
   const fee = details.shippingFee ?? readBostaShippingFee(live.data) ?? (Number.isFinite(currentFee) ? currentFee : null);
-  const governorate = String(details.placeLabel || "").trim() || null;
+  const placeLabel = String(details.placeLabel || "").trim() || null;
+  const snap = (row.customerSnapshot as Snapshot) || null;
   await writeConfirmation({
     confirmationId,
-    snapshot: (row.customerSnapshot as Snapshot) || null,
+    snapshot: snap,
     trackingNumber: tracking,
     bostaStatus: status || typed.bostaStatus || null,
     bostaShippingFee: fee,
     bostaSyncError: null,
-    governorate,
+    governorate: placeLabel,
   });
+  const governorate =
+    preferSiteLocation(snap?.governorate, splitBostaPlaceLabel(placeLabel || "").governorate) || null;
   return present({
     trackingNumber: tracking,
     bostaStatus: status || typed.bostaStatus,
