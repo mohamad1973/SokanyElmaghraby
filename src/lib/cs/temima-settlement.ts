@@ -100,8 +100,10 @@ function resolveSettlementRange(weekStartInput: string | undefined, weekEndInput
 }
 
 function money(value: unknown) {
-  const n = Number(String(value ?? "").replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
+  const raw = String(value ?? "").trim();
+  const n = Number(raw.replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(n)) return 0;
+  return raw.startsWith("-") ? -n : n;
 }
 
 export function cashAmountOf(row: {
@@ -863,6 +865,9 @@ export async function setFawrySettlementDeposit(input: { confirmationId: number;
   `;
   if (closed.length) return { ok: false as const, message: "الأسبوع مقفل." };
   const total = orderTotalOf(row, null, true);
+  if (total < 0) {
+    return { ok: true as const, depositAmount: 0, cashAmount: total };
+  }
   const amount =
     input.amount == null || !Number.isFinite(input.amount) ? null : Math.min(total, Math.max(0, input.amount));
   if (amount == null) {

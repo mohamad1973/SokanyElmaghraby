@@ -66,11 +66,13 @@ function rowMatchesQuery(row: SheetRow, raw: string) {
 }
 
 function rowRemainder(row: SheetRow) {
-  return Math.max(0, Number(row.cashAmount) || 0);
+  const amount = Number(row.cashAmount);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 function shipmentValue(row: SheetRow) {
-  return Math.max(0, Number(row.orderTotal) || 0);
+  const amount = Number(row.orderTotal);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 function postponeValue(row: SheetRow) {
@@ -531,19 +533,21 @@ export function TemimaSettlementClient({
                             onChange={(event) => {
                               const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
                               const deposit = Number.isFinite(next) ? Math.max(0, next) : 0;
-                              const capped = Math.min(row.orderTotal || deposit, deposit);
+                              const orderTotal = Number(row.orderTotal) || 0;
+                              const capped = orderTotal < 0 ? 0 : Math.min(orderTotal || deposit, deposit);
                               patchRow(row.confirmationId, {
                                 depositAmount: capped,
-                                cashAmount: Math.max(0, (row.orderTotal || 0) - capped),
+                                cashAmount: orderTotal < 0 ? orderTotal : Math.max(0, orderTotal - capped),
                               });
                             }}
                             onBlur={(event) => {
                               const next = event.target.value.trim() === "" ? 0 : Number(event.target.value);
-                              const deposit = Number.isFinite(next) ? Math.min(row.orderTotal || 0, Math.max(0, next)) : 0;
+                              const orderTotal = Number(row.orderTotal) || 0;
+                              const deposit = orderTotal < 0 || !Number.isFinite(next) ? 0 : Math.min(orderTotal, Math.max(0, next));
                               const nextRow = {
                                 ...row,
                                 depositAmount: deposit,
-                                cashAmount: Math.max(0, (row.orderTotal || 0) - deposit),
+                                cashAmount: orderTotal < 0 ? orderTotal : Math.max(0, orderTotal - deposit),
                               };
                               patchRow(row.confirmationId, {
                                 depositAmount: nextRow.depositAmount,

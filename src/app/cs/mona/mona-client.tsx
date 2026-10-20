@@ -217,16 +217,19 @@ function dayBlocksOf(orders: OrderCard[]) {
 }
 
 function shipmentValue(order: OrderCard) {
-  return Math.max(0, Number(order.orderTotal) || 0);
+  const amount = Number(order.orderTotal);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 function goodsAfterDeposit(order: OrderCard) {
   if (order.official === "refused") return 0;
-  return Math.max(0, shipmentValue(order) - (Number(order.depositAmount) || 0));
+  const net = shipmentValue(order) - (Number(order.depositAmount) || 0);
+  return shipmentValue(order) < 0 ? net : Math.max(0, net);
 }
 
 function remainder(order: OrderCard) {
-  return Math.max(0, Number(order.cashAmount) || 0);
+  const amount = Number(order.cashAmount);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 function postponeValue(order: OrderCard) {
@@ -239,7 +242,8 @@ function refusalValue(order: OrderCard) {
 
 function netValue(order: OrderCard) {
   if (order.official !== "delivered") return 0;
-  return Math.max(0, (Number(order.orderTotal) || 0) - (Number(order.depositAmount) || 0));
+  const net = (Number(order.orderTotal) || 0) - (Number(order.depositAmount) || 0);
+  return (Number(order.orderTotal) || 0) < 0 ? net : Math.max(0, net);
 }
 
 function sumOf(list: OrderCard[], pick: (order: OrderCard) => number) {

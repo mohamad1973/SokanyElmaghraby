@@ -237,7 +237,8 @@ function cardFrom(row: OrderRow, answers: AnswerRow[]): MonaOrderCard {
 }
 
 function monaSheetNet(card: { orderTotal: number; depositAmount: number }) {
-  return Math.max(0, card.orderTotal - card.depositAmount);
+  const net = card.orderTotal - card.depositAmount;
+  return card.orderTotal < 0 ? net : Math.max(0, net);
 }
 
 function assignedDayOf(value: Date | string | null | undefined) {

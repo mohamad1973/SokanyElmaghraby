@@ -25,6 +25,7 @@ import {
   cairoYmdBounds,
   isWithinCairoLastDays,
   isWithinCairoTodayOrYesterday,
+  fulfillmentAccountAmount,
   resolvePaymentState,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
@@ -920,7 +921,8 @@ export function serializeCsQueueItem(row: {
   const addressOnly = loc.address || raw?.address || "";
   const govOk = Boolean(loc.governorate);
   const areaOk = Boolean(loc.area);
-  const displayTotal = String(raw?.waybillTotal || raw?.total || "");
+  const signedAccount = fulfillmentAccountAmount(raw, row.fulfillmentKind);
+  const displayTotal = signedAccount != null ? String(signedAccount) : String(raw?.waybillTotal || raw?.total || "");
   const snapKind = String((raw as { fulfillmentKind?: string } | null)?.fulfillmentKind || "").trim();
   const fulfillmentKind =
     row.fulfillmentKind === "exchange" || snapKind === "exchange"

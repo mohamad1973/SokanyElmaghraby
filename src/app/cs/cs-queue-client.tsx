@@ -110,7 +110,7 @@ function sheetDepositNet(item: CsQueueItem) {
   // Queue API already maps waybillTotal → customerSnapshot.total after discount sync,
   // so do not re-apply orderTotalDelta here (would double-discount).
   return sheetCollectedSplit({
-    total: parseOrderTotal(item.customerSnapshot?.total),
+    total: parseOrderTotal(item.customerSnapshot?.total, item.fulfillmentKind),
     wooStatus: item.customerSnapshot?.wooStatus,
     paymentState: itemPaymentState(item),
     depositAmount: item.depositAmount,
@@ -124,9 +124,13 @@ function temimaMoney(item: CsQueueItem) {
   return { paid: split.deposit, remainder: split.net };
 }
 
-function parseOrderTotal(value: string | null | undefined) {
-  const n = Number(String(value || "").replace(/[^\d.]/g, ""));
-  return Number.isFinite(n) ? n : 0;
+function parseOrderTotal(value: string | null | undefined, kind?: string | null) {
+  const raw = String(value || "").trim();
+  const n = Number(raw.replace(/[^\d.]/g, ""));
+  const abs = Number.isFinite(n) ? n : 0;
+  if (kind === "return") return abs === 0 ? 0 : -abs;
+  if (raw.startsWith("-")) return -abs;
+  return abs;
 }
 
 const dateMaxYmd = () => cairoTodayYmd();
@@ -1309,7 +1313,7 @@ export function CsQueueClient({
     return map;
   }, [items]);
   const sheetDayTotal = isCourierSupervisor
-    ? filtered.reduce((sum, item) => sum + parseOrderTotal(item.customerSnapshot?.total), 0)
+    ? filtered.reduce((sum, item) => sum + parseOrderTotal(item.customerSnapshot?.total, item.fulfillmentKind), 0)
     : 0;
 
   function rememberEdits(next: TemimaSheetEdit[]) {

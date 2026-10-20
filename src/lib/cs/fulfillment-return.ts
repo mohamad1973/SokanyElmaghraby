@@ -259,7 +259,9 @@ export async function createFulfillmentFromOrder(input: {
     return { ok: false as const, message: "بيانات العميل ناقصة (الاسم/التليفون/العنوان/المحافظة)." };
   }
 
-  const settlement = settlementOf(signedMoney(input.collectAmount));
+  const entered = signedMoney(input.collectAmount);
+  // A return is a payout to the customer even if the amount was typed without a minus.
+  const settlement = settlementOf(input.kind === "return" ? -Math.abs(entered) : entered);
   const siblingCount = await prisma.csOrderConfirmation.count({
     where: { parentConfirmationId: parent.id },
   });

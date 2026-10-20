@@ -200,11 +200,46 @@ export function hasWaybillTotal(snap: { waybillTotal?: unknown } | null | undefi
   return String(snap.waybillTotal).trim() !== "";
 }
 
+type FulfillmentMoneySnap = {
+  fulfillmentKind?: unknown;
+  settlementDirection?: unknown;
+  settlementAbs?: unknown;
+  waybillTotal?: unknown;
+  wooTotal?: unknown;
+  total?: unknown;
+};
+
+/**
+ * Signed account amount for a return/exchange child.
+ * A return is money the courier pays the customer, so it always decreases the account.
+ * An exchange keeps the entered sign: positive collect, negative refund.
+ * Returns null for ordinary orders.
+ */
+export function fulfillmentAccountAmount(
+  snap: FulfillmentMoneySnap | null | undefined,
+  rowKind?: string | null,
+): number | null {
+  const kind = String(rowKind || snap?.fulfillmentKind || "").trim();
+  if (kind !== "return" && kind !== "exchange") return null;
+  const direction = String(snap?.settlementDirection || "").trim();
+  const absField = Number(snap?.settlementAbs);
+  const raw = String(snap?.waybillTotal ?? snap?.total ?? snap?.wooTotal ?? "").trim();
+  const parsed = Number(raw.replace(/[^\d.]/g, ""));
+  const abs =
+    Number.isFinite(absField) && absField > 0 ? absField : Number.isFinite(parsed) ? parsed : 0;
+  if (kind === "return") return abs === 0 ? 0 : -abs;
+  if (direction === "refund" || raw.startsWith("-")) return abs === 0 ? 0 : -abs;
+  if (direction === "none") return 0;
+  return abs;
+}
+
 /** Prefer waybillTotal (post-discount COD base) when set; else wooTotal/total. */
 export function baseTotalFromSnapshot(
-  snap: { waybillTotal?: unknown; wooTotal?: unknown; total?: unknown } | null | undefined,
+  snap: FulfillmentMoneySnap | null | undefined,
 ): number {
   if (!snap) return 0;
+  const signed = fulfillmentAccountAmount(snap);
+  if (signed != null) return signed;
   if (hasWaybillTotal(snap)) return parseMoneyAmount(snap.waybillTotal);
   return parseMoneyAmount(snap.wooTotal ?? snap.total);
 }
@@ -284,7 +319,10 @@ export function sheetCollectedSplit(input: {
   /** Open Temima settlement keeps a cancelled sheet order at its value. */
   keepCancelledValue?: boolean;
 }) {
-  const base = Math.max(0, Number(input.total) || 0);
+  const signedBase = Number(input.total) || 0;
+  // Courier pays the customer: the sheet and settlement must subtract, not add.
+  if (signedBase < 0) return { deposit: 0, net: Math.round(signedBase * 100) / 100 };
+  const base = Math.max(0, signedBase);
   const delta = Number(input.orderTotalDelta);
   const discountOk =
     String(input.discountApprovalStatus || "").toLowerCase() === "approved" &&

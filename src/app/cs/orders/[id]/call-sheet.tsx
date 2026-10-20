@@ -1059,7 +1059,7 @@ export function CsCallSheet({
           </label>
         ) : null}
         <label className="mt-2 block text-[11px] font-extrabold text-[#14213D]">
-          قيمة التحصيل (+) أو رد الفرق (−)
+          {fulfillmentKind === "return" ? "المبلغ اللي هيتدفع للعميل" : "قيمة التحصيل (+) أو رد الفرق (−)"}
           <input
             dir="ltr"
             inputMode="decimal"
@@ -1073,7 +1073,9 @@ export function CsCallSheet({
             className={`${inputCls} mt-1`}
           />
           <span className="mt-0.5 block text-[10px] font-bold text-[#14213D]/65">
-            موجب = تحصيل من العميل على بوليصة بوسطة · سالب = رد فرق (COD صفر + ملاحظة على البوليصة)
+            {fulfillmentKind === "return"
+              ? "الاسترجاع ينقص حساب المندوب: هو اللي هيدفع المبلغ للعميل، حتى لو اتكتب من غير سالب."
+              : "موجب = تحصيل من العميل على بوليصة بوسطة · سالب = رد فرق ينقص حساب المندوب"}
           </span>
         </label>
         {fulfillmentKind === "exchange" ? (
