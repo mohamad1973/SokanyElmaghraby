@@ -4,7 +4,11 @@ export type DeskFulfillmentKind = "return" | "exchange";
 
 export type FulfillmentWaybillDraft = {
   deliveryKind: DeskFulfillmentKind;
-  /** Cash collected from the customer. A payout is not a collection. */
+  /**
+   * Amount printed on the Bosta sticker.
+   * Return (type 25): refund value paid to the customer.
+   * Exchange (type 30): cash collected from the customer (0 when refunding a difference).
+   */
   cod: number;
   description: string;
   itemsCount: number;
@@ -40,28 +44,40 @@ function formatMoney(amount: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-function itemLines(items: unknown, kind: DeskFulfillmentKind) {
+function cleanItemName(name: string) {
+  return name
+    .replace(/\s*\((خارج|راجع)\)\s*$/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatItemLine(item: SnapshotItem) {
+  const name = cleanItemName(String(item.name || ""));
+  if (!name) return null;
+  const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+  return { text: qty > 1 ? `${name} ×${qty}` : name, qty };
+}
+
+function itemParts(items: unknown) {
   const list = Array.isArray(items) ? (items as SnapshotItem[]) : [];
-  const lines: string[] = [];
+  const outbound: string[] = [];
+  const returning: string[] = [];
   let count = 0;
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
+    const line = formatItemLine(item);
+    if (!line) continue;
+    count += line.qty;
     const role = String(item.role || "").trim();
-    if (kind === "return" && role === "outbound") continue;
-    const name = String(item.name || "").trim();
-    if (!name) continue;
-    const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
-    count += qty;
-    lines.push(qty > 1 ? `${name} ×${qty}` : name);
+    if (role === "outbound") outbound.push(line.text);
+    else returning.push(line.text);
   }
-  return { text: lines.join(" — "), count };
+  return { outbound, returning, count };
 }
 
 /**
- * Printed Bosta COD is only money taken from the customer.
- * A return always pays the customer, so the sticker collection stays 0 and the
- * payout is written into the shipment description. Exchange collection is the
- * positive settlement; a negative exchange is a refund, not a collection.
+ * Desk return/exchange → Bosta description + COD.
+ * Description always starts with استرجاع / استبدال and lists outbound + return product names.
  */
 export function fulfillmentWaybillDraft(
   snapshot: Record<string, unknown> | null | undefined,
@@ -71,16 +87,28 @@ export function fulfillmentWaybillDraft(
   const snap = snapshot || {};
   const abs = moneyAbs(snap);
   const direction = directionOf(snap, abs);
-  const items = itemLines(snap.items, kind);
-  const parts = [items.text || (kind === "return" ? "استرجاع" : "استبدال")];
+  const items = itemParts(snap.items);
+  const kindLabel = kind === "return" ? "استرجاع" : "استبدال";
+  const parts: string[] = [kindLabel];
+  if (kind === "exchange" && items.outbound.length) {
+    parts.push(`خارج: ${items.outbound.join(" + ")}`);
+  }
+  if (items.returning.length) {
+    parts.push(`راجع: ${items.returning.join(" + ")}`);
+  } else if (!items.outbound.length) {
+    parts.push(kindLabel);
+  }
+
   let cod = 0;
   if (kind === "return") {
-    if (abs > 0) parts.push(`رد للعميل ${formatMoney(abs)} ج.م`);
+    // CRP (type 25): print the refund amount as the sticker value.
+    if (abs > 0) cod = abs;
   } else if (direction === "collect" && abs > 0) {
     cod = abs;
   } else if (direction === "refund" && abs > 0) {
     parts.push(`رد فرق ${formatMoney(abs)} ج.م`);
   }
+
   const description = parts.join(" — ").replace(/\s+/g, " ").trim().slice(0, 500);
   return {
     deliveryKind: kind,
@@ -98,7 +126,8 @@ export function deskFulfillmentDeliveryFields(input: {
   itemsCount: number;
   address: Record<string, unknown>;
 }) {
-  const description = input.description.trim().slice(0, 500) || (input.kind === "return" ? "استرجاع" : "استبدال");
+  const kindLabel = input.kind === "return" ? "استرجاع" : "استبدال";
+  const description = input.description.trim().slice(0, 500) || kindLabel;
   const specs = {
     packageType: "Parcel",
     size: "SMALL",
