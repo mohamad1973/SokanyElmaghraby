@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib";
 
 import type { AdminOrder } from "@/lib/orders";
 
+import { deskFulfillmentDeliveryFields } from "@/lib/cs/fulfillment-waybill";
 import {
   findBostaCity,
   getBostaStatusLabelAr,
@@ -666,6 +667,10 @@ export type CsBostaParty = {
   cod: number;
   reference: string;
   notes?: string;
+  /** Set only for Temima / Eid / Momen return and exchange stickers. */
+  deliveryKind?: "return" | "exchange";
+  description?: string;
+  itemsCount?: number;
 };
 
 export function bostaPayload(raw: unknown): Record<string, unknown> | null {
@@ -828,27 +833,48 @@ export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
   };
 }
 
-function deliveryPayload(party: CsBostaParty, city: { code: string; nameAr: string }) {
+function customerAddress(party: CsBostaParty, city: { code: string; nameAr: string }) {
+  return {
+    city: city.code,
+    zone: party.area || city.nameAr,
+    firstLine: party.address,
+    secondLine: party.landmarks || party.area || "",
+  };
+}
+
+export function buildCsBostaDeliveryPayload(party: CsBostaParty, city: { code: string; nameAr: string }) {
   const { firstName, lastName } = splitCustomerName(party.name);
+  const receiver = {
+    firstName,
+    lastName,
+    phone: normalizePhone(party.phone),
+    ...(party.secondPhone ? { secondPhone: normalizePhone(party.secondPhone) } : {}),
+  };
+  const notes = party.notes || party.landmarks || "";
+  const tail = {
+    receiver,
+    businessReference: party.reference,
+    notes,
+    webhookUrl: buildBostaWebhookUrl(),
+  };
+  if (party.deliveryKind === "return" || party.deliveryKind === "exchange") {
+    return {
+      ...deskFulfillmentDeliveryFields({
+        kind: party.deliveryKind,
+        cod: party.cod,
+        description: party.description || "",
+        itemsCount: party.itemsCount || 1,
+        address: customerAddress(party, city),
+      }),
+      ...tail,
+    };
+  }
   return {
     type: 10,
     cod: party.cod,
     specs: { packageType: "Parcel", size: "SMALL" },
-    dropOffAddress: {
-      city: city.code,
-      zone: party.area || city.nameAr,
-      firstLine: party.address,
-      secondLine: party.landmarks || party.area || "",
-    },
-    receiver: {
-      firstName,
-      lastName,
-      phone: normalizePhone(party.phone),
-      ...(party.secondPhone ? { secondPhone: normalizePhone(party.secondPhone) } : {}),
-    },
-    businessReference: party.reference,
-    notes: party.notes || party.landmarks || "",
-    webhookUrl: buildBostaWebhookUrl(),
+    dropOffAddress: customerAddress(party, city),
+    ...tail,
   };
 }
 
@@ -859,7 +885,7 @@ export async function createCsBostaDelivery(party: CsBostaParty): Promise<BostaD
   }
   const result = await bostaFetch<{ _id?: string; trackingNumber?: string }>("/deliveries", {
     method: "POST",
-    body: JSON.stringify(deliveryPayload(party, city)),
+    body: JSON.stringify(buildCsBostaDeliveryPayload(party, city)),
   });
   if (!result.ok) return { ok: false, message: result.message };
   const details = readBostaLiveDetails(result.data);
@@ -896,7 +922,12 @@ function placesMatch(left: string, right: string) {
 
 function readWaybillEditFields(raw: unknown) {
   const root = bostaPayload(raw);
-  const drop = asRecord(root?.dropOffAddress) || asRecord(root?.dropoffAddress) || {};
+  const drop =
+    asRecord(root?.dropOffAddress) ||
+    asRecord(root?.dropoffAddress) ||
+    asRecord(root?.pickupAddress) ||
+    asRecord(root?.pickup_address) ||
+    {};
   const cityValue = drop.city;
   const cityRecord = asRecord(cityValue);
   const zoneValue = drop.zone;
@@ -1184,17 +1215,26 @@ export async function updateCsBostaDelivery(trackingNumber: string, party: CsBos
   if (districtId) dropOffAddress.districtId = districtId;
   if (!zoneId && !districtId && zoneName) dropOffAddress.zone = zoneName;
 
-  const body = {
-    receiver: {
-      firstName,
-      lastName,
-      phone,
-      ...(secondPhone ? { secondPhone } : {}),
-    },
-    dropOffAddress,
-    notes: party.notes || party.landmarks || "",
-    cod: party.cod,
+  const receiver = {
+    firstName,
+    lastName,
+    phone,
+    ...(secondPhone ? { secondPhone } : {}),
   };
+  const notes = party.notes || party.landmarks || "";
+  const fulfillment =
+    party.deliveryKind === "return" || party.deliveryKind === "exchange"
+      ? deskFulfillmentDeliveryFields({
+          kind: party.deliveryKind,
+          cod: party.cod,
+          description: party.description || "",
+          itemsCount: party.itemsCount || 1,
+          address: dropOffAddress,
+        })
+      : null;
+  const body = fulfillment
+    ? { receiver, notes, ...fulfillment }
+    : { receiver, dropOffAddress, notes, cod: party.cod };
   const putDelivery = (path: string) =>
     bostaFetch(path, {
       method: "PUT",

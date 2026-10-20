@@ -12,6 +12,7 @@ import {
   updateCsBostaDelivery,
   type CsBostaParty,
 } from "@/lib/shipping/bosta-client";
+import { fulfillmentWaybillDraft } from "@/lib/cs/fulfillment-waybill";
 import { effectivePaymentState } from "@/lib/cs/order-window";
 import {
   bostaStatusLocksEdits,
@@ -72,18 +73,9 @@ function partyFromAnswers(input: {
   if (!name || !phone || !address || !governorate) {
     return { ok: false, message: "بيانات البوليصة ناقصة: الاسم أو التليفون أو العنوان أو المحافظة." };
   }
-  const fulfillmentKind = String(snap.fulfillmentKind || "").trim();
-  if (fulfillmentKind === "return" || fulfillmentKind === "exchange") {
-    const direction = String(snap.settlementDirection || "").trim();
-    const absRaw = Number(snap.settlementAbs ?? Math.abs(Number(String(snap.waybillTotal || snap.total || "").replace(/,/g, "")) || 0));
-    const abs = Number.isFinite(absRaw) ? Math.max(0, absRaw) : 0;
-    const cod = direction === "collect" ? abs : 0;
-    const noteParts = [
-      String(snap.note || `طلب #${input.wooOrderNumber}`).trim(),
-      direction === "refund" && abs > 0 ? `رد فرق ${abs} ج.م للعميل` : null,
-      direction === "collect" && abs > 0 ? `تحصيل ${abs} ج.م` : null,
-      landmarks || null,
-    ].filter(Boolean);
+  const fulfillment = fulfillmentWaybillDraft(snap);
+  if (fulfillment) {
+    const noteParts = [fulfillment.description, landmarks || null].filter(Boolean);
     return {
       ok: true,
       party: {
@@ -94,9 +86,12 @@ function partyFromAnswers(input: {
         area,
         address,
         landmarks,
-        cod,
+        cod: fulfillment.cod,
         reference: String(input.wooOrderId),
         notes: noteParts.join(" — "),
+        deliveryKind: fulfillment.deliveryKind,
+        description: fulfillment.description,
+        itemsCount: fulfillment.itemsCount,
       },
     };
   }
