@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { techNoteForConfirmation } from "@/lib/cs/bosta-return-lifecycle";
 import { getCsConfirmation, parseOrderTotalDelta, resolveCsViewer, serializeDepositAmount } from "@/lib/cs/confirmations";
+import { getCsCarrierByCode } from "@/lib/cs/sokany-waybill";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsCallSheet } from "./call-sheet";
@@ -52,6 +53,8 @@ export default async function CsOrderPage({ params }: Props) {
   };
   const bostaFee = row.bostaShippingFee == null ? null : Number(row.bostaShippingFee);
   const maintenanceTechNote = await techNoteForConfirmation(confirmation.id);
+  const carrier = await getCsCarrierByCode(String(confirmation.shippingCompany || ""));
+  const sokanyWaybill = carrier?.waybillProvider === "sokany";
 
   return (
     <CsCallSheet
@@ -60,6 +63,7 @@ export default async function CsOrderPage({ params }: Props) {
       snapshot={snapshot}
       maintenanceTechNote={maintenanceTechNote}
       shippingCompany={confirmation.shippingCompany}
+      sokanyWaybill={sokanyWaybill}
       trackingNumber={row.trackingNumber || snapshot?.trackingNumber || null}
       bostaStatus={row.bostaStatus || null}
       bostaShippingFee={Number.isFinite(bostaFee) ? bostaFee : null}

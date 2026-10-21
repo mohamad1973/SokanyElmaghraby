@@ -2,6 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/security";
+import { ensureSokanyAwbTables } from "@/lib/cs/sokany-waybill";
 
 export type CsRole =
   | "agent"
@@ -204,6 +205,7 @@ async function runEnsureCsTables() {
   );
   if (ready.length) {
     await ensureCsSpeedIndexes(prisma);
+    await ensureSokanyAwbTables();
     return;
   }
 
@@ -623,6 +625,7 @@ async function runEnsureCsTables() {
   }
 
   await ensureCsSpeedIndexes(prisma);
+  await ensureSokanyAwbTables();
 }
 
 /** Idempotent schema migration for CS tables — safe to call before every CS query. */

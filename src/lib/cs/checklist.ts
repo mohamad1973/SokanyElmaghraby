@@ -160,7 +160,7 @@ export function validateChecklistAnswers(
       .trim()
       .toLowerCase() || null;
 
-  if (shipping === "bosta" || shipping === "eid" || shipping === "momen") {
+  if (shipping && shipping !== "sayed_temima") {
     // Bosta / Eid / Moamen: shipping company alone is enough to finalize (no full card checklist).
     if (opts?.shippingCompany === shipping) {
       return { ok: true, missing: [] as string[] };

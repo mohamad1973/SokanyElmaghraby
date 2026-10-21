@@ -978,6 +978,11 @@ function CsHeader() {
               المستخدمون
             </Link>
           ) : null}
+          {isAdmin ? (
+            <Link href="/cs/carriers" className={navClass(pathname.startsWith("/cs/carriers"))}>
+              شركات الشحن
+            </Link>
+          ) : null}
           {isCourierSupervisor ? (
             <Link href="/cs/temima-scan" className={navClass(pathname.startsWith("/cs/temima-scan"))}>
               استلام
@@ -1084,6 +1089,14 @@ export function CsShell({ children }: { children: ReactNode }) {
         {children}
         <CsPwaInstallPrompt />
       </div>
+    );
+  }
+
+  if (pathname.startsWith("/cs/print/")) {
+    return (
+      <SessionProvider>
+        <div className="bg-white text-black">{children}</div>
+      </SessionProvider>
     );
   }
 

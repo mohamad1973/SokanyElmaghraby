@@ -1,0 +1,442 @@
+import "server-only";
+
+import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
+import { fulfillmentWaybillDraft } from "@/lib/cs/fulfillment-waybill";
+import { isDisplayablePlaceName } from "@/lib/cs/resolve-location";
+import type { SokanyCarrier, SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
+import { getPrismaClient } from "@/lib/db";
+
+export type { SokanyCarrier, SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
+
+const DEFAULT_RETURN_ADDRESS = "الشرقية | العاشر من رمضان (المنطقة الصناعية)";
+const BUILTIN_BOSTA_CODES = new Set(["bosta", "sayed_temima", "eid", "momen"]);
+
+const PREFIX: Record<string, string> = {
+  sayed_temima: "TM",
+  eid: "EID",
+  momen: "MN",
+};
+
+function preferPlace(snap: unknown, answer: string) {
+  const site = String(snap || "").trim();
+  if (isDisplayablePlaceName(site)) return site;
+  const extra = String(answer || "").trim();
+  if (isDisplayablePlaceName(extra)) return extra;
+  return site || extra;
+}
+
+function textOf(answers: Array<{ itemKey: string; value?: string | null }>, key: string) {
+  return String(answers.find((row) => row.itemKey === key)?.value || "").trim();
+}
+
+function moneyOf(value: unknown) {
+  const parsed = Number(String(value ?? "").replace(/,/g, "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : 0;
+}
+
+export function trackingPrefixForCarrier(code: string) {
+  const known = PREFIX[code];
+  if (known) return known;
+  const cleaned = code.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  return cleaned || "SK";
+}
+
+export function buildSokanyTracking(carrierCode: string, wooOrderNumber: string, kind?: string) {
+  const order = String(wooOrderNumber || "").replace(/^#/, "").replace(/\s+/g, "").slice(0, 32);
+  const base = `SK-${trackingPrefixForCarrier(carrierCode)}-${order || "0"}`;
+  if (kind === "return") return `${base}-R1`;
+  if (kind === "exchange") return `${base}-X1`;
+  return base;
+}
+
+export async function ensureSokanyAwbTables() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsCarrier\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`code\` VARCHAR(32) NOT NULL,
+      \`nameAr\` VARCHAR(191) NOT NULL,
+      \`waybillProvider\` VARCHAR(16) NOT NULL,
+      \`printHubLabel\` VARCHAR(191) NOT NULL,
+      \`returnAddress\` TEXT NOT NULL,
+      \`senderName\` VARCHAR(191) NOT NULL DEFAULT 'Sokany Elmaghraby',
+      \`allowOpenPackage\` BOOLEAN NOT NULL DEFAULT true,
+      \`defaultReturnFee\` DECIMAL(12,2) NOT NULL DEFAULT 75,
+      \`isActive\` BOOLEAN NOT NULL DEFAULT true,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsCarrier_code_key\`(\`code\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`CsSokanyWaybill\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`tracking\` VARCHAR(64) NOT NULL,
+      \`confirmationId\` INT NOT NULL,
+      \`carrierCode\` VARCHAR(32) NOT NULL,
+      \`kind\` VARCHAR(16) NOT NULL,
+      \`cod\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`returnFee\` DECIMAL(12,2) NOT NULL DEFAULT 75,
+      \`description\` TEXT NOT NULL,
+      \`itemsCount\` INT NOT NULL DEFAULT 1,
+      \`snapshot\` JSON NOT NULL,
+      \`invoiceNumber\` VARCHAR(64) NULL,
+      \`barcodePayload\` VARCHAR(64) NOT NULL,
+      \`status\` VARCHAR(24) NOT NULL DEFAULT 'created',
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`CsSokanyWaybill_tracking_key\`(\`tracking\`),
+      INDEX \`CsSokanyWaybill_confirmationId_idx\`(\`confirmationId\`),
+      INDEX \`CsSokanyWaybill_carrierCode_idx\`(\`carrierCode\`),
+      INDEX \`CsSokanyWaybill_status_idx\`(\`status\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  `);
+  const seeds: Array<[string, string, string, string]> = [
+    ["bosta", "بوسطة", "bosta", "بوسطة"],
+    ["sayed_temima", "سيد تميمة", "bosta", "مندوب سيد تميمة"],
+    ["eid", "عيد", "bosta", "مندوب عيد"],
+    ["momen", "مؤمن", "bosta", "مندوب مؤمن"],
+  ];
+  for (const [code, nameAr, provider, hub] of seeds) {
+    await prisma.$executeRawUnsafe(
+      `INSERT IGNORE INTO \`CsCarrier\`
+        (\`code\`, \`nameAr\`, \`waybillProvider\`, \`printHubLabel\`, \`returnAddress\`, \`senderName\`, \`allowOpenPackage\`, \`defaultReturnFee\`, \`isActive\`, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, ?, 'Sokany Elmaghraby', 1, 75, 1, NOW(3), NOW(3))`,
+      code,
+      nameAr,
+      provider,
+      hub,
+      DEFAULT_RETURN_ADDRESS,
+    );
+  }
+}
+
+function mapCarrier(row: {
+  id: number | bigint;
+  code: string;
+  nameAr: string;
+  waybillProvider: string;
+  printHubLabel: string;
+  returnAddress: string;
+  senderName: string;
+  allowOpenPackage: number | boolean;
+  defaultReturnFee: unknown;
+  isActive: number | boolean;
+}): SokanyCarrier {
+  return {
+    id: Number(row.id),
+    code: row.code,
+    nameAr: row.nameAr,
+    waybillProvider: row.waybillProvider === "sokany" ? "sokany" : "bosta",
+    printHubLabel: row.printHubLabel,
+    returnAddress: row.returnAddress,
+    senderName: row.senderName || "Sokany Elmaghraby",
+    allowOpenPackage: Boolean(row.allowOpenPackage),
+    defaultReturnFee: moneyOf(row.defaultReturnFee) || 75,
+    isActive: Boolean(row.isActive),
+  };
+}
+
+export async function listCsCarriers(activeOnly = false) {
+  const prisma = getPrismaClient();
+  if (!prisma) return [] as SokanyCarrier[];
+  await ensureSokanyAwbTables();
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      id: number | bigint;
+      code: string;
+      nameAr: string;
+      waybillProvider: string;
+      printHubLabel: string;
+      returnAddress: string;
+      senderName: string;
+      allowOpenPackage: number | boolean;
+      defaultReturnFee: unknown;
+      isActive: number | boolean;
+    }>
+  >(
+    activeOnly
+      ? "SELECT * FROM CsCarrier WHERE isActive = 1 ORDER BY id ASC"
+      : "SELECT * FROM CsCarrier ORDER BY id ASC",
+  );
+  return rows.map(mapCarrier);
+}
+
+export async function getCsCarrierByCode(code: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return null;
+  await ensureSokanyAwbTables();
+  const trimmed = String(code || "").trim();
+  if (!trimmed) return null;
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      id: number | bigint;
+      code: string;
+      nameAr: string;
+      waybillProvider: string;
+      printHubLabel: string;
+      returnAddress: string;
+      senderName: string;
+      allowOpenPackage: number | boolean;
+      defaultReturnFee: unknown;
+      isActive: number | boolean;
+    }>
+  >("SELECT * FROM CsCarrier WHERE code = ? LIMIT 1", trimmed);
+  return rows[0] ? mapCarrier(rows[0]) : null;
+}
+
+export async function resolveAssignableCarrierCode(value: unknown) {
+  const code = String(value || "").trim();
+  if (!code) return null;
+  if (BUILTIN_BOSTA_CODES.has(code)) return code;
+  const carrier = await getCsCarrierByCode(code);
+  return carrier?.isActive ? carrier.code : null;
+}
+
+export async function createCsCarrier(input: {
+  code: string;
+  nameAr: string;
+  printHubLabel?: string;
+  returnAddress?: string;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureSokanyAwbTables();
+  const code = String(input.code || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "");
+  const nameAr = String(input.nameAr || "").trim();
+  if (!/^[a-z][a-z0-9_]{1,15}$/.test(code)) {
+    return { ok: false as const, message: "كود الشركة حروف إنجليزي صغيرة وأرقام، يبدأ بحرف." };
+  }
+  if (BUILTIN_BOSTA_CODES.has(code)) {
+    return { ok: false as const, message: "تميمة وعيد ومؤمن وبوسطة موجودين — أضيفي شركة جديدة." };
+  }
+  if (nameAr.length < 2) return { ok: false as const, message: "اكتبي اسم الشركة بالعربي." };
+  const hub = String(input.printHubLabel || `مندوب ${nameAr}`).trim();
+  const returnAddress = String(input.returnAddress || DEFAULT_RETURN_ADDRESS).trim();
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO \`CsCarrier\`
+        (\`code\`, \`nameAr\`, \`waybillProvider\`, \`printHubLabel\`, \`returnAddress\`, \`senderName\`, \`allowOpenPackage\`, \`defaultReturnFee\`, \`isActive\`, \`createdAt\`, \`updatedAt\`)
+       VALUES (?, ?, 'sokany', ?, ?, 'Sokany Elmaghraby', 1, 75, 1, NOW(3), NOW(3))`,
+      code,
+      nameAr,
+      hub,
+      returnAddress,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Duplicate|1062/i.test(message)) return { ok: false as const, message: "الكود مستخدم قبل كده." };
+    return { ok: false as const, message: "تعذر حفظ الشركة." };
+  }
+  const created = await getCsCarrierByCode(code);
+  return created
+    ? { ok: true as const, carrier: created }
+    : { ok: false as const, message: "تعذر قراءة الشركة بعد الحفظ." };
+}
+
+function kindLabelOf(kind: string) {
+  if (kind === "return") return "استرجاع";
+  if (kind === "exchange") return "استبدال";
+  return "توصيل";
+}
+
+function itemDescription(snapshot: Record<string, unknown>) {
+  const draft = fulfillmentWaybillDraft(snapshot);
+  if (draft?.description) return { text: draft.description, count: draft.itemsCount, kind: draft.deliveryKind, cod: draft.cod };
+  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+  const names: string[] = [];
+  let count = 0;
+  for (const raw of items) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as { name?: unknown; quantity?: unknown };
+    const name = String(item.name || "").trim();
+    if (!name) continue;
+    const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+    count += qty;
+    names.push(qty > 1 ? `${name} ×${qty}` : name);
+  }
+  return { text: names.join(" — ") || "شحنة سوكانى", count: Math.max(1, count), kind: "delivery" as const, cod: moneyOf(snapshot.waybillTotal ?? snapshot.total) };
+}
+
+export async function ensureCsSokanyWaybill(confirmationId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureSokanyAwbTables();
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    include: { answers: true },
+  });
+  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+  if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
+    return { ok: false as const, message: "اطبعي بوليصة سوكانى بعد حفظ الأوردر." };
+  }
+  const carrier = await getCsCarrierByCode(String(row.shippingCompany || ""));
+  if (!carrier || carrier.waybillProvider !== "sokany") {
+    return { ok: false as const, message: "هذه الشركة تطبع من بوسطة حتى اعتماد بوليصة سوكانى." };
+  }
+
+  const existing = await prisma.$queryRawUnsafe<
+    Array<{
+      tracking: string;
+      carrierCode: string;
+      kind: string;
+      cod: unknown;
+      returnFee: unknown;
+      description: string;
+      itemsCount: number;
+      snapshot: unknown;
+      invoiceNumber: string | null;
+      barcodePayload: string;
+      createdAt: Date;
+    }>
+  >("SELECT * FROM CsSokanyWaybill WHERE confirmationId = ? ORDER BY id DESC LIMIT 1", confirmationId);
+  const invoiceNumber = String(row.invoiceNumber || "").trim();
+  if (existing[0]) {
+    if (invoiceNumber && invoiceNumber !== String(existing[0].invoiceNumber || "").trim()) {
+      await prisma.$executeRawUnsafe(
+        "UPDATE CsSokanyWaybill SET invoiceNumber = ?, updatedAt = NOW(3) WHERE tracking = ?",
+        invoiceNumber,
+        existing[0].tracking,
+      );
+      existing[0].invoiceNumber = invoiceNumber;
+    }
+    return { ok: true as const, waybill: existing[0], carrier };
+  }
+
+  const snap = (row.customerSnapshot || {}) as Record<string, unknown>;
+  const answers = row.answers || [];
+  const built = itemDescription(snap);
+  const tracking = buildSokanyTracking(carrier.code, row.wooOrderNumber, built.kind);
+  const printSnap = {
+    customerName: textOf(answers, "customer_name") || String(snap.customerName || "").trim(),
+    phone: textOf(answers, "primary_phone") || String(snap.phone || "").trim(),
+    address: textOf(answers, "address_complete") || String(snap.address || "").trim(),
+    governorate: preferPlace(snap.governorate, textOf(answers, "governorate_confirm")),
+    area: preferPlace(snap.area, textOf(answers, "area_confirm")),
+    landmarks: textOf(answers, "address_landmarks") || String(snap.note || "").trim(),
+  };
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO CsSokanyWaybill
+        (tracking, confirmationId, carrierCode, kind, cod, returnFee, description, itemsCount, snapshot, invoiceNumber, barcodePayload, status, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, 'created', NOW(3), NOW(3))`,
+      tracking,
+      confirmationId,
+      carrier.code,
+      built.kind,
+      built.cod,
+      carrier.defaultReturnFee,
+      built.text.slice(0, 500),
+      built.count,
+      JSON.stringify(printSnap),
+      invoiceNumber || null,
+      tracking,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate|1062/i.test(message)) {
+      return { ok: false as const, message: "تعذر إنشاء بوليصة سوكانى." };
+    }
+  }
+  const created = await prisma.$queryRawUnsafe<typeof existing>(
+    "SELECT * FROM CsSokanyWaybill WHERE confirmationId = ? ORDER BY id DESC LIMIT 1",
+    confirmationId,
+  );
+  if (!created[0]) return { ok: false as const, message: "تعذر قراءة البوليصة." };
+  return { ok: true as const, waybill: created[0], carrier };
+}
+
+export function toSokanyPrintPayload(
+  waybill: {
+    tracking: string;
+    kind: string;
+    cod: unknown;
+    returnFee: unknown;
+    description: string;
+    itemsCount: number;
+    snapshot: unknown;
+    invoiceNumber: string | null;
+    barcodePayload: string;
+    createdAt: Date | string;
+  },
+  carrier: SokanyCarrier,
+  wooOrderNumber: string,
+): SokanyPrintPayload {
+  const snap = (typeof waybill.snapshot === "string" ? JSON.parse(waybill.snapshot) : waybill.snapshot || {}) as Record<
+    string,
+    unknown
+  >;
+  const gov = String(snap.governorate || "").trim();
+  const area = String(snap.area || "").trim();
+  return {
+    tracking: waybill.tracking,
+    barcodeSvg: code128Svg(String(waybill.barcodePayload || waybill.tracking)),
+    kindLabel: kindLabelOf(waybill.kind),
+    hubLabel: carrier.printHubLabel,
+    senderName: carrier.senderName || "Sokany Elmaghraby",
+    senderNameAr: "التاجر: سوكانى المغربي",
+    receiverName: String(snap.customerName || "").trim() || "—",
+    receiverPhone: String(snap.phone || "").trim() || "—",
+    zone: [gov, area].filter(Boolean).join(" - ") || "—",
+    address: String(snap.address || "").trim() || "—",
+    landmarks: String(snap.landmarks || "").trim() || "—",
+    openPackage: carrier.allowOpenPackage,
+    itemsCount: Math.max(1, Number(waybill.itemsCount) || 1),
+    description: String(waybill.description || "").trim() || "—",
+    notes: String(snap.landmarks || "").trim() || "—",
+    invoiceNumber: String(waybill.invoiceNumber || "").trim() || "—",
+    orderReference: `WooCommerce_${String(wooOrderNumber || "").replace(/^#/, "")}`,
+    returnAddress: carrier.returnAddress || DEFAULT_RETURN_ADDRESS,
+    cod: moneyOf(waybill.cod),
+    returnFee: moneyOf(waybill.returnFee) || 75,
+    createdAt: waybill.createdAt instanceof Date ? waybill.createdAt.toISOString() : String(waybill.createdAt),
+  };
+}
+
+/** Compact Code 128B SVG for thermal 10×15 cm stickers. */
+export function code128Svg(text: string) {
+  const payload = String(text || "").slice(0, 32);
+  const patterns = CODE128_PATTERNS;
+  const codes: number[] = [104];
+  for (const ch of payload) {
+    const code = ch.charCodeAt(0) - 32;
+    codes.push(code >= 0 && code <= 94 ? code : 0);
+  }
+  let checksum = 104;
+  codes.slice(1).forEach((code, index) => {
+    checksum += code * (index + 1);
+  });
+  codes.push(checksum % 103);
+  codes.push(106);
+  let bars = "";
+  let x = 0;
+  for (const code of codes) {
+    const pattern = patterns[code] || patterns[0];
+    for (let i = 0; i < pattern.length; i += 1) {
+      const width = Number(pattern[i]);
+      if (i % 2 === 0) bars += `<rect x="${x}" y="0" width="${width}" height="40" fill="#111"/>`;
+      x += width;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} 40" preserveAspectRatio="none" role="img" aria-label="${payload}">${bars}</svg>`;
+}
+
+const CODE128_PATTERNS = [
+  "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213",
+  "221312","231212","112232","122132","122231","113222","123122","123221","223211","221132",
+  "221231","213212","223112","312131","311222","321122","321221","312212","322112","322211",
+  "212123","212321","232121","111323","131123","131321","112313","132113","132311","211313",
+  "231113","231311","112133","112331","132131","113123","113321","133121","313121","211331",
+  "231131","213113","213311","213131","311123","311321","331121","312113","312311","332111",
+  "314111","221411","431111","111224","111422","121124","121421","141122","141221","112214",
+  "112412","122114","122411","142112","142211","241211","221114","413111","241112","134111",
+  "111242","121142","121241","114212","124112","124211","411212","421112","421211","212141",
+  "214121","412121","111143","111341","131141","114113","114311","411113","411311","113141",
+  "114131","311141","411131","211412","211214","211232","2331112",
+];

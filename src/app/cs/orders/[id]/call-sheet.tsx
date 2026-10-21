@@ -70,6 +70,7 @@ type Props = {
     customerFollowUp: boolean;
   };
   shippingCompany?: string | null;
+  sokanyWaybill?: boolean;
   trackingNumber?: string | null;
   bostaStatus?: string | null;
   bostaShippingFee?: number | null;
@@ -334,6 +335,7 @@ export function CsCallSheet({
   initialAnswers,
   followUp,
   shippingCompany,
+  sokanyWaybill = false,
   trackingNumber: initialTracking,
   bostaStatus: initialBostaStatus,
   bostaShippingFee: initialBostaFee,
@@ -360,13 +362,7 @@ export function CsCallSheet({
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
-  const lockedShipping =
-    shippingCompany === "bosta" ||
-    shippingCompany === "sayed_temima" ||
-    shippingCompany === "eid" ||
-    shippingCompany === "momen"
-      ? shippingCompany
-      : null;
+  const lockedShipping = String(shippingCompany || "").trim() || null;
 
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [answers, setAnswers] = useState(() => {
@@ -1327,6 +1323,11 @@ export function CsCallSheet({
   }
 
   async function printWaybill() {
+    if (sokanyWaybill) {
+      window.open(`/cs/print/sokany-awb/${confirmationId}`, "sokany-awb");
+      setWaybillPrinted(true);
+      return;
+    }
     await printWaybillPdf(trackingNumber);
   }
 
@@ -2079,7 +2080,7 @@ export function CsCallSheet({
           <span>{snapshot?.paymentMethod}</span>
           {lockedShipping ? (
             <span className="rounded bg-white/15 px-2 py-0.5">
-              شحن: {SHIPPING_COMPANY_LABEL[lockedShipping]}
+              شحن: {SHIPPING_COMPANY_LABEL[lockedShipping] || lockedShipping}
             </span>
           ) : (
             <span className="rounded bg-black/40 px-2 py-0.5 text-[#FCA311]">شحن: لم تُحدد المشرفة بعد</span>
@@ -2212,7 +2213,7 @@ export function CsCallSheet({
         >
           <p className="text-xs font-extrabold text-[#14213D]">شركة الشحن</p>
           <p className="mt-1 text-[11px] font-extrabold text-[#14213D]">
-            {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] : "لم تُحدد بعد"}
+            {lockedShipping ? SHIPPING_COMPANY_LABEL[lockedShipping] || lockedShipping : "لم تُحدد بعد"}
           </p>
         </div>
 

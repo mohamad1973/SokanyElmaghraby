@@ -777,6 +777,7 @@ export function CsQueueClient({
   const [sheetEditBusy, setSheetEditBusy] = useState(false);
   const [cutoffBusy, setCutoffBusy] = useState(false);
   const [savingShipId, setSavingShipId] = useState<number | null>(null);
+  const [extraCarriers, setExtraCarriers] = useState<Array<{ code: string; nameAr: string }>>([]);
   const [savingHandId, setSavingHandId] = useState<number | null>(null);
   const [markingId, setMarkingId] = useState<number | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
@@ -1037,7 +1038,19 @@ export function CsQueueClient({
     void markSupervisorResult(id, action);
   }
 
-  async function setShipping(id: number, shippingCompany: "bosta" | "sayed_temima" | "eid" | "momen") {
+  useEffect(() => {
+    void fetch("/api/cs/carriers")
+      .then((res) => res.json())
+      .then((data: { carriers?: Array<{ code: string; nameAr: string; waybillProvider?: string }> }) => {
+        const extras = (data.carriers || []).filter(
+          (row) => row.waybillProvider === "sokany" && !["bosta", "sayed_temima", "eid", "momen"].includes(row.code),
+        );
+        setExtraCarriers(extras.map((row) => ({ code: row.code, nameAr: row.nameAr })));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function setShipping(id: number, shippingCompany: string) {
     if (savingShipId) return;
     setSavingShipId(id);
     setMessage("");
@@ -1703,6 +1716,11 @@ export function CsQueueClient({
             <option value="sayed_temima">سيد تميمة</option>
             <option value="eid">عيد</option>
             <option value="momen">مؤمن</option>
+            {extraCarriers.map((carrier) => (
+              <option key={carrier.code} value={carrier.code}>
+                {carrier.nameAr}
+              </option>
+            ))}
           </select>
           )}
           {isCourierSupervisor || !temimaDateMode(draft) ? null : (
@@ -1953,13 +1971,7 @@ export function CsQueueClient({
             const isAwaiting = paymentState === "awaiting_payment";
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
-            const ship =
-              item.shippingCompany === "sayed_temima" ||
-              item.shippingCompany === "eid" ||
-              item.shippingCompany === "momen" ||
-              item.shippingCompany === "bosta"
-                ? item.shippingCompany
-                : "bosta";
+            const ship = item.shippingCompany || "bosta";
             const dup = dupMeta.get(item.id);
             const returnedPostponed =
               isCourierSupervisor && !item.courierAgentId && item.courierOutcome === "postponed";
@@ -2230,6 +2242,22 @@ export function CsQueueClient({
                           مؤمن
                         </label>
                       </div>
+                      {extraCarriers.length ? (
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          {extraCarriers.map((carrier) => (
+                            <label key={carrier.code} className="flex items-center gap-1 text-[10px] font-bold text-[#14213D]">
+                              <input
+                                type="checkbox"
+                                className="size-3.5 accent-[#FCA311]"
+                                checked={ship === carrier.code}
+                                disabled={savingShipId === item.id}
+                                onChange={() => void setShipping(item.id, carrier.code)}
+                              />
+                              {carrier.nameAr}
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
                       {savingShipId === item.id ? (
                         <span className="text-[10px] font-extrabold text-[#14213D]">جاري التحميل</span>
                       ) : null}

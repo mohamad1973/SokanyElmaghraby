@@ -35,6 +35,7 @@ import {
   monaCourierBucketFromName,
   resolveMonaCourierIdForShipping,
 } from "@/lib/cs/mona-courier";
+import { resolveAssignableCarrierCode } from "@/lib/cs/sokany-waybill";
 
 export type CsQueueSnapshot = {
   customerName?: string;
@@ -690,8 +691,16 @@ export async function listCsQueuePage(opts: {
   }
   if (query) {
     const pattern = queueLikePattern(query);
-    where.push("(wooOrderNumber LIKE ? OR CAST(customerSnapshot AS CHAR) LIKE ?)");
-    params.push(pattern, pattern);
+    where.push(`(
+      wooOrderNumber LIKE ?
+      OR trackingNumber LIKE ?
+      OR CAST(customerSnapshot AS CHAR) LIKE ?
+      OR EXISTS (
+        SELECT 1 FROM CsSokanyWaybill w
+        WHERE w.confirmationId = CsOrderConfirmation.id AND w.tracking LIKE ?
+      )
+    )`);
+    params.push(pattern, pattern, pattern, pattern);
   }
   if (status === "DISTRIBUTED") {
     where.push("assignedAgentId IS NOT NULL");
@@ -776,6 +785,9 @@ export async function listCsQueuePage(opts: {
       where.push("shippingCompany = ?");
       params.push(opts.shipping);
     }
+  } else if (opts.shipping && opts.shipping !== "all") {
+    where.push("shippingCompany = ?");
+    params.push(opts.shipping);
   }
   if (opts.agentFilterId && opts.agentFilterId > 0) {
     where.push("assignedAgentId = ?");
@@ -904,8 +916,8 @@ export function serializeCsQueueItem(row: {
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;
   const monaBucket = monaCourierBucketFromName(String(row.monaCourierName || ""));
   const shippingCompany =
-    (isCsShippingCompany(row.shippingCompany) ? row.shippingCompany : null) ||
-    (isCsShippingCompany(shippingFromAnswer) ? shippingFromAnswer : null) ||
+    String(row.shippingCompany || "").trim() ||
+    (isCsShippingCompany(shippingFromAnswer) ? shippingFromAnswer : String(shippingFromAnswer || "").trim()) ||
     (monaBucket === "eid" || monaBucket === "momen" ? monaBucket : null) ||
     "bosta";
   const trackingNumber =
@@ -1726,7 +1738,7 @@ export async function saveCsConfirmation(input: {
 
   await persistChecklistAnswers(input.id, input.answers);
 
-  const shippingFromRow = isCsShippingCompany(row.shippingCompany) ? row.shippingCompany : null;
+  const shippingFromRow = String(row.shippingCompany || "").trim() || null;
   const shippingCompany = shippingFromRow || shippingCompanyFromAnswers(input.answers);
   const snapshotDelta =
     input.orderTotalDelta !== undefined
@@ -1956,7 +1968,7 @@ export async function setCsHandedToCarrier(input: {
 /** Desk (Eid/Momen/Temima) assignment is stored as intent until the call is CONFIRMED. */
 async function syncDeskCourierAssignment(input: {
   id: number;
-  company: CsShippingCompany | null;
+  company: string | null;
   status: string;
   trackingNumber?: string | null;
   wooOrderId?: number;
@@ -2005,7 +2017,7 @@ async function syncDeskCourierAssignment(input: {
 
 export async function setCsShippingCompany(input: {
   id: number;
-  shippingCompany: CsShippingCompany | null;
+  shippingCompany: string | null;
   agentId: number;
 }) {
   const prisma = getPrismaClient();
@@ -2020,7 +2032,7 @@ export async function setCsShippingCompany(input: {
   const row = await prisma.csOrderConfirmation.findUnique({ where: { id: input.id } });
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
-  const company = input.shippingCompany && isCsShippingCompany(input.shippingCompany) ? input.shippingCompany : null;
+  const company = await resolveAssignableCarrierCode(input.shippingCompany);
 
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
