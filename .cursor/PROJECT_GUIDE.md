@@ -458,6 +458,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| اسم التاجر على بوليصة سوكانى | التاجر يظهر بالإنجليزي فقط (Sokany Elmaghraby) من غير الاسم العربي | `sokany-awb/sticker.tsx`, `sokany-waybill.ts` |
 | حفظ فحص مرتجع الصيانة | زر «تم» يحفظ INSERT/UPDATE بسيط ويظهر سبب الخطأ بدل رسالة السيرفر العامة | `bosta-return-review.ts`, `maintenance/returns/route.ts`, `maintenance-client.tsx` |
 | محافظة ووصف الشحنة | بنى/بني سويف تتطابق مع بوسطة؛ البوليصة تأخذ محافظة الكارت؛ وصف الشحنة يعرض الأصناف؛ تحديث البوليصة القديمة قبل الطباعة | `bosta-zones.ts`, `bosta-client.ts`, `bosta-waybill.ts`, `sokany-waybill.ts` |
 | تنسيق بوليصة سوكانى | إطار كامل 10×15 مثل بوسطة، التراك تحت الباركود، لوجو سوكانى، خطوط داخل الفريم | `cs/print/sokany-awb`, `public/cs/sokany-awb-logo.png` |

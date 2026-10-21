@@ -25,7 +25,6 @@ export type SokanyPrintPayload = {
   kindLabel: string;
   hubLabel: string;
   senderName: string;
-  senderNameAr: string;
   receiverName: string;
   receiverPhone: string;
   zone: string;

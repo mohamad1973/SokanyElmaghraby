@@ -202,10 +202,7 @@ export function SokanyAwbSticker({
                 <div className="merchant">
                   <div>
                     <strong>التاجر:</strong>
-                    <div className="name" style={{ fontSize: "9pt" }}>
-                      {payload.senderNameAr.replace(/^التاجر:\s*/, "")}
-                    </div>
-                    <div>{payload.senderName}</div>
+                    <div className="name">{payload.senderName}</div>
                   </div>
                   <img src={LOGO_SRC} alt="" className="logo" style={{ width: "11mm", height: "11mm" }} />
                 </div>

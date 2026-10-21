@@ -429,7 +429,6 @@ export function toSokanyPrintPayload(
     kindLabel: kindLabelOf(waybill.kind),
     hubLabel: carrier.printHubLabel,
     senderName: carrier.senderName || "Sokany Elmaghraby",
-    senderNameAr: "التاجر: سوكانى المغربي",
     receiverName: String(snap.customerName || "").trim() || "—",
     receiverPhone: String(snap.phone || "").trim() || "—",
     zone: [gov, area].filter(Boolean).join(" - ") || "—",
