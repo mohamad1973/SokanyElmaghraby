@@ -443,8 +443,9 @@ export function code128Svg(text: string) {
   });
   codes.push(checksum % 103);
   codes.push(106);
+  const quiet = 12;
   let bars = "";
-  let x = 0;
+  let x = quiet;
   for (const code of codes) {
     const pattern = patterns[code] || patterns[0];
     for (let i = 0; i < pattern.length; i += 1) {
@@ -453,7 +454,8 @@ export function code128Svg(text: string) {
       x += width;
     }
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} 40" preserveAspectRatio="none" role="img" aria-label="${payload}">${bars}</svg>`;
+  x += quiet;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} 40" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${payload}">${bars}</svg>`;
 }
 
 const CODE128_PATTERNS = [
