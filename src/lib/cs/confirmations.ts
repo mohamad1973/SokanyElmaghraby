@@ -35,7 +35,12 @@ import {
   monaCourierBucketFromName,
   resolveMonaCourierIdForShipping,
 } from "@/lib/cs/mona-courier";
-import { resolveAssignableCarrierCode } from "@/lib/cs/sokany-waybill";
+import {
+  ensureCsSokanyWaybill,
+  ensureSokanyAwbTables,
+  resolveAssignableCarrierCode,
+} from "@/lib/cs/sokany-waybill";
+import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 
 export type CsQueueSnapshot = {
   customerName?: string;
@@ -55,6 +60,8 @@ export type CsQueueSnapshot = {
   datePaid?: string | null;
   wooStatus?: string;
   trackingNumber?: string | null;
+  parentWooOrderNumber?: string;
+  legacyRef?: string;
   items?: Array<{ name: string; quantity?: number; total?: string; sku?: string }>;
   freeShippingHint?: string;
   number?: string;
@@ -361,7 +368,7 @@ async function linkMissingBostaWaybills(
     where: {
       AND: [
         { OR: [{ trackingNumber: null }, { trackingNumber: "" }] },
-        { OR: [{ shippingCompany: "bosta" }, { shippingCompany: null }, { shippingCompany: "sayed_temima" }] },
+        { OR: [{ shippingCompany: "bosta" }, { shippingCompany: null }] },
       ],
     },
     orderBy: { createdAt: "desc" },
@@ -402,14 +409,13 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       customerSnapshot: snapshotFromOrder(order, tracking.get(order.id)),
     },
   });
-  if (!String(saved.trackingNumber || "").trim()) {
+  if (!String(saved.trackingNumber || "").trim() && saved.shippingCompany === "bosta") {
     await attachBostaWaybillByOrderReference({
       confirmationId: saved.id,
       wooOrderId: saved.wooOrderId,
       wooOrderNumber: saved.wooOrderNumber,
       snapshot: (saved.customerSnapshot as Record<string, unknown> | null) || null,
       knownTracking: order.bostaTrackingNumber || null,
-      onlyIfFound: saved.shippingCompany === "sayed_temima",
     });
   }
 }
@@ -593,12 +599,18 @@ function sheetQueueItemMatches(
     const snap = item.customerSnapshot;
     const hay = [
       item.wooOrderNumber,
+      item.trackingNumber,
+      item.parentWooOrderNumber,
+      item.fulfillmentKind === "exchange" ? "استبدال" : item.fulfillmentKind === "return" ? "استرجاع" : "",
       snap?.customerName,
       snap?.phone,
       snap?.address,
       snap?.addressFull,
       snap?.area,
       snap?.governorate,
+      snap?.parentWooOrderNumber,
+      snap?.trackingNumber,
+      snap?.legacyRef,
       ...(snap?.items || []).map((line) => line.name),
     ]
       .filter(Boolean)
@@ -652,6 +664,7 @@ export async function listCsQueuePage(opts: {
   const prisma = getPrismaClient();
   if (!prisma) return { items: [], total: 0, page: 1, pageSize: CS_QUEUE_PAGE_SIZE, hasMore: false };
   await ensureCsTables();
+  await ensureSokanyAwbTables();
 
   const seeAll = Boolean(opts.isSupervisor || opts.seeAll);
   const pageSize = opts.all ? 5000 : Math.min(CS_QUEUE_PAGE_SIZE, Math.max(1, opts.limit || CS_QUEUE_PAGE_SIZE));
@@ -671,6 +684,7 @@ export async function listCsQueuePage(opts: {
   const fromBounds = isQueueYmd(dateFrom) ? cairoYmdBounds(dateFrom) : null;
   const toBounds = isQueueYmd(dateTo) ? cairoYmdBounds(dateTo) : null;
   const sheetMode =
+    !query &&
     status === "CONFIRMED" &&
     opts.shipping === "sayed_temima" &&
     isQueueYmd(dateFrom) &&
@@ -695,14 +709,19 @@ export async function listCsQueuePage(opts: {
       wooOrderNumber LIKE ?
       OR trackingNumber LIKE ?
       OR CAST(customerSnapshot AS CHAR) LIKE ?
+      OR fulfillmentKind LIKE ?
       OR EXISTS (
         SELECT 1 FROM CsSokanyWaybill w
         WHERE w.confirmationId = CsOrderConfirmation.id AND w.tracking LIKE ?
       )
+      OR EXISTS (
+        SELECT 1 FROM CsOrderConfirmation p
+        WHERE p.id = CsOrderConfirmation.parentConfirmationId AND p.wooOrderNumber LIKE ?
+      )
     )`);
-    params.push(pattern, pattern, pattern, pattern);
+    params.push(pattern, pattern, pattern, pattern, pattern, pattern);
   }
-  if (status === "DISTRIBUTED") {
+  if (!query && status === "DISTRIBUTED") {
     where.push("assignedAgentId IS NOT NULL");
     if (fromBounds && toBounds) {
       where.push(`EXISTS (
@@ -714,7 +733,7 @@ export async function listCsQueuePage(opts: {
       )`);
       params.push(fromBounds.start, toBounds.endExclusive);
     }
-  } else if (isQueueYmd(dateFrom) && isQueueYmd(dateTo)) {
+  } else if (!query && isQueueYmd(dateFrom) && isQueueYmd(dateTo)) {
     if (opts.dateBasis === "saved" && fromBounds && toBounds) {
       where.push("confirmedAt >= ? AND confirmedAt < ?");
       params.push(fromBounds.start, toBounds.endExclusive);
@@ -742,11 +761,11 @@ export async function listCsQueuePage(opts: {
       );
     }
   }
-  if (status !== "all" && status !== "DISTRIBUTED") {
+  if (!query && status !== "all" && status !== "DISTRIBUTED") {
     where.push("status = ?");
     params.push(status);
   }
-  if (status === "CONFIRMED" && opts.followUp && opts.followUp !== "all") {
+  if (!query && status === "CONFIRMED" && opts.followUp && opts.followUp !== "all") {
     if (opts.followUp === "handed") where.push("handedToCarrier = 1");
     else if (opts.followUp === "delivered") where.push("deliveredToCustomer = 1");
     else if (opts.followUp === "followup") where.push("customerFollowUp = 1");
@@ -1026,6 +1045,8 @@ export function serializeCsQueueItem(row: {
           paidOnlineHighlight,
           wooStatus: raw.wooStatus || raw.status,
           trackingNumber,
+          parentWooOrderNumber: parentWooOrderNumber || undefined,
+          legacyRef: String(raw.legacyRef || "").trim() || undefined,
           items: (raw.items || []).map((item) => ({
             name: item.name,
             quantity: item.quantity,
@@ -1282,6 +1303,17 @@ function bostaResultFields(state: Awaited<ReturnType<typeof syncCsBostaWaybill>>
     cod: state.cod,
     lastEvent: state.lastEvent,
   };
+}
+
+async function attachSokanyWaybillIfDesk(shippingCompany: string | null, confirmationId: number) {
+  if (!usesSokanyWaybillPrint(shippingCompany)) return {};
+  try {
+    const result = await ensureCsSokanyWaybill(confirmationId);
+    if (!result.ok) return {};
+    return { trackingNumber: result.waybill.tracking };
+  } catch {
+    return {};
+  }
 }
 
 async function pushBostaIfNeeded(input: {
@@ -1653,11 +1685,15 @@ export async function saveCsConfirmation(input: {
           allowCreate: true,
         });
     if (!post?.refundPaid) await applySheetChoice();
+    const sokany = post?.refundPaid
+      ? {}
+      : await attachSokanyWaybillIfDesk(row.shippingCompany, input.id);
     return {
       ok: true as const,
       status: post?.refundPaid ? CS_CONFIRMATION_STATUS.CANCELLED : CS_CONFIRMATION_STATUS.CONFIRMED,
       missing: [] as string[],
       ...bostaResultFields(bosta),
+      ...sokany,
     };
   }
 
@@ -1892,16 +1928,14 @@ export async function saveCsConfirmation(input: {
     id: input.id,
     company: shippingCompany,
     status: CS_CONFIRMATION_STATUS.CONFIRMED,
-    trackingNumber: nextTracking || row.trackingNumber,
-    wooOrderId: row.wooOrderId,
-    wooOrderNumber: row.wooOrderNumber,
-    snapshot: nextSnapshot,
   });
+  const sokany = await attachSokanyWaybillIfDesk(shippingCompany, input.id);
   return {
     ok: true as const,
     status: CS_CONFIRMATION_STATUS.CONFIRMED,
     missing: [] as string[],
     ...bostaResultFields(bosta),
+    ...sokany,
   };
 }
 
@@ -1970,10 +2004,6 @@ async function syncDeskCourierAssignment(input: {
   id: number;
   company: string | null;
   status: string;
-  trackingNumber?: string | null;
-  wooOrderId?: number;
-  wooOrderNumber?: string;
-  snapshot?: Record<string, unknown> | null;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return;
@@ -1996,22 +2026,6 @@ async function syncDeskCourierAssignment(input: {
       SET monaCourierId = NULL, monaAssignedAt = NULL
       WHERE id = ${input.id}
     `;
-  }
-
-  if (
-    confirmed &&
-    input.company === "sayed_temima" &&
-    !String(input.trackingNumber || "").trim() &&
-    input.wooOrderId &&
-    input.wooOrderNumber
-  ) {
-    await attachBostaWaybillByOrderReference({
-      confirmationId: input.id,
-      wooOrderId: input.wooOrderId,
-      wooOrderNumber: input.wooOrderNumber,
-      snapshot: input.snapshot || null,
-      onlyIfFound: true,
-    });
   }
 }
 
@@ -2046,11 +2060,10 @@ export async function setCsShippingCompany(input: {
     id: input.id,
     company,
     status: row.status,
-    trackingNumber: row.trackingNumber,
-    wooOrderId: row.wooOrderId,
-    wooOrderNumber: row.wooOrderNumber,
-    snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
   });
+  if (row.status === CS_CONFIRMATION_STATUS.CONFIRMED) {
+    await attachSokanyWaybillIfDesk(company, input.id);
+  }
 
   if (company) {
     await prisma.csChecklistAnswer.upsert({

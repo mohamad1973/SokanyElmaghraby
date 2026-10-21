@@ -771,7 +771,10 @@ export function CsCallSheet({
       return;
     }
 
-    if (data.trackingNumber) setTrackingNumber(data.trackingNumber);
+    if (data.trackingNumber) {
+      setTrackingNumber(data.trackingNumber);
+      setSnapshot((prev) => (prev ? { ...prev, trackingNumber: data.trackingNumber } : prev));
+    }
     if (data.bostaStatus) setBostaStatus(data.bostaStatus);
     if (data.bostaShippingFee !== undefined && data.bostaShippingFee !== null) setBostaFee(data.bostaShippingFee);
     if (data.bostaSyncedAt) setBostaSyncedAt(data.bostaSyncedAt);
@@ -901,29 +904,13 @@ export function CsCallSheet({
     return () => window.clearTimeout(timer);
   }, [fulfillmentHitTarget, fulfillmentOutboundQ, fulfillmentReturnQ]);
 
-  async function printFulfillmentWaybill(childId: number, tracking: string | null) {
-    if (!tracking) {
-      setMessage("مفيش رقم تتبع بوسطة للطباعة. حاول الحفظ مرة أخرى بعد إنشاء البوليصة.");
+  function printFulfillmentWaybill(childId: number) {
+    const popup = window.open(`/cs/print/sokany-awb/${childId}`, "sokany-awb");
+    if (!popup) {
+      setMessage("المتصفح منع نافذة الطباعة. اسمح بالنوافذ المنبثقة ثم أعيدي المحاولة.");
       return;
     }
-    const preview = window.open("", "bosta-awb");
-    setMessage("");
-    const res = await fetch(`/api/cs/confirmations/${childId}/bosta-awb`);
-    if (!res.ok) {
-      preview?.close();
-      const data = (await res.json().catch(() => null)) as { message?: string } | null;
-      setMessage(data?.message || "تعذر طباعة بوليصة الاستبدال/الاسترجاع.");
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    if (preview) {
-      preview.location.href = url;
-      preview.focus();
-    } else {
-      window.open(url, "_blank");
-    }
-    void fetch(`/api/cs/confirmations/${childId}/bosta-awb`, { method: "POST" });
+    setMessage("اتفتحت بوليصة سوكانى للطباعة 10×15.");
   }
 
   async function submitFulfillment() {
@@ -985,15 +972,15 @@ export function CsCallSheet({
       setMessage(
         data?.message ||
           (!data?.trackingNumber && data?.confirmationId
-            ? "تم حفظ الأوردر لكن تعذر إنشاء بوليصة بوسطة — لا يمكن الطباعة."
+            ? "تم حفظ الأوردر لكن تعذر إنشاء بوليصة سوكانى — لا يمكن الطباعة."
             : "تعذر إنشاء الاستبدال/الاسترجاع."),
       );
       return;
     }
     setMessage(
-      `تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber} وبوليصة بوسطة.`,
+      `تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber} وبوليصة سوكانى.`,
     );
-    void printFulfillmentWaybill(data.confirmationId, data.trackingNumber);
+    printFulfillmentWaybill(data.confirmationId);
   }
 
   function fulfillmentCard() {
@@ -1004,7 +991,7 @@ export function CsCallSheet({
       <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
         <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
         <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
-          لا يغيّر الأوردر الأصلي — ينشئ بوليصة مرتبطة فقط ويطبعها من بوسطة، وتظهر في حساب تميمة أو عيد أو مؤمن. رسوم الشحن عند تم بنجاح.
+          لا يغيّر الأوردر الأصلي — ينشئ بوليصة سوكانى مرتبطة ويطبعها، وتظهر في حساب تميمة أو عيد أو مؤمن. رسوم الشحن عند تم بنجاح.
         </p>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <div className="flex flex-wrap gap-1">
@@ -1083,8 +1070,8 @@ export function CsCallSheet({
           />
           <span className="mt-0.5 block text-[10px] font-bold text-[#14213D]/65">
             {fulfillmentKind === "return"
-              ? "الاسترجاع ينقص حساب المندوب لأنه يدفع للعميل. بوليصة بوسطة نوع استرجاع، والوصف فيه اسم المنتج الراجع، وقيمة المرتجع تظهر على البوليصة."
-              : "موجب = مبلغ التحصيل على بوليصة استبدال بوسطة · سالب = رد فرق ينقص الحساب · الوصف: منتج خارج + منتج راجع"}
+              ? "الاسترجاع ينقص حساب المندوب لأنه يدفع للعميل. بوليصة سوكانى نوع استرجاع، والوصف فيه اسم المنتج الراجع، وقيمة المرتجع تظهر على البوليصة."
+              : "موجب = مبلغ التحصيل على بوليصة استبدال سوكانى · سالب = رد فرق ينقص الحساب · الوصف: منتج خارج + منتج راجع"}
           </span>
         </label>
         {fulfillmentKind === "exchange" ? (
@@ -1205,7 +1192,7 @@ export function CsCallSheet({
                   type="button"
                   disabled={!child.trackingNumber}
                   className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white disabled:opacity-40"
-                  onClick={() => void printFulfillmentWaybill(child.id, child.trackingNumber)}
+                  onClick={() => printFulfillmentWaybill(child.id)}
                 >
                   {child.trackingNumber ? "طباعة" : "بدون بوليصة"}
                 </button>
@@ -1324,8 +1311,18 @@ export function CsCallSheet({
     frame.src = url;
   }
 
-  function openSokanyAwb() {
-    const popup = window.open(`/cs/print/sokany-awb/${confirmationId}`, "sokany-awb");
+  async function openSokanyAwb() {
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}/sokany-awb`);
+    const data = (await res.json().catch(() => ({}))) as { message?: string; tracking?: string; printUrl?: string };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر إنشاء بوليصة سوكانى.");
+      return;
+    }
+    if (data.tracking) {
+      setTrackingNumber(data.tracking);
+      setSnapshot((prev) => (prev ? { ...prev, trackingNumber: data.tracking } : prev));
+    }
+    const popup = window.open(data.printUrl || `/cs/print/sokany-awb/${confirmationId}`, "sokany-awb");
     if (!popup) {
       setMessage("المتصفح منع نافذة الطباعة. اسمح بالنوافذ المنبثقة ثم أعيدي المحاولة.");
       return;
@@ -1337,7 +1334,7 @@ export function CsCallSheet({
 
   async function printWaybill() {
     if (printSokanyAwb) {
-      openSokanyAwb();
+      await openSokanyAwb();
       return;
     }
     await printWaybillPdf(trackingNumber);
@@ -1346,7 +1343,7 @@ export function CsCallSheet({
   async function createWaybillAndPrint() {
     if (creatingWaybill || printingWaybill) return;
     if (printSokanyAwb) {
-      openSokanyAwb();
+      await openSokanyAwb();
       return;
     }
     setCreatingWaybill(true);
@@ -2101,8 +2098,8 @@ export function CsCallSheet({
           ) : (
             <span className="rounded bg-black/40 px-2 py-0.5 text-[#FCA311]">شحن: لم تُحدد المشرفة بعد</span>
           )}
-          {snapshot?.trackingNumber ? (
-            <span dir="ltr">تتبع: {snapshot.trackingNumber}</span>
+          {trackingNumber || snapshot?.trackingNumber ? (
+            <span dir="ltr">تتبع: {trackingNumber || snapshot?.trackingNumber}</span>
           ) : null}
         </div>
         <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-3">

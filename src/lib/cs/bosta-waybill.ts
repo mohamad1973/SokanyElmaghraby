@@ -15,6 +15,7 @@ import {
 } from "@/lib/shipping/bosta-client";
 import { fulfillmentWaybillDraft, orderItemsDescription } from "@/lib/cs/fulfillment-waybill";
 import { hydrateWaybillSnapshot } from "@/lib/cs/hydrate-waybill-snapshot";
+import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 import { effectivePaymentState } from "@/lib/cs/order-window";
 import {
   bostaStatusLocksEdits,
@@ -922,6 +923,9 @@ export async function ensureCsBostaWaybill(
     typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
       ? null
       : Number(typed.bostaShippingFee);
+  if (usesSokanyWaybillPrint(typed.shippingCompany)) {
+    return { ok: false, message: "هذه الشركة تطبع بوليصة سوكانى، مش بوسطة." };
+  }
   const preserveShippingCompany = Boolean(opts?.preserveShippingCompany);
 
   const existingTracking = String(typed.trackingNumber || "").trim();
@@ -974,6 +978,8 @@ export async function alignCsBostaWaybillBeforePrint(confirmationId: number) {
   };
   const tracking = String(typed.trackingNumber || "").trim();
   if (!tracking) return;
+  if (String(typed.shippingCompany || "").trim() !== "bosta") return;
+  if (/^SK-/i.test(tracking)) return;
   const fee =
     typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
       ? null

@@ -66,6 +66,8 @@ export type CsQueueItem = {
     datePaid?: string | null;
     wooStatus?: string;
     trackingNumber?: string | null;
+    parentWooOrderNumber?: string;
+    legacyRef?: string;
     items?: Array<{ name: string; quantity?: number; sku?: string }>;
   } | null;
   startedAt?: string | null;
@@ -393,6 +395,10 @@ function searchableText(item: CsQueueItem) {
     item.status,
     item.shippingCompany,
     item.assignedAgent?.name,
+    item.trackingNumber,
+    item.fulfillmentKind === "exchange" ? "استبدال" : item.fulfillmentKind === "return" ? "استرجاع" : "",
+    item.parentWooOrderNumber,
+    snap?.parentWooOrderNumber,
     snap?.customerName,
     phone,
     digits,
@@ -404,6 +410,7 @@ function searchableText(item: CsQueueItem) {
     snap?.total,
     snap?.paymentMethod,
     snap?.trackingNumber,
+    snap?.legacyRef,
     products,
   ]
     .filter(Boolean)
@@ -2300,14 +2307,18 @@ export function CsQueueClient({
                     <span className="rounded-lg bg-[#14213D] px-2.5 py-1 text-base font-extrabold text-[#FCA311]">
                       {item.customerSnapshot?.total || "—"} ج.م
                     </span>
-                    {item.shippingCompany === "bosta" && (item.trackingNumber || item.bostaShippingFee != null) ? (
+                    {item.trackingNumber || (item.shippingCompany === "bosta" && item.bostaShippingFee != null) ? (
                       <span className="text-[11px] font-extrabold text-[#14213D]">
                         {item.trackingNumber ? <span dir="ltr">{item.trackingNumber}</span> : null}
-                        {item.trackingNumber && item.bostaShippingFee != null ? " · " : ""}
-                        {item.bostaShippingFee != null
+                        {item.shippingCompany === "bosta" && item.trackingNumber && item.bostaShippingFee != null
+                          ? " · "
+                          : ""}
+                        {item.shippingCompany === "bosta" && item.bostaShippingFee != null
                           ? `شحن ${Number(item.bostaShippingFee).toLocaleString("ar-EG")} ج.م`
                           : ""}
-                        {item.bostaStatus ? ` · ${getBostaStatusLabelAr(item.bostaStatus)}` : ""}
+                        {item.shippingCompany === "bosta" && item.bostaStatus
+                          ? ` · ${getBostaStatusLabelAr(item.bostaStatus)}`
+                          : ""}
                       </span>
                     ) : null}
                     {isConfirmed ? (

@@ -245,6 +245,12 @@ export function SokanyAwbSticker({
                   الفاتورة: {payload.invoiceNumber}
                   <br />
                   {payload.orderReference}
+                  {payload.legacyRef ? (
+                    <>
+                      <br />
+                      {payload.legacyRef}
+                    </>
+                  ) : null}
                 </div>
               </td>
               <td className="notes-track">

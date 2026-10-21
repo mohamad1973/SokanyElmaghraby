@@ -43,11 +43,25 @@ export function trackingPrefixForCarrier(code: string) {
 }
 
 export function buildSokanyTracking(carrierCode: string, wooOrderNumber: string, kind?: string) {
-  const order = String(wooOrderNumber || "").replace(/^#/, "").replace(/\s+/g, "").slice(0, 32);
-  const base = `SK-${trackingPrefixForCarrier(carrierCode)}-${order || "0"}`;
-  if (kind === "return") return `${base}-R1`;
-  if (kind === "exchange") return `${base}-X1`;
-  return base;
+  const raw = String(wooOrderNumber || "").replace(/^#/, "").replace(/\s+/g, "").slice(0, 32);
+  const stripped = raw.replace(/-(R|X)\d+$/i, "");
+  const suffix = kind === "return" ? "R1" : kind === "exchange" ? "X1" : "";
+  const order = suffix ? `${stripped || "0"}-${suffix}` : raw || "0";
+  return `SK-${trackingPrefixForCarrier(carrierCode)}-${order}`;
+}
+
+function looksLikeSokanyTracking(value: string) {
+  return /^SK-/i.test(value.trim());
+}
+
+function pickLegacyRef(snapshot: Record<string, unknown>, confirmationTracking: string) {
+  const stored = String(snapshot.legacyRef || "").trim();
+  if (stored && !looksLikeSokanyTracking(stored)) return stored;
+  for (const candidate of [confirmationTracking, String(snapshot.trackingNumber || "")]) {
+    const value = candidate.trim();
+    if (value && !looksLikeSokanyTracking(value)) return value;
+  }
+  return "";
 }
 
 export async function ensureSokanyAwbTables() {
@@ -97,9 +111,9 @@ export async function ensureSokanyAwbTables() {
   `);
   const seeds: Array<[string, string, string, string]> = [
     ["bosta", "بوسطة", "bosta", "بوسطة"],
-    ["sayed_temima", "سيد تميمة", "bosta", "مندوب سيد تميمة"],
-    ["eid", "عيد", "bosta", "مندوب عيد"],
-    ["momen", "مؤمن", "bosta", "مندوب مؤمن"],
+    ["sayed_temima", "سيد تميمة", "sokany", "مندوب سيد تميمة"],
+    ["eid", "عيد", "sokany", "مندوب عيد"],
+    ["momen", "مؤمن", "sokany", "مندوب مؤمن"],
   ];
   for (const [code, nameAr, provider, hub] of seeds) {
     await prisma.$executeRawUnsafe(
@@ -113,6 +127,11 @@ export async function ensureSokanyAwbTables() {
       DEFAULT_RETURN_ADDRESS,
     );
   }
+  await prisma.$executeRawUnsafe(
+    `UPDATE \`CsCarrier\`
+     SET \`waybillProvider\` = 'sokany', \`updatedAt\` = NOW(3)
+     WHERE \`code\` IN ('sayed_temima', 'eid', 'momen') AND \`waybillProvider\` <> 'sokany'`,
+  );
 }
 
 function mapCarrier(row: {
@@ -293,6 +312,7 @@ function printLocation(
     governorate: preferPlace(loc.governorate || snapshot.governorate, textOf(answers, "governorate_confirm")),
     area: preferPlace(loc.area || snapshot.area, textOf(answers, "area_confirm")),
     landmarks: textOf(answers, "address_landmarks") || String(snapshot.note || "").trim(),
+    legacyRef: pickLegacyRef(snapshot, ""),
   };
 }
 
@@ -347,7 +367,19 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
   const snap = await hydrateWaybillSnapshot((row.customerSnapshot || {}) as Record<string, unknown>, row.wooOrderId);
   const answers = row.answers || [];
   const built = itemDescription(snap);
-  const printSnap = printLocation(snap, answers);
+  const legacyRef = pickLegacyRef(snap, String(row.trackingNumber || ""));
+  if (legacyRef) snap.legacyRef = legacyRef;
+  const printSnap = { ...printLocation(snap, answers), legacyRef };
+  const persistCardTracking = async (tracking: string) => {
+    snap.trackingNumber = tracking;
+    await prisma.csOrderConfirmation.update({
+      where: { id: confirmationId },
+      data: {
+        trackingNumber: tracking,
+        customerSnapshot: snap,
+      } as never,
+    });
+  };
   if (existing[0]) {
     await prisma.$executeRawUnsafe(
       `UPDATE CsSokanyWaybill
@@ -359,6 +391,7 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
       invoiceNumber || null,
       existing[0].tracking,
     );
+    await persistCardTracking(existing[0].tracking);
     return {
       ok: true as const,
       waybill: {
@@ -401,6 +434,7 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
     confirmationId,
   );
   if (!created[0]) return { ok: false as const, message: "تعذر قراءة البوليصة." };
+  await persistCardTracking(created[0].tracking);
   return { ok: true as const, waybill: created[0], carrier };
 }
 
@@ -440,6 +474,7 @@ export function toSokanyPrintPayload(
     notes: String(snap.landmarks || "").trim() || "—",
     invoiceNumber: String(waybill.invoiceNumber || "").trim() || "—",
     orderReference: `WooCommerce_${String(wooOrderNumber || "").replace(/^#/, "")}`,
+    legacyRef: String(snap.legacyRef || "").trim(),
     returnAddress: carrier.returnAddress || DEFAULT_RETURN_ADDRESS,
     cod: moneyOf(waybill.cod),
     returnFee: moneyOf(waybill.returnFee) || 75,

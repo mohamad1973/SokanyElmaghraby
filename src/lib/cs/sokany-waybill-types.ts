@@ -1,4 +1,4 @@
-export const BOSTA_WAYBILL_COMPANIES = ["bosta", "sayed_temima", "eid", "momen"] as const;
+export const BOSTA_WAYBILL_COMPANIES = ["bosta"] as const;
 
 export function usesSokanyWaybillPrint(shippingCompany?: string | null, flagged = false) {
   if (flagged) return true;
@@ -36,6 +36,7 @@ export type SokanyPrintPayload = {
   notes: string;
   invoiceNumber: string;
   orderReference: string;
+  legacyRef: string;
   returnAddress: string;
   cod: number;
   returnFee: number;
