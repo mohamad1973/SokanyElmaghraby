@@ -80,10 +80,14 @@ export const BOSTA_CITY_MAP: Record<string, { code: string; nameAr: string }> = 
   qena: { code: "EG-25", nameAr: "قنا" },
   "الأقصر": { code: "EG-26", nameAr: "الأقصر" },
   luxor: { code: "EG-26", nameAr: "الأقصر" },
+  "الشرقية": { code: "EG-SHR", nameAr: "الشرقية" },
+  "الشرقيه": { code: "EG-SHR", nameAr: "الشرقية" },
+  sharqia: { code: "EG-SHR", nameAr: "الشرقية" },
+  sharkia: { code: "EG-SHR", nameAr: "الشرقية" },
 };
 
 /** Collapse Arabic ta-marbuta / ha so «القاهرة» and «القاهره» match the same city. */
-function normalizeArabicCityKey(value: string) {
+export function normalizeArabicCityKey(value: string) {
   return value
     .trim()
     .toLowerCase()
@@ -92,31 +96,32 @@ function normalizeArabicCityKey(value: string) {
     .replace(/[أإآ]/g, "ا");
 }
 
+function cityLookupCandidates(governorate: string) {
+  const raw = governorate.trim();
+  if (!raw) return [] as string[];
+  const parts = raw.split(/\s*[-–—·,]\s*/).map((part) => part.trim()).filter(Boolean);
+  const ordered = parts.length >= 2 ? [parts[parts.length - 1], parts[0], raw] : [raw];
+  return [...new Set(ordered)];
+}
+
 export function findBostaCity(governorate: string): { code: string; nameAr: string } | null {
-  const raw = governorate.trim().toLowerCase();
-  if (!raw) return null;
-
-  if (BOSTA_CITY_MAP[raw]) {
-    return BOSTA_CITY_MAP[raw];
-  }
-
-  const normalized = normalizeArabicCityKey(raw);
-  for (const [key, value] of Object.entries(BOSTA_CITY_MAP)) {
-    const keyNorm = normalizeArabicCityKey(key);
-    if (
-      keyNorm === normalized ||
-      normalized.includes(keyNorm) ||
-      (keyNorm.length >= 3 && keyNorm.includes(normalized))
-    ) {
-      return value;
+  for (const candidate of cityLookupCandidates(governorate)) {
+    const raw = candidate.trim().toLowerCase();
+    if (!raw) continue;
+    if (BOSTA_CITY_MAP[raw]) return BOSTA_CITY_MAP[raw];
+    const normalized = normalizeArabicCityKey(raw);
+    const codeKey = normalized.replace(/-/g, "");
+    for (const [key, value] of Object.entries(BOSTA_CITY_MAP)) {
+      if (normalizeArabicCityKey(key) === normalized) return value;
+      if (normalizeArabicCityKey(value.nameAr) === normalized) return value;
+      if (value.code.toLowerCase().replace(/-/g, "") === codeKey) return value;
     }
   }
-
   return null;
 }
 
 export function mapGovernorateToBostaCity(governorate: string) {
-  return findBostaCity(governorate) || { code: "EG-01", nameAr: governorate || "القاهرة" };
+  return findBostaCity(governorate);
 }
 
 export const BOSTA_STATUS_LABELS: Record<string, string> = {

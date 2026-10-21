@@ -2,7 +2,7 @@ import "server-only";
 
 import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
 import { getPrismaClient } from "@/lib/db";
-import { isDisplayablePlaceName } from "@/lib/cs/resolve-location";
+import { isDisplayablePlaceName, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
 import {
   createCsBostaDelivery,
   fetchCsBostaDelivery,
@@ -74,6 +74,29 @@ export function secondPhoneFromAnswers(answers: CsChecklistAnswerInput[]) {
   return String(legacy.note || "").trim();
 }
 
+function csBostaBusinessReference(wooOrderNumber: string, wooOrderId: number) {
+  const number = String(wooOrderNumber || "").replace(/^#/, "").trim();
+  return number && number !== "0" ? `Woocommerce_${number}` : `Woocommerce_${wooOrderId}`;
+}
+
+function mergeChecklistAnswers(saved: CsChecklistAnswerInput[], overlay?: CsChecklistAnswerInput[]) {
+  if (!overlay?.length) return saved;
+  const map = new Map(saved.map((row) => [row.itemKey, row]));
+  for (const row of overlay) {
+    const key = String(row.itemKey || "").trim();
+    if (!key) continue;
+    const prev = map.get(key);
+    map.set(key, {
+      itemKey: key,
+      confirmed: Boolean(row.confirmed || prev?.confirmed),
+      value: row.value !== undefined ? row.value : prev?.value,
+      note: row.note !== undefined ? row.note : prev?.note,
+      yesNo: row.yesNo !== undefined ? row.yesNo : prev?.yesNo,
+    });
+  }
+  return [...map.values()];
+}
+
 function partyFromAnswers(input: {
   answers: CsChecklistAnswerInput[];
   snapshot: Snapshot;
@@ -85,12 +108,20 @@ function partyFromAnswers(input: {
   depositApprovalStatus?: string | null;
 }): { ok: true; party: CsBostaParty } | { ok: false; message: string } {
   const snap = input.snapshot || {};
+  const loc = resolveSnapshotLocation({
+    governorate: String(snap.governorate || ""),
+    area: String(snap.area || ""),
+    address: String(snap.address || ""),
+    state: String(snap.state || ""),
+    city: String(snap.city || ""),
+  });
   const name = textOf(input.answers, "customer_name") || String(snap.customerName || "").trim();
   const phone = textOf(input.answers, "primary_phone") || String(snap.phone || "").trim();
-  const address = textOf(input.answers, "address_complete") || String(snap.address || "").trim();
-  const governorate = preferSiteLocation(snap.governorate, textOf(input.answers, "governorate_confirm"));
-  const area = preferSiteLocation(snap.area, textOf(input.answers, "area_confirm"));
+  const address = textOf(input.answers, "address_complete") || loc.address || String(snap.address || "").trim();
+  const governorate = preferSiteLocation(loc.governorate || snap.governorate, textOf(input.answers, "governorate_confirm"));
+  const area = preferSiteLocation(loc.area || snap.area, textOf(input.answers, "area_confirm"));
   const landmarks = textOf(input.answers, "address_landmarks");
+  const reference = csBostaBusinessReference(input.wooOrderNumber, input.wooOrderId);
   if (!name || !phone || !address || !governorate) {
     return { ok: false, message: "بيانات البوليصة ناقصة: الاسم أو التليفون أو العنوان أو المحافظة." };
   }
@@ -108,7 +139,7 @@ function partyFromAnswers(input: {
         address,
         landmarks,
         cod: fulfillment.cod,
-        reference: String(input.wooOrderId),
+        reference,
         notes: noteParts.join(" — "),
         deliveryKind: fulfillment.deliveryKind,
         description: fulfillment.description,
@@ -143,7 +174,7 @@ function partyFromAnswers(input: {
       address,
       landmarks,
       cod,
-      reference: String(input.wooOrderId),
+      reference,
       notes: [`طلب #${input.wooOrderNumber}`, landmarks].filter(Boolean).join(" — "),
     },
   };
@@ -846,7 +877,7 @@ export async function syncConfirmationMoneyToBosta(confirmationId: number): Prom
  */
 export async function ensureCsBostaWaybill(
   confirmationId: number,
-  opts?: { preserveShippingCompany?: boolean },
+  opts?: { preserveShippingCompany?: boolean; answers?: CsChecklistAnswerInput[] },
 ): Promise<{ ok: true; created: boolean; state: BostaWaybillState } | { ok: false; message: string }> {
   const prisma = getPrismaClient();
   if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) {
@@ -868,12 +899,15 @@ export async function ensureCsBostaWaybill(
     depositApprovalStatus?: string | null;
     shippingCompany?: string | null;
   };
-  const answers: CsChecklistAnswerInput[] = row.answers.map((answer) => ({
-    itemKey: answer.itemKey,
-    confirmed: Boolean(answer.confirmed),
-    value: answer.value,
-    note: answer.note,
-  }));
+  const answers = mergeChecklistAnswers(
+    row.answers.map((answer) => ({
+      itemKey: answer.itemKey,
+      confirmed: Boolean(answer.confirmed),
+      value: answer.value,
+      note: answer.note,
+    })),
+    opts?.answers,
+  );
   const snapshot = (row.customerSnapshot as Snapshot) || null;
   const fee =
     typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
@@ -890,6 +924,12 @@ export async function ensureCsBostaWaybill(
         return { ok: true, created: false, state: refreshed };
       }
     }
+    return {
+      ok: false,
+      message: live.ok
+        ? "البوليصة موجودة على الأوردر وتعذر قراءتها من بوسطة. لا ننشئ شحنة تانية."
+        : live.message || "البوليصة موجودة على الأوردر وتعذر قراءتها من بوسطة. لا ننشئ شحنة تانية.",
+    };
   }
 
   const beforeTracking = existingTracking;

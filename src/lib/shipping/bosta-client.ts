@@ -8,8 +8,8 @@ import { deskFulfillmentDeliveryFields } from "@/lib/cs/fulfillment-waybill";
 import {
   findBostaCity,
   getBostaStatusLabelAr,
+  normalizeArabicCityKey,
   normalizeBostaStatus,
-  mapGovernorateToBostaCity,
   type BostaTrackEvent,
 } from "./bosta-zones";
 
@@ -408,9 +408,13 @@ export function buildBostaWebhookUrl() {
 }
 
 export async function createBostaDelivery(order: AdminOrder, codAmount?: number): Promise<BostaDeliveryResult> {
-  const city = mapGovernorateToBostaCity(order.governorate);
+  const city = findBostaCity(order.governorate);
+  if (!city) {
+    return { ok: false, message: `المحافظة «${order.governorate || "—"}» غير معروفة عند بوسطة.` };
+  }
   const { firstName, lastName } = splitCustomerName(order.customerName);
   const cod = codAmount ?? (Number.parseFloat(order.total) || 0);
+  const orderNumber = String(order.number || "").replace(/^#/, "").trim();
 
   const payload = {
     type: 10,
@@ -430,7 +434,7 @@ export async function createBostaDelivery(order: AdminOrder, codAmount?: number)
       lastName,
       phone: normalizePhone(order.phone),
     },
-    businessReference: String(order.id),
+    businessReference: orderNumber ? `Woocommerce_${orderNumber}` : `Woocommerce_${order.id}`,
     notes: `WooCommerce order #${order.number}`,
     webhookUrl: buildBostaWebhookUrl(),
   };
@@ -833,16 +837,25 @@ export function readBostaLiveDetails(raw: unknown): BostaLiveDetails {
   };
 }
 
-function customerAddress(party: CsBostaParty, city: { code: string; nameAr: string }) {
+type ResolvedBostaCity = {
+  id: string;
+  code: string;
+  nameAr: string;
+  districtId?: string;
+  districtName?: string;
+};
+
+function customerAddress(party: CsBostaParty, city: ResolvedBostaCity) {
   return {
-    city: city.code,
-    zone: party.area || city.nameAr,
+    city: city.id,
+    ...(city.districtId ? { districtId: city.districtId } : {}),
+    zone: city.districtName || party.area || city.nameAr,
     firstLine: party.address,
-    secondLine: party.landmarks || party.area || "",
+    secondLine: party.landmarks || (!city.districtId ? party.area : "") || "",
   };
 }
 
-export function buildCsBostaDeliveryPayload(party: CsBostaParty, city: { code: string; nameAr: string }) {
+export function buildCsBostaDeliveryPayload(party: CsBostaParty, city: ResolvedBostaCity) {
   const { firstName, lastName } = splitCustomerName(party.name);
   const receiver = {
     firstName,
@@ -879,10 +892,45 @@ export function buildCsBostaDeliveryPayload(party: CsBostaParty, city: { code: s
 }
 
 export async function createCsBostaDelivery(party: CsBostaParty): Promise<BostaDeliveryResult> {
-  const city = findBostaCity(party.governorate);
-  if (!city) {
-    return { ok: false, message: `المحافظة «${party.governorate || "—"}» غير معروفة عند بوسطة.` };
+  const citiesResult = await getBostaCityOptions();
+  if (!citiesResult.ok || !citiesResult.cities.length) {
+    return {
+      ok: false,
+      message: citiesResult.ok
+        ? `المحافظة على الكارت: ${party.governorate || "—"} — مش متطابقة عند بوسطة.`
+        : "تعذر جلب مدن بوسطة. جرّبي تاني.",
+    };
   }
+  const liveCity = matchBostaCityOption(citiesResult.cities, party.governorate);
+  if (!liveCity?.id) {
+    return {
+      ok: false,
+      message: `المحافظة على الكارت: ${party.governorate || "—"} — مش متطابقة عند بوسطة.`,
+    };
+  }
+  const mapped = findBostaCity(party.governorate);
+  let districtId = "";
+  let districtName = "";
+  if (party.area.trim()) {
+    const districtsResult = await getBostaDistrictOptions(liveCity.id);
+    if (districtsResult.ok) {
+      const hit = districtsResult.districts.find(
+        (district) =>
+          normalizeArabicCityKey(district.nameAr) === normalizeArabicCityKey(party.area) ||
+          normalizeArabicCityKey(district.nameEn) === normalizeArabicCityKey(party.area),
+      );
+      if (hit) {
+        districtId = hit.id;
+        districtName = hit.nameAr;
+      }
+    }
+  }
+  const city: ResolvedBostaCity = {
+    id: liveCity.id,
+    code: mapped?.code || liveCity.id,
+    nameAr: liveCity.nameAr || mapped?.nameAr || party.governorate,
+    ...(districtId ? { districtId, districtName } : {}),
+  };
   const result = await bostaFetch<{ _id?: string; trackingNumber?: string }>("/deliveries", {
     method: "POST",
     body: JSON.stringify(buildCsBostaDeliveryPayload(party, city)),
@@ -957,15 +1005,21 @@ function readWaybillEditFields(raw: unknown) {
 
 function matchBostaCityOption(cities: BostaCityOption[], governorate: string) {
   const known = findBostaCity(governorate);
+  const parts = String(governorate || "")
+    .split(/\s*[-–—·,]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
   const keys = new Set(
-    [governorate, known?.nameAr || "", known?.code || ""].map(compactPlace).filter(Boolean),
+    [governorate, known?.nameAr || "", known?.code || "", ...parts]
+      .map(normalizeArabicCityKey)
+      .filter(Boolean),
   );
   return (
     cities.find(
       (city) =>
-        keys.has(compactPlace(city.nameAr)) ||
-        keys.has(compactPlace(city.nameEn)) ||
-        keys.has(compactPlace(city.id)),
+        keys.has(normalizeArabicCityKey(city.nameAr)) ||
+        keys.has(normalizeArabicCityKey(city.nameEn)) ||
+        keys.has(normalizeArabicCityKey(city.id)),
     ) || null
   );
 }

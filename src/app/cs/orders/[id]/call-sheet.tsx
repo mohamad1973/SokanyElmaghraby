@@ -1354,7 +1354,7 @@ export function CsCallSheet({
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create" }),
+      body: JSON.stringify({ action: "create", answers: payloadAnswers }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       message?: string;

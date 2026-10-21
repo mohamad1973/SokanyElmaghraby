@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ensureCsBostaWaybill, refreshCsBostaWaybill } from "@/lib/cs/bosta-waybill";
+import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
 import { requireCsSession } from "@/lib/session-guards";
 
 type Context = { params: Promise<{ id: string }> };
@@ -17,15 +18,17 @@ export async function POST(request: Request, context: Context) {
     return NextResponse.json({ message: "معرف غير صالح." }, { status: 400 });
   }
 
-  let body: { action?: string } = {};
+  let body: { action?: string; answers?: CsChecklistAnswerInput[] } = {};
   try {
-    body = (await request.json()) as { action?: string };
+    body = (await request.json()) as { action?: string; answers?: CsChecklistAnswerInput[] };
   } catch {
     body = {};
   }
 
   if (body.action === "create") {
-    const created = await ensureCsBostaWaybill(numericId);
+    const created = await ensureCsBostaWaybill(numericId, {
+      answers: Array.isArray(body.answers) ? body.answers : undefined,
+    });
     if (!created.ok) {
       return NextResponse.json({ message: created.message }, { status: 400 });
     }
