@@ -222,6 +222,7 @@ async function loadCourierDay(courierId: number, dayYmd?: string) {
   if (!prisma || !bounds) return { mode: "courier" as const, day, orders: [] as Array<ReturnType<typeof cardFromRow> & { matches: number[] }> };
   const rows = await prisma.csOrderConfirmation.findMany({
     where: {
+      status: "CONFIRMED",
       courierAgentId: courierId,
       courierAssignedAt: { gte: bounds.start, lt: bounds.endExclusive },
     },

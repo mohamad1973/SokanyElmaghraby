@@ -318,7 +318,8 @@ async function loadAssignedOrders(courierId?: number, dayYmd?: string | null) {
       `SELECT ${ORDER_COLUMNS}
        FROM CsOrderConfirmation c
        LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-       WHERE c.monaCourierId = ?
+       WHERE c.status = 'CONFIRMED'
+         AND c.monaCourierId = ?
          AND c.monaAssignedAt IS NOT NULL
          AND c.monaAssignedAt >= ?
          AND c.monaAssignedAt < ?
@@ -333,7 +334,8 @@ async function loadAssignedOrders(courierId?: number, dayYmd?: string | null) {
       `SELECT ${ORDER_COLUMNS}
        FROM CsOrderConfirmation c
        LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-       WHERE c.monaCourierId = ?
+       WHERE c.status = 'CONFIRMED'
+         AND c.monaCourierId = ?
        ORDER BY c.monaAssignedAt DESC, c.id DESC`,
       courierId,
     );
@@ -343,7 +345,8 @@ async function loadAssignedOrders(courierId?: number, dayYmd?: string | null) {
       `SELECT ${ORDER_COLUMNS}
        FROM CsOrderConfirmation c
        LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-       WHERE c.monaCourierId IS NOT NULL
+       WHERE c.status = 'CONFIRMED'
+         AND c.monaCourierId IS NOT NULL
          AND c.monaAssignedAt IS NOT NULL
          AND c.monaAssignedAt >= ?
          AND c.monaAssignedAt < ?
@@ -356,7 +359,8 @@ async function loadAssignedOrders(courierId?: number, dayYmd?: string | null) {
     `SELECT ${ORDER_COLUMNS}
      FROM CsOrderConfirmation c
      LEFT JOIN CsAgent a ON a.id = c.monaCourierId
-     WHERE c.monaCourierId IS NOT NULL
+     WHERE c.status = 'CONFIRMED'
+       AND c.monaCourierId IS NOT NULL
      ORDER BY c.monaAssignedAt DESC, c.id DESC`,
   );
 }

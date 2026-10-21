@@ -1876,6 +1876,15 @@ export async function saveCsConfirmation(input: {
   });
 
   await applySheetChoice();
+  await syncDeskCourierAssignment({
+    id: input.id,
+    company: shippingCompany,
+    status: CS_CONFIRMATION_STATUS.CONFIRMED,
+    trackingNumber: nextTracking || row.trackingNumber,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    snapshot: nextSnapshot,
+  });
   return {
     ok: true as const,
     status: CS_CONFIRMATION_STATUS.CONFIRMED,
@@ -1944,6 +1953,56 @@ export async function setCsHandedToCarrier(input: {
   };
 }
 
+/** Desk (Eid/Momen/Temima) assignment is stored as intent until the call is CONFIRMED. */
+async function syncDeskCourierAssignment(input: {
+  id: number;
+  company: CsShippingCompany | null;
+  status: string;
+  trackingNumber?: string | null;
+  wooOrderId?: number;
+  wooOrderNumber?: string;
+  snapshot?: Record<string, unknown> | null;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const confirmed = input.status === CS_CONFIRMATION_STATUS.CONFIRMED;
+  const deskCourier =
+    confirmed && (input.company === "eid" || input.company === "momen")
+      ? await resolveMonaCourierIdForShipping(input.company)
+      : null;
+
+  if (deskCourier) {
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaCourierId = ${deskCourier},
+          monaAssignedAt = COALESCE(monaAssignedAt, NOW(3))
+      WHERE id = ${input.id}
+    `;
+  } else {
+    await prisma.$executeRaw`
+      UPDATE CsOrderConfirmation
+      SET monaCourierId = NULL, monaAssignedAt = NULL
+      WHERE id = ${input.id}
+    `;
+  }
+
+  if (
+    confirmed &&
+    input.company === "sayed_temima" &&
+    !String(input.trackingNumber || "").trim() &&
+    input.wooOrderId &&
+    input.wooOrderNumber
+  ) {
+    await attachBostaWaybillByOrderReference({
+      confirmationId: input.id,
+      wooOrderId: input.wooOrderId,
+      wooOrderNumber: input.wooOrderNumber,
+      snapshot: input.snapshot || null,
+      onlyIfFound: true,
+    });
+  }
+}
+
 export async function setCsShippingCompany(input: {
   id: number;
   shippingCompany: CsShippingCompany | null;
@@ -1971,30 +2030,15 @@ export async function setCsShippingCompany(input: {
     },
   });
 
-  if (company === "eid" || company === "momen") {
-    const courierId = await resolveMonaCourierIdForShipping(company);
-    if (courierId) {
-      await prisma.$executeRaw`
-        UPDATE CsOrderConfirmation
-        SET monaCourierId = ${courierId},
-            monaAssignedAt = COALESCE(monaAssignedAt, NOW(3))
-        WHERE id = ${input.id}
-      `;
-    } else {
-      await prisma.$executeRaw`
-        UPDATE CsOrderConfirmation
-        SET monaCourierId = NULL, monaAssignedAt = NULL
-        WHERE id = ${input.id}
-      `;
-    }
-  } else {
-    // Bosta / Temima / clear: drop Mona assignment so sheets stay exclusive.
-    await prisma.$executeRaw`
-      UPDATE CsOrderConfirmation
-      SET monaCourierId = NULL, monaAssignedAt = NULL
-      WHERE id = ${input.id}
-    `;
-  }
+  await syncDeskCourierAssignment({
+    id: input.id,
+    company,
+    status: row.status,
+    trackingNumber: row.trackingNumber,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
+  });
 
   if (company) {
     await prisma.csChecklistAnswer.upsert({
@@ -2014,16 +2058,6 @@ export async function setCsShippingCompany(input: {
         confirmed: true,
         value: company,
       },
-    });
-  }
-
-  if (company === "sayed_temima" && !String(row.trackingNumber || "").trim()) {
-    await attachBostaWaybillByOrderReference({
-      confirmationId: row.id,
-      wooOrderId: row.wooOrderId,
-      wooOrderNumber: row.wooOrderNumber,
-      snapshot: (row.customerSnapshot as Record<string, unknown> | null) || null,
-      onlyIfFound: true,
     });
   }
 
