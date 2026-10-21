@@ -342,9 +342,10 @@ function ReviewCards({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackingNumber: row.trackingNumber, condition, defects, usage }),
       });
-      const body = (await response.json()) as { message?: string; review?: Review };
+      const body = (await response.json()) as { message?: string; review?: Review; detail?: string };
       if (!response.ok || !body.review) {
-        setError(body.message || "تعذر حفظ الفحص.");
+        const base = body.message || "تعذر حفظ الفحص.";
+        setError(body.detail ? `${base} (${body.detail})` : base);
         return;
       }
       onSaved(body.review);

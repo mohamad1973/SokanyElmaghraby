@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ensureBostaReturnCaptureTable } from "@/lib/cs/bosta-return-capture";
 import { getPrismaClient } from "@/lib/db";
 import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
@@ -110,6 +111,30 @@ function isoOrNull(value: unknown): string | null {
   if (!text || text.startsWith("0000")) return null;
   const d = new Date(text);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function sqlDateTime(value: Date | string | null | undefined) {
+  const iso = isoOrNull(value);
+  if (!iso) return null;
+  return iso.slice(0, 23).replace("T", " ");
+}
+
+/** Map Hostinger/Prisma SQL failures to a short Arabic message for CS staff. */
+export function maintenanceDbErrorMessage(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (/doesn't exist|1146|no such table/i.test(detail)) {
+    return { message: "جدول المرتجعات مش موجود في قاعدة البيانات.", detail };
+  }
+  if (/unknown column|1054/i.test(detail)) {
+    return { message: "جدول الصيانة ناقص عمود مطلوب للحفظ.", detail };
+  }
+  if (/connect|ECONN|ETIMEDOUT|timeout|too many connections|server has gone away/i.test(detail)) {
+    return { message: "تعذر الاتصال بقاعدة البيانات. حاول مرة أخرى.", detail };
+  }
+  if (/Duplicate|1062/i.test(detail)) {
+    return { message: "الفحص محفوظ من قبل. حدّث الصفحة وحاول تاني.", detail };
+  }
+  return { message: "تعذر حفظ العملية بسبب خطأ في السيرفر.", detail };
 }
 
 export function reviewLabel(review: Omit<BostaReturnReview, "label">) {
@@ -241,76 +266,86 @@ export async function saveBostaReturnReview(input: {
   if (!condition) return { ok: false as const, message: "الاختيار مش واضح." };
   const usage: ReviewUsage | "" = input.usage === "new" || input.usage === "used" ? input.usage : "";
   if (!usage) return { ok: false as const, message: "حدّد المنتج جديد أو مستخدم." };
-  await ensureBostaReturnReviewTable();
-  const stored = await prisma.$queryRawUnsafe<Array<{ kind: string }>>(
-    `SELECT kind FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
-    trackingNumber,
-  );
-  const kind =
-    stored[0]?.kind === "refused" || stored[0]?.kind === "return" || stored[0]?.kind === "exchange" ? stored[0].kind : "";
-  if (!kind) return { ok: false as const, message: "الأوردر مش في مرتجعات بوسطة المحفوظة." };
-  const defects = [...new Set(parseDefects(input.defects.join(",")))];
-  const decided = decidedReview(kind, condition, defects);
-  if (!decided) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
-  const prev = await prisma.$queryRawUnsafe<
-    Array<{
-      grade: string | null;
-      techNote: string | null;
-      deliveredToMaintenanceAt: Date | string | null;
-      receivedFromMaintenanceAt: Date | string | null;
-      shelfAt: Date | string | null;
-    }>
-  >(
-    `SELECT grade, techNote, deliveredToMaintenanceAt, receivedFromMaintenanceAt, shelfAt
-     FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
-    trackingNumber,
-  );
-  const prevRow = prev[0];
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO \`CsBostaReturnReview\`
-      (\`trackingNumber\`, \`condition\`, \`defects\`, \`destination\`, \`bostaClaim\`, \`usage\`,
-       \`deliveredToMaintenanceAt\`, \`updatedAt\`)
-     VALUES (?, ?, ?, ?, ?, ?, IF(? = 'maintenance', CURRENT_TIMESTAMP(3), NULL), CURRENT_TIMESTAMP(3))
-     ON DUPLICATE KEY UPDATE
-      \`condition\` = ?,
-      \`defects\` = ?,
-      \`destination\` = ?,
-      \`bostaClaim\` = ?,
-      \`usage\` = ?,
-      \`deliveredToMaintenanceAt\` = IF(
-        ? = 'maintenance',
-        COALESCE(\`deliveredToMaintenanceAt\`, CURRENT_TIMESTAMP(3)),
-        \`deliveredToMaintenanceAt\`
-      ),
-      \`updatedAt\` = CURRENT_TIMESTAMP(3)`,
-    trackingNumber,
-    decided.condition,
-    decided.defects.join(","),
-    decided.destination,
-    decided.bostaClaim ? 1 : 0,
-    usage,
-    decided.destination,
-    decided.condition,
-    decided.defects.join(","),
-    decided.destination,
-    decided.bostaClaim ? 1 : 0,
-    usage,
-    decided.destination,
-  );
-  const packed = packReview({
-    condition: decided.condition,
-    defects: decided.defects.join(","),
-    destination: decided.destination,
-    bostaClaim: decided.bostaClaim ? 1 : 0,
-    usage,
-    grade: prevRow?.grade,
-    techNote: prevRow?.techNote,
-    deliveredToMaintenanceAt:
+  try {
+    await ensureBostaReturnCaptureTable();
+    await ensureBostaReturnReviewTable();
+    const stored = await prisma.$queryRawUnsafe<Array<{ kind: string }>>(
+      `SELECT kind FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
+      trackingNumber,
+    );
+    const kind =
+      stored[0]?.kind === "refused" || stored[0]?.kind === "return" || stored[0]?.kind === "exchange"
+        ? stored[0].kind
+        : "";
+    if (!kind) return { ok: false as const, message: "الأوردر مش في مرتجعات بوسطة المحفوظة." };
+    const defects = [...new Set(parseDefects(input.defects.join(",")))];
+    const decided = decidedReview(kind, condition, defects);
+    if (!decided) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
+    const prev = await prisma.$queryRawUnsafe<
+      Array<{
+        grade: string | null;
+        techNote: string | null;
+        deliveredToMaintenanceAt: Date | string | null;
+        receivedFromMaintenanceAt: Date | string | null;
+        shelfAt: Date | string | null;
+      }>
+    >(
+      `SELECT grade, techNote, deliveredToMaintenanceAt, receivedFromMaintenanceAt, shelfAt
+       FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
+      trackingNumber,
+    );
+    const prevRow = prev[0];
+    const deliveredAt =
       decided.destination === "maintenance"
-        ? prevRow?.deliveredToMaintenanceAt || new Date()
-        : prevRow?.deliveredToMaintenanceAt || null,
-    receivedFromMaintenanceAt: prevRow?.receivedFromMaintenanceAt,
-    shelfAt: prevRow?.shelfAt,
-  });
-  return { ok: true as const, review: packed! };
+        ? sqlDateTime(prevRow?.deliveredToMaintenanceAt || new Date())
+        : sqlDateTime(prevRow?.deliveredToMaintenanceAt);
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO \`CsBostaReturnReview\`
+          (\`trackingNumber\`, \`condition\`, \`defects\`, \`destination\`, \`bostaClaim\`, \`usage\`,
+           \`deliveredToMaintenanceAt\`, \`updatedAt\`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))`,
+        trackingNumber,
+        decided.condition,
+        decided.defects.join(","),
+        decided.destination,
+        decided.bostaClaim ? 1 : 0,
+        usage,
+        deliveredAt,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Duplicate|1062/i.test(message)) throw error;
+      await prisma.$executeRawUnsafe(
+        `UPDATE \`CsBostaReturnReview\`
+         SET \`condition\` = ?, \`defects\` = ?, \`destination\` = ?, \`bostaClaim\` = ?, \`usage\` = ?,
+             \`deliveredToMaintenanceAt\` = ?, \`updatedAt\` = CURRENT_TIMESTAMP(3)
+         WHERE \`trackingNumber\` = ?`,
+        decided.condition,
+        decided.defects.join(","),
+        decided.destination,
+        decided.bostaClaim ? 1 : 0,
+        usage,
+        deliveredAt,
+        trackingNumber,
+      );
+    }
+    const packed = packReview({
+      condition: decided.condition,
+      defects: decided.defects.join(","),
+      destination: decided.destination,
+      bostaClaim: decided.bostaClaim ? 1 : 0,
+      usage,
+      grade: prevRow?.grade,
+      techNote: prevRow?.techNote,
+      deliveredToMaintenanceAt: deliveredAt,
+      receivedFromMaintenanceAt: prevRow?.receivedFromMaintenanceAt,
+      shelfAt: prevRow?.shelfAt,
+    });
+    return { ok: true as const, review: packed! };
+  } catch (error) {
+    const mapped = maintenanceDbErrorMessage(error);
+    console.error("[cs] saveBostaReturnReview", trackingNumber, mapped.detail);
+    return { ok: false as const, message: mapped.message, detail: mapped.detail.slice(0, 200) };
+  }
 }

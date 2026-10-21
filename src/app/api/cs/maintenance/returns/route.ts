@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { saveBostaReturnReview } from "@/lib/cs/bosta-return-review";
+import { maintenanceDbErrorMessage, saveBostaReturnReview } from "@/lib/cs/bosta-return-review";
 import {
   maintenanceVarianceReport,
   markReturnOpened,
@@ -191,13 +191,18 @@ export async function POST(request: Request) {
       defects,
       usage: String(body?.usage || ""),
     });
-    if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+    if (!result.ok) {
+      return NextResponse.json(
+        { message: result.message, ...("detail" in result && result.detail ? { detail: result.detail } : {}) },
+        { status: 400 },
+      );
+    }
     return NextResponse.json({ review: result.review });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error("[cs/maintenance/returns] POST", detail);
+    const mapped = maintenanceDbErrorMessage(error);
+    console.error("[cs/maintenance/returns] POST", mapped.detail);
     return NextResponse.json(
-      { message: "تعذر حفظ العملية بسبب خطأ في السيرفر.", detail: detail.slice(0, 200) },
+      { message: mapped.message, detail: mapped.detail.slice(0, 200) },
       { status: 500 },
     );
   }
