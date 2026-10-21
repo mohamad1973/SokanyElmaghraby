@@ -1,3 +1,11 @@
+export const BOSTA_WAYBILL_COMPANIES = ["bosta", "sayed_temima", "eid", "momen"] as const;
+
+export function usesSokanyWaybillPrint(shippingCompany?: string | null, flagged = false) {
+  if (flagged) return true;
+  const code = String(shippingCompany || "").trim();
+  return Boolean(code) && !BOSTA_WAYBILL_COMPANIES.includes(code as (typeof BOSTA_WAYBILL_COMPANIES)[number]);
+}
+
 export type SokanyCarrier = {
   id: number;
   code: string;

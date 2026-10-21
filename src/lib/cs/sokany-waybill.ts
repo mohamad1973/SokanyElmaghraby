@@ -3,7 +3,7 @@ import "server-only";
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
 import { fulfillmentWaybillDraft } from "@/lib/cs/fulfillment-waybill";
 import { isDisplayablePlaceName } from "@/lib/cs/resolve-location";
-import type { SokanyCarrier, SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
+import { usesSokanyWaybillPrint, type SokanyCarrier, type SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
 import { getPrismaClient } from "@/lib/db";
 
 export type { SokanyCarrier, SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
@@ -184,7 +184,7 @@ export async function getCsCarrierByCode(code: string) {
       defaultReturnFee: unknown;
       isActive: number | boolean;
     }>
-  >("SELECT * FROM CsCarrier WHERE code = ? LIMIT 1", trimmed);
+  >("SELECT * FROM CsCarrier WHERE LOWER(code) = LOWER(?) LIMIT 1", trimmed);
   return rows[0] ? mapCarrier(rows[0]) : null;
 }
 
@@ -246,6 +246,23 @@ function kindLabelOf(kind: string) {
   return "توصيل";
 }
 
+function parseWaybillSnapshot(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(value)) {
+    return parseWaybillSnapshot(value.toString("utf8"));
+  }
+  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  return {};
+}
+
 function itemDescription(snapshot: Record<string, unknown>) {
   const draft = fulfillmentWaybillDraft(snapshot);
   if (draft?.description) return { text: draft.description, count: draft.itemsCount, kind: draft.deliveryKind, cod: draft.cod };
@@ -276,7 +293,22 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
   if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
     return { ok: false as const, message: "اطبعي بوليصة سوكانى بعد حفظ الأوردر." };
   }
-  const carrier = await getCsCarrierByCode(String(row.shippingCompany || ""));
+  const shippingCode = String(row.shippingCompany || "").trim();
+  let carrier = await getCsCarrierByCode(shippingCode);
+  if ((!carrier || carrier.waybillProvider !== "sokany") && usesSokanyWaybillPrint(shippingCode)) {
+    carrier = {
+      id: 0,
+      code: shippingCode,
+      nameAr: shippingCode,
+      waybillProvider: "sokany",
+      printHubLabel: `مندوب ${shippingCode}`,
+      returnAddress: DEFAULT_RETURN_ADDRESS,
+      senderName: "Sokany Elmaghraby",
+      allowOpenPackage: true,
+      defaultReturnFee: 75,
+      isActive: true,
+    };
+  }
   if (!carrier || carrier.waybillProvider !== "sokany") {
     return { ok: false as const, message: "هذه الشركة تطبع من بوسطة حتى اعتماد بوليصة سوكانى." };
   }
@@ -325,7 +357,7 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO CsSokanyWaybill
         (tracking, confirmationId, carrierCode, kind, cod, returnFee, description, itemsCount, snapshot, invoiceNumber, barcodePayload, status, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, 'created', NOW(3), NOW(3))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', NOW(3), NOW(3))`,
       tracking,
       confirmationId,
       carrier.code,
@@ -368,10 +400,7 @@ export function toSokanyPrintPayload(
   carrier: SokanyCarrier,
   wooOrderNumber: string,
 ): SokanyPrintPayload {
-  const snap = (typeof waybill.snapshot === "string" ? JSON.parse(waybill.snapshot) : waybill.snapshot || {}) as Record<
-    string,
-    unknown
-  >;
+  const snap = parseWaybillSnapshot(waybill.snapshot);
   const gov = String(snap.governorate || "").trim();
   const area = String(snap.area || "").trim();
   return {

@@ -10,6 +10,7 @@ import {
   type CsChecklistAnswerInput,
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
+import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 import { formatCairoOrderDateTime, resolvePaymentState } from "@/lib/cs/order-window";
 import {
   BOSTA_TRACK_STAGES,
@@ -363,6 +364,7 @@ export function CsCallSheet({
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
   const lockedShipping = String(shippingCompany || "").trim() || null;
+  const printSokanyAwb = usesSokanyWaybillPrint(lockedShipping, sokanyWaybill);
 
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [answers, setAnswers] = useState(() => {
@@ -1322,10 +1324,20 @@ export function CsCallSheet({
     frame.src = url;
   }
 
+  function openSokanyAwb() {
+    const popup = window.open(`/cs/print/sokany-awb/${confirmationId}`, "sokany-awb");
+    if (!popup) {
+      setMessage("المتصفح منع نافذة الطباعة. اسمح بالنوافذ المنبثقة ثم أعيدي المحاولة.");
+      return;
+    }
+    setWaybillPrinted(true);
+    setWaybillCreatePrompt(false);
+    setMessage("اتفتحت بوليصة سوكانى للطباعة 10×15.");
+  }
+
   async function printWaybill() {
-    if (sokanyWaybill) {
-      window.open(`/cs/print/sokany-awb/${confirmationId}`, "sokany-awb");
-      setWaybillPrinted(true);
+    if (printSokanyAwb) {
+      openSokanyAwb();
       return;
     }
     await printWaybillPdf(trackingNumber);
@@ -1333,6 +1345,10 @@ export function CsCallSheet({
 
   async function createWaybillAndPrint() {
     if (creatingWaybill || printingWaybill) return;
+    if (printSokanyAwb) {
+      openSokanyAwb();
+      return;
+    }
     setCreatingWaybill(true);
     setMessage("");
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta`, {
@@ -2229,11 +2245,13 @@ export function CsCallSheet({
             waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
           }`}
         >
-          {printingWaybill || creatingWaybill
+            {printingWaybill || creatingWaybill
             ? "جاري التحميل"
             : waybillPrinted
               ? "مطبوع"
-              : "طباعة البوليصة"}
+              : printSokanyAwb
+                ? "طباعة بوليصة سوكانى"
+                : "طباعة البوليصة"}
         </button>
         </div>
       </div>
