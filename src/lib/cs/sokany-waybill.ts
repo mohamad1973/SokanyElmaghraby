@@ -1,8 +1,9 @@
 import "server-only";
 
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
-import { fulfillmentWaybillDraft } from "@/lib/cs/fulfillment-waybill";
-import { isDisplayablePlaceName } from "@/lib/cs/resolve-location";
+import { fulfillmentWaybillDraft, orderItemsDescription } from "@/lib/cs/fulfillment-waybill";
+import { hydrateWaybillSnapshot } from "@/lib/cs/hydrate-waybill-snapshot";
+import { isDisplayablePlaceName, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
 import { usesSokanyWaybillPrint, type SokanyCarrier, type SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
 import { getPrismaClient } from "@/lib/db";
 
@@ -265,20 +266,34 @@ function parseWaybillSnapshot(value: unknown): Record<string, unknown> {
 
 function itemDescription(snapshot: Record<string, unknown>) {
   const draft = fulfillmentWaybillDraft(snapshot);
-  if (draft?.description) return { text: draft.description, count: draft.itemsCount, kind: draft.deliveryKind, cod: draft.cod };
-  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
-  const names: string[] = [];
-  let count = 0;
-  for (const raw of items) {
-    if (!raw || typeof raw !== "object") continue;
-    const item = raw as { name?: unknown; quantity?: unknown };
-    const name = String(item.name || "").trim();
-    if (!name) continue;
-    const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
-    count += qty;
-    names.push(qty > 1 ? `${name} ×${qty}` : name);
-  }
-  return { text: names.join(" — ") || "شحنة سوكانى", count: Math.max(1, count), kind: "delivery" as const, cod: moneyOf(snapshot.waybillTotal ?? snapshot.total) };
+  const items = orderItemsDescription(snapshot);
+  return {
+    text: items.text || "شحنة سوكانى",
+    count: items.count,
+    kind: items.kind,
+    cod: draft?.cod ?? moneyOf(snapshot.waybillTotal ?? snapshot.total),
+  };
+}
+
+function printLocation(
+  snapshot: Record<string, unknown>,
+  answers: Array<{ itemKey: string; value?: string | null }>,
+) {
+  const loc = resolveSnapshotLocation({
+    governorate: String(snapshot.governorate || ""),
+    area: String(snapshot.area || ""),
+    address: String(snapshot.address || ""),
+    state: String(snapshot.state || ""),
+    city: String(snapshot.city || ""),
+  });
+  return {
+    customerName: textOf(answers, "customer_name") || String(snapshot.customerName || "").trim(),
+    phone: textOf(answers, "primary_phone") || String(snapshot.phone || "").trim(),
+    address: textOf(answers, "address_complete") || loc.address || String(snapshot.address || "").trim(),
+    governorate: preferPlace(loc.governorate || snapshot.governorate, textOf(answers, "governorate_confirm")),
+    area: preferPlace(loc.area || snapshot.area, textOf(answers, "area_confirm")),
+    landmarks: textOf(answers, "address_landmarks") || String(snapshot.note || "").trim(),
+  };
 }
 
 export async function ensureCsSokanyWaybill(confirmationId: number) {
@@ -329,30 +344,35 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
     }>
   >("SELECT * FROM CsSokanyWaybill WHERE confirmationId = ? ORDER BY id DESC LIMIT 1", confirmationId);
   const invoiceNumber = String(row.invoiceNumber || "").trim();
-  if (existing[0]) {
-    if (invoiceNumber && invoiceNumber !== String(existing[0].invoiceNumber || "").trim()) {
-      await prisma.$executeRawUnsafe(
-        "UPDATE CsSokanyWaybill SET invoiceNumber = ?, updatedAt = NOW(3) WHERE tracking = ?",
-        invoiceNumber,
-        existing[0].tracking,
-      );
-      existing[0].invoiceNumber = invoiceNumber;
-    }
-    return { ok: true as const, waybill: existing[0], carrier };
-  }
-
-  const snap = (row.customerSnapshot || {}) as Record<string, unknown>;
+  const snap = await hydrateWaybillSnapshot((row.customerSnapshot || {}) as Record<string, unknown>, row.wooOrderId);
   const answers = row.answers || [];
   const built = itemDescription(snap);
+  const printSnap = printLocation(snap, answers);
+  if (existing[0]) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE CsSokanyWaybill
+         SET description = ?, itemsCount = ?, snapshot = ?, invoiceNumber = COALESCE(?, invoiceNumber), updatedAt = NOW(3)
+       WHERE tracking = ?`,
+      built.text.slice(0, 500),
+      built.count,
+      JSON.stringify(printSnap),
+      invoiceNumber || null,
+      existing[0].tracking,
+    );
+    return {
+      ok: true as const,
+      waybill: {
+        ...existing[0],
+        description: built.text.slice(0, 500),
+        itemsCount: built.count,
+        snapshot: printSnap,
+        invoiceNumber: invoiceNumber || existing[0].invoiceNumber,
+      },
+      carrier,
+    };
+  }
+
   const tracking = buildSokanyTracking(carrier.code, row.wooOrderNumber, built.kind);
-  const printSnap = {
-    customerName: textOf(answers, "customer_name") || String(snap.customerName || "").trim(),
-    phone: textOf(answers, "primary_phone") || String(snap.phone || "").trim(),
-    address: textOf(answers, "address_complete") || String(snap.address || "").trim(),
-    governorate: preferPlace(snap.governorate, textOf(answers, "governorate_confirm")),
-    area: preferPlace(snap.area, textOf(answers, "area_confirm")),
-    landmarks: textOf(answers, "address_landmarks") || String(snap.note || "").trim(),
-  };
   try {
     await prisma.$executeRawUnsafe(
       `INSERT INTO CsSokanyWaybill

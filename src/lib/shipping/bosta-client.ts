@@ -4,7 +4,7 @@ import { PDFDocument } from "pdf-lib";
 
 import type { AdminOrder } from "@/lib/orders";
 
-import { deskFulfillmentDeliveryFields } from "@/lib/cs/fulfillment-waybill";
+import { deskFulfillmentDeliveryFields, orderItemsDescription } from "@/lib/cs/fulfillment-waybill";
 import {
   findBostaCity,
   getBostaStatusLabelAr,
@@ -416,13 +416,11 @@ export async function createBostaDelivery(order: AdminOrder, codAmount?: number)
   const cod = codAmount ?? (Number.parseFloat(order.total) || 0);
   const orderNumber = String(order.number || "").replace(/^#/, "").trim();
 
+  const items = orderItemsDescription({ items: order.items });
   const payload = {
     type: 10,
     cod,
-    specs: {
-      packageType: "Parcel",
-      size: "SMALL",
-    },
+    specs: parcelSpecs(items.text, items.count),
     dropOffAddress: {
       city: city.code,
       zone: order.area || city.nameAr,
@@ -855,6 +853,18 @@ function customerAddress(party: CsBostaParty, city: ResolvedBostaCity) {
   };
 }
 
+function parcelSpecs(description: string | undefined, itemsCount: number | undefined) {
+  const text = String(description || "").trim().slice(0, 500) || "شحنة سوكانى";
+  return {
+    packageType: "Parcel" as const,
+    size: "SMALL" as const,
+    packageDetails: {
+      description: text,
+      itemsCount: Math.max(1, Math.round(Number(itemsCount) || 1)),
+    },
+  };
+}
+
 export function buildCsBostaDeliveryPayload(party: CsBostaParty, city: ResolvedBostaCity) {
   const { firstName, lastName } = splitCustomerName(party.name);
   const receiver = {
@@ -885,7 +895,7 @@ export function buildCsBostaDeliveryPayload(party: CsBostaParty, city: ResolvedB
   return {
     type: 10,
     cod: party.cod,
-    specs: { packageType: "Parcel", size: "SMALL" },
+    specs: parcelSpecs(party.description, party.itemsCount),
     dropOffAddress: customerAddress(party, city),
     ...tail,
   };
@@ -959,8 +969,8 @@ function compactPlace(value: string) {
 }
 
 function placesMatch(left: string, right: string) {
-  const a = compactPlace(left);
-  const b = compactPlace(right);
+  const a = normalizeArabicCityKey(left);
+  const b = normalizeArabicCityKey(right);
   if (!a || !b) return false;
   if (a === b) return true;
   const shorter = a.length < b.length ? a : b;
@@ -1005,22 +1015,20 @@ function readWaybillEditFields(raw: unknown) {
 
 function matchBostaCityOption(cities: BostaCityOption[], governorate: string) {
   const known = findBostaCity(governorate);
-  const parts = String(governorate || "")
-    .split(/\s*[-–—·,]\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const keys = new Set(
-    [governorate, known?.nameAr || "", known?.code || "", ...parts]
+  const wantedKeys = new Set(
+    [governorate, known?.nameAr || ""]
       .map(normalizeArabicCityKey)
       .filter(Boolean),
   );
   return (
-    cities.find(
-      (city) =>
-        keys.has(normalizeArabicCityKey(city.nameAr)) ||
-        keys.has(normalizeArabicCityKey(city.nameEn)) ||
-        keys.has(normalizeArabicCityKey(city.id)),
-    ) || null
+    cities.find((city) => {
+      const live = findBostaCity(city.nameAr) || findBostaCity(city.nameEn);
+      if (known && live?.code === known.code) return true;
+      return (
+        wantedKeys.has(normalizeArabicCityKey(city.nameAr)) ||
+        wantedKeys.has(normalizeArabicCityKey(city.nameEn))
+      );
+    }) || null
   );
 }
 
@@ -1206,17 +1214,10 @@ export async function updateCsBostaDelivery(trackingNumber: string, party: CsBos
   const citiesResult = await getBostaCityOptions();
   const cities = citiesResult.ok ? citiesResult.cities : [];
   const requestedCity = matchBostaCityOption(cities, party.governorate);
-  const currentCity =
-    cities.find(
-      (city) =>
-        city.id === before.cityId ||
-        (before.cityName && placesMatch(city.nameAr, before.cityName)) ||
-        placesMatch(city.nameEn, before.cityId),
-    ) || null;
   let cityToSend = before.cityId;
-  if (requestedCity && currentCity && requestedCity.id !== currentCity.id) {
+  if (requestedCity?.id && requestedCity.id !== before.cityId) {
     cityToSend = requestedCity.id;
-  } else if (!cityToSend && requestedCity) {
+  } else if (!cityToSend && requestedCity?.id) {
     cityToSend = requestedCity.id;
   } else if (!cityToSend) {
     const mapped = findBostaCity(party.governorate);
@@ -1288,7 +1289,13 @@ export async function updateCsBostaDelivery(trackingNumber: string, party: CsBos
       : null;
   const body = fulfillment
     ? { receiver, notes, ...fulfillment }
-    : { receiver, dropOffAddress, notes, cod: party.cod };
+    : {
+        receiver,
+        dropOffAddress,
+        notes,
+        cod: party.cod,
+        specs: parcelSpecs(party.description, party.itemsCount),
+      };
   const putDelivery = (path: string) =>
     bostaFetch(path, {
       method: "PUT",

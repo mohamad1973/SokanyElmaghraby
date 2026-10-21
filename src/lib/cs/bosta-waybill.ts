@@ -13,7 +13,8 @@ import {
   updateCsBostaDelivery,
   type CsBostaParty,
 } from "@/lib/shipping/bosta-client";
-import { fulfillmentWaybillDraft } from "@/lib/cs/fulfillment-waybill";
+import { fulfillmentWaybillDraft, orderItemsDescription } from "@/lib/cs/fulfillment-waybill";
+import { hydrateWaybillSnapshot } from "@/lib/cs/hydrate-waybill-snapshot";
 import { effectivePaymentState } from "@/lib/cs/order-window";
 import {
   bostaStatusLocksEdits,
@@ -126,6 +127,7 @@ function partyFromAnswers(input: {
     return { ok: false, message: "بيانات البوليصة ناقصة: الاسم أو التليفون أو العنوان أو المحافظة." };
   }
   const fulfillment = fulfillmentWaybillDraft(snap);
+  const items = orderItemsDescription(snap);
   if (fulfillment) {
     const noteParts = [fulfillment.description, landmarks || null].filter(Boolean);
     return {
@@ -176,6 +178,8 @@ function partyFromAnswers(input: {
       cod,
       reference,
       notes: [`طلب #${input.wooOrderNumber}`, landmarks].filter(Boolean).join(" — "),
+      description: items.text || `طلب #${input.wooOrderNumber}`,
+      itemsCount: items.count,
     },
   };
 }
@@ -597,8 +601,13 @@ export async function syncCsBostaWaybill(input: {
     orderTotalDelta = null;
   }
 
+  const snapshot = await hydrateWaybillSnapshot(
+    (input.snapshot || {}) as Record<string, unknown>,
+    input.wooOrderId,
+  );
   const built = partyFromAnswers({
     ...input,
+    snapshot,
     orderTotalDelta,
     depositAmount,
     depositPaid,
@@ -607,7 +616,7 @@ export async function syncCsBostaWaybill(input: {
   if (!built.ok) {
     await writeConfirmation({
       confirmationId: input.confirmationId,
-      snapshot: input.snapshot,
+      snapshot,
       trackingNumber,
       bostaStatus,
       bostaShippingFee,
@@ -627,7 +636,7 @@ export async function syncCsBostaWaybill(input: {
     const message = "تم حفظ التعديل هنا. بوسطة قفلت تعديل البوليصة بعد استلام المندوب.";
     await writeConfirmation({
       confirmationId: input.confirmationId,
-      snapshot: input.snapshot,
+      snapshot,
       trackingNumber,
       bostaStatus,
       bostaShippingFee,
@@ -650,7 +659,7 @@ export async function syncCsBostaWaybill(input: {
       : updated.message;
     await writeConfirmation({
       confirmationId: input.confirmationId,
-      snapshot: input.snapshot,
+      snapshot,
       trackingNumber,
       bostaStatus,
       bostaShippingFee,
@@ -681,7 +690,7 @@ export async function syncCsBostaWaybill(input: {
     const message = created.ok ? "بوسطة لم ترجع رقم تتبع." : created.message;
     await writeConfirmation({
       confirmationId: input.confirmationId,
-      snapshot: input.snapshot,
+      snapshot,
       trackingNumber: null,
       bostaStatus: input.bostaStatus,
       bostaShippingFee: input.bostaShippingFee,
@@ -710,7 +719,7 @@ export async function syncCsBostaWaybill(input: {
   const status = normalizeBostaStatus(details.status || readBostaStatus(raw) || "created");
   await writeConfirmation({
     confirmationId: input.confirmationId,
-    snapshot: input.snapshot,
+    snapshot,
     trackingNumber: created.trackingNumber,
     bostaStatus: status,
     bostaShippingFee: fee,
@@ -916,29 +925,13 @@ export async function ensureCsBostaWaybill(
   const preserveShippingCompany = Boolean(opts?.preserveShippingCompany);
 
   const existingTracking = String(typed.trackingNumber || "").trim();
-  if (existingTracking) {
-    const live = await fetchCsBostaDelivery(existingTracking);
-    if (live.ok) {
-      const refreshed = await refreshCsBostaWaybill(confirmationId);
-      if (refreshed?.trackingNumber) {
-        return { ok: true, created: false, state: refreshed };
-      }
-    }
-    return {
-      ok: false,
-      message: live.ok
-        ? "البوليصة موجودة على الأوردر وتعذر قراءتها من بوسطة. لا ننشئ شحنة تانية."
-        : live.message || "البوليصة موجودة على الأوردر وتعذر قراءتها من بوسطة. لا ننشئ شحنة تانية.",
-    };
-  }
-
   const beforeTracking = existingTracking;
   const state = await syncCsBostaWaybill({
     confirmationId,
     wooOrderId: row.wooOrderId,
     wooOrderNumber: row.wooOrderNumber,
     shippingCompany: preserveShippingCompany ? typed.shippingCompany || "bosta" : "bosta",
-    trackingNumber: null,
+    trackingNumber: existingTracking || null,
     bostaStatus: typed.bostaStatus || null,
     bostaShippingFee: fee,
     answers,
@@ -958,6 +951,54 @@ export async function ensureCsBostaWaybill(
   }
   const created = !beforeTracking || beforeTracking !== state.trackingNumber;
   return { ok: true, created, state };
+}
+
+/** Update city + وصف الشحنة on an existing Bosta AWB from the CS card, without creating a new shipment. */
+export async function alignCsBostaWaybillBeforePrint(confirmationId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) return;
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    include: { answers: true },
+  });
+  if (!row) return;
+  const typed = row as {
+    trackingNumber?: string | null;
+    bostaStatus?: string | null;
+    bostaShippingFee?: unknown;
+    orderTotalDelta?: unknown;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
+    depositApprovalStatus?: string | null;
+    shippingCompany?: string | null;
+  };
+  const tracking = String(typed.trackingNumber || "").trim();
+  if (!tracking) return;
+  const fee =
+    typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
+      ? null
+      : Number(typed.bostaShippingFee);
+  await syncCsBostaWaybill({
+    confirmationId,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    shippingCompany: typed.shippingCompany || "bosta",
+    trackingNumber: tracking,
+    bostaStatus: typed.bostaStatus || null,
+    bostaShippingFee: fee,
+    answers: row.answers.map((answer) => ({
+      itemKey: answer.itemKey,
+      confirmed: Boolean(answer.confirmed),
+      value: answer.value,
+      note: answer.note,
+    })),
+    snapshot: (row.customerSnapshot as Snapshot) || null,
+    orderTotalDelta: typed.orderTotalDelta == null ? null : Number(typed.orderTotalDelta),
+    depositAmount: typed.depositAmount == null ? null : Number(typed.depositAmount),
+    depositPaid: Boolean(typed.depositPaid),
+    depositApprovalStatus: typed.depositApprovalStatus || null,
+    preserveShippingCompany: typed.shippingCompany !== "bosta",
+  });
 }
 
 export async function refreshCsBostaWaybill(confirmationId: number): Promise<BostaWaybillState | null> {

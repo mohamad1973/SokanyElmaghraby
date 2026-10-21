@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { alignCsBostaWaybillBeforePrint } from "@/lib/cs/bosta-waybill";
 import { getPrismaClient } from "@/lib/db";
 import { fetchBostaAwbPdf } from "@/lib/shipping/bosta-client";
 import { requireCsSession } from "@/lib/session-guards";
@@ -34,6 +35,7 @@ export async function GET(_request: Request, context: Context) {
       { status: 400 },
     );
   }
+  await alignCsBostaWaybillBeforePrint(numericId);
   const printed = await fetchBostaAwbPdf(tracking);
   if (!printed.ok) {
     const missing = /مفيش بوليصة|غير موجود|not found|404|does not exist/i.test(printed.message);

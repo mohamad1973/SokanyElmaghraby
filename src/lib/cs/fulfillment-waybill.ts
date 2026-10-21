@@ -118,6 +118,22 @@ export function fulfillmentWaybillDraft(
   };
 }
 
+/** Product names for وصف الشحنة on a normal delivery (and fallback for Sokany AWB). */
+export function orderItemsDescription(snapshot: Record<string, unknown> | null | undefined) {
+  const snap = snapshot || {};
+  const draft = fulfillmentWaybillDraft(snap);
+  if (draft) {
+    return { text: draft.description, count: draft.itemsCount, kind: draft.deliveryKind };
+  }
+  const items = itemParts(snap.items);
+  const names = [...items.outbound, ...items.returning];
+  return {
+    text: names.join(" — ").replace(/\s+/g, " ").trim().slice(0, 500),
+    count: Math.max(1, items.count || 1),
+    kind: "delivery" as const,
+  };
+}
+
 /** Type 25 picks the parcel up from the customer. Type 30 delivers the replacement there. */
 export function deskFulfillmentDeliveryFields(input: {
   kind: DeskFulfillmentKind;

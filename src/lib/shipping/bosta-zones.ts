@@ -67,7 +67,13 @@ export const BOSTA_CITY_MAP: Record<string, { code: string; nameAr: string }> = 
   "أسيوط": { code: "EG-19", nameAr: "أسيوط" },
   assiut: { code: "EG-19", nameAr: "أسيوط" },
   "بني سويف": { code: "EG-20", nameAr: "بني سويف" },
+  "بنى سويف": { code: "EG-20", nameAr: "بني سويف" },
   "بنيسويف": { code: "EG-20", nameAr: "بني سويف" },
+  "بنىسويف": { code: "EG-20", nameAr: "بني سويف" },
+  "beni suef": { code: "EG-20", nameAr: "بني سويف" },
+  "beni-suef": { code: "EG-20", nameAr: "بني سويف" },
+  "bani sweif": { code: "EG-20", nameAr: "بني سويف" },
+  "banisweif": { code: "EG-20", nameAr: "بني سويف" },
   "بورسعيد": { code: "EG-21", nameAr: "بورسعيد" },
   portsaid: { code: "EG-21", nameAr: "بورسعيد" },
   "دمياط": { code: "EG-22", nameAr: "دمياط" },
@@ -86,14 +92,16 @@ export const BOSTA_CITY_MAP: Record<string, { code: string; nameAr: string }> = 
   sharkia: { code: "EG-SHR", nameAr: "الشرقية" },
 };
 
-/** Collapse Arabic ta-marbuta / ha so «القاهرة» and «القاهره» match the same city. */
+/** Collapse Arabic spelling so «القاهرة/القاهره» and «بني/بنى سويف» match the same city. */
 export function normalizeArabicCityKey(value: string) {
   return value
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/ة/g, "ه")
-    .replace(/[أإآ]/g, "ا");
+    .replace(/[أإآ]/g, "ا")
+    .replace(/[ىئ]/g, "ي")
+    .replace(/ؤ/g, "و");
 }
 
 function cityLookupCandidates(governorate: string) {

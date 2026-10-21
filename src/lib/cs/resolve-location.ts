@@ -1,4 +1,4 @@
-import { BOSTA_CITY_MAP } from "@/lib/shipping/bosta-zones";
+import { BOSTA_CITY_MAP, findBostaCity } from "@/lib/shipping/bosta-zones";
 
 function metaValue(meta: Array<{ key: string; value?: unknown }> | undefined, keys: string[]) {
   if (!meta?.length) return "";
@@ -50,6 +50,9 @@ export function resolveArabicGovernorate(raw: string | null | undefined) {
   if (!value || value === "غير محدد") return "";
 
   if (/^EG$/i.test(value)) return "";
+
+  const mapped = findBostaCity(value);
+  if (mapped?.nameAr) return mapped.nameAr;
 
   const direct = BOSTA_CITY_MAP[value] || BOSTA_CITY_MAP[value.toLowerCase()];
   if (direct?.nameAr) return direct.nameAr;
