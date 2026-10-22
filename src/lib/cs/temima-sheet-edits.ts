@@ -372,9 +372,9 @@ export async function freezePreparedTemimaDay(dayYmd: string) {
   if (await hasTemimaFreezeDay(dayYmd)) {
     return { ok: true as const, dayYmd, frozen: true as const, message: "الشيت متجمد من وقت القفل." };
   }
-  const cutoffs = await listTemimaCutoffs();
-  if (!cutoffs.some((row) => row.dayYmd === dayYmd)) {
-    return { ok: false as const, message: "جهّز اليوم الأول." };
+  const cutoff = await ensureTemimaDayCutoff(dayYmd);
+  if (!cutoff.ok) {
+    return { ok: false as const, message: "تعذر قفل اليوم. حدّد يوم واحد في من/إلى وحاول تاني." };
   }
   await captureTemimaSheetFreeze(dayYmd);
   await clearTemimaPrepareHold(dayYmd);
