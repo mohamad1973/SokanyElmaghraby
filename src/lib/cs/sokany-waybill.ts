@@ -260,6 +260,37 @@ export async function createCsCarrier(input: {
     : { ok: false as const, message: "تعذر قراءة الشركة بعد الحفظ." };
 }
 
+export async function updateCsCarrier(input: {
+  code: string;
+  printHubLabel: string;
+  nameAr?: string;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureSokanyAwbTables();
+  const code = String(input.code || "").trim();
+  if (!code) return { ok: false as const, message: "كود الشركة مطلوب." };
+  const existing = await getCsCarrierByCode(code);
+  if (!existing) return { ok: false as const, message: "الشركة غير موجودة." };
+  if (existing.waybillProvider === "bosta") {
+    return { ok: false as const, message: "بوسطة تطبع من لوحة بوسطة، مش من بوليصة سوكانى." };
+  }
+  const hub = String(input.printHubLabel || "").trim();
+  if (hub.length < 2) return { ok: false as const, message: "اكتبي الاسم اللي يظهر على بوليصة سوكانى." };
+  const nameAr = input.nameAr !== undefined ? String(input.nameAr || "").trim() : existing.nameAr;
+  if (nameAr.length < 2) return { ok: false as const, message: "اكتبي اسم الشركة بالعربي." };
+  await prisma.$executeRawUnsafe(
+    `UPDATE CsCarrier SET printHubLabel = ?, nameAr = ?, updatedAt = NOW(3) WHERE LOWER(code) = LOWER(?)`,
+    hub,
+    nameAr,
+    code,
+  );
+  const updated = await getCsCarrierByCode(code);
+  return updated
+    ? { ok: true as const, carrier: updated }
+    : { ok: false as const, message: "تعذر قراءة الشركة بعد الحفظ." };
+}
+
 function kindLabelOf(kind: string) {
   if (kind === "return") return "استرجاع";
   if (kind === "exchange") return "استبدال";

@@ -925,7 +925,9 @@ function CsHeader() {
                   pathname.startsWith("/cs/couriers") ||
                   pathname === "/cs/courier" ||
                   pathname.startsWith("/cs/courier/") ||
-                  pathname.startsWith("/cs/mona-accounts"),
+                  pathname.startsWith("/cs/mona-accounts") ||
+                  pathname.startsWith("/cs/bosta") ||
+                  pathname.startsWith("/cs/carriers"),
               )}
               aria-expanded={shippingOpen}
               aria-haspopup="menu"
@@ -953,7 +955,7 @@ function CsHeader() {
               توزيع
             </Link>
           ) : null}
-          {isSupervisor && !isCourierSupervisor ? (
+          {isSupervisor && !isAdmin && !isCourierSupervisor ? (
             <Link href="/cs/bosta" className={navClass(pathname.startsWith("/cs/bosta"))}>
               لوحة بوسطة
             </Link>
@@ -976,11 +978,6 @@ function CsHeader() {
           {isAdmin ? (
             <Link href="/cs/users" className={navClass(pathname.startsWith("/cs/users"))}>
               المستخدمون
-            </Link>
-          ) : null}
-          {isAdmin ? (
-            <Link href="/cs/carriers" className={navClass(pathname.startsWith("/cs/carriers"))}>
-              شركات الشحن
             </Link>
           ) : null}
           {isCourierSupervisor ? (
@@ -1022,14 +1019,6 @@ function CsHeader() {
               style={{ top: shippingPos.top, left: shippingPos.left }}
             >
               <Link
-                href="/cs/bosta"
-                role="menuitem"
-                onClick={() => setShippingOpen(false)}
-                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
-              >
-                لوحة بوسطة
-              </Link>
-              <Link
                 href="/cs/temima"
                 role="menuitem"
                 onClick={() => setShippingOpen(false)}
@@ -1068,6 +1057,22 @@ function CsHeader() {
                 className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
               >
                 مناديب المشرفة
+              </Link>
+              <Link
+                href="/cs/bosta"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                لوحة بوسطة
+              </Link>
+              <Link
+                href="/cs/carriers"
+                role="menuitem"
+                onClick={() => setShippingOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+              >
+                شركات الشحن
               </Link>
             </div>,
             document.body,

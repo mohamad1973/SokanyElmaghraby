@@ -458,6 +458,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| اسم البوليصة تحت شحن | الأدمن يعدّل الاسم الظاهر في هيدر بوليصة سوكانى من لوحة الشركات؛ شركات الشحن ولوحة بوسطة آخر قائمة تبويب شحن | `sokany-waybill.ts`, `carriers/route.ts`, `carriers-client.tsx`, `cs-shell.tsx` |
 | بوليصة سوكانى لتميمة وعيد ومؤمن | أي أوردر تميمة/عيد/مؤمن (توصيل/استرجاع/استبدال) يطبع سوكانى 10×15 بتراك SK-TM\|EID\|MN؛ الكارت يعرض SK؛ رقم بوسطة القديم يظهر أرقام فقط تحت الفاتورة؛ البحث يلاقي الأبناء برقم الأصل وSK | `sokany-waybill.ts`, `fulfillment-return.ts`, `confirmations.ts`, `call-sheet.tsx`, `sticker.tsx` |
 | اسم التاجر على بوليصة سوكانى | التاجر يظهر بالإنجليزي فقط (Sokany Elmaghraby) من غير الاسم العربي | `sokany-awb/sticker.tsx`, `sokany-waybill.ts` |
 | حفظ فحص مرتجع الصيانة | زر «تم» يحفظ INSERT/UPDATE بسيط ويظهر سبب الخطأ بدل رسالة السيرفر العامة | `bosta-return-review.ts`, `maintenance/returns/route.ts`, `maintenance-client.tsx` |

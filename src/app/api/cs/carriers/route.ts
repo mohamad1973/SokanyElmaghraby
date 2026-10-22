@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveCsViewer } from "@/lib/cs/confirmations";
-import { createCsCarrier, listCsCarriers } from "@/lib/cs/sokany-waybill";
+import { createCsCarrier, listCsCarriers, updateCsCarrier } from "@/lib/cs/sokany-waybill";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function GET() {
@@ -33,6 +33,31 @@ export async function POST(request: Request) {
     nameAr: String(body.nameAr || ""),
     printHubLabel: body.printHubLabel,
     returnAddress: body.returnAddress,
+  });
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true, carrier: result.carrier });
+}
+
+export async function PATCH(request: Request) {
+  const session = await requireCsSession();
+  if (!session?.user.csAgentId) {
+    return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  const viewer = await resolveCsViewer(session.user.csAgentId);
+  if (!viewer.isAdmin) {
+    return NextResponse.json({ message: "للأدمن فقط." }, { status: 403 });
+  }
+  const body = (await request.json().catch(() => ({}))) as {
+    code?: string;
+    nameAr?: string;
+    printHubLabel?: string;
+  };
+  const result = await updateCsCarrier({
+    code: String(body.code || ""),
+    printHubLabel: String(body.printHubLabel || ""),
+    nameAr: body.nameAr,
   });
   if (!result.ok) {
     return NextResponse.json({ message: result.message }, { status: 400 });
