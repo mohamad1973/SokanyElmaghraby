@@ -855,6 +855,7 @@ export function CsQueueClient({
   const [sheetTab, setSheetTab] = useState<"sheet" | "late">("sheet");
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
+  const [lateDateFilter, setLateDateFilter] = useState("");
 
   useEffect(() => {
     setItems(initialItems);
@@ -976,6 +977,22 @@ export function CsQueueClient({
     () => new Map(lateRows.map((row) => [row.confirmationId, row])),
     [lateRows],
   );
+  const lateDayOptions = useMemo(() => {
+    const map = new Map<string, { freezeDay: string; sinceLabel: string; count: number }>();
+    for (const row of lateRows) {
+      const prev = map.get(row.freezeDay);
+      if (prev) {
+        prev.count += 1;
+        continue;
+      }
+      map.set(row.freezeDay, { freezeDay: row.freezeDay, sinceLabel: row.sinceLabel, count: 1 });
+    }
+    return [...map.values()].sort((a, b) => b.freezeDay.localeCompare(a.freezeDay));
+  }, [lateRows]);
+  const visibleLateRows = useMemo(() => {
+    if (!lateDateFilter) return lateRows;
+    return lateRows.filter((row) => row.freezeDay === lateDateFilter);
+  }, [lateRows, lateDateFilter]);
 
   const filtered = useMemo(() => {
     const wantDupOnly = Boolean(isSupervisor) && draft.duplicates === "only";
@@ -2035,46 +2052,97 @@ export function CsQueueClient({
               <p className="font-bold">مفيش أوردرات متأخرة في التسليم.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
-              <table className="min-w-full text-right text-sm font-bold text-[#14213D]">
-                <thead className="bg-[#14213D] text-white">
-                  <tr>
-                    <th className="px-3 py-2">الأوردر</th>
-                    <th className="px-3 py-2">العميل</th>
-                    <th className="px-3 py-2">الموبايل</th>
-                    <th className="px-3 py-2">تاريخ القفل</th>
-                    <th className="px-3 py-2">العمر</th>
-                    <th className="px-3 py-2">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lateRows.map((row) => (
-                    <tr key={row.confirmationId} className="border-t border-[#E5E5E5]">
-                      <td className="px-3 py-2">
-                        {canOpenOrders ? (
-                          <Link href={`/cs/orders/${row.confirmationId}`} className="text-[#14213D] underline">
-                            #{row.wooOrderNumber}
-                          </Link>
-                        ) : (
-                          <>#{row.wooOrderNumber}</>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{row.customerName || "—"}</td>
-                      <td className="px-3 py-2" dir="ltr">
-                        {row.phone || "—"}
-                      </td>
-                      <td className="px-3 py-2">{formatCairoOrderDate(row.freezeAt) || row.freezeDay}</td>
-                      <td className="px-3 py-2">
-                        <span className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white">
-                          متأخر · {row.sinceLabel}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{row.statusLabel}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+                <label className="flex flex-col gap-1 text-xs font-extrabold text-[#14213D]">
+                  تاريخ القفل
+                  <input
+                    type="date"
+                    value={lateDateFilter}
+                    onChange={(event) => setLateDateFilter(event.target.value)}
+                    className="h-10 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold"
+                  />
+                </label>
+                <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-extrabold text-[#14213D]">
+                  منذ كام يوم
+                  <select
+                    value={lateDateFilter}
+                    onChange={(event) => setLateDateFilter(event.target.value)}
+                    className="h-10 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold"
+                  >
+                    <option value="">الكل ({lateRows.length})</option>
+                    {lateDayOptions.map((option) => {
+                      const [year, month, day] = option.freezeDay.split("-");
+                      return (
+                        <option key={option.freezeDay} value={option.freezeDay}>
+                          {Number(day)}-{Number(month)}-{year} · {option.sinceLabel} ({option.count})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white">
+                  {lateDateFilter
+                    ? `متأخرة منذ هذا التاريخ: ${visibleLateRows.length}`
+                    : `كل المتأخرة: ${lateRows.length}`}
+                </p>
+                {lateDateFilter ? (
+                  <button
+                    type="button"
+                    onClick={() => setLateDateFilter("")}
+                    className="h-10 rounded-xl bg-[#E5E5E5] px-3 text-sm font-extrabold text-[#14213D]"
+                  >
+                    الكل
+                  </button>
+                ) : null}
+              </div>
+              {visibleLateRows.length === 0 ? (
+                <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
+                  <p className="font-bold">مفيش أوردرات متأخرة في التاريخ ده.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+                  <table className="min-w-full text-right text-sm font-bold text-[#14213D]">
+                    <thead className="bg-[#14213D] text-white">
+                      <tr>
+                        <th className="px-3 py-2">الأوردر</th>
+                        <th className="px-3 py-2">العميل</th>
+                        <th className="px-3 py-2">الموبايل</th>
+                        <th className="px-3 py-2">تاريخ القفل</th>
+                        <th className="px-3 py-2">العمر</th>
+                        <th className="px-3 py-2">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleLateRows.map((row) => (
+                        <tr key={row.confirmationId} className="border-t border-[#E5E5E5]">
+                          <td className="px-3 py-2">
+                            {canOpenOrders ? (
+                              <Link href={`/cs/orders/${row.confirmationId}`} className="text-[#14213D] underline">
+                                #{row.wooOrderNumber}
+                              </Link>
+                            ) : (
+                              <>#{row.wooOrderNumber}</>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">{row.customerName || "—"}</td>
+                          <td className="px-3 py-2" dir="ltr">
+                            {row.phone || "—"}
+                          </td>
+                          <td className="px-3 py-2">{formatCairoOrderDate(row.freezeAt) || row.freezeDay}</td>
+                          <td className="px-3 py-2">
+                            <span className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white">
+                              متأخر · {row.sinceLabel}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">{row.statusLabel}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
