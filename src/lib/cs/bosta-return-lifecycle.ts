@@ -47,6 +47,7 @@ export async function ensureMaintenanceLifecycleColumns() {
   await ensureBostaReturnReviewTable();
   await addColumn("ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `note` TEXT NULL");
   await addColumn("ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `openedAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `source` VARCHAR(16) NOT NULL DEFAULT 'bosta'");
   await addColumn(
     "ALTER TABLE `CsBostaReturnReview` ADD COLUMN `deliveredToMaintenanceAt` DATETIME(3) NULL",
   );

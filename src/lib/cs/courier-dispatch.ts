@@ -1,5 +1,6 @@
 import "server-only";
 
+import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
 import { getPrismaClient } from "@/lib/db";
 import { parseCsRoles } from "@/lib/cs/agents";
 import { orderMatchesAreas, parseCourierAreas, serializeCourierAreas } from "@/lib/cs/courier-areas";
@@ -470,6 +471,7 @@ export async function markCourierOutcome(
       },
     });
   }
+  if (outcome !== "postponed") await captureDeskReturnFromConfirmation(order.id);
   return { ok: true as const };
 }
 
@@ -493,6 +495,7 @@ export async function markCourierSupervisorDisposition(
       ...(outcome === "postponed" ? { courierAgentId: null, courierAssignedAt: null } : {}),
     },
   });
+  if (outcome === "refused") await captureDeskReturnFromConfirmation(order.id);
   return { ok: true as const };
 }
 

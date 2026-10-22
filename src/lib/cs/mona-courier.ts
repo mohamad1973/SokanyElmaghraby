@@ -11,6 +11,7 @@ import {
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
+import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
 import { cashAmountOf } from "@/lib/cs/temima-settlement";
 
 export const MONA_COURIER_FEE = 75;
@@ -751,6 +752,7 @@ export async function markMonaOutcome(input: {
         monaRefusalReason = ${input.outcome === "refused" ? reason : null}
     WHERE id = ${input.confirmationId} AND monaCourierId = ${input.courierId}
   `;
+  await captureDeskReturnFromConfirmation(input.confirmationId);
   return { ok: true as const, message: "اتسجل." };
 }
 
@@ -795,6 +797,7 @@ export async function markMonaSupervisorResult(confirmationId: number, result: O
       WHERE id = ${confirmationId}
     `;
   }
+  await captureDeskReturnFromConfirmation(confirmationId);
   return { ok: true as const, message: "اتسجل في الحسابات." };
 }
 

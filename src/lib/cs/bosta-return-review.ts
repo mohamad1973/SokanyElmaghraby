@@ -269,18 +269,21 @@ export async function saveBostaReturnReview(input: {
   try {
     await ensureBostaReturnCaptureTable();
     await ensureBostaReturnReviewTable();
-    const stored = await prisma.$queryRawUnsafe<Array<{ kind: string }>>(
-      `SELECT kind FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
+    const stored = await prisma.$queryRawUnsafe<Array<{ kind: string; source: string | null }>>(
+      `SELECT kind, source FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
       trackingNumber,
     );
     const kind =
       stored[0]?.kind === "refused" || stored[0]?.kind === "return" || stored[0]?.kind === "exchange"
         ? stored[0].kind
         : "";
-    if (!kind) return { ok: false as const, message: "الأوردر مش في مرتجعات بوسطة المحفوظة." };
+    if (!kind) return { ok: false as const, message: "الأوردر مش في مرتجعات الصيانة المحفوظة." };
     const defects = [...new Set(parseDefects(input.defects.join(",")))];
     const decided = decidedReview(kind, condition, defects);
     if (!decided) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
+    const source = String(stored[0]?.source || "").trim();
+    const deskReturn = source === "temima" || source === "eid" || source === "momen";
+    const bostaClaim = deskReturn ? false : decided.bostaClaim;
     const prev = await prisma.$queryRawUnsafe<
       Array<{
         grade: string | null;
@@ -309,7 +312,7 @@ export async function saveBostaReturnReview(input: {
         decided.condition,
         decided.defects.join(","),
         decided.destination,
-        decided.bostaClaim ? 1 : 0,
+        bostaClaim ? 1 : 0,
         usage,
         deliveredAt,
       );
@@ -324,7 +327,7 @@ export async function saveBostaReturnReview(input: {
         decided.condition,
         decided.defects.join(","),
         decided.destination,
-        decided.bostaClaim ? 1 : 0,
+        bostaClaim ? 1 : 0,
         usage,
         deliveredAt,
         trackingNumber,
@@ -334,7 +337,7 @@ export async function saveBostaReturnReview(input: {
       condition: decided.condition,
       defects: decided.defects.join(","),
       destination: decided.destination,
-      bostaClaim: decided.bostaClaim ? 1 : 0,
+      bostaClaim: bostaClaim ? 1 : 0,
       usage,
       grade: prevRow?.grade,
       techNote: prevRow?.techNote,

@@ -42,25 +42,23 @@ type Review = {
   shelfAt: string | null;
 };
 
-type LocalRow = {
-  confirmationId: number;
-  day: string;
-  wooOrderNumber: string;
-  customerName: string;
-  phone: string;
-  product: string;
-  searchText: string;
-};
-
 type LinkedProduct = {
   productId: number;
   productName: string;
   productCode: string;
 };
 
-type BostaRow = Omit<LocalRow, "confirmationId"> & {
+type Source = "bosta" | "temima" | "eid" | "momen";
+
+type BostaRow = {
   trackingNumber: string;
   confirmationId: number | null;
+  day: string;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+  product: string;
+  searchText: string;
   kind: Kind;
   statusLabel: string;
   reasonText: string;
@@ -69,18 +67,20 @@ type BostaRow = Omit<LocalRow, "confirmationId"> & {
   review: Review | null;
   orderProduct: string;
   linkedProducts: LinkedProduct[];
+  source?: Source;
 };
 
 type CourierSection = {
   found: boolean;
-  rows: LocalRow[];
+  rows: BostaRow[];
+  error?: string | null;
 };
 
 type Payload = {
   from: string;
   to: string;
   bosta: { rows: BostaRow[]; error: string | null };
-  temima: { rows: LocalRow[] };
+  temima: { rows: BostaRow[]; error?: string | null };
   eid: CourierSection;
   momen: CourierSection;
   variance?: VariancePayload | null;
@@ -136,6 +136,20 @@ const DEST_PRINT_ORDER: Array<{ id: Destination | "unreviewed"; label: string }>
   { id: "unreviewed", label: "لسه متفحصش" },
 ];
 
+const TAB_PRINT: Record<TabId, string> = {
+  bosta: "مرتجعات بوسطة",
+  temima: "مرتجعات تميمة",
+  eid: "مرتجعات عيد",
+  momen: "مرتجعات مؤمن",
+};
+
+const EMPTY_INSPECT: Record<TabId, string> = {
+  bosta: "مفيش مرتجعات في المدى ده. وسّع من/إلى (إمبارح موجود لو التاريخ يشمله) أو اضغط «حفظ ظاهر بوسطة».",
+  temima: "مفيش مرتجعات تميمة في المدى.",
+  eid: "مفيش مرتجعات عيد في المدى.",
+  momen: "مفيش مرتجعات مؤمن في المدى.",
+};
+
 function matchesQuery(searchText: string, raw: string) {
   const query = raw.trim().toLowerCase();
   if (!query) return true;
@@ -143,44 +157,6 @@ function matchesQuery(searchText: string, raw: string) {
   if (hay.includes(query)) return true;
   const digits = query.replace(/\D/g, "");
   return digits.length >= 4 && hay.replace(/\D/g, "").includes(digits);
-}
-
-function LocalTable({ rows, loading, empty, missing }: { rows: LocalRow[]; loading: boolean; empty: string; missing?: string }) {
-  if (missing) return <p className="px-4 py-6 text-center text-sm font-bold text-[#14213D]/60">{missing}</p>;
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-right text-sm">
-        <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
-          <tr>
-            <th className="px-3 py-2">اليوم</th>
-            <th className="px-3 py-2">الأوردر</th>
-            <th className="px-3 py-2">العميل</th>
-            <th className="px-3 py-2">الموبايل</th>
-            <th className="px-3 py-2">المنتج</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((row) => (
-              <tr key={row.confirmationId} className="border-t border-black/5">
-                <td className="px-3 py-2">{row.day || "—"}</td>
-                <td className="px-3 py-2 font-extrabold">{row.wooOrderNumber || "—"}</td>
-                <td className="px-3 py-2">{row.customerName || "—"}</td>
-                <td className="px-3 py-2">{row.phone || "—"}</td>
-                <td className="px-3 py-2">{row.product || "—"}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={5} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
-                {loading ? "جارٍ التحميل…" : empty}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 function productText(product: LinkedProduct) {
@@ -300,10 +276,12 @@ function ProductSearch({
 
 function ReviewCards({
   row,
+  deskReturn,
   onClose,
   onSaved,
 }: {
   row: BostaRow;
+  deskReturn?: boolean;
   onClose: () => void;
   onSaved: (review: Review) => void;
 }) {
@@ -467,7 +445,7 @@ function ReviewCards({
         {phase === "hand" ? (
           <div className="space-y-3">
             <p className="rounded-2xl bg-[#F5F5F0] px-4 py-8 text-center text-xl font-extrabold text-[#14213D]">{handText}</p>
-            {condition === "broken" ? (
+            {condition === "broken" && !deskReturn ? (
               <button type="button" onClick={() => setPhase("claim")} className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
                 التالي
               </button>
@@ -483,7 +461,7 @@ function ReviewCards({
             )}
           </div>
         ) : null}
-        {phase === "claim" ? (
+        {phase === "claim" && !deskReturn ? (
           <div className="space-y-3">
             <p className="rounded-2xl bg-[#F5F5F0] px-4 py-8 text-center text-xl font-extrabold text-[#14213D]">رفع تذكرة للتعويض من بوسطة</p>
             <button
@@ -585,6 +563,36 @@ export function MaintenanceClient({
     })();
   }, [load, canInspect]);
 
+  function patchCapturedRow(trackingNumber: string, patch: (row: BostaRow) => BostaRow) {
+    const map = (rows: BostaRow[]) =>
+      rows.map((row) => (row.trackingNumber === trackingNumber ? patch(row) : row));
+    setData((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        bosta: { ...current.bosta, rows: map(current.bosta.rows) },
+        temima: { ...current.temima, rows: map(current.temima.rows) },
+        eid: { ...current.eid, rows: map(current.eid.rows) },
+        momen: { ...current.momen, rows: map(current.momen.rows) },
+      };
+    });
+    setActive((current) => (current && current.trackingNumber === trackingNumber ? patch(current) : current));
+  }
+
+  function tabSourceRows(payload: Payload | null, currentTab: TabId) {
+    if (!payload) return [] as BostaRow[];
+    if (currentTab === "bosta") return payload.bosta.rows;
+    if (currentTab === "temima") return payload.temima.rows;
+    if (currentTab === "eid") return payload.eid.rows;
+    return payload.momen.rows;
+  }
+
+  function findCapturedRow(trackingNumber: string) {
+    return tabSourceRows(data, "bosta")
+      .concat(tabSourceRows(data, "temima"), tabSourceRows(data, "eid"), tabSourceRows(data, "momen"))
+      .find((row) => row.trackingNumber === trackingNumber);
+  }
+
   async function openReview(row: BostaRow) {
     setActive(row);
     if (!canInspect) return;
@@ -596,25 +604,10 @@ export function MaintenanceClient({
       });
       const body = (await response.json()) as { openedAt?: string | null };
       if (response.ok && body.openedAt) {
-        setData((current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            bosta: {
-              ...current.bosta,
-              rows: current.bosta.rows.map((item) =>
-                item.trackingNumber === row.trackingNumber
-                  ? { ...item, openedAt: item.openedAt || body.openedAt || null }
-                  : item,
-              ),
-            },
-          };
-        });
-        setActive((current) =>
-          current && current.trackingNumber === row.trackingNumber
-            ? { ...current, openedAt: current.openedAt || body.openedAt || null }
-            : current,
-        );
+        patchCapturedRow(row.trackingNumber, (item) => ({
+          ...item,
+          openedAt: item.openedAt || body.openedAt || null,
+        }));
       }
     } catch {
       // ignore open stamp failures
@@ -651,29 +644,14 @@ export function MaintenanceClient({
   }
 
   function patchProducts(trackingNumber: string, linkedProducts: LinkedProduct[]) {
-    setData((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        bosta: {
-          ...current.bosta,
-          rows: current.bosta.rows.map((row) => {
-            if (row.trackingNumber !== trackingNumber) return row;
-            const product = productsLabel(linkedProducts, row.orderProduct);
-            return { ...row, linkedProducts, product, searchText: `${row.searchText} ${product}` };
-          }),
-        },
-      };
-    });
-    setActive((current) => {
-      if (!current || current.trackingNumber !== trackingNumber) return current;
-      const product = productsLabel(linkedProducts, current.orderProduct);
-      return { ...current, linkedProducts, product };
+    patchCapturedRow(trackingNumber, (row) => {
+      const product = productsLabel(linkedProducts, row.orderProduct);
+      return { ...row, linkedProducts, product, searchText: `${row.searchText} ${product}` };
     });
   }
 
   function rememberProduct(trackingNumber: string, linkedProduct: LinkedProduct) {
-    const current = data?.bosta.rows.find((row) => row.trackingNumber === trackingNumber);
+    const current = findCapturedRow(trackingNumber);
     const existing = current?.linkedProducts || [];
     const next = existing.some((item) => item.productId === linkedProduct.productId)
       ? existing.map((item) => (item.productId === linkedProduct.productId ? linkedProduct : item))
@@ -694,7 +672,7 @@ export function MaintenanceClient({
         setError(body.message || "تعذر شيل المنتج.");
         return;
       }
-      const current = data?.bosta.rows.find((row) => row.trackingNumber === trackingNumber);
+      const current = findCapturedRow(trackingNumber);
       patchProducts(
         trackingNumber,
         (current?.linkedProducts || []).filter((item) => item.productId !== productId),
@@ -705,28 +683,18 @@ export function MaintenanceClient({
   }
 
   function rememberReview(trackingNumber: string, review: Review) {
-    setData((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        bosta: {
-          ...current.bosta,
-          rows: current.bosta.rows.map((row) =>
-            row.trackingNumber === trackingNumber
-              ? { ...row, review, searchText: `${row.searchText} ${review.label}` }
-              : row,
-          ),
-        },
-      };
-    });
-    setActive((current) => (current && current.trackingNumber === trackingNumber ? { ...current, review } : current));
+    patchCapturedRow(trackingNumber, (row) => ({
+      ...row,
+      review,
+      searchText: `${row.searchText} ${review.label}`,
+    }));
   }
 
   function visible<T extends { searchText: string }>(rows: T[]) {
     return rows.filter((row) => matchesQuery(row.searchText, query));
   }
 
-  const bostaSearched = visible(data?.bosta.rows || []);
+  const bostaSearched = visible(tabSourceRows(data, tab));
   const bostaFiltered = bostaSearched.filter((row) => {
     if (!kinds.includes(row.kind)) return false;
     if (usageFilter === "new" || usageFilter === "used") {
@@ -782,9 +750,6 @@ export function MaintenanceClient({
   }));
   const usageFilterLabel = USAGE_FILTERS.find((item) => item.id === usageFilter)?.label || "";
   const destFilterLabel = DEST_FILTERS.find((item) => item.id === destinationFilter)?.label || "";
-  const temimaRows = visible(data?.temima.rows || []);
-  const eidRows = visible(data?.eid.rows || []);
-  const momenRows = visible(data?.momen.rows || []);
   const hubTabs: Array<{ id: HubTab; label: string; show: boolean }> = [
     { id: "inspect", label: "فحص المرتجع", show: canInspect },
     { id: "tech", label: "فني الصيانة", show: canTech },
@@ -797,6 +762,21 @@ export function MaintenanceClient({
     exchange: bostaSearched.filter((row) => row.kind === "exchange").length,
     return: bostaSearched.filter((row) => row.kind === "return").length,
   };
+  const tabError =
+    tab === "bosta"
+      ? data?.bosta.error
+      : tab === "temima"
+        ? data?.temima.error
+        : tab === "eid"
+          ? data?.eid.error
+          : data?.momen.error;
+  const tabMissing =
+    tab === "eid" && data && !data.eid.found
+      ? "المندوب مش متسجل."
+      : tab === "momen" && data && !data.momen.found
+        ? "المندوب مش متسجل."
+        : "";
+  const deskReturn = tab !== "bosta";
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -818,7 +798,10 @@ export function MaintenanceClient({
       </div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex gap-2">
-          {canInspect && hubTab === "inspect"
+          {(hubTab === "inspect" && canInspect) ||
+          (hubTab === "tech" && canTech) ||
+          (hubTab === "receive" && canInspect) ||
+          (hubTab === "accounting" && canAccounting)
             ? TABS.map((item) => (
                 <button
                   key={item.id}
@@ -883,7 +866,7 @@ export function MaintenanceClient({
         {hubTab === "variance" && (canInspect || canTech) ? (
           <VariancePanel variance={data?.variance || null} />
         ) : null}
-        {hubTab === "inspect" && canInspect && tab === "bosta" ? (
+        {hubTab === "inspect" && canInspect ? (
           <>
             <header className="space-y-3 border-b border-black/10 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -924,14 +907,16 @@ export function MaintenanceClient({
                   >
                     طباعة تقرير الصيانة
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void capture()}
-                    disabled={saving}
-                    className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
-                  >
-                    {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
-                  </button>
+                  {tab === "bosta" ? (
+                    <button
+                      type="button"
+                      onClick={() => void capture()}
+                      disabled={saving}
+                      className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
+                    >
+                      {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -963,7 +948,8 @@ export function MaintenanceClient({
                 ))}
               </div>
             </header>
-            {data?.bosta.error ? <p className="px-4 py-3 text-sm font-bold text-red-700">{data.bosta.error}</p> : null}
+            {tabError ? <p className="px-4 py-3 text-sm font-bold text-red-700">{tabError}</p> : null}
+            {tabMissing ? <p className="px-4 py-3 text-sm font-bold text-[#14213D]/60">{tabMissing}</p> : null}
             <div className="overflow-x-auto">
               <table className="min-w-full text-right text-sm">
                 <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
@@ -1051,9 +1037,7 @@ export function MaintenanceClient({
                   ) : (
                     <tr>
                       <td colSpan={11} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
-                        {loading
-                          ? "جارٍ التحميل…"
-                          : "مفيش مرتجعات في المدى ده. وسّع من/إلى (إمبارح موجود لو التاريخ يشمله) أو اضغط «حفظ ظاهر بوسطة»."}
+                        {loading ? "جارٍ التحميل…" : tabMissing || EMPTY_INSPECT[tab]}
                       </td>
                     </tr>
                   )}
@@ -1061,25 +1045,6 @@ export function MaintenanceClient({
               </table>
             </div>
           </>
-        ) : null}
-        {hubTab === "inspect" && canInspect && tab === "temima" ? (
-          <LocalTable rows={temimaRows} loading={loading} empty="مفيش إلغاء على الشيت في المدى." />
-        ) : null}
-        {hubTab === "inspect" && canInspect && tab === "eid" ? (
-          <LocalTable
-            rows={eidRows}
-            loading={loading}
-            empty="مفيش إلغاء على شيت عيد في المدى."
-            missing={data && !data.eid.found ? "المندوب مش متسجل." : ""}
-          />
-        ) : null}
-        {hubTab === "inspect" && canInspect && tab === "momen" ? (
-          <LocalTable
-            rows={momenRows}
-            loading={loading}
-            empty="مفيش إلغاء على شيت مؤمن في المدى."
-            missing={data && !data.momen.found ? "المندوب مش متسجل." : ""}
-          />
         ) : null}
       </section>
       {linking ? (
@@ -1097,18 +1062,7 @@ export function MaintenanceClient({
           initial={noteRow.note || ""}
           onClose={() => setNoteRow(null)}
           onSaved={(note) => {
-            setData((current) => {
-              if (!current) return current;
-              return {
-                ...current,
-                bosta: {
-                  ...current.bosta,
-                  rows: current.bosta.rows.map((row) =>
-                    row.trackingNumber === noteRow.trackingNumber ? { ...row, note } : row,
-                  ),
-                },
-              };
-            });
+            patchCapturedRow(noteRow.trackingNumber, (row) => ({ ...row, note }));
           }}
         />
       ) : null}
@@ -1116,14 +1070,15 @@ export function MaintenanceClient({
         <ReviewCards
           key={active.trackingNumber}
           row={active}
+          deskReturn={active.source ? active.source !== "bosta" : deskReturn}
           onClose={() => setActive(null)}
           onSaved={(review) => rememberReview(active.trackingNumber, review)}
         />
       ) : null}
-      {hubTab === "inspect" && canInspect && tab === "bosta" && printMode === "all" ? (
+      {hubTab === "inspect" && canInspect && printMode === "all" ? (
         <div className="print-only">
           <h1 className="text-center text-lg font-extrabold">
-            مرتجعات بوسطة {from} — {to}
+            {TAB_PRINT[tab]} {from} — {to}
           </h1>
           <p className="mb-2 text-center text-xs font-bold">
             {usageFilterLabel} · {destFilterLabel} · عدد الصفوف: {bostaFiltered.length}
@@ -1171,7 +1126,7 @@ export function MaintenanceClient({
       ) : null}
       {printMode === "maintenance" ? (
         <div className="print-only">
-          <h1 className="text-center text-lg font-extrabold">تقرير تسليم للصيانة</h1>
+          <h1 className="text-center text-lg font-extrabold">تقرير تسليم للصيانة · {TAB_PRINT[tab]}</h1>
           <p className="mb-2 text-center text-xs font-bold">
             {from} — {to} · عدد الصفوف: {maintenancePrintRows.length}
           </p>

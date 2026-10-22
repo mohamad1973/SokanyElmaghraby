@@ -57,28 +57,30 @@ export async function GET(request: Request) {
         "bosta",
       ),
       loadTemima
-        ? settledValue(listTemimaReturns(range.from, range.to), { rows: [] }, "temima")
-        : Promise.resolve({ rows: [] }),
+        ? settledValue(listTemimaReturns(range.from, range.to), { rows: [], error: null }, "temima")
+        : Promise.resolve({ rows: [], error: null }),
       loadCouriers
         ? settledValue(
             listCourierReturns(range.from, range.to),
-            { eid: { found: false, rows: [] }, momen: { found: false, rows: [] } },
+            { eid: { found: false, rows: [], error: null }, momen: { found: false, rows: [], error: null } },
             "couriers",
           )
-        : Promise.resolve({ eid: { found: false, rows: [] }, momen: { found: false, rows: [] } }),
+        : Promise.resolve({ eid: { found: false, rows: [], error: null }, momen: { found: false, rows: [], error: null } }),
       loadVariance
         ? settledValue(maintenanceVarianceReport(range.from, range.to), null, "variance")
         : Promise.resolve(null),
     ]);
 
-    const sectionErrors = [bosta.error].filter(Boolean) as string[];
+    const sectionErrors = [bosta.error, temima.error, couriers.eid.error, couriers.momen.error].filter(
+      Boolean,
+    ) as string[];
     return NextResponse.json({
       from: range.from,
       to: range.to,
       bosta: { rows: bosta.rows, error: bosta.error },
-      temima: { rows: temima.rows },
-      eid: couriers.eid,
-      momen: couriers.momen,
+      temima: { rows: temima.rows, error: temima.error },
+      eid: { found: couriers.eid.found, rows: couriers.eid.rows, error: couriers.eid.error },
+      momen: { found: couriers.momen.found, rows: couriers.momen.rows, error: couriers.momen.error },
       variance,
       viewer: {
         isMaintenance: viewer.isMaintenance,

@@ -10,6 +10,7 @@ import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-w
 import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
 import { getPrismaClient } from "@/lib/db";
 
 export const TEMIMA_COMPANY = "sayed_temima";
@@ -828,6 +829,7 @@ export async function applySupervisorOrderResult(input: {
     SET temimaSupervisorResult = ${disposition}
     WHERE id = ${order.id}
   `;
+  await captureDeskReturnFromConfirmation(order.id);
 
   return { ok: true as const, result: input.result, disposition };
 }
