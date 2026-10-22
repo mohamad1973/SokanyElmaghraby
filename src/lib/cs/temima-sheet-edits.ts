@@ -18,6 +18,7 @@ import {
   removeTemimaFreezeId,
   saveTemimaFreeze,
 } from "@/lib/cs/temima-sheet-freeze";
+import { markTemimaSheetHandedToCarrier } from "@/lib/cs/temima-late";
 import { onUnifiedSayedSheet, sayedSheetYmd, type TemimaSheetEdit } from "@/lib/cs/temima-sheet";
 
 function asKind(value: string): TemimaSheetEdit["kind"] | null {
@@ -189,7 +190,10 @@ async function pinOrderToSaveDay(
     update: { kind: "exclude" },
   });
   await removeTemimaFreezeId(today, confirmationId);
-  if (await hasTemimaFreezeDay(saveDay)) await addTemimaFreezeIds(saveDay, [confirmationId]);
+  if (await hasTemimaFreezeDay(saveDay)) {
+    await addTemimaFreezeIds(saveDay, [confirmationId]);
+    await markTemimaSheetHandedToCarrier([confirmationId]);
+  }
 }
 
 async function restoreTodayEditsToClosedSheetDay() {
@@ -303,6 +307,7 @@ export async function captureTemimaSheetFreeze(dayYmd: string) {
   if (await hasTemimaFreezeDay(dayYmd)) return;
   const ids = await liveUnifiedSayedSheetIds(dayYmd, dayYmd);
   await saveTemimaFreeze(dayYmd, ids);
+  await markTemimaSheetHandedToCarrier(ids);
 }
 
 async function ensureClosedDaysFrozen(dateFrom: string, dateTo: string) {
@@ -594,7 +599,10 @@ export async function placeSayedOrderOnChosenDay(
     create: { dayYmd: today, confirmationId, kind: "include" },
     update: { kind: "include" },
   });
-  if (await hasTemimaFreezeDay(today)) await addTemimaFreezeIds(today, [confirmationId]);
+  if (await hasTemimaFreezeDay(today)) {
+    await addTemimaFreezeIds(today, [confirmationId]);
+    await markTemimaSheetHandedToCarrier([confirmationId]);
+  }
 }
 
 export async function includeTemimaOrders(dayYmd: string, confirmationIds: number[]) {
@@ -623,7 +631,11 @@ export async function includeTemimaOrders(dayYmd: string, confirmationIds: numbe
       update: { kind: "include" },
     });
   }
-  if (await hasTemimaFreezeDay(dayYmd)) await addTemimaFreezeIds(dayYmd, allowed.map((row) => row.id));
+  if (await hasTemimaFreezeDay(dayYmd)) {
+    const added = allowed.map((row) => row.id);
+    await addTemimaFreezeIds(dayYmd, added);
+    await markTemimaSheetHandedToCarrier(added);
+  }
   const edits = allowed.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
   const skipped = rows.length - allowed.length;
   return {

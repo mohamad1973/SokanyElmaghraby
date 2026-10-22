@@ -85,6 +85,18 @@ export type CsQueueItem = {
   sheetSerial?: number | null;
 };
 
+type TemimaLateRow = {
+  confirmationId: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+  freezeDay: string;
+  freezeAt: string;
+  daysSinceFreeze: number;
+  sinceLabel: string;
+  statusLabel: "فاضي" | "مؤجل";
+};
+
 function lineQuantity(quantity: unknown) {
   const qty = Number(quantity);
   return Number.isFinite(qty) && qty > 0 ? qty : 0;
@@ -840,6 +852,9 @@ export function CsQueueClient({
   const [queueTotal, setQueueTotal] = useState(initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
+  const [sheetTab, setSheetTab] = useState<"sheet" | "late">("sheet");
+  const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
+  const [lateLoading, setLateLoading] = useState(false);
 
   useEffect(() => {
     setItems(initialItems);
@@ -848,6 +863,12 @@ export function CsQueueClient({
     setQueueTotal(initialTotal);
     pageRef.current = 1;
   }, [initialItems, initialHasMore, initialTotal]);
+
+  useEffect(() => {
+    if (!isCourierSupervisor) return;
+    void loadTemimaLate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCourierSupervisor]);
 
   async function loadQueue(filters: DraftFilters, page: number) {
     const params = new URLSearchParams();
@@ -951,6 +972,10 @@ export function CsQueueClient({
   }, [items, draft.query, applied, isSupervisor, isAccounting, isCourierSupervisor, afterLastDistribution, cutoffs, sheetEdits]);
 
   const dupMeta = useMemo(() => buildDuplicateMeta(baseFiltered), [baseFiltered]);
+  const lateById = useMemo(
+    () => new Map(lateRows.map((row) => [row.confirmationId, row])),
+    [lateRows],
+  );
 
   const filtered = useMemo(() => {
     const wantDupOnly = Boolean(isSupervisor) && draft.duplicates === "only";
@@ -1012,6 +1037,7 @@ export function CsQueueClient({
         return { ...item, settlementDisposition };
       }),
     );
+    if (isCourierSupervisor) void loadTemimaLate();
   }
 
   function askStatusEdit(
@@ -1162,6 +1188,22 @@ export function CsQueueClient({
     rememberFrozenDays(filters.dateFrom, filters.dateTo, data.frozenDays || []);
   }
 
+  async function loadTemimaLate() {
+    if (!isCourierSupervisor) return;
+    setLateLoading(true);
+    try {
+      const res = await fetch("/api/cs/temima-late");
+      const data = (await res.json()) as { items?: TemimaLateRow[]; message?: string };
+      if (!res.ok) {
+        setMessage(data.message || "تعذر تحميل الأوردرات المتأخرة.");
+        return;
+      }
+      setLateRows(data.items || []);
+    } finally {
+      setLateLoading(false);
+    }
+  }
+
   function rememberFrozenDays(from: string, to: string, days: string[]) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return;
     setFrozenDays((prev) => [...prev.filter((day) => day < from || day > to), ...days]);
@@ -1191,6 +1233,7 @@ export function CsQueueClient({
     }
     if (data.frozen) {
       setFrozenDays((prev) => (prev.includes(dayYmd) ? prev : [...prev, dayYmd]));
+      if (isCourierSupervisor) void loadTemimaLate();
     }
     if (typeof data.minutes === "number") {
       setCutoffs((prev) => {
@@ -1476,6 +1519,7 @@ export function CsQueueClient({
     setFrozenDays((prev) => (prev.includes(sheetDay) ? prev : [...prev, sheetDay]));
     await loadSayedSheet(applied);
     setFrozenDays((prev) => (prev.includes(sheetDay) ? prev : [...prev, sheetDay]));
+    await loadTemimaLate();
     setMessage(data.message || "اتقفل وتجمد.");
   }
 
@@ -1515,6 +1559,31 @@ export function CsQueueClient({
               </p>
             ) : null}
           </div>
+          {isCourierSupervisor ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSheetTab("sheet")}
+                className={`rounded-xl px-3 py-2 text-xs font-extrabold sm:text-sm ${
+                  sheetTab === "sheet" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                }`}
+              >
+                شيت اليوم
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSheetTab("late");
+                  void loadTemimaLate();
+                }}
+                className={`rounded-xl px-3 py-2 text-xs font-extrabold sm:text-sm ${
+                  sheetTab === "late" ? "bg-red-700 text-white" : "bg-red-100 text-red-800"
+                }`}
+              >
+                أوردرات متأخرة في التسليم ({lateRows.length})
+              </button>
+            </div>
+          ) : null}
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
           {isSupervisor && !isCourierSupervisor ? (
@@ -1837,7 +1906,7 @@ export function CsQueueClient({
         <p className="no-print rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      {sheetDay && (canEditTemimaSheet || canReopenTemimaSheet || isCourierSupervisor || sheetFrozen) ? (
+      {sheetTab !== "late" && sheetDay && (canEditTemimaSheet || canReopenTemimaSheet || isCourierSupervisor || sheetFrozen) ? (
         <form
           className={`no-print grid gap-2 rounded-2xl p-3 shadow ring-1 ${
             sheetFrozen ? "bg-gray-100 ring-gray-400" : "bg-white ring-[#14213D]/10"
@@ -1956,7 +2025,58 @@ export function CsQueueClient({
       ) : null}
 
       <div className="no-print space-y-2">
-        {filtered.length === 0 ? (
+        {isCourierSupervisor && sheetTab === "late" ? (
+          lateLoading ? (
+            <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
+              <p className="font-bold">جاري تحميل الأوردرات المتأخرة.</p>
+            </div>
+          ) : lateRows.length === 0 ? (
+            <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
+              <p className="font-bold">مفيش أوردرات متأخرة في التسليم.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl bg-white shadow ring-1 ring-[#14213D]/10">
+              <table className="min-w-full text-right text-sm font-bold text-[#14213D]">
+                <thead className="bg-[#14213D] text-white">
+                  <tr>
+                    <th className="px-3 py-2">الأوردر</th>
+                    <th className="px-3 py-2">العميل</th>
+                    <th className="px-3 py-2">الموبايل</th>
+                    <th className="px-3 py-2">تاريخ القفل</th>
+                    <th className="px-3 py-2">العمر</th>
+                    <th className="px-3 py-2">الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lateRows.map((row) => (
+                    <tr key={row.confirmationId} className="border-t border-[#E5E5E5]">
+                      <td className="px-3 py-2">
+                        {canOpenOrders ? (
+                          <Link href={`/cs/orders/${row.confirmationId}`} className="text-[#14213D] underline">
+                            #{row.wooOrderNumber}
+                          </Link>
+                        ) : (
+                          <>#{row.wooOrderNumber}</>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{row.customerName || "—"}</td>
+                      <td className="px-3 py-2" dir="ltr">
+                        {row.phone || "—"}
+                      </td>
+                      <td className="px-3 py-2">{formatCairoOrderDate(row.freezeAt) || row.freezeDay}</td>
+                      <td className="px-3 py-2">
+                        <span className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white">
+                          متأخر · {row.sinceLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{row.statusLabel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
             {items.length === 0 ? (
               isCourierSupervisor ? (
@@ -2032,6 +2152,11 @@ export function CsQueueClient({
                         <span className="rounded-full bg-[#FCA311]/25 px-2 py-0.5 text-[10px] font-extrabold text-[#14213D]">
                           {item.fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"}
                           {item.parentWooOrderNumber ? ` · #${item.parentWooOrderNumber}` : ""}
+                        </span>
+                      ) : null}
+                      {isCourierSupervisor && lateById.get(item.id) ? (
+                        <span className="rounded bg-red-700 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                          متأخر · {lateById.get(item.id)?.sinceLabel}
                         </span>
                       ) : null}
                       {isCourierSupervisor ? (
