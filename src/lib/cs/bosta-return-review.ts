@@ -270,7 +270,7 @@ export async function saveBostaReturnReview(input: {
     await ensureBostaReturnCaptureTable();
     await ensureBostaReturnReviewTable();
     const stored = await prisma.$queryRawUnsafe<Array<{ kind: string; source: string | null }>>(
-      `SELECT kind, source FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
+      `SELECT kind, \`source\` AS source FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
       trackingNumber,
     );
     const kind =

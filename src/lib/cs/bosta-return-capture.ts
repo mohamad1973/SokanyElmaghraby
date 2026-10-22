@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
-import { cairoTodayYmd } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { listBostaHeadingReturns, type BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 export type DeskReturnSource = "temima" | "eid" | "momen";
@@ -254,40 +254,40 @@ export async function backfillDeskReturnCaptures(from: string, to: string) {
     return;
   }
   const run = (async () => {
-    const prisma = getPrismaClient();
-    if (!prisma) return;
-    await ensureBostaReturnCaptureTable();
-    const ids = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
-      `SELECT c.id
-       FROM CsOrderConfirmation c
-       LEFT JOIN CsBostaReturnCapture r ON r.confirmationId = c.id
-       WHERE c.status = 'CONFIRMED'
-         AND r.trackingNumber IS NULL
-         AND (
-           c.temimaSupervisorResult = 'return'
-           OR c.monaSupervisorResult = 'refused'
-           OR c.courierOutcome = 'refused'
-           OR (
-             (c.temimaSupervisorResult = 'collect' OR c.monaSupervisorResult = 'delivered' OR c.courierOutcome = 'delivered')
-             AND (
-               c.fulfillmentKind IN ('return', 'exchange')
-               OR JSON_UNQUOTE(JSON_EXTRACT(c.customerSnapshot, '$.fulfillmentKind')) IN ('return', 'exchange')
+    try {
+      const prisma = getPrismaClient();
+      if (!prisma) return;
+      await ensureBostaReturnCaptureTable();
+      const start = cairoYmdBounds(from);
+      const end = cairoYmdBounds(to);
+      if (!start || !end) return;
+      const ids = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+        `SELECT c.id
+         FROM CsOrderConfirmation c
+         LEFT JOIN CsBostaReturnCapture r ON r.confirmationId = c.id
+         WHERE c.status = 'CONFIRMED'
+           AND r.trackingNumber IS NULL
+           AND (
+             c.temimaSupervisorResult = 'return'
+             OR c.monaSupervisorResult = 'refused'
+             OR c.courierOutcome = 'refused'
+             OR (
+               (c.temimaSupervisorResult = 'collect' OR c.monaSupervisorResult = 'delivered' OR c.courierOutcome = 'delivered')
+               AND c.fulfillmentKind IN ('return', 'exchange')
              )
            )
-         )
-         AND (
-           LEFT(JSON_UNQUOTE(JSON_EXTRACT(c.customerSnapshot, '$.dateCreated')), 10) BETWEEN ? AND ?
-           OR LEFT(c.confirmedAt, 10) BETWEEN ? AND ?
-         )
-       ORDER BY c.id DESC
-       LIMIT 2000`,
-      from,
-      to,
-      from,
-      to,
-    );
-    for (const row of ids) {
-      await captureDeskReturnFromConfirmation(Number(row.id));
+           AND c.confirmedAt >= ? AND c.confirmedAt < ?
+         ORDER BY c.id DESC
+         LIMIT 2000`,
+        start.start,
+        end.endExclusive,
+      );
+      for (const row of ids) {
+        await captureDeskReturnFromConfirmation(Number(row.id));
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error("[cs] backfillDeskReturnCaptures", from, to, detail);
     }
   })().finally(() => {
     if (backfillInFlight.get(key) === run) backfillInFlight.delete(key);
@@ -316,10 +316,10 @@ export async function listCapturedReturns(from: string, to: string, sources: Ret
       source: string | null;
     }>
   >(
-    `SELECT trackingNumber, seenDay, kind, reasonText, customerName, phone, businessReference, wooOrderNumber, confirmationId, source
+    `SELECT trackingNumber, seenDay, kind, reasonText, customerName, phone, businessReference, wooOrderNumber, confirmationId, \`source\` AS source
      FROM CsBostaReturnCapture
      WHERE seenDay >= ? AND seenDay <= ?
-       AND COALESCE(NULLIF(source, ''), 'bosta') IN (${marks})
+       AND COALESCE(NULLIF(\`source\`, ''), 'bosta') IN (${marks})
      ORDER BY seenDay DESC, trackingNumber DESC`,
     from,
     to,

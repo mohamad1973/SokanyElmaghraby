@@ -748,7 +748,21 @@ export async function syncCsBostaWaybill(input: {
   });
 }
 
-function moneySnapshotWithWaybillTotal(snapshot: Snapshot, orderTotalDelta: number | null): Snapshot {
+export function snapshotWithLiveMerchandiseTotal(
+  snapshot: Snapshot,
+  liveTotal?: string | number | null,
+): Snapshot {
+  const next: Record<string, unknown> = { ...(snapshot || {}) };
+  const live = Number(String(liveTotal ?? next.total ?? "").replace(/,/g, "").replace(/[^\d.-]/g, ""));
+  const frozen = Number(String(next.wooTotal ?? "").replace(/,/g, "").replace(/[^\d.-]/g, ""));
+  if (Number.isFinite(live) && live >= 0 && (!Number.isFinite(frozen) || frozen !== live)) {
+    next.total = String(live);
+    next.wooTotal = String(live);
+  }
+  return next;
+}
+
+export function moneySnapshotWithWaybillTotal(snapshot: Snapshot, orderTotalDelta: number | null): Snapshot {
   const next: Record<string, unknown> = { ...(snapshot || {}) };
   const rawBase = Number(String(next.wooTotal || next.total || "").replace(/,/g, ""));
   if (Number.isFinite(rawBase) && !next.wooTotal) next.wooTotal = String(rawBase);
@@ -801,7 +815,10 @@ export async function syncConfirmationMoneyToBosta(confirmationId: number): Prom
     if (Number.isFinite(n) && n < 0) orderTotalDelta = n;
   }
 
-  const snap = moneySnapshotWithWaybillTotal((row.customerSnapshot as Snapshot) || null, orderTotalDelta);
+  const snap = moneySnapshotWithWaybillTotal(
+    snapshotWithLiveMerchandiseTotal((row.customerSnapshot as Snapshot) || null),
+    orderTotalDelta,
+  );
   await prisma.csOrderConfirmation.update({
     where: { id: confirmationId },
     data: { customerSnapshot: snap } as never,
@@ -984,6 +1001,17 @@ export async function alignCsBostaWaybillBeforePrint(confirmationId: number) {
     typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
       ? null
       : Number(typed.bostaShippingFee);
+  const discountApproved = String((row as { discountApprovalStatus?: string | null }).discountApprovalStatus || "").toLowerCase() === "approved";
+  const rawDelta = typed.orderTotalDelta == null ? NaN : Number(typed.orderTotalDelta);
+  const orderTotalDelta = discountApproved && Number.isFinite(rawDelta) && rawDelta < 0 ? rawDelta : null;
+  const snap = moneySnapshotWithWaybillTotal(
+    snapshotWithLiveMerchandiseTotal((row.customerSnapshot as Snapshot) || null),
+    orderTotalDelta,
+  );
+  await prisma.csOrderConfirmation.update({
+    where: { id: confirmationId },
+    data: { customerSnapshot: snap } as never,
+  });
   await syncCsBostaWaybill({
     confirmationId,
     wooOrderId: row.wooOrderId,
@@ -998,8 +1026,8 @@ export async function alignCsBostaWaybillBeforePrint(confirmationId: number) {
       value: answer.value,
       note: answer.note,
     })),
-    snapshot: (row.customerSnapshot as Snapshot) || null,
-    orderTotalDelta: typed.orderTotalDelta == null ? null : Number(typed.orderTotalDelta),
+    snapshot: snap,
+    orderTotalDelta,
     depositAmount: typed.depositAmount == null ? null : Number(typed.depositAmount),
     depositPaid: Boolean(typed.depositPaid),
     depositApprovalStatus: typed.depositApprovalStatus || null,

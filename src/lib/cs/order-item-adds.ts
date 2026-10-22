@@ -1,8 +1,9 @@
 import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
-import { cashAmountOf } from "@/lib/cs/temima-settlement";
-import { updateBostaDeliveryCod } from "@/lib/shipping/bosta-client";
+import { moneySnapshotWithWaybillTotal, snapshotWithLiveMerchandiseTotal, syncConfirmationMoneyToBosta } from "@/lib/cs/bosta-waybill";
+import { ensureCsSokanyWaybill } from "@/lib/cs/sokany-waybill";
+import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 import { appendWooOrderProduct, removeWooOrderProduct } from "@/lib/woocommerce-update";
 
 export type OrderItemAddRow = {
@@ -173,10 +174,10 @@ async function applyTotals(
     where: { id: confirmationId },
     select: {
       customerSnapshot: true,
-      depositAmount: true,
-      depositPaid: true,
-      trackingNumber: true,
       shippingCompany: true,
+      status: true,
+      orderTotalDelta: true,
+      discountApprovalStatus: true,
     },
   });
   if (!row) return { ok: false as const, message: "الأوردر مش موجود." };
@@ -184,24 +185,26 @@ async function applyTotals(
     string,
     unknown
   >;
-  const nextSnap = { ...snap, total, items };
+  const discountApproved = String(row.discountApprovalStatus || "").toLowerCase() === "approved";
+  const rawDelta = Number(row.orderTotalDelta);
+  const orderTotalDelta =
+    discountApproved && Number.isFinite(rawDelta) && rawDelta < 0 ? rawDelta : null;
+  const nextSnap = moneySnapshotWithWaybillTotal(
+    snapshotWithLiveMerchandiseTotal({ ...snap, total, items }, total),
+    orderTotalDelta,
+  );
   await prisma.csOrderConfirmation.update({
     where: { id: confirmationId },
-    data: { customerSnapshot: nextSnap },
+    data: { customerSnapshot: nextSnap } as never,
   });
   let bostaNote = "";
-  if (row.shippingCompany === "bosta" && row.trackingNumber) {
-    const cod = cashAmountOf({
-      customerSnapshot: nextSnap,
-      depositAmount: row.depositAmount,
-      depositPaid: row.depositPaid,
-    });
-    const bosta = await updateBostaDeliveryCod(
-      row.trackingNumber,
-      cod,
-      items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0),
-    );
-    if (!bosta.ok) bostaNote = ` السعر اتسجل، وتحديث بوسطة: ${bosta.message}`;
+  const bosta = await syncConfirmationMoneyToBosta(confirmationId);
+  if (bosta.message && !bosta.synced && String(row.shippingCompany || "") === "bosta") {
+    bostaNote = ` السعر اتسجل، وتحديث بوسطة: ${bosta.message}`;
+  }
+  if (usesSokanyWaybillPrint(String(row.shippingCompany || "")) && row.status === "CONFIRMED") {
+    const sokany = await ensureCsSokanyWaybill(confirmationId);
+    if (!sokany.ok) bostaNote = `${bostaNote} بوليصة سوكانى: ${sokany.message}`.trim();
   }
   void wooOrderId;
   return { ok: true as const, message: `اتحفظ السعر الجديد.${bostaNote}` };

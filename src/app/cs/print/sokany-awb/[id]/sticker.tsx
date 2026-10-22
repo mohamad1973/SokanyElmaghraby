@@ -71,7 +71,7 @@ export function SokanyAwbSticker({
         .sheet-wrap {
           width: 100mm;
           height: 150mm;
-          padding: 2.2mm;
+          padding: 2.2mm 5mm 2.2mm 2.2mm;
           overflow: hidden;
         }
         .sheet {

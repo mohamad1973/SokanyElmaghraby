@@ -1,5 +1,6 @@
 import "server-only";
 
+import { moneySnapshotWithWaybillTotal, snapshotWithLiveMerchandiseTotal } from "@/lib/cs/bosta-waybill";
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
 import { fulfillmentWaybillDraft, orderItemsDescription } from "@/lib/cs/fulfillment-waybill";
 import { hydrateWaybillSnapshot } from "@/lib/cs/hydrate-waybill-snapshot";
@@ -33,6 +34,12 @@ function textOf(answers: Array<{ itemKey: string; value?: string | null }>, key:
 function moneyOf(value: unknown) {
   const parsed = Number(String(value ?? "").replace(/,/g, "").replace(/[^\d.-]/g, ""));
   return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 100) / 100) : 0;
+}
+
+function approvedDiscountDelta(row: { discountApprovalStatus?: string | null; orderTotalDelta?: unknown }) {
+  if (String(row.discountApprovalStatus || "").toLowerCase() !== "approved") return null;
+  const n = Number(row.orderTotalDelta);
+  return Number.isFinite(n) && n < 0 ? n : null;
 }
 
 export function trackingPrefixForCarrier(code: string) {
@@ -396,6 +403,10 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
   >("SELECT * FROM CsSokanyWaybill WHERE confirmationId = ? ORDER BY id DESC LIMIT 1", confirmationId);
   const invoiceNumber = String(row.invoiceNumber || "").trim();
   const snap = await hydrateWaybillSnapshot((row.customerSnapshot || {}) as Record<string, unknown>, row.wooOrderId);
+  Object.assign(
+    snap,
+    moneySnapshotWithWaybillTotal(snapshotWithLiveMerchandiseTotal(snap), approvedDiscountDelta(row)),
+  );
   const answers = row.answers || [];
   const built = itemDescription(snap);
   const legacyRef = pickLegacyRef(snap, String(row.trackingNumber || ""));
@@ -414,10 +425,11 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
   if (existing[0]) {
     await prisma.$executeRawUnsafe(
       `UPDATE CsSokanyWaybill
-         SET description = ?, itemsCount = ?, snapshot = ?, invoiceNumber = COALESCE(?, invoiceNumber), updatedAt = NOW(3)
+         SET description = ?, itemsCount = ?, cod = ?, snapshot = ?, invoiceNumber = COALESCE(?, invoiceNumber), updatedAt = NOW(3)
        WHERE tracking = ?`,
       built.text.slice(0, 500),
       built.count,
+      built.cod,
       JSON.stringify(printSnap),
       invoiceNumber || null,
       existing[0].tracking,
@@ -429,6 +441,7 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
         ...existing[0],
         description: built.text.slice(0, 500),
         itemsCount: built.count,
+        cod: built.cod,
         snapshot: printSnap,
         invoiceNumber: invoiceNumber || existing[0].invoiceNumber,
       },

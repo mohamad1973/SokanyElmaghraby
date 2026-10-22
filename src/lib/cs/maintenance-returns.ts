@@ -42,6 +42,7 @@ export type MaintenanceCourierSection = {
   found: boolean;
   rows: MaintenanceBostaRow[];
   error?: string | null;
+  detail?: string | null;
 };
 
 type Snap = {
@@ -226,24 +227,37 @@ export async function listBostaReceivedReturns(from: string, to: string) {
   try {
     await ensureMaintenanceLifecycleColumns();
     const stored = await listCapturedBostaReturns(from, to);
-    return { rows: await hydrateCapturedReturnRows(stored), error: null as string | null };
+    return { rows: await hydrateCapturedReturnRows(stored), error: null as string | null, detail: null as string | null };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error("[maintenance-returns] listBostaReceivedReturns", detail);
-    return { rows: [], error: "تعذر تحميل مرتجعات بوسطة. حاول مرة أخرى." as string | null };
+    return {
+      rows: [],
+      error: "تعذر تحميل مرتجعات بوسطة. حاول مرة أخرى." as string | null,
+      detail: detail.slice(0, 200),
+    };
   }
 }
 
 async function listDeskReceivedReturns(source: DeskReturnSource, from: string, to: string) {
   try {
-    await backfillDeskReturnCaptures(from, to);
+    try {
+      await backfillDeskReturnCaptures(from, to);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error("[maintenance-returns] backfillDeskReturnCaptures", source, detail);
+    }
     await ensureMaintenanceLifecycleColumns();
     const stored = await listCapturedReturns(from, to, [source]);
-    return { rows: await hydrateCapturedReturnRows(stored), error: null as string | null };
+    return { rows: await hydrateCapturedReturnRows(stored), error: null as string | null, detail: null as string | null };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error("[maintenance-returns] listDeskReceivedReturns", source, detail);
-    return { rows: [] as MaintenanceBostaRow[], error: "تعذر تحميل مرتجعات المندوب. حاول مرة أخرى." as string | null };
+    return {
+      rows: [] as MaintenanceBostaRow[],
+      error: "تعذر تحميل مرتجعات المندوب. حاول مرة أخرى." as string | null,
+      detail: detail.slice(0, 200),
+    };
   }
 }
 
@@ -267,7 +281,7 @@ export async function listCourierReturns(from: string, to: string) {
     listDeskReceivedReturns("momen", from, to),
   ]);
   return {
-    eid: { found: eidFound, rows: eid.rows, error: eid.error },
-    momen: { found: momenFound, rows: momen.rows, error: momen.error },
+    eid: { found: eidFound, rows: eid.rows, error: eid.error, detail: eid.detail },
+    momen: { found: momenFound, rows: momen.rows, error: momen.error, detail: momen.detail },
   };
 }

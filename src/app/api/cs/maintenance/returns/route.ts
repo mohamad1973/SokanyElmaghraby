@@ -53,27 +53,36 @@ export async function GET(request: Request) {
     const [bosta, temima, couriers, variance] = await Promise.all([
       settledValue(
         listBostaReceivedReturns(range.from, range.to),
-        { rows: [], error: "تعذر تحميل مرتجعات بوسطة." },
+        { rows: [], error: "تعذر تحميل مرتجعات بوسطة.", detail: null },
         "bosta",
       ),
       loadTemima
-        ? settledValue(listTemimaReturns(range.from, range.to), { rows: [], error: null }, "temima")
-        : Promise.resolve({ rows: [], error: null }),
+        ? settledValue(listTemimaReturns(range.from, range.to), { rows: [], error: null, detail: null }, "temima")
+        : Promise.resolve({ rows: [], error: null, detail: null }),
       loadCouriers
         ? settledValue(
             listCourierReturns(range.from, range.to),
-            { eid: { found: false, rows: [], error: null }, momen: { found: false, rows: [], error: null } },
+            {
+              eid: { found: false, rows: [], error: null, detail: null },
+              momen: { found: false, rows: [], error: null, detail: null },
+            },
             "couriers",
           )
-        : Promise.resolve({ eid: { found: false, rows: [], error: null }, momen: { found: false, rows: [], error: null } }),
+        : Promise.resolve({
+            eid: { found: false, rows: [], error: null, detail: null },
+            momen: { found: false, rows: [], error: null, detail: null },
+          }),
       loadVariance
         ? settledValue(maintenanceVarianceReport(range.from, range.to), null, "variance")
         : Promise.resolve(null),
     ]);
 
-    const sectionErrors = [bosta.error, temima.error, couriers.eid.error, couriers.momen.error].filter(
-      Boolean,
-    ) as string[];
+    const failed = [
+      { error: bosta.error, detail: bosta.detail },
+      { error: temima.error, detail: temima.detail },
+      { error: couriers.eid.error, detail: couriers.eid.detail },
+      { error: couriers.momen.error, detail: couriers.momen.detail },
+    ].find((section) => section.error);
     return NextResponse.json({
       from: range.from,
       to: range.to,
@@ -88,7 +97,9 @@ export async function GET(request: Request) {
         isAccounting: viewer.isAccounting,
         isAdmin: viewer.isAdmin,
       },
-      ...(sectionErrors.length ? { message: sectionErrors[0], partial: true } : {}),
+      ...(failed
+        ? { message: failed.error, detail: failed.detail || undefined, partial: true }
+        : {}),
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
