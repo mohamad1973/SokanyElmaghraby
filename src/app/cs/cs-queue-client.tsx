@@ -9,6 +9,7 @@ import { getBostaStatusLabelAr } from "@/lib/shipping/bosta-zones";
 import {
   cairoClock,
   cairoTodayYmd,
+  cairoYmdBounds,
   cairoYesterdayYmd,
   formatCairoOrderDate,
   formatCairoOrderDateTime,
@@ -96,6 +97,27 @@ type TemimaLateRow = {
   sinceLabel: string;
   statusLabel: "فاضي" | "مؤجل";
 };
+
+function formatLateFreezeDay(ymd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const [year, month, day] = ymd.split("-");
+  return `${Number(day)}-${Number(month)}-${year}`;
+}
+
+function lateSinceFreezeLabel(days: number) {
+  const n = Math.max(1, Math.floor(days));
+  if (n === 1) return "منذ يوم";
+  if (n === 2) return "منذ يومين";
+  if (n >= 3 && n <= 10) return `منذ ${n} أيام`;
+  return `منذ ${n} يوم`;
+}
+
+function lateDaysSinceFreezeDay(freezeDay: string) {
+  const from = cairoYmdBounds(freezeDay);
+  const to = cairoYmdBounds(cairoTodayYmd());
+  if (!from || !to) return 1;
+  return Math.max(1, Math.round((to.start.getTime() - from.start.getTime()) / 86400000));
+}
 
 function lineQuantity(quantity: unknown) {
   const qty = Number(quantity);
@@ -985,7 +1007,8 @@ export function CsQueueClient({
         prev.count += 1;
         continue;
       }
-      map.set(row.freezeDay, { freezeDay: row.freezeDay, sinceLabel: row.sinceLabel, count: 1 });
+      const sinceLabel = lateSinceFreezeLabel(lateDaysSinceFreezeDay(row.freezeDay));
+      map.set(row.freezeDay, { freezeDay: row.freezeDay, sinceLabel, count: 1 });
     }
     return [...map.values()].sort((a, b) => b.freezeDay.localeCompare(a.freezeDay));
   }, [lateRows]);
@@ -2053,48 +2076,45 @@ export function CsQueueClient({
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-end gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
-                <label className="flex flex-col gap-1 text-xs font-extrabold text-[#14213D]">
-                  تاريخ القفل
-                  <input
-                    type="date"
-                    value={lateDateFilter}
-                    onChange={(event) => setLateDateFilter(event.target.value)}
-                    className="h-10 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold"
-                  />
-                </label>
-                <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-extrabold text-[#14213D]">
-                  منذ كام يوم
-                  <select
-                    value={lateDateFilter}
-                    onChange={(event) => setLateDateFilter(event.target.value)}
-                    className="h-10 rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold"
-                  >
-                    <option value="">الكل ({lateRows.length})</option>
-                    {lateDayOptions.map((option) => {
-                      const [year, month, day] = option.freezeDay.split("-");
-                      return (
-                        <option key={option.freezeDay} value={option.freezeDay}>
-                          {Number(day)}-{Number(month)}-{year} · {option.sinceLabel} ({option.count})
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-                <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white">
-                  {lateDateFilter
-                    ? `متأخرة منذ هذا التاريخ: ${visibleLateRows.length}`
-                    : `كل المتأخرة: ${lateRows.length}`}
-                </p>
-                {lateDateFilter ? (
+              <div className="rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-extrabold text-[#14213D]">اختاري يوم القفل</p>
+                  <p className="rounded-xl bg-[#14213D] px-3 py-1.5 text-sm font-extrabold text-white">
+                    {lateDateFilter
+                      ? `متأخرة يوم ${formatLateFreezeDay(lateDateFilter)}: ${visibleLateRows.length}`
+                      : `كل المتأخرة: ${lateRows.length}`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => setLateDateFilter("")}
-                    className="h-10 rounded-xl bg-[#E5E5E5] px-3 text-sm font-extrabold text-[#14213D]"
+                    className={`rounded-xl px-3 py-2 text-right text-xs font-extrabold ${
+                      lateDateFilter === "" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                    }`}
                   >
                     الكل
+                    <span className="mt-0.5 block text-[11px] font-bold opacity-80">{lateRows.length} أوردر</span>
                   </button>
-                ) : null}
+                  {lateDayOptions.map((option) => {
+                    const selected = lateDateFilter === option.freezeDay;
+                    return (
+                      <button
+                        key={option.freezeDay}
+                        type="button"
+                        onClick={() => setLateDateFilter(option.freezeDay)}
+                        className={`min-w-[8.5rem] rounded-xl px-3 py-2 text-right text-xs font-extrabold ${
+                          selected ? "bg-red-700 text-white" : "bg-red-50 text-red-900 ring-1 ring-red-200"
+                        }`}
+                      >
+                        <span className="block">{formatLateFreezeDay(option.freezeDay)}</span>
+                        <span className={`block text-[11px] font-bold ${selected ? "text-white/85" : "text-red-800/80"}`}>
+                          {option.sinceLabel} · {option.count} أوردر
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {visibleLateRows.length === 0 ? (
                 <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
@@ -2129,10 +2149,10 @@ export function CsQueueClient({
                           <td className="px-3 py-2" dir="ltr">
                             {row.phone || "—"}
                           </td>
-                          <td className="px-3 py-2">{formatCairoOrderDate(row.freezeAt) || row.freezeDay}</td>
+                          <td className="px-3 py-2">{formatLateFreezeDay(row.freezeDay)}</td>
                           <td className="px-3 py-2">
                             <span className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white">
-                              متأخر · {row.sinceLabel}
+                              متأخر · {lateSinceFreezeLabel(lateDaysSinceFreezeDay(row.freezeDay))}
                             </span>
                           </td>
                           <td className="px-3 py-2">{row.statusLabel}</td>
