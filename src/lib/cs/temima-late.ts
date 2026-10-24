@@ -6,6 +6,7 @@ import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-w
 import { ensureTemimaFreezeTables } from "@/lib/cs/temima-sheet-freeze";
 
 export const LATE_AFTER_MS = 65 * 60 * 60 * 1000;
+export const LATE_FROM_YMD = "2026-09-27";
 const ID_CHUNK = 400;
 
 export type TemimaLateDelivery = {
@@ -96,18 +97,21 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
      FROM CsTemimaSheetFreezeDay d
      INNER JOIN CsTemimaSheetFreeze f ON f.dayYmd = d.dayYmd
      WHERE d.createdAt <= ?
+       AND d.dayYmd >= ?
      ORDER BY d.createdAt ASC`,
     cutoff,
+    LATE_FROM_YMD,
   );
   if (!pairs.length) return [];
 
   const freezeById = new Map<number, { dayYmd: string; freezeAt: Date }>();
   for (const row of pairs) {
     const id = Number(row.confirmationId);
-    if (!Number.isInteger(id) || id <= 0 || freezeById.has(id)) continue;
+    const dayYmd = String(row.dayYmd);
+    if (!Number.isInteger(id) || id <= 0 || freezeById.has(id) || dayYmd < LATE_FROM_YMD) continue;
     const freezeAt = asDate(row.createdAt);
     if (!freezeAt || freezeAt.getTime() > cutoff.getTime()) continue;
-    freezeById.set(id, { dayYmd: String(row.dayYmd), freezeAt });
+    freezeById.set(id, { dayYmd, freezeAt });
   }
   const ids = [...freezeById.keys()];
   if (!ids.length) return [];
