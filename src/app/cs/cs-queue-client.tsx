@@ -2080,9 +2080,15 @@ export function CsQueueClient({
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-extrabold text-[#14213D]">اختاري يوم القفل</p>
                   <p className="rounded-xl bg-[#14213D] px-3 py-1.5 text-sm font-extrabold text-white">
-                    {lateDateFilter
-                      ? `متأخرة يوم ${formatLateFreezeDay(lateDateFilter)}: ${visibleLateRows.length}`
-                      : `كل المتأخرة: ${lateRows.length}`}
+                    {lateDateFilter ? (
+                      <>
+                        متأخرة يوم <span dir="ltr">{formatLateFreezeDay(lateDateFilter)}</span>
+                        {" · "}
+                        {visibleLateRows.length} أوردر
+                      </>
+                    ) : (
+                      <>كل المتأخرة: {lateRows.length}</>
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -2149,7 +2155,9 @@ export function CsQueueClient({
                           <td className="px-3 py-2" dir="ltr">
                             {row.phone || "—"}
                           </td>
-                          <td className="px-3 py-2">{formatLateFreezeDay(row.freezeDay)}</td>
+                          <td className="px-3 py-2" dir="ltr">
+                            {formatLateFreezeDay(row.freezeDay)}
+                          </td>
                           <td className="px-3 py-2">
                             <span className="rounded bg-red-700 px-1.5 py-0.5 text-[11px] font-extrabold text-white">
                               متأخر · {lateSinceFreezeLabel(lateDaysSinceFreezeDay(row.freezeDay))}
