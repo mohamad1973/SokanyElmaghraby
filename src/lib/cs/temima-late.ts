@@ -27,12 +27,6 @@ function chunkIds(ids: number[]) {
   return out;
 }
 
-function asDate(value: Date | string | null | undefined) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function snapshotText(value: string | null | undefined) {
   const text = String(value || "").trim();
   return text === "null" ? "" : text;
@@ -90,17 +84,19 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
   await ensureCsTables();
   await ensureTemimaFreezeTables();
   const cutoff = new Date(now.getTime() - LATE_AFTER_MS);
+  const cutoffYmd = cairoYmdFromIso(cutoff.toISOString());
+  if (!cutoffYmd || cutoffYmd < LATE_FROM_YMD) return [];
   const pairs = await prisma.$queryRawUnsafe<
-    Array<{ dayYmd: string; createdAt: Date | string; confirmationId: number | bigint }>
+    Array<{ dayYmd: string; confirmationId: number | bigint }>
   >(
-    `SELECT d.dayYmd, d.createdAt, f.confirmationId
+    `SELECT d.dayYmd, f.confirmationId
      FROM CsTemimaSheetFreezeDay d
      INNER JOIN CsTemimaSheetFreeze f ON f.dayYmd = d.dayYmd
-     WHERE d.createdAt <= ?
-       AND d.dayYmd >= ?
-     ORDER BY d.createdAt ASC`,
-    cutoff,
+     WHERE d.dayYmd >= ?
+       AND d.dayYmd <= ?
+     ORDER BY d.dayYmd ASC`,
     LATE_FROM_YMD,
+    cutoffYmd,
   );
   if (!pairs.length) return [];
 
@@ -109,7 +105,7 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
     const id = Number(row.confirmationId);
     const dayYmd = String(row.dayYmd);
     if (!Number.isInteger(id) || id <= 0 || freezeById.has(id) || dayYmd < LATE_FROM_YMD) continue;
-    const freezeAt = asDate(row.createdAt);
+    const freezeAt = cairoYmdBounds(dayYmd)?.start ?? null;
     if (!freezeAt || freezeAt.getTime() > cutoff.getTime()) continue;
     freezeById.set(id, { dayYmd, freezeAt });
   }
