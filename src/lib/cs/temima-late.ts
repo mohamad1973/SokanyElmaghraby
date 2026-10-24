@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ensureCsTables } from "@/lib/cs/agents";
 import { getPrismaClient } from "@/lib/db";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { ensureTemimaFreezeTables } from "@/lib/cs/temima-sheet-freeze";
@@ -85,6 +86,7 @@ export async function markTemimaSheetHandedToCarrier(confirmationIds: number[]) 
 export async function listTemimaLateDeliveries(now = new Date()): Promise<TemimaLateDelivery[]> {
   const prisma = getPrismaClient();
   if (!prisma) return [];
+  await ensureCsTables();
   await ensureTemimaFreezeTables();
   const cutoff = new Date(now.getTime() - LATE_AFTER_MS);
   const pairs = await prisma.$queryRawUnsafe<
@@ -133,10 +135,20 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
     for (const row of rows) orders.set(Number(row.id), row);
   }
 
+  const settled = new Set<number>();
+  for (const group of chunkIds(ids)) {
+    const lines = await prisma.csCarrierWeekLine.findMany({
+      where: { confirmationId: { in: group }, disposition: { in: ["collect", "return"] } },
+      select: { confirmationId: true },
+    });
+    for (const line of lines) settled.add(line.confirmationId);
+  }
+
   const items: TemimaLateDelivery[] = [];
   for (const [id, freeze] of freezeById) {
     const order = orders.get(id);
     if (!order) continue;
+    if (settled.has(id)) continue;
     if (isFinalOutcome(order.temimaSupervisorResult, order.courierOutcome, order.deliveredToCustomer)) continue;
     const daysSinceFreeze = Math.max(1, cairoDaysSinceFreeze(freeze.freezeAt, now));
     items.push({
