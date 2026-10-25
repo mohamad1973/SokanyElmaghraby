@@ -18,7 +18,7 @@ export type TemimaLateDelivery = {
   freezeAt: string;
   daysSinceFreeze: number;
   sinceLabel: string;
-  statusLabel: "فاضي" | "مؤجل";
+  statusLabel: "لم يسجل" | "مؤجل";
 };
 
 function chunkIds(ids: number[]) {
@@ -57,9 +57,9 @@ function isFinalOutcome(supervisor: string | null | undefined, courier: string |
   return Boolean(delivered);
 }
 
-function lateStatusLabel(supervisor: string | null | undefined, courier: string | null | undefined): "فاضي" | "مؤجل" {
+function lateStatusLabel(supervisor: string | null | undefined, courier: string | null | undefined): "لم يسجل" | "مؤجل" {
   if (String(supervisor || "") === "postpone" || String(courier || "") === "postponed") return "مؤجل";
-  return "فاضي";
+  return "لم يسجل";
 }
 
 export async function markTemimaSheetHandedToCarrier(confirmationIds: number[]) {

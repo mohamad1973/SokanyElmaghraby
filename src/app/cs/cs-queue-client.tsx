@@ -95,7 +95,7 @@ type TemimaLateRow = {
   freezeAt: string;
   daysSinceFreeze: number;
   sinceLabel: string;
-  statusLabel: "فاضي" | "مؤجل";
+  statusLabel: "لم يسجل" | "مؤجل";
 };
 
 function formatLateFreezeDay(ymd: string) {

@@ -89,7 +89,8 @@ function shipmentValue(row: SheetRow) {
 }
 
 function postponeValue(row: SheetRow) {
-  return row.disposition === "postpone" ? rowRemainder(row) : 0;
+  if (row.disposition === "collect" || row.disposition === "return") return 0;
+  return rowRemainder(row);
 }
 
 function refusalValue(row: SheetRow) {
@@ -170,7 +171,7 @@ function dispositionLabel(row: SheetRow) {
   if (row.disposition === "return") return "الغاء";
   if (row.disposition === "postpone") return "مؤجل";
   if (row.disposition === "collect") return "تم بنجاح";
-  return "";
+  return "فاضي · لم يسجل";
 }
 
 export function TemimaSettlementClient({
@@ -619,7 +620,7 @@ export function TemimaSettlementClient({
                           onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition }, true)}
                           className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
                         >
-                          <option value="">لم يُعلَّم</option>
+                          <option value="">لم يسجل</option>
                           <option value="collect">تم بنجاح</option>
                           <option value="return">الغاء</option>
                           <option value="postpone">مؤجل</option>
