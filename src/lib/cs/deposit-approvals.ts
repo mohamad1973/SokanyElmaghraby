@@ -7,6 +7,7 @@ import {
   markDepositApprovalNotificationsDone,
 } from "@/lib/admin-notifications";
 import { syncConfirmationMoneyToBosta } from "@/lib/cs/bosta-waybill";
+import { ensureCsSokanyWaybill } from "@/lib/cs/sokany-waybill";
 import {
   normalizeDepositFromNumber,
   normalizeDepositInstapayName,
@@ -264,6 +265,11 @@ export async function decideDepositApproval(input: {
       await syncConfirmationMoneyToBosta(input.id);
     } catch (error) {
       console.error("[deposit-approvals] bosta money sync failed", error);
+    }
+    try {
+      await ensureCsSokanyWaybill(input.id);
+    } catch (error) {
+      console.error("[deposit-approvals] sokany money sync failed", error);
     }
 
     return { ok: true as const, status: approved ? ("approved" as const) : ("rejected" as const) };

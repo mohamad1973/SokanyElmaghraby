@@ -187,7 +187,13 @@ export function SokanyAwbSticker({
               <td className="type-code">{code}</td>
               <td className="money">
                 <div>
-                  مبلغ التحصيل: <b>{money(payload.cod)} ج.م</b>
+                  {payload.cod === 0 ? (
+                    <b>لا يوجد تحصيل</b>
+                  ) : (
+                    <>
+                      مبلغ التحصيل: <b>{money(payload.cod)} ج.م</b>
+                    </>
+                  )}
                 </div>
                 <div>تكلفة عدم الاستلام: {money(payload.returnFee)} ج.م</div>
               </td>

@@ -4,6 +4,7 @@ import { moneySnapshotWithWaybillTotal, snapshotWithLiveMerchandiseTotal } from 
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
 import { fulfillmentWaybillDraft, orderItemsDescription } from "@/lib/cs/fulfillment-waybill";
 import { hydrateWaybillSnapshot } from "@/lib/cs/hydrate-waybill-snapshot";
+import { sheetCollectedSplit, sheetSplitFromConfirmation } from "@/lib/cs/order-window";
 import { isDisplayablePlaceName, resolveSnapshotLocation } from "@/lib/cs/resolve-location";
 import { usesSokanyWaybillPrint, type SokanyCarrier, type SokanyPrintPayload } from "@/lib/cs/sokany-waybill-types";
 import { getPrismaClient } from "@/lib/db";
@@ -409,6 +410,26 @@ export async function ensureCsSokanyWaybill(confirmationId: number) {
   );
   const answers = row.answers || [];
   const built = itemDescription(snap);
+  if (!fulfillmentWaybillDraft(snap)) {
+    const money = row as {
+      depositAmount?: unknown;
+      depositPaid?: boolean | null;
+      depositApprovalStatus?: string | null;
+      orderTotalDelta?: unknown;
+      discountApprovalStatus?: string | null;
+    };
+    built.cod = sheetCollectedSplit(
+      sheetSplitFromConfirmation({
+        customerSnapshot: snap,
+        depositAmount: money.depositAmount,
+        depositPaid: money.depositPaid,
+        depositApprovalStatus: money.depositApprovalStatus,
+        orderTotalDelta: money.orderTotalDelta,
+        discountApprovalStatus: money.discountApprovalStatus,
+        freshPaymentState: true,
+      }),
+    ).net;
+  }
   const legacyRef = pickLegacyRef(snap, String(row.trackingNumber || ""));
   if (legacyRef) snap.legacyRef = legacyRef;
   const printSnap = { ...printLocation(snap, answers), legacyRef };
