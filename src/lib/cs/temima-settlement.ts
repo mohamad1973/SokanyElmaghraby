@@ -11,6 +11,7 @@ import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-ed
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
+import { LATE_FROM_YMD } from "@/lib/cs/temima-late";
 import { getPrismaClient } from "@/lib/db";
 
 export const TEMIMA_COMPANY = "sayed_temima";
@@ -68,8 +69,8 @@ export function formatTemimaDayAr(ymd: string) {
 }
 
 export function temimaCarrySheetTitle(fromYmd: string, toYmd: string) {
-  if (!fromYmd || !toYmd) return "مؤجلات مرحلة من الأسبوع السابق";
-  return `مؤجلات مرحلة من الأسبوع السابق من ${formatTemimaDayAr(fromYmd)} إلى ${formatTemimaDayAr(toYmd)}`;
+  if (!fromYmd || !toYmd) return "شيت مؤجلات مرحلة";
+  return `شيت مؤجلات مرحلة من أسبوع ${formatTemimaDayAr(fromYmd)} إلى ${formatTemimaDayAr(toYmd)}`;
 }
 
 function addDaysYmd(ymd: string, days: number) {
@@ -114,6 +115,57 @@ export function openWeekToClose(weeks: Array<{ weekStart: string; status: string
   const previous = weeks.find((row) => row.weekStart === previousSunday);
   if (!previous || previous.status !== "closed") return previousSunday;
   return thisSunday;
+}
+
+/** Finished Sunday–Saturday weeks from the Temima start day, never including the week that contains today. */
+export function completedTemimaSundaysToClose(fromYmd: string, today = cairoTodayYmd()) {
+  const currentSunday = sundayOnOrBefore(today);
+  let sunday = sundayOnOrBefore(fromYmd);
+  const out: string[] = [];
+  while (sunday && sunday < currentSunday) {
+    const saturday = addDaysYmd(sunday, 6);
+    if (saturday >= today) break;
+    out.push(sunday);
+    sunday = addDaysYmd(sunday, 7);
+  }
+  return out;
+}
+
+let ensuringClosedWeeks = false;
+
+async function ensureClosedTemimaWeeksFrom(fromYmd: string, agentId: number) {
+  if (ensuringClosedWeeks) return;
+  ensuringClosedWeeks = true;
+  try {
+    const prisma = getPrismaClient();
+    if (!prisma) return;
+    await ensureCsTables();
+    const closer =
+      agentId > 0
+        ? agentId
+        : ((await prisma.csAgent.findFirst({ where: { isActive: true }, select: { id: true } }))?.id || 0);
+    if (!closer) return;
+    for (const sunday of completedTemimaSundaysToClose(fromYmd)) {
+      const saturday = addDaysYmd(sunday, 6);
+      const start = cairoYmdBounds(sunday)?.start;
+      if (!start) continue;
+      const existing = await prisma.csCarrierWeek.findUnique({
+        where: { carrierCompany_weekStart: { carrierCompany: TEMIMA_COMPANY, weekStart: start } },
+      });
+      if (existing?.status === "closed") continue;
+      const closed = await saveTemimaWeek({
+        weekStart: sunday,
+        weekEnd: saturday,
+        cashPaid: existing ? Number(existing.cashPaid) : 0,
+        rows: [],
+        agentId: closer,
+        close: true,
+      });
+      if (!closed.ok) console.error("[temima-settlement] backfill close failed", sunday, closed.message);
+    }
+  } finally {
+    ensuringClosedWeeks = false;
+  }
 }
 
 function isYmd(value?: string): value is string {
@@ -375,10 +427,11 @@ export async function listTemimaCarryForward(): Promise<TemimaCarryForward> {
   };
 }
 
-export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string) {
+export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, agentId = 0) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
+  await ensureClosedTemimaWeeksFrom(LATE_FROM_YMD, agentId);
 
   const weeks = await loadWeeks();
   const range = resolveSettlementRange(
@@ -410,18 +463,18 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     fromYmd: string;
     toYmd: string;
   }> = [];
-  const latestClosed = weeks.find((item) => item.status === "closed" && (!week || item.id !== week.id)) || null;
-  const carryFromStart = latestClosed ? weekYmd(latestClosed.weekStart) : "";
-  const carryFromEnd = latestClosed ? weekYmd(latestClosed.weekEnd) : "";
   const seenCarry = new Set<number>();
-  for (const item of weeks) {
-    if (item.status !== "closed") continue;
-    if (week && item.id === week.id) continue;
+  const closedOther = weeks
+    .filter((item) => item.status === "closed" && (!week || item.id !== week.id))
+    .slice()
+    .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime());
+  for (const item of closedOther) {
     for (const line of item.lines) {
-      if (line.disposition === "collect" || line.disposition === "return") {
-        settledIds.add(line.confirmationId);
-        continue;
-      }
+      if (line.disposition === "collect" || line.disposition === "return") settledIds.add(line.confirmationId);
+    }
+  }
+  for (const item of closedOther) {
+    for (const line of item.lines) {
       if (line.disposition !== "postpone") continue;
       if (resolvedPostponeIds.has(line.id) || settledIds.has(line.confirmationId) || seenCarry.has(line.confirmationId)) continue;
       seenCarry.add(line.confirmationId);
@@ -436,6 +489,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       });
     }
   }
+  const sourceWeekById = new Map(openPostpones.map((row) => [row.confirmationId, { fromYmd: row.fromYmd, toYmd: row.toYmd }]));
 
   if (week?.status === "closed") {
     const ids = week.lines.map((line) => line.confirmationId);
@@ -481,8 +535,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         carried,
         postponeLineId: line.resolvesLineId,
         sheetDay: carried ? "" : days.get(line.confirmationId) || fallbackSheetDay(order, cutoffs, edits, sunday, saturday),
-        carryFromStart: carried ? carryFromStart : undefined,
-        carryFromEnd: carried ? carryFromEnd : undefined,
+        carryFromStart: carried ? sourceWeekById.get(line.confirmationId)?.fromYmd : undefined,
+        carryFromEnd: carried ? sourceWeekById.get(line.confirmationId)?.toYmd : undefined,
         refusalReason: storedDisposition(line.disposition) === "return" ? refusalReasonOf(order || {}) : undefined,
       };
     }).filter((row) => {
@@ -504,16 +558,13 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       monthId: week.monthId,
       rows,
       refusals: refusalRowsOf(rows),
-      carryTitle: temimaCarrySheetTitle(carryFromStart, carryFromEnd),
       history: historyOf(weeks),
     };
   }
 
   const days = await sheetDayById(range.start, range.end);
   const sheetIds = [...days.keys()];
-  const carryIds = range.fullWeek
-    ? openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id))
-    : [];
+  const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id));
   const orderIds = [...sheetIds, ...carryIds];
   const orders = orderIds.length
     ? await prisma.csOrderConfirmation.findMany({
@@ -569,7 +620,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     });
   }
 
-  if (range.fullWeek) for (const carried of openPostpones) {
+  for (const carried of openPostpones) {
     const saved = draft.get(carried.confirmationId);
     const order = orders.find((row) => row.id === carried.confirmationId);
     const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
@@ -589,8 +640,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       carried: true,
       postponeLineId: carried.lineId,
       sheetDay: "",
-      carryFromStart: carryFromStart || carried.fromYmd,
-      carryFromEnd: carryFromEnd || carried.toYmd,
+      carryFromStart: carried.fromYmd,
+      carryFromEnd: carried.toYmd,
       refusalReason: storedDisposition(saved?.disposition) === "return" ? refusalReasonOf(order || {}) : undefined,
     });
   }
@@ -612,7 +663,6 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     monthId: week?.monthId ?? null,
     rows,
     refusals: refusalRowsOf(rows),
-    carryTitle: temimaCarrySheetTitle(carryFromStart, carryFromEnd),
     history: historyOf(weeks),
   };
 }
@@ -751,6 +801,7 @@ export async function saveTemimaWeek(input: {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
+  await ensureClosedTemimaWeeksFrom(LATE_FROM_YMD, input.agentId);
 
   const range = resolveSettlementRange(input.weekStart, input.weekEnd, sundayOnOrBefore(input.weekStart || cairoTodayYmd()));
   if (input.close && !range.fullWeek) {
@@ -772,7 +823,7 @@ export async function saveTemimaWeek(input: {
   }
 
   if (input.close) {
-    const live = await getTemimaWeekSheet(range.sunday, range.saturday);
+    const live = await getTemimaWeekSheet(range.sunday, range.saturday, input.agentId);
     if (!live.ok) return live;
     const snapshotRows = live.rows.map((row) =>
       !row.carried && !storedDisposition(row.disposition) ? { ...row, disposition: "postpone" as const } : row,

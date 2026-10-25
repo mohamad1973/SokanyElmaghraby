@@ -115,11 +115,9 @@ function formatDayAr(ymd: string) {
   return `${Number(day)}-${Number(month)}-${year}`;
 }
 
-function carryBlockTitle(rows: SheetRow[]) {
-  const from = rows.find((row) => row.carryFromStart)?.carryFromStart || "";
-  const to = rows.find((row) => row.carryFromEnd)?.carryFromEnd || "";
-  if (from && to) return `مؤجلات مرحلة من الأسبوع السابق من ${formatDayAr(from)} إلى ${formatDayAr(to)}`;
-  return "مؤجلات مرحلة من الأسبوع السابق";
+function carryBlockTitle(from: string, to: string) {
+  if (from && to) return `شيت مؤجلات مرحلة من أسبوع ${formatDayAr(from)} إلى ${formatDayAr(to)}`;
+  return "شيت مؤجلات مرحلة";
 }
 
 type DayBlock = { key: string; title: string; rows: SheetRow[] };
@@ -127,10 +125,13 @@ type DayBlock = { key: string; title: string; rows: SheetRow[] };
 function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
   const byDay = new Map<string, SheetRow[]>();
   const undated: SheetRow[] = [];
-  const carried: SheetRow[] = [];
+  const carriedByWeek = new Map<string, SheetRow[]>();
   for (const row of visible) {
     if (row.carried) {
-      carried.push(row);
+      const key = `${row.carryFromStart || ""}|${row.carryFromEnd || ""}`;
+      const list = carriedByWeek.get(key) || [];
+      list.push(row);
+      carriedByWeek.set(key, list);
       continue;
     }
     if (!row.sheetDay) {
@@ -155,10 +156,12 @@ function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
       rows: undated.sort((a, b) => orderNumber(b) - orderNumber(a)),
     });
   }
-  if (carried.length) {
+  for (const key of [...carriedByWeek.keys()].sort()) {
+    const carried = carriedByWeek.get(key) || [];
+    const [from, to] = key.split("|");
     blocks.push({
-      key: "carried",
-      title: carryBlockTitle(carried),
+      key: `carried-${key}`,
+      title: carryBlockTitle(from, to),
       rows: carried.sort((a, b) => orderNumber(b) - orderNumber(a)),
     });
   }

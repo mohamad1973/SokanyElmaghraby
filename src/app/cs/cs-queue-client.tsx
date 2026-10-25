@@ -83,9 +83,6 @@ export type CsQueueItem = {
   courierRefusalReason?: string | null;
   settlementDisposition?: "" | "collect" | "return" | "postpone";
   temimaWeekClosed?: boolean;
-  temimaCarrySheet?: boolean;
-  carryFromStart?: string;
-  carryFromEnd?: string;
   sheetSerial?: number | null;
 };
 
@@ -877,12 +874,10 @@ export function CsQueueClient({
   const [queueTotal, setQueueTotal] = useState(initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
-  const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "carry">("sheet");
+  const [sheetTab, setSheetTab] = useState<"sheet" | "late">("sheet");
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
   const [lateDateFilter, setLateDateFilter] = useState("");
-  const [carryTitle, setCarryTitle] = useState("مؤجلات مرحلة من الأسبوع السابق");
-  const [carryCount, setCarryCount] = useState(0);
 
   useEffect(() => {
     setItems(initialItems);
@@ -895,7 +890,6 @@ export function CsQueueClient({
   useEffect(() => {
     if (!isCourierSupervisor) return;
     void loadTemimaLate();
-    void refreshCarryMeta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCourierSupervisor]);
 
@@ -1077,14 +1071,7 @@ export function CsQueueClient({
     }
     setEditingStatusId(null);
     const settlementDisposition = result === "delivered" ? "collect" : result === "returned" ? "return" : "postpone";
-    setItems((prev) => {
-      if (sheetTab === "carry" && settlementDisposition !== "postpone") {
-        const next = prev.filter((item) => item.id !== id);
-        setCarryCount(next.length);
-        return next;
-      }
-      return prev.map((item) => (item.id === id ? { ...item, settlementDisposition } : item));
-    });
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, settlementDisposition } : item)));
     if (isCourierSupervisor) void loadTemimaLate();
   }
 
@@ -1218,31 +1205,6 @@ export function CsQueueClient({
     setFiltering(true);
     const work = isCourierSupervisor ? loadSayedSheet(filters) : loadQueue(filters, 1);
     void Promise.resolve(work).finally(() => setFiltering(false));
-  }
-
-  async function refreshCarryMeta() {
-    const res = await fetch("/api/cs/orders?sheet=temima&carry=1");
-    const data = (await res.json()) as { items?: CsQueueItem[]; carryTitle?: string };
-    if (!res.ok) return;
-    setCarryCount((data.items || []).length);
-    if (data.carryTitle) setCarryTitle(data.carryTitle);
-  }
-
-  async function loadCarrySheet() {
-    const res = await fetch("/api/cs/orders?sheet=temima&carry=1");
-    const data = (await res.json()) as {
-      message?: string;
-      items?: CsQueueItem[];
-      carryTitle?: string;
-    };
-    if (!res.ok) {
-      setMessage(data.message || "تعذر تحميل شيت المؤجلات المرحلة.");
-      return;
-    }
-    const next = data.items || [];
-    setItems(next);
-    setCarryCount(next.length);
-    if (data.carryTitle) setCarryTitle(data.carryTitle);
   }
 
   async function loadSayedSheet(filters: DraftFilters) {
@@ -1437,8 +1399,7 @@ export function CsQueueClient({
   const todayYmd = cairoTodayYmd();
   const dayIsFrozen = (dayYmd: string) =>
     Boolean(dayYmd) && (frozenDays.includes(dayYmd) || cutoffs.some((row) => row.dayYmd === dayYmd));
-  const carryView = sheetTab === "carry";
-  const sheetFrozen = !carryView && dayIsFrozen(sheetDay);
+  const sheetFrozen = dayIsFrozen(sheetDay);
   const todayFrozen = dayIsFrozen(todayYmd);
   const sheetEditsLocked = sheetFrozen && !canEditTemimaSheet && !canReopenTemimaSheet;
   const liveSheetSerial = useMemo(() => {
@@ -1614,9 +1575,7 @@ export function CsQueueClient({
         <div className="min-w-0 sm:flex-1">
           <h1 className="text-xl font-extrabold text-[#14213D] sm:text-2xl">
             {isCourierSupervisor
-              ? sheetTab === "carry"
-                ? carryTitle
-                : sheetDay
+              ? sheetDay
                 ? formatSayedSheetHeading(sheetDay)
                 : "شيت سيد تميمة"
               : "قائمة تأكيد الطلبات"}
@@ -1649,19 +1608,6 @@ export function CsQueueClient({
                 }`}
               >
                 شيت اليوم
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSheetTab("carry");
-                  setFiltering(true);
-                  void Promise.resolve(loadCarrySheet()).finally(() => setFiltering(false));
-                }}
-                className={`rounded-xl px-3 py-2 text-xs font-extrabold sm:text-sm ${
-                  sheetTab === "carry" ? "bg-amber-600 text-black" : "bg-amber-100 text-amber-900"
-                }`}
-              >
-                مؤجلات مرحلة ({carryCount})
               </button>
               <button
                 type="button"
@@ -2230,7 +2176,7 @@ export function CsQueueClient({
             {items.length === 0 ? (
               isCourierSupervisor ? (
                 <p className="font-bold">
-                  {carryView ? "مفيش مؤجلات مرحلة من الأسبوع السابق." : "مفيش أوردرات مؤكدة لسيد تميمة في اليوم ده."}
+                  {"مفيش أوردرات مؤكدة لسيد تميمة في اليوم ده."}
                 </p>
               ) : isSupervisor || isAccounting ? (
                 <p className="font-bold">لا توجد طلبات — راجعي المزامنة أو وسّعي تاريخ الفلتر.</p>
@@ -2347,7 +2293,7 @@ export function CsQueueClient({
                     {showOfficialMarks && item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" ? (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {officialActions(item.settlementDisposition, editingStatusId === item.id).map((action) => {
-                          const weekClosed = Boolean(item.temimaWeekClosed) && !item.temimaCarrySheet && !carryView;
+                          const weekClosed = Boolean(item.temimaWeekClosed);
                           const label = action === "delivered" ? "تم بنجاح" : action === "returned" ? "الغاء" : "مؤجل";
                           const selected =
                             (action === "delivered" && item.settlementDisposition === "collect") ||

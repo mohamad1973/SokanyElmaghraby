@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   const week = url.searchParams.get("week") || undefined;
   const weekEnd = url.searchParams.get("weekEnd") || undefined;
   const closeDate = url.searchParams.get("closeDate") || undefined;
-  const sheet = await getTemimaWeekSheet(week, weekEnd);
+  const sheet = await getTemimaWeekSheet(week, weekEnd, session.user.csAgentId);
   if (!sheet.ok) return NextResponse.json({ message: sheet.message }, { status: 503 });
   const month = await previewTemimaMonth(closeDate);
   return NextResponse.json({
