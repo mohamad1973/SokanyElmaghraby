@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 
 import { isAccountingRole } from "@/lib/cs/agents";
 import { CS_QUEUE_PAGE_SIZE, listCsQueuePage, resolveCsViewer } from "@/lib/cs/confirmations";
-import { listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
+import { listSayedSheetByIds, listVisibleSayedSheet } from "@/lib/cs/temima-sheet-edits";
 import { listTemimaFrozenDays } from "@/lib/cs/temima-sheet-freeze";
-import { closedTemimaWeekIds, openSettlementMarks } from "@/lib/cs/temima-settlement";
+import {
+  closedTemimaWeekIds,
+  listTemimaCarryForward,
+  openSettlementMarks,
+  temimaCarrySheetTitle,
+} from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function GET(request: Request) {
@@ -18,6 +23,29 @@ export async function GET(request: Request) {
   if (url.searchParams.get("sheet") === "temima") {
     const canSeeSheet = viewer.isAdmin || viewer.isSupervisor || viewer.isCourierSupervisor;
     if (!canSeeSheet) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    if (url.searchParams.get("carry") === "1") {
+      const carry = await listTemimaCarryForward();
+      const items = await listSayedSheetByIds(carry.confirmationIds);
+      const ids = items.map((item) => item.id);
+      const marks = await openSettlementMarks(ids);
+      return NextResponse.json({
+        items: items.map((item) => ({
+          ...item,
+          settlementDisposition: (marks.get(item.id) || "postpone") as "" | "collect" | "return" | "postpone",
+          temimaWeekClosed: false,
+          temimaCarrySheet: true,
+          carryFromStart: carry.fromYmd,
+          carryFromEnd: carry.toYmd,
+        })),
+        carryFromStart: carry.fromYmd,
+        carryFromEnd: carry.toYmd,
+        carryTitle: temimaCarrySheetTitle(carry.fromYmd, carry.toYmd),
+        frozenDays: [],
+        total: items.length,
+        hasMore: false,
+        nextCursor: null,
+      });
+    }
     const from = url.searchParams.get("from") || "";
     const to = url.searchParams.get("to") || "";
     const items = await listVisibleSayedSheet(from, to);

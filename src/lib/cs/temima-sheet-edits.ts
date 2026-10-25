@@ -559,6 +559,21 @@ export async function listVisibleSayedSheet(dateFrom: string, dateTo: string) {
   return listUnifiedSayedSheet(dateFrom, dateTo);
 }
 
+export async function listSayedSheetByIds(ids: number[]) {
+  const prisma = getPrismaClient();
+  const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!prisma || !unique.length) return [];
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: unique } },
+    include: { assignedAgent: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return unique.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [serializeCsQueueItem(row)] : [];
+  });
+}
+
 export async function closedPreviousSayedSheetDay(order: {
   id: number;
   confirmedAt?: Date | string | null;

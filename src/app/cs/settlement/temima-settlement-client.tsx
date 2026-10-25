@@ -23,6 +23,19 @@ type SheetRow = {
   carried: boolean;
   postponeLineId: number | null;
   sheetDay?: string;
+  carryFromStart?: string;
+  carryFromEnd?: string;
+  refusalReason?: string;
+};
+
+type RefusalRow = {
+  confirmationId: number;
+  wooOrderNumber: string;
+  customerName: string;
+  phone: string;
+  productNames: string;
+  sheetDay: string;
+  reason: string;
 };
 
 type HistoryRow = {
@@ -96,6 +109,19 @@ function orderNumber(row: SheetRow) {
   return Number(String(row.wooOrderNumber).replace(/\D/g, "")) || 0;
 }
 
+function formatDayAr(ymd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const [year, month, day] = ymd.split("-");
+  return `${Number(day)}-${Number(month)}-${year}`;
+}
+
+function carryBlockTitle(rows: SheetRow[]) {
+  const from = rows.find((row) => row.carryFromStart)?.carryFromStart || "";
+  const to = rows.find((row) => row.carryFromEnd)?.carryFromEnd || "";
+  if (from && to) return `مؤجلات مرحلة من الأسبوع السابق من ${formatDayAr(from)} إلى ${formatDayAr(to)}`;
+  return "مؤجلات مرحلة من الأسبوع السابق";
+}
+
 type DayBlock = { key: string; title: string; rows: SheetRow[] };
 
 function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
@@ -132,7 +158,7 @@ function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
   if (carried.length) {
     blocks.push({
       key: "carried",
-      title: "مؤجل من أسابيع سابقة",
+      title: carryBlockTitle(carried),
       rows: carried.sort((a, b) => orderNumber(b) - orderNumber(a)),
     });
   }
@@ -162,6 +188,8 @@ export function TemimaSettlementClient({
   const [fullWeek, setFullWeek] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [rows, setRows] = useState<SheetRow[]>([]);
+  const [refusals, setRefusals] = useState<RefusalRow[]>([]);
+  const [printKind, setPrintKind] = useState<"week" | "refusals">("week");
   const [closedCashDue, setClosedCashDue] = useState<number | null>(null);
   const [cashPaid, setCashPaid] = useState(0);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -191,6 +219,7 @@ export function TemimaSettlementClient({
       fullWeek?: boolean;
       status?: "open" | "closed";
       rows?: SheetRow[];
+      refusals?: RefusalRow[];
       cashPaid?: number;
       cashDue?: number;
       history?: HistoryRow[];
@@ -206,6 +235,7 @@ export function TemimaSettlementClient({
     setStatus(data.status || "open");
     editedIds.current.clear();
     setRows(data.rows || []);
+    setRefusals(data.refusals || []);
     setClosedCashDue(data.status === "closed" && data.fullWeek ? Number(data.cashDue) || 0 : null);
     setCashPaid(data.cashPaid || 0);
     setHistory(data.history || []);
@@ -423,10 +453,23 @@ export function TemimaSettlementClient({
         <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "الأسبوع مقفل" : fullWeek ? "أسبوع كامل" : "فترة مفتوحة"}</span>
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={() => {
+            setPrintKind("week");
+            window.setTimeout(() => window.print(), 50);
+          }}
           className="h-9 rounded-lg bg-[#14213D] px-3 text-xs font-extrabold text-white"
         >
           طباعة
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPrintKind("refusals");
+            window.setTimeout(() => window.print(), 50);
+          }}
+          className="h-9 rounded-lg bg-red-700 px-3 text-xs font-extrabold text-white"
+        >
+          طباعة بيان المرفوض
         </button>
         {fullWeek ? null : (
           <p className="text-xs font-bold text-[#14213D]/70">قفل الأسبوع بالطلب، لما تختار من الأحد للسبت.</p>
@@ -607,7 +650,7 @@ export function TemimaSettlementClient({
                   ))}
                   <tr>
                     <td colSpan={5} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
-                      {block.key === "carried" ? "تصفية المؤجل السابق" : "تصفية اليوم"}
+                      {block.key === "carried" ? block.title : "تصفية اليوم"}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
                       {money(sumOf(block.rows, (row) => (row.carried ? 0 : shipmentValue(row))))}
@@ -764,7 +807,50 @@ export function TemimaSettlementClient({
 
       {message ? <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p> : null}
 
-      <div className="print-only hidden" dir="rtl">
+      <div className="space-y-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+        <h2 className="text-lg font-extrabold text-[#14213D]">بيان الأوردرات المرفوضة</h2>
+        <p className="text-xs font-bold text-[#14213D]/70">
+          للمخزن قبل تصفية الأحد. الرفض والالغاء مش داخل واجب التحصيل.
+        </p>
+        {refusals.length === 0 ? (
+          <p className="text-sm font-bold text-[#14213D]/60">مفيش أوردرات مرفوضة في الفترة دي.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">أوردر</th>
+                  <th className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">العميل</th>
+                  <th className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">موبايل</th>
+                  <th className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">المنتج</th>
+                  <th className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">يوم الشيت</th>
+                  <th className="border border-[#14213D]/25 bg-[#E5E5E5] px-2 py-2">السبب</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refusals.map((row) => (
+                  <tr key={row.confirmationId}>
+                    <td className="border border-[#14213D]/15 px-2 py-2 font-extrabold" dir="ltr">
+                      {row.wooOrderNumber}
+                    </td>
+                    <td className="border border-[#14213D]/15 px-2 py-2">{row.customerName}</td>
+                    <td className="border border-[#14213D]/15 px-2 py-2" dir="ltr">
+                      {row.phone || "—"}
+                    </td>
+                    <td className="border border-[#14213D]/15 px-2 py-2">{row.productNames}</td>
+                    <td className="border border-[#14213D]/15 px-2 py-2">
+                      {row.sheetDay ? formatDayAr(row.sheetDay) : "—"}
+                    </td>
+                    <td className="border border-[#14213D]/15 px-2 py-2">{row.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className={`print-only hidden ${printKind === "week" ? "print-target" : ""}`} dir="rtl">
         <h1 className="mb-2 text-center text-lg font-extrabold">
           {weekStart && weekStart === weekEnd ? formatSayedSheetHeading(weekStart) : `تصفية سيد تميمة من ${weekStart} إلى ${weekEnd}`}
         </h1>
@@ -811,7 +897,7 @@ export function TemimaSettlementClient({
                 ))}
                 <tr>
                   <td colSpan={5} className="border border-black px-1 py-1 font-extrabold">
-                    {block.key === "carried" ? "تصفية المؤجل السابق" : "تصفية اليوم"}
+                    {block.key === "carried" ? block.title : "تصفية اليوم"}
                   </td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">
                     {money(sumOf(block.rows, (row) => (row.carried ? 0 : shipmentValue(row))))}
@@ -846,16 +932,54 @@ export function TemimaSettlementClient({
         ) : null}
       </div>
 
+      <div className={`print-only hidden ${printKind === "refusals" ? "print-target" : ""}`} dir="rtl">
+        <h1 className="mb-2 text-center text-lg font-extrabold">
+          بيان الأوردرات المرفوضة من {weekStart} إلى {weekEnd}
+        </h1>
+        <table className="w-full border-collapse text-[11px]">
+          <thead>
+            <tr>
+              <th className="border border-black px-1 py-1">أوردر</th>
+              <th className="border border-black px-1 py-1">العميل</th>
+              <th className="border border-black px-1 py-1">موبايل</th>
+              <th className="border border-black px-1 py-1">المنتج</th>
+              <th className="border border-black px-1 py-1">يوم الشيت</th>
+              <th className="border border-black px-1 py-1">السبب</th>
+            </tr>
+          </thead>
+          <tbody>
+            {refusals.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="border border-black px-1 py-2 text-center">
+                  مفيش أوردرات مرفوضة في الفترة دي.
+                </td>
+              </tr>
+            ) : (
+              refusals.map((row) => (
+                <tr key={`print-ref-${row.confirmationId}`}>
+                  <td className="border border-black px-1 py-1" dir="ltr">{row.wooOrderNumber}</td>
+                  <td className="border border-black px-1 py-1">{row.customerName}</td>
+                  <td className="border border-black px-1 py-1" dir="ltr">{row.phone || ""}</td>
+                  <td className="border border-black px-1 py-1">{row.productNames}</td>
+                  <td className="border border-black px-1 py-1">{row.sheetDay ? formatDayAr(row.sheetDay) : ""}</td>
+                  <td className="border border-black px-1 py-1">{row.reason}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
       <style jsx global>{`
         @media print {
           body * {
             visibility: hidden !important;
           }
-          .print-only,
-          .print-only * {
+          .print-target,
+          .print-target * {
             visibility: visible !important;
           }
-          .print-only {
+          .print-target {
             display: block !important;
             position: absolute;
             inset: 0;
