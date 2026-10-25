@@ -120,22 +120,23 @@ function carryBlockTitle(from: string, to: string) {
   return "شيت مؤجلات مرحلة";
 }
 
+function isCarryBlock(key: string) {
+  return key.startsWith("carried");
+}
+
 type DayBlock = { key: string; title: string; rows: SheetRow[] };
 
-function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
+function dayBlocksOf(visible: SheetRow[], fallbackFrom = "", fallbackTo = ""): DayBlock[] {
   const byDay = new Map<string, SheetRow[]>();
-  const undated: SheetRow[] = [];
   const carriedByWeek = new Map<string, SheetRow[]>();
   for (const row of visible) {
-    if (row.carried) {
-      const key = `${row.carryFromStart || ""}|${row.carryFromEnd || ""}`;
+    if (row.carried || !row.sheetDay) {
+      const from = row.carryFromStart || fallbackFrom;
+      const to = row.carryFromEnd || fallbackTo;
+      const key = `${from}|${to}`;
       const list = carriedByWeek.get(key) || [];
       list.push(row);
       carriedByWeek.set(key, list);
-      continue;
-    }
-    if (!row.sheetDay) {
-      undated.push(row);
       continue;
     }
     const list = byDay.get(row.sheetDay) || [];
@@ -149,13 +150,6 @@ function dayBlocksOf(visible: SheetRow[]): DayBlock[] {
       title: formatSayedSheetHeading(day),
       rows: (byDay.get(day) || []).sort((a, b) => orderNumber(b) - orderNumber(a)),
     }));
-  if (undated.length) {
-    blocks.push({
-      key: "undated",
-      title: "بدون يوم شيت",
-      rows: undated.sort((a, b) => orderNumber(b) - orderNumber(a)),
-    });
-  }
   for (const key of [...carriedByWeek.keys()].sort()) {
     const carried = carriedByWeek.get(key) || [];
     const [from, to] = key.split("|");
@@ -285,17 +279,17 @@ export function TemimaSettlementClient({
     const inWeek = rows.filter((row) => ids.has(row.confirmationId));
     return inWeek.length ? inWeek : rows;
   }, [rows, searchQuery, searchScope, orderHits]);
-  const dayBlocks = useMemo(() => dayBlocksOf(visibleRows), [visibleRows]);
+  const dayBlocks = useMemo(() => dayBlocksOf(visibleRows, weekStart, weekEnd), [visibleRows, weekStart, weekEnd]);
   const serials = useMemo(() => {
     const map = new Map<string, number>();
-    for (const block of dayBlocksOf(rows)) {
+    for (const block of dayBlocksOf(rows, weekStart, weekEnd)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(block.key)) continue;
       block.rows.forEach((row, index) => {
         map.set(`${row.confirmationId}-${row.postponeLineId || 0}`, index + 1);
       });
     }
     return map;
-  }, [rows]);
+  }, [rows, weekStart, weekEnd]);
 
   const outsideHits = useMemo(() => {
     if (searchScope !== "orders" || searchQuery.trim().length < 2) return [];
@@ -653,7 +647,7 @@ export function TemimaSettlementClient({
                   ))}
                   <tr>
                     <td colSpan={5} className="border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 font-extrabold text-[#14213D]">
-                      {block.key === "carried" ? block.title : "تصفية اليوم"}
+                      {isCarryBlock(block.key) ? block.title : "تصفية اليوم"}
                     </td>
                     <td className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums">
                       {money(sumOf(block.rows, (row) => (row.carried ? 0 : shipmentValue(row))))}
@@ -900,7 +894,7 @@ export function TemimaSettlementClient({
                 ))}
                 <tr>
                   <td colSpan={5} className="border border-black px-1 py-1 font-extrabold">
-                    {block.key === "carried" ? block.title : "تصفية اليوم"}
+                    {isCarryBlock(block.key) ? block.title : "تصفية اليوم"}
                   </td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">
                     {money(sumOf(block.rows, (row) => (row.carried ? 0 : shipmentValue(row))))}

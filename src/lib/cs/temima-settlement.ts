@@ -490,6 +490,12 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     }
   }
   const sourceWeekById = new Map(openPostpones.map((row) => [row.confirmationId, { fromYmd: row.fromYmd, toYmd: row.toYmd }]));
+  const fallbackCarryFrom = closedOther[0] ? weekYmd(closedOther[0].weekStart) : LATE_FROM_YMD;
+  const fallbackCarryTo = saturday;
+
+  function carrySourceOf(confirmationId: number) {
+    return sourceWeekById.get(confirmationId) || { fromYmd: fallbackCarryFrom, toYmd: fallbackCarryTo };
+  }
 
   if (week?.status === "closed") {
     const ids = week.lines.map((line) => line.confirmationId);
@@ -518,8 +524,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const rows: TemimaSheetRow[] = week.lines.map((line) => {
       const order = snapById.get(line.confirmationId);
       const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-      const carried = Boolean(line.resolvesLineId);
+      const disposition = storedDisposition(line.disposition);
+      const resolvedCarry = Boolean(line.resolvesLineId);
       const override = overrides.get(line.confirmationId) ?? null;
+      const naturalDay = resolvedCarry
+        ? ""
+        : days.get(line.confirmationId) || fallbackSheetDay(order, cutoffs, edits, sunday, saturday);
+      const carried = resolvedCarry || (disposition === "postpone" && !naturalDay);
+      const source = carried ? carrySourceOf(line.confirmationId) : null;
       return {
         confirmationId: line.confirmationId,
         wooOrderNumber: line.wooOrderNumber,
@@ -530,14 +542,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         depositAmount: order ? settlementSplit(order, override, false).deposit : 0,
         orderTotal: order ? orderTotalOf(order, override, false) : money(snap.total),
         fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
-        disposition: storedDisposition(line.disposition),
+        disposition,
         isLarge: line.isLarge,
         carried,
         postponeLineId: line.resolvesLineId,
-        sheetDay: carried ? "" : days.get(line.confirmationId) || fallbackSheetDay(order, cutoffs, edits, sunday, saturday),
-        carryFromStart: carried ? sourceWeekById.get(line.confirmationId)?.fromYmd : undefined,
-        carryFromEnd: carried ? sourceWeekById.get(line.confirmationId)?.toYmd : undefined,
-        refusalReason: storedDisposition(line.disposition) === "return" ? refusalReasonOf(order || {}) : undefined,
+        sheetDay: carried ? "" : naturalDay,
+        carryFromStart: source?.fromYmd,
+        carryFromEnd: source?.toYmd,
+        refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
       };
     }).filter((row) => {
       if (row.carried || !row.sheetDay) return range.fullWeek;
@@ -601,6 +613,10 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const snap = (order.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
     const override = overrides.get(order.id) ?? null;
     const split = settlementSplit(order, override, true, true);
+    const disposition = storedDisposition(saved?.disposition);
+    const sheetDay = days.get(order.id) || fallbackSheetDay(order, cutoffs, edits, range.start, range.end);
+    const carried = !sheetDay;
+    const source = carried ? carrySourceOf(order.id) : null;
     rows.push({
       confirmationId: order.id,
       wooOrderNumber: order.wooOrderNumber,
@@ -611,12 +627,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       depositAmount: split.deposit,
       orderTotal: split.deposit + split.net,
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
-      disposition: storedDisposition(saved?.disposition),
+      disposition,
       isLarge: saved?.isLarge || false,
-      carried: false,
+      carried,
       postponeLineId: null,
-      sheetDay: days.get(order.id) || fallbackSheetDay(order, cutoffs, edits, range.start, range.end),
-      refusalReason: storedDisposition(saved?.disposition) === "return" ? refusalReasonOf(order) : undefined,
+      sheetDay: carried ? "" : sheetDay,
+      carryFromStart: source?.fromYmd,
+      carryFromEnd: source?.toYmd,
+      refusalReason: disposition === "return" ? refusalReasonOf(order) : undefined,
     });
   }
 
