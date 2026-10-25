@@ -227,6 +227,8 @@ const SHEET_DAY_SELECT = {
   shippingCompany: true,
   status: true,
   confirmedAt: true,
+  confirmationEditedAt: true,
+  shippingAssignedAt: true,
   handedToCarrier: true,
   handedToCarrierAt: true,
 } as const;
@@ -241,6 +243,8 @@ function fallbackSheetDay(
     shippingCompany?: string | null;
     status?: string | null;
     confirmedAt?: Date | null;
+    confirmationEditedAt?: Date | null;
+    shippingAssignedAt?: Date | null;
     handedToCarrier?: boolean | null;
     handedToCarrierAt?: Date | null;
   } | null | undefined,
@@ -523,7 +527,6 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
           depositApprovalStatus: true,
           orderTotalDelta: true,
           discountApprovalStatus: true,
-          shippingAssignedAt: true,
           createdAt: true,
           courierOutcome: true,
           courierRefusalReason: true,

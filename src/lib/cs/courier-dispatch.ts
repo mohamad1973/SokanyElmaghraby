@@ -193,6 +193,8 @@ function onTodaySheet(
     id: number;
     shippingCompany?: string | null;
     confirmedAt: Date | null;
+    confirmationEditedAt?: Date | null;
+    shippingAssignedAt?: Date | null;
     handedToCarrier?: boolean | null;
     handedToCarrierAt: Date | null;
   },
@@ -206,6 +208,8 @@ function onTodaySheet(
       status: "CONFIRMED",
       shippingCompany: row.shippingCompany,
       confirmedAt: row.confirmedAt,
+      confirmationEditedAt: row.confirmationEditedAt,
+      shippingAssignedAt: row.shippingAssignedAt,
       handedToCarrier: row.handedToCarrier,
       handedToCarrierAt: row.handedToCarrierAt,
     },
@@ -219,13 +223,16 @@ function onTodaySheet(
 async function loadCourierDay(courierId: number, dayYmd?: string) {
   const prisma = getPrismaClient();
   const day = dayYmd && /^\d{4}-\d{2}-\d{2}$/.test(dayYmd) ? dayYmd : cairoTodayYmd();
-  const bounds = cairoYmdBounds(day);
-  if (!prisma || !bounds) return { mode: "courier" as const, day, orders: [] as Array<ReturnType<typeof cardFromRow> & { matches: number[] }> };
+  const empty = { mode: "courier" as const, day, orders: [] as Array<ReturnType<typeof cardFromRow> & { matches: number[] }> };
+  if (!prisma) return empty;
+  const ids = await listUnifiedSayedSheetIds(day, day);
+  if (!ids.length) return empty;
   const rows = await prisma.csOrderConfirmation.findMany({
     where: {
+      id: { in: ids },
       status: "CONFIRMED",
+      shippingCompany: TEMIMA,
       courierAgentId: courierId,
-      courierAssignedAt: { gte: bounds.start, lt: bounds.endExclusive },
     },
     select: {
       id: true,
@@ -318,6 +325,8 @@ const ASSIGN_SELECT = {
   wooOrderNumber: true,
   shippingCompany: true,
   confirmedAt: true,
+  confirmationEditedAt: true,
+  shippingAssignedAt: true,
   courierAgentId: true,
   deliveredToCustomer: true,
   deliveredToCustomerAt: true,

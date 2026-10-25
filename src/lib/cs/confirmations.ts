@@ -1898,6 +1898,7 @@ export async function saveCsConfirmation(input: {
 
   const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
   const savedAt = new Date();
+  const shippingChanged = Boolean(shippingCompany) && row.shippingCompany !== shippingCompany;
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {
@@ -1905,6 +1906,7 @@ export async function saveCsConfirmation(input: {
       ...(alreadySaved ? { confirmationEditedAt: savedAt } : { confirmedAt: savedAt }),
       assignedAgentId: input.agentId,
       shippingCompany,
+      ...(shippingChanged ? { shippingAssignedAt: savedAt } : {}),
       failReason: null,
       ...shippingMetaPatch,
       ...salesOrderPatch,

@@ -10,6 +10,8 @@ export type TemimaSheetOrder = {
   id: number;
   shippingCompany?: string | null;
   confirmedAt?: string | Date | null;
+  confirmationEditedAt?: string | Date | null;
+  shippingAssignedAt?: string | Date | null;
   handedToCarrierAt?: string | Date | null;
 };
 
@@ -145,14 +147,39 @@ type SheetOrder = {
   shippingCompany?: string | null;
   status?: string | null;
   confirmedAt?: string | Date | null;
+  confirmationEditedAt?: string | Date | null;
+  shippingAssignedAt?: string | Date | null;
   handedToCarrier?: boolean | null;
   handedToCarrierAt?: string | Date | null;
 };
 
+function timeMs(value: string | Date | null | undefined) {
+  if (!value) return null;
+  const time = value instanceof Date ? value.getTime() : Date.parse(String(value));
+  return Number.isFinite(time) ? time : null;
+}
+
+/**
+ * Order-page save that counts for Temima sheet.
+ * Stamping shipping after the first save does not enter the sheet until the order page is saved again.
+ */
+function temimaSaveAt(order: SheetOrder): string | Date | null {
+  if (!order.confirmedAt) return null;
+  const firstSave = timeMs(order.confirmedAt);
+  const shippedAt = timeMs(order.shippingAssignedAt);
+  if (firstSave != null && shippedAt != null && shippedAt > firstSave) {
+    const editedAt = order.confirmationEditedAt;
+    const edited = timeMs(editedAt);
+    if (edited == null || edited < shippedAt) return null;
+    return editedAt || null;
+  }
+  return order.confirmedAt;
+}
+
 function temimaConfirmed(order: SheetOrder) {
   if (order.shippingCompany !== "sayed_temima") return false;
   if (order.status && order.status !== "CONFIRMED") return false;
-  return true;
+  return Boolean(temimaSaveAt(order));
 }
 
 /** Handoff day when the handoff is before that day's close. A handoff at or after close does not enter. */
@@ -166,19 +193,19 @@ function handoffBeforeCloseYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): stri
   return handed.ymd;
 }
 
-/** True when the first save is at or after that day's close. No close means the day is still open. */
+/** True when the Temima order-page save is at or after that day's close. No close means the day is still open. */
 function savedAtOrAfterClose(order: SheetOrder, cutoffs: TemimaCutoff[]) {
-  const save = clockOf(order.confirmedAt);
+  const save = clockOf(temimaSaveAt(order));
   if (!save) return false;
   const cutoff = cutoffs.find((row) => row.dayYmd === save.ymd) || null;
   return Boolean(cutoff && save.minutes >= cutoff.minutes);
 }
 
-/** Save day when the first save is before that day's close. A save after close is not on a sheet. */
+/** Save day when the Temima order-page save is before that day's close. A save after close is not on a sheet. */
 function saveBeforeCloseYmd(order: SheetOrder, cutoffs: TemimaCutoff[]): string | null {
   if (!temimaConfirmed(order)) return null;
   if (savedAtOrAfterClose(order, cutoffs)) return null;
-  return clockOf(order.confirmedAt)?.ymd || null;
+  return clockOf(temimaSaveAt(order))?.ymd || null;
 }
 
 /** Sheet day is a handoff before close, otherwise a save before close. Nothing after close enters that day. */

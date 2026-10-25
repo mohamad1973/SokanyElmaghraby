@@ -451,7 +451,10 @@ export async function ruleBasedAssign(input: {
         if (rule.shippingCompany === "sayed_temima" && monaIds.has(row.id)) continue;
         await prisma.csOrderConfirmation.update({
           where: { id: row.id },
-          data: { shippingCompany: rule.shippingCompany },
+          data: {
+            shippingCompany: rule.shippingCompany,
+            ...(row.shippingCompany !== rule.shippingCompany ? { shippingAssignedAt: new Date() } : {}),
+          },
         });
         updated += 1;
         break;

@@ -132,9 +132,17 @@ const SHEET_PICK = {
   status: true,
   shippingCompany: true,
   confirmedAt: true,
+  confirmationEditedAt: true,
+  shippingAssignedAt: true,
   handedToCarrier: true,
   handedToCarrierAt: true,
 } as const;
+
+const SHEET_DAY_OR = (from: Date, endExclusive: Date) => [
+  { confirmedAt: { gte: from, lt: endExclusive } },
+  { confirmationEditedAt: { gte: from, lt: endExclusive } },
+  { handedToCarrierAt: { gte: from, lt: endExclusive } },
+];
 
 function eachSheetDay(dateFrom: string, dateTo: string) {
   const days: string[] = [];
@@ -220,11 +228,20 @@ async function restoreTodayEditsToClosedSheetDay() {
           ...(itemIds.length ? [{ id: { in: itemIds } }] : []),
         ],
       },
-      select: { id: true, confirmedAt: true, confirmationEditedAt: true, handedToCarrierAt: true },
+      select: {
+        id: true,
+        confirmedAt: true,
+        confirmationEditedAt: true,
+        shippingAssignedAt: true,
+        handedToCarrierAt: true,
+      },
     }),
     listTemimaSheetEdits(),
   ]);
   for (const row of edited) {
+    const firstSave = row.confirmedAt ? new Date(cairoIso(row.confirmedAt)).getTime() : 0;
+    const shippedAt = row.shippingAssignedAt ? new Date(cairoIso(row.shippingAssignedAt)).getTime() : 0;
+    if (firstSave && shippedAt && shippedAt > firstSave) continue;
     const clock = cairoClock(cairoIso(row.confirmedAt));
     if (!clock || clock.ymd >= today) continue;
     const moved = edits.some(
@@ -270,10 +287,7 @@ async function liveUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
     where: {
       status: "CONFIRMED",
       shippingCompany: "sayed_temima",
-      OR: [
-        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
-        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
-      ],
+      OR: SHEET_DAY_OR(from.start, to.endExclusive),
     },
     select: SHEET_PICK,
     orderBy: { id: "desc" },
@@ -433,10 +447,7 @@ async function loadSayedSheetCandidates(dateFrom: string, dateTo: string, edits:
     where: {
       status: "CONFIRMED",
       shippingCompany: "sayed_temima",
-      OR: [
-        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
-        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
-      ],
+      OR: SHEET_DAY_OR(from.start, to.endExclusive),
     },
     select: SHEET_PICK,
     orderBy: { id: "desc" },
@@ -528,10 +539,7 @@ export async function listSayedSheetOrders(dateFrom: string, dateTo: string) {
     where: {
       status: "CONFIRMED",
       shippingCompany: "sayed_temima",
-      OR: [
-        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
-        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
-      ],
+      OR: SHEET_DAY_OR(from.start, to.endExclusive),
     },
     include: { assignedAgent: true },
     take: 2000,
