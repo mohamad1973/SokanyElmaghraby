@@ -994,34 +994,44 @@ export async function applySupervisorOrderResult(input: {
 
   const disposition: TemimaDisposition =
     input.result === "returned" ? "return" : input.result === "postponed" ? "postpone" : "collect";
+  const convertingPostpone =
+    currentMark === "postpone" && (disposition === "collect" || disposition === "return");
 
-  const closedPostpones = await prisma.csCarrierWeekLine.findMany({
-    where: {
-      confirmationId: order.id,
-      disposition: "postpone",
-      week: { carrierCompany: TEMIMA_COMPANY, status: "closed" },
-    },
-    select: { id: true },
-  });
-  const resolved = closedPostpones.length
-    ? await prisma.csCarrierWeekLine.findMany({
-        where: { resolvesLineId: { in: closedPostpones.map((line) => line.id) } },
-        select: { resolvesLineId: true },
-      })
-    : [];
-  const resolvedIds = new Set(resolved.map((line) => line.resolvesLineId));
-  const openPostponeId = closedPostpones.find((line) => !resolvedIds.has(line.id))?.id ?? null;
+  let openPostponeId: number | null = null;
+  if (!convertingPostpone) {
+    const closedPostpones = await prisma.csCarrierWeekLine.findMany({
+      where: {
+        confirmationId: order.id,
+        disposition: "postpone",
+        week: { carrierCompany: TEMIMA_COMPANY, status: "closed" },
+      },
+      select: { id: true },
+    });
+    const resolved = closedPostpones.length
+      ? await prisma.csCarrierWeekLine.findMany({
+          where: { resolvesLineId: { in: closedPostpones.map((line) => line.id) } },
+          select: { resolvesLineId: true },
+        })
+      : [];
+    const resolvedIds = new Set(resolved.map((line) => line.resolvesLineId));
+    openPostponeId = closedPostpones.find((line) => !resolvedIds.has(line.id))?.id ?? null;
+  }
 
   const cutoffs = await listTemimaCutoffs();
-  const sheetDay = sayedSheetYmd(order, cutoffs) || cairoTodayYmd();
+  const sheetDay = sayedSheetYmd(order, cutoffs) || clockDayOf(order.confirmedAt) || cairoTodayYmd();
   const sheetSunday = sundayOnOrBefore(sheetDay);
-  // Unresolved postpone from a closed week lands on the current open week only.
-  const targetSunday = openPostponeId ? sundayOnOrBefore(cairoTodayYmd()) : sheetSunday;
+  const targetSunday = convertingPostpone
+    ? sheetSunday
+    : openPostponeId
+      ? sundayOnOrBefore(cairoTodayYmd())
+      : sheetSunday;
   const targetSaturday = addDaysYmd(targetSunday, 6);
   const week = await upsertOpenWeek(targetSunday, targetSaturday, input.agentId);
   if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
   const weekClosed = week.status === "closed";
-  if (weekClosed && !input.allowClosed) return { ok: false as const, message: "الأسبوع مقفل." };
+  if (weekClosed && !input.allowClosed && !convertingPostpone) {
+    return { ok: false as const, message: "الأسبوع مقفل." };
+  }
 
   const overrides = await depositOverrides([order.id]);
   const split = settlementSplit(order, overrides.get(order.id) ?? null, true, true);
@@ -1029,6 +1039,19 @@ export async function applySupervisorOrderResult(input: {
     where: { weekId: week.id, confirmationId: order.id },
     select: { isLarge: true },
   });
+
+  if (convertingPostpone) {
+    const extras = await prisma.csCarrierWeekLine.findMany({
+      where: { confirmationId: order.id, NOT: { weekId: week.id } },
+      select: { weekId: true },
+    });
+    await prisma.csCarrierWeekLine.deleteMany({
+      where: { confirmationId: order.id, NOT: { weekId: week.id } },
+    });
+    for (const weekId of new Set(extras.map((row) => row.weekId))) {
+      await refreshWeekCashDue(weekId);
+    }
+  }
 
   await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id, confirmationId: order.id } });
   await prisma.csCarrierWeekLine.create({
@@ -1039,7 +1062,7 @@ export async function applySupervisorOrderResult(input: {
       disposition,
       cashAmount: split.net,
       isLarge: disposition === "collect" ? Boolean(existing?.isLarge) : false,
-      resolvesLineId: disposition !== "postpone" ? openPostponeId : null,
+      resolvesLineId: convertingPostpone ? null : disposition !== "postpone" ? openPostponeId : null,
     },
   });
 
@@ -1057,7 +1080,7 @@ export async function applySupervisorOrderResult(input: {
     WHERE id = ${order.id}
   `;
   await captureDeskReturnFromConfirmation(order.id);
-  await lockResolvedCarryLines(input.agentId);
+  if (!convertingPostpone) await lockResolvedCarryLines(input.agentId);
 
   return { ok: true as const, result: input.result, disposition };
 }

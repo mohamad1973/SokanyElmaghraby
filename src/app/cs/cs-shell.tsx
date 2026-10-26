@@ -921,7 +921,6 @@ function CsHeader() {
               onClick={() => setShippingOpen((open) => !open)}
               className={navClass(
                 pathname.startsWith("/cs/temima") ||
-                  pathname.startsWith("/cs/temima-scan") ||
                   pathname.startsWith("/cs/couriers") ||
                   pathname === "/cs/courier" ||
                   pathname.startsWith("/cs/courier/") ||
@@ -981,11 +980,6 @@ function CsHeader() {
             </Link>
           ) : null}
           {isCourierSupervisor ? (
-            <Link href="/cs/temima-scan" className={navClass(pathname.startsWith("/cs/temima-scan"))}>
-              استلام
-            </Link>
-          ) : null}
-          {isCourierSupervisor ? (
             <Link href="/cs/couriers" className={navClass(pathname.startsWith("/cs/couriers"))}>
               توزيع المناديب
             </Link>
@@ -1025,14 +1019,6 @@ function CsHeader() {
                 className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
               >
                 شيت سيد تميمة
-              </Link>
-              <Link
-                href="/cs/temima-scan"
-                role="menuitem"
-                onClick={() => setShippingOpen(false)}
-                className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
-              >
-                استلام تميمة
               </Link>
               <Link
                 href="/cs/couriers"

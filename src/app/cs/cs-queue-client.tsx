@@ -806,7 +806,6 @@ export function CsQueueClient({
   const [afterLastDistribution, setAfterLastDistribution] = useState(false);
   const [printMode, setPrintMode] = useState<PrintMode>("none");
   const [printingCourierId, setPrintingCourierId] = useState<number | null>(null);
-  const [courierPrintPick, setCourierPrintPick] = useState("");
   const [cutoffs, setCutoffs] = useState<TemimaCutoff[]>(temimaCutoffs);
   const [sheetEdits, setSheetEdits] = useState<TemimaSheetEdit[]>(temimaSheetEdits);
   const [addOpen, setAddOpen] = useState(false);
@@ -874,7 +873,7 @@ export function CsQueueClient({
   const [queueTotal, setQueueTotal] = useState(initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
-  const [sheetTab, setSheetTab] = useState<"sheet" | "late">("sheet");
+  const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked" | "postpone">("sheet");
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
   const [lateDateFilter, setLateDateFilter] = useState("");
@@ -962,12 +961,13 @@ export function CsQueueClient({
 
   // Auto-sync every 3 minutes so open desks stay under the database connection cap.
   useEffect(() => {
+    if (isCourierSupervisor) return;
     const id = window.setInterval(() => {
       void syncOrders({ quiet: true });
     }, 180000);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isCourierSupervisor]);
 
   useEffect(() => {
     if (isCourierSupervisor) return;
@@ -1017,6 +1017,15 @@ export function CsQueueClient({
     return lateRows.filter((row) => row.freezeDay === lateDateFilter);
   }, [lateRows, lateDateFilter]);
 
+  const unmarkedCount = useMemo(
+    () => baseFiltered.filter((item) => !item.settlementDisposition).length,
+    [baseFiltered],
+  );
+  const postponeCount = useMemo(
+    () => baseFiltered.filter((item) => item.settlementDisposition === "postpone").length,
+    [baseFiltered],
+  );
+
   const filtered = useMemo(() => {
     const wantDupOnly = Boolean(isSupervisor) && draft.duplicates === "only";
     let list = baseFiltered;
@@ -1029,8 +1038,13 @@ export function CsQueueClient({
         return parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber);
       });
     }
+    if (isCourierSupervisor && sheetTab === "unmarked") {
+      list = list.filter((item) => !item.settlementDisposition);
+    } else if (isCourierSupervisor && sheetTab === "postpone") {
+      list = list.filter((item) => item.settlementDisposition === "postpone");
+    }
     return list;
-  }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor]);
+  }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor, isCourierSupervisor, sheetTab]);
 
   const printRows = useMemo(() => {
     if (sheetPrintRows) return sheetPrintRows;
@@ -1081,7 +1095,7 @@ export function CsQueueClient({
     disposition: CsQueueItem["settlementDisposition"],
   ) {
     if (editingStatusId === id) return;
-    if (weekClosed && !canEditClosedWeek) return;
+    if (weekClosed && !canEditClosedWeek && disposition !== "postpone") return;
     // Supervisors may only re-edit مؤجل; تم بنجاح / الغاء stay locked (admin override via canEditClosedWeek).
     if (!canEditClosedWeek && (disposition === "collect" || disposition === "return")) return;
     if (!window.confirm("هل تريد التعديل؟")) return;
@@ -1094,7 +1108,7 @@ export function CsQueueClient({
     disposition: CsQueueItem["settlementDisposition"],
     weekClosed: boolean,
   ) {
-    if (weekClosed && !canEditClosedWeek) return;
+    if (weekClosed && !canEditClosedWeek && disposition !== "postpone") return;
     if (
       !canEditClosedWeek &&
       (disposition === "collect" || disposition === "return") &&
@@ -1299,27 +1313,6 @@ export function CsQueueClient({
     setCutoffs((prev) => prev.filter((row) => row.dayYmd !== dayYmd));
     if (isCourierSupervisor) await loadSayedSheet(applied);
     setMessage(data.message || "اتفتح الشيت.");
-  }
-
-  async function printCourierSheet() {
-    if (printing || !courierPrintPick) return;
-    setPrinting(true);
-    setMessage("");
-    const filters = { ...applied, query: draft.query };
-    const copies = sheetCopyCount();
-    const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
-    if (singleDay) {
-      const recorded = await recordSheetPrint(singleDay, copies);
-      if (!recorded.ok) {
-        setPrinting(false);
-        return;
-      }
-      if (recorded.message) setMessage(recorded.message);
-    }
-    setSheetPrintRows(null);
-    setPrintCopyCount(copies);
-    setPrintingCourierId(Number(courierPrintPick));
-    setPrintMode("sheet");
   }
 
   async function printApplied() {
@@ -1611,6 +1604,24 @@ export function CsQueueClient({
               </button>
               <button
                 type="button"
+                onClick={() => setSheetTab("unmarked")}
+                className={`rounded-xl px-3 py-2 text-xs font-extrabold sm:text-sm ${
+                  sheetTab === "unmarked" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+                }`}
+              >
+                لم يسجل ({unmarkedCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSheetTab("postpone")}
+                className={`rounded-xl px-3 py-2 text-xs font-extrabold sm:text-sm ${
+                  sheetTab === "postpone" ? "bg-orange-500 text-black" : "bg-orange-100 text-orange-900"
+                }`}
+              >
+                مؤجل ({postponeCount})
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setSheetTab("late");
                   void loadTemimaLate();
@@ -1666,48 +1677,16 @@ export function CsQueueClient({
           </button>
           </div>
           ) : null}
-          {isCourierSupervisor ? (
-            <Link
-              href="/cs/temima-scan"
-              className="shrink-0 rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white sm:py-2.5 sm:text-sm"
+          {isCourierSupervisor ? null : (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void syncOrders()}
+              className="shrink-0 rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
             >
-              استلام بالسكان
-            </Link>
-          ) : null}
-          {isCourierSupervisor ? (
-            <div className="flex shrink-0 items-center gap-2">
-              <select
-                value={courierPrintPick}
-                onChange={(e) => setCourierPrintPick(e.target.value)}
-                className="h-9 rounded-xl border border-[#E5E5E5] bg-white px-2 text-xs font-extrabold text-[#14213D]"
-              >
-                <option value="">اسم المندوب</option>
-                {couriers.map((courier) => (
-                  <option key={courier.id} value={String(courier.id)}>
-                    {courier.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={printing || !courierPrintPick}
-                onClick={() => {
-                  void printCourierSheet();
-                }}
-                className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50 sm:py-2.5 sm:text-sm"
-              >
-                {printing ? "جاري التحميل" : "طباعة المندوب"}
-              </button>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void syncOrders()}
-            className="shrink-0 rounded-xl bg-[#FCA311] px-3 py-2 text-xs font-extrabold text-black disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
-          >
-            {loading ? "جاري التحميل" : "مزامنة"}
-          </button>
+              {loading ? "جاري التحميل" : "مزامنة"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -2173,11 +2152,13 @@ export function CsQueueClient({
           )
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
-            {items.length === 0 ? (
+            {isCourierSupervisor && sheetTab === "unmarked" ? (
+              <p className="font-bold">مفيش أوردرات لم تسجل في الفترة دي.</p>
+            ) : isCourierSupervisor && sheetTab === "postpone" ? (
+              <p className="font-bold">مفيش أوردرات مؤجلة في الفترة دي.</p>
+            ) : items.length === 0 ? (
               isCourierSupervisor ? (
-                <p className="font-bold">
-                  {"مفيش أوردرات مؤكدة لسيد تميمة في اليوم ده."}
-                </p>
+                <p className="font-bold">مفيش أوردرات مؤكدة لسيد تميمة في اليوم ده.</p>
               ) : isSupervisor || isAccounting ? (
                 <p className="font-bold">لا توجد طلبات — راجعي المزامنة أو وسّعي تاريخ الفلتر.</p>
               ) : (
@@ -2315,7 +2296,7 @@ export function CsQueueClient({
                             <button
                               key={action}
                               type="button"
-                              disabled={!canPressOfficial || markingId === item.id || sheetEditsLocked}
+                              disabled={!canPressOfficial || markingId === item.id}
                               onClick={() => pressStatus(item.id, action, item.settlementDisposition, weekClosed)}
                               onDoubleClick={() => {
                                 if (!item.settlementDisposition) return;
