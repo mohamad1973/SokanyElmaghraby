@@ -7,7 +7,7 @@ import {
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
-import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaSheetEdits, listUnifiedSayedSheetIds, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
@@ -605,104 +605,17 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       });
     }
   }
-  const sourceWeekById = new Map(openPostpones.map((row) => [row.confirmationId, { fromYmd: row.fromYmd, toYmd: row.toYmd }]));
   const fallbackCarryFrom = closedOther[0] ? weekYmd(closedOther[0].weekStart) : LATE_FROM_YMD;
   const fallbackCarryTo = saturday;
 
-  function carrySourceOf(confirmationId: number) {
-    return sourceWeekById.get(confirmationId) || { fromYmd: fallbackCarryFrom, toYmd: fallbackCarryTo };
-  }
-
-  if (week?.status === "closed" && range.end <= saturday) {
-    const ids = week.lines.map((line) => line.confirmationId);
-    const snaps = ids.length
-      ? await prisma.csOrderConfirmation.findMany({
-          where: { id: { in: ids } },
-          select: {
-            id: true,
-            customerSnapshot: true,
-            depositAmount: true,
-            depositPaid: true,
-            depositApprovalStatus: true,
-            orderTotalDelta: true,
-            discountApprovalStatus: true,
-            courierOutcome: true,
-            courierRefusalReason: true,
-            ...SHEET_DAY_SELECT,
-          },
-        })
-      : [];
-    const snapById = new Map(snaps.map((row) => [row.id, row]));
-    const overrides = await depositOverrides(ids);
-    const days = await sheetDayById(sunday, saturday);
-    const cutoffs = await listTemimaCutoffs();
-    const edits = await listTemimaSheetEdits();
-    const rows: TemimaSheetRow[] = week.lines.map((line) => {
-      const order = snapById.get(line.confirmationId);
-      const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-      const disposition = storedDisposition(line.disposition);
-      const resolvedCarry = Boolean(line.resolvesLineId);
-      const override = overrides.get(line.confirmationId) ?? null;
-      const naturalDay = resolvedCarry
-        ? ""
-        : days.get(line.confirmationId) || fallbackSheetDay(order, cutoffs, edits, sunday, saturday);
-      const carried = resolvedCarry || (disposition === "postpone" && !naturalDay);
-      const source = carried ? carrySourceOf(line.confirmationId) : null;
-      return {
-        confirmationId: line.confirmationId,
-        wooOrderNumber: line.wooOrderNumber,
-        customerName: customerNameOf(order?.customerSnapshot),
-        productNames: productNamesOf(order?.customerSnapshot),
-        ...contactOf(order?.customerSnapshot),
-        cashAmount: Number(line.cashAmount),
-        depositAmount: order ? settlementSplit(order, override, false).deposit : 0,
-        orderTotal: order ? orderTotalOf(order, override, false) : money(snap.total),
-        fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
-        disposition,
-        isLarge: line.isLarge,
-        carried,
-        carryLocked: Boolean(resolvedCarry || (carried && (disposition === "collect" || disposition === "return"))),
-        postponeLineId: line.resolvesLineId,
-        sheetDay: carried ? "" : naturalDay,
-        carryFromStart: source?.fromYmd,
-        carryFromEnd: source?.toYmd,
-        refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
-      };
-    }).filter((row) => {
-      if (row.carried || !row.sheetDay) return range.fullWeek;
-      return row.sheetDay >= range.start && row.sheetDay <= range.end;
-    });
-    rows.push(
-      ...(await lockedCarryRowsInRange(
-        weeks,
-        range,
-        new Set(rows.map((row) => row.confirmationId)),
-        postponeSourceByLineId,
-        { fromYmd: fallbackCarryFrom, toYmd: fallbackCarryTo },
-      )),
-    );
-    const due = collectDueBreakdown(rows);
-    return {
-      ok: true as const,
-      weekStart: range.start,
-      weekEnd: range.end,
-      fullWeek: range.fullWeek,
-      status: "closed" as const,
-      cashDue: Number(week.cashDue),
-      weekCollectDue: due.weekCollectDue,
-      priorPostponeCollectDue: due.priorPostponeCollectDue,
-      priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,
-      cashPaid: Number(week.cashPaid),
-      monthId: week.monthId,
-      rows,
-      refusals: refusalRowsOf(rows),
-      history: historyOf(weeks),
-    };
-  }
-
-  const days = await sheetDayById(range.start, range.end);
-  const sheetIds = [...days.keys()];
-  const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIds.includes(id));
+  const rangeClosed = week?.status === "closed" && range.end <= saturday;
+  const [days, sheetIdList] = await Promise.all([
+    sheetDayById(range.start, range.end),
+    listUnifiedSayedSheetIds(range.start, range.end),
+  ]);
+  const sheetIds = [...new Set([...sheetIdList, ...days.keys()])];
+  const sheetIdSet = new Set(sheetIds);
+  const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIdSet.has(id));
   const orderIds = [...sheetIds, ...carryIds];
   const orders = orderIds.length
     ? await prisma.csOrderConfirmation.findMany({
@@ -723,8 +636,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         },
       })
     : [];
+  const orderById = new Map(orders.map((row) => [row.id, row]));
 
-  const postponeIds = new Set(openPostpones.map((row) => row.confirmationId));
   const draft = new Map(
     weeks
       .filter((item) => {
@@ -735,45 +648,52 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       })
       .flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)),
   );
+  if (week) {
+    for (const line of week.lines) {
+      if (!draft.has(line.confirmationId)) draft.set(line.confirmationId, line);
+    }
+  }
   const overrides = await depositOverrides(orderIds);
   const cutoffs = await listTemimaCutoffs();
   const edits = await listTemimaSheetEdits();
 
   const rows: TemimaSheetRow[] = [];
-  const sheetIdSet = new Set(sheetIds);
-  for (const order of orders) {
-    if (!sheetIdSet.has(order.id)) continue;
-    if (settledIds.has(order.id) || postponeIds.has(order.id)) continue;
-    const saved = draft.get(order.id);
+  for (const id of sheetIds) {
+    const order = orderById.get(id);
+    if (!order) continue;
+    const saved = draft.get(id);
     const snap = (order.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-    const override = overrides.get(order.id) ?? null;
-    const split = settlementSplit(order, override, true, true);
+    const override = overrides.get(id) ?? null;
+    const split = settlementSplit(order, override, !rangeClosed, true);
     const disposition = storedDisposition(saved?.disposition);
-    const sheetDay = days.get(order.id) || fallbackSheetDay(order, cutoffs, edits, range.start, range.end);
-    const carried = !sheetDay;
-    const source = carried ? carrySourceOf(order.id) : null;
+    const resolvedCarry = Boolean(saved?.resolvesLineId);
+    const sheetDay =
+      days.get(id) ||
+      fallbackSheetDay(order, cutoffs, edits, range.start, range.end) ||
+      (range.start === range.end ? range.start : "");
+    if (!sheetDay || sheetDay < range.start || sheetDay > range.end) continue;
     rows.push({
-      confirmationId: order.id,
+      confirmationId: id,
       wooOrderNumber: order.wooOrderNumber,
       customerName: customerNameOf(order.customerSnapshot),
       productNames: productNamesOf(order.customerSnapshot),
       ...contactOf(order.customerSnapshot),
-      cashAmount: split.net,
-      depositAmount: split.deposit,
-      orderTotal: split.deposit + split.net,
+      cashAmount: saved && rangeClosed ? Number(saved.cashAmount) : split.net,
+      depositAmount: rangeClosed ? settlementSplit(order, override, false).deposit : split.deposit,
+      orderTotal: rangeClosed ? orderTotalOf(order, override, false) : split.deposit + split.net,
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition,
       isLarge: saved?.isLarge || false,
-      carried,
-      postponeLineId: null,
-      sheetDay: carried ? "" : sheetDay,
-      carryFromStart: source?.fromYmd,
-      carryFromEnd: source?.toYmd,
+      carried: false,
+      carryLocked: Boolean(resolvedCarry && (disposition === "collect" || disposition === "return")),
+      postponeLineId: saved?.resolvesLineId || null,
+      sheetDay,
       refusalReason: disposition === "return" ? refusalReasonOf(order) : undefined,
     });
   }
 
   for (const carried of openPostpones) {
+    if (sheetIdSet.has(carried.confirmationId)) continue;
     const saved = draft.get(carried.confirmationId);
     const order = orders.find((row) => row.id === carried.confirmationId);
     const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
@@ -817,8 +737,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     weekStart: range.start,
     weekEnd: range.end,
     fullWeek: range.fullWeek,
-    status: "open" as const,
-    cashDue: due.cashDue,
+    status: rangeClosed ? ("closed" as const) : ("open" as const),
+    cashDue: rangeClosed && range.fullWeek && week ? Number(week.cashDue) : due.cashDue,
     weekCollectDue: due.weekCollectDue,
     priorPostponeCollectDue: due.priorPostponeCollectDue,
     priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,
