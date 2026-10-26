@@ -15,7 +15,9 @@ export type CsRole =
   | "maintenance_tech"
   | "courier_supervisor"
   | "courier"
-  | "mona_courier";
+  | "mona_courier"
+  | "sc_manager"
+  | "sc_staff";
 
 export const CS_ROLES: CsRole[] = [
   "agent",
@@ -29,6 +31,8 @@ export const CS_ROLES: CsRole[] = [
   "courier_supervisor",
   "courier",
   "mona_courier",
+  "sc_manager",
+  "sc_staff",
 ];
 
 export function normalizeCsUsername(value: string) {
@@ -104,6 +108,9 @@ export function csFlagsFromRoles(roles: CsRole[]) {
     isCourierSupervisor: list.includes("courier_supervisor"),
     isCourier: list.includes("courier"),
     isMonaCourier: list.includes("mona_courier"),
+    isScManager: hasAdmin || list.includes("sc_manager"),
+    isScStaff: list.includes("sc_staff"),
+    canAccessScCenters: hasAdmin || list.includes("sc_manager") || list.includes("sc_staff"),
     canAccessTransfers: hasAdmin || list.includes("transfers") || list.includes("supervisor"),
     canSeeOrders:
       hasAdmin ||
@@ -241,6 +248,8 @@ async function runEnsureCsTables() {
     await ensureCarrierWeekExtraColumns(prisma);
     await ensureCsSpeedIndexes(prisma);
     await ensureSokanyAwbTables();
+    const { ensureScCenterTables } = await import("@/lib/cs/sc-centers");
+    await ensureScCenterTables();
     return;
   }
 
@@ -684,6 +693,8 @@ async function runEnsureCsTables() {
 
   await ensureCsSpeedIndexes(prisma);
   await ensureSokanyAwbTables();
+  const { ensureScCenterTables } = await import("@/lib/cs/sc-centers");
+  await ensureScCenterTables();
 }
 
 /** Idempotent schema migration for CS tables — safe to call before every CS query. */
@@ -996,7 +1007,14 @@ export async function listCsAgents() {
 
 export async function listActiveCsAgents() {
   const all = await listCsAgents();
-  return all.filter((a) => a.isActive);
+  return all.filter((a) => {
+    if (!a.isActive) return false;
+    const roles = ((a as { roles?: CsRole[] }).roles || [a.role]) as CsRole[];
+    if (roles.includes("sc_staff") || (roles.includes("sc_manager") && !roles.some((role) => role === "agent" || role === "supervisor" || role === "admin"))) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export async function getCsAgentById(id: number) {

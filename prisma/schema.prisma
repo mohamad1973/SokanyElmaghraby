@@ -673,6 +673,52 @@ model CsSokanyWaybill {
   @@index([status])
 }
 
+model ScCenter {
+  id           Int          @id @default(autoincrement())
+  name         String       @db.VarChar(191)
+  address      String       @db.Text
+  governorate  String       @db.VarChar(64)
+  phones       String       @db.Text
+  headcount    Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  employees    ScEmployee[]
+}
+
+model ScJob {
+  id               Int          @id @default(autoincrement())
+  title            String       @db.VarChar(191)
+  parentId         Int?
+  parent           ScJob?       @relation("ScJobTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children         ScJob[]      @relation("ScJobTree")
+  sortOrder        Int          @default(0)
+  responsibilities String       @db.Text
+  permissions      String       @db.Text
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  employees        ScEmployee[]
+
+  @@index([parentId])
+}
+
+model ScEmployee {
+  id        Int      @id @default(autoincrement())
+  centerId  Int
+  center    ScCenter @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  jobId     Int?
+  job       ScJob?   @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  agentId   Int      @unique
+  name      String   @db.VarChar(191)
+  phone     String?  @db.VarChar(32)
+  address   String   @db.Text
+  photoUrl  String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([centerId])
+  @@index([jobId])
+}
+
 model ThemeSettings {
   id        String   @id @db.VarChar(64)
   settings  String   @db.LongText

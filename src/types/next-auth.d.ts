@@ -12,7 +12,9 @@ export type CsAgentRole =
   | "maintenance_tech"
   | "courier_supervisor"
   | "courier"
-  | "mona_courier";
+  | "mona_courier"
+  | "sc_manager"
+  | "sc_staff";
 
 declare module "next-auth" {
   interface Session {

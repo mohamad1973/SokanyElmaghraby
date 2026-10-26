@@ -24,6 +24,7 @@ const PERMISSIONS = [
   { id: "courier_supervisor", label: "مشرف مناديب" },
   { id: "courier", label: "مندوب" },
   { id: "mona_courier", label: "مندوب المشرفة" },
+  { id: "sc_manager", label: "مدير مراكز الصيانة" },
   { id: "admin", label: "أدمن" },
 ] as const;
 

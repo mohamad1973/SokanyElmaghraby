@@ -864,6 +864,9 @@ function CsHeader() {
   const isCourierSupervisor = roles.includes("courier_supervisor");
   const isCourier = roles.includes("courier");
   const isMonaCourier = roles.includes("mona_courier");
+  const isScManager = roles.includes("sc_manager") || isAdmin;
+  const isScStaff = roles.includes("sc_staff");
+  const canScCenters = isAdmin || isScManager || isScStaff;
   const canSeeOrders = roles.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting");
   const isTransfersOnly = isTransfers && !canSeeOrders && !isShipping;
   const canSettlement = isShipping || isSupervisor || isAdmin;
@@ -895,6 +898,10 @@ function CsHeader() {
                 ? "التحويلات · مخزون الموقع وحد الطلب"
                 : isShipping
                   ? "حساب شحن · تصفية سيد تميمة"
+                  : isScManager && !canSeeOrders
+                    ? "مدير مراكز الصيانة"
+                    : isScStaff && !canSeeOrders
+                      ? "موظف مراكز الصيانة"
                   : isAccounting && !isMaintenance && !isMaintenanceTech
                     ? "حسابات · كل الأوردرات"
                     : canMaintenanceHub && !canSeeOrders && !isTransfers && !isShipping
@@ -947,6 +954,11 @@ function CsHeader() {
           {canMaintenanceHub ? (
             <Link href="/cs/maintenance" className={navClass(pathname.startsWith("/cs/maintenance"))}>
               {isMaintenanceTech && !isMaintenance && !isAccounting ? "فني الصيانة" : "الصيانة"}
+            </Link>
+          ) : null}
+          {canScCenters ? (
+            <Link href="/cs/centers" className={navClass(pathname.startsWith("/cs/centers"))}>
+              مراكز الصيانة
             </Link>
           ) : null}
           {isSupervisor ? (
