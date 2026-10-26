@@ -74,21 +74,23 @@ export function temimaCarrySheetTitle(fromYmd: string, toYmd: string) {
   return `شيت مؤجلات مرحلة من أسبوع ${formatTemimaDayAr(fromYmd)} إلى ${formatTemimaDayAr(toYmd)}`;
 }
 
+function ymdParts(ymd: string) {
+  const [year, month, day] = ymd.split("-").map((part) => Number(part));
+  if (!year || !month || !day) return null;
+  return { year, month, day };
+}
+
 function addDaysYmd(ymd: string, days: number) {
-  const bounds = cairoYmdBounds(ymd);
-  if (!bounds) return ymd;
-  return cairoYmdFromIso(new Date(bounds.start.getTime() + days * 24 * 60 * 60 * 1000).toISOString());
+  const parts = ymdParts(ymd);
+  if (!parts) return ymd;
+  const utc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(2, "0")}-${String(utc.getUTCDate()).padStart(2, "0")}`;
 }
 
 function weekdayIndex(ymd: string) {
-  const bounds = cairoYmdBounds(ymd);
-  if (!bounds) return 0;
-  const label = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Africa/Cairo",
-    weekday: "short",
-  }).format(bounds.start);
-  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return map[label] ?? 0;
+  const parts = ymdParts(ymd);
+  if (!parts) return 0;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
 }
 
 export function sundayOnOrBefore(ymd: string) {

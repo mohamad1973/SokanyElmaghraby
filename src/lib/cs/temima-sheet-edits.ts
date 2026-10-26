@@ -475,7 +475,7 @@ function clockYmd(value: Date | string | null | undefined) {
   return cairoClock(iso)?.ymd || "";
 }
 
-/** Settlement day map: live save/handoff/assign dates. Ignores freeze and does not lock days. */
+/** Settlement day map: freeze pairs plus live save/handoff/assign dates. Does not freeze on read. */
 export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string) {
   const map = new Map<number, string>();
   const prisma = getPrismaClient();
@@ -484,7 +484,15 @@ export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string
   const from = cairoYmdBounds(dateFrom);
   const to = cairoYmdBounds(dateTo);
   if (!from || !to) return map;
-  const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
+  const [pairs, cutoffs, edits] = await Promise.all([
+    listTemimaFreezePairs(dateFrom, dateTo),
+    listTemimaCutoffs(),
+    listTemimaSheetEdits(),
+  ]);
+  for (const pair of pairs) {
+    if (pair.dayYmd < dateFrom || pair.dayYmd > dateTo || map.has(pair.confirmationId)) continue;
+    map.set(pair.confirmationId, pair.dayYmd);
+  }
   const rows = await prisma.csOrderConfirmation.findMany({
     where: {
       status: "CONFIRMED",
@@ -515,6 +523,7 @@ export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string
       })
     : [];
   for (const row of [...rows, ...extra]) {
+    if (map.has(row.id)) continue;
     const day = sayedSheetYmd(row, cutoffs);
     if (day && day >= dateFrom && day <= dateTo && !edits.some((edit) => edit.confirmationId === row.id && edit.dayYmd === day && edit.kind === "exclude")) {
       map.set(row.id, day);
