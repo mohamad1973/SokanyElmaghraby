@@ -7,7 +7,7 @@ import {
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
-import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
+import { listSettlementSheetDayMap, listTemimaSheetEdits } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
 import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
@@ -241,8 +241,10 @@ const SHEET_DAY_SELECT = {
   handedToCarrierAt: true,
 } as const;
 
-async function sheetDayById(from: string, to: string) {
-  return sayedSheetDayMap(from, to);
+function clockDayOf(value: Date | string | null | undefined) {
+  if (!value) return "";
+  const iso = value instanceof Date ? value.toISOString() : String(value);
+  return cairoYmdFromIso(iso);
 }
 
 function fallbackSheetDay(
@@ -261,7 +263,7 @@ function fallbackSheetDay(
   from: string,
   to: string,
 ) {
-  if (!order) return "";
+  if (!order) return from;
   const day = sayedSheetYmd(order, cutoffs);
   if (day && day >= from && day <= to && !edits.some((edit) => edit.confirmationId === order.id && edit.dayYmd === day && edit.kind === "exclude")) {
     return day;
@@ -269,7 +271,10 @@ function fallbackSheetDay(
   const include = edits.find(
     (edit) => edit.kind === "include" && edit.confirmationId === order.id && edit.dayYmd >= from && edit.dayYmd <= to,
   );
-  return include?.dayYmd || "";
+  if (include?.dayYmd) return include.dayYmd;
+  const clocks = [clockDayOf(order.handedToCarrierAt), clockDayOf(order.confirmationEditedAt), clockDayOf(order.confirmedAt)];
+  const inRange = clocks.find((ymd) => ymd >= from && ymd <= to);
+  return inRange || from;
 }
 
 export type TemimaOrderSearchHit = {
@@ -419,9 +424,10 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         })),
     ),
   );
-  const { sunday, saturday } = range;
+  const { sunday } = range;
   const week =
     weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday && !isCarryDayWeek(row)) || null;
+  const rangeClosed = week?.status === "closed";
 
   const resolvedPostponeIds = new Set<number>();
   for (const item of weeks) {
@@ -471,82 +477,17 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     }
   }
 
-  const useClosedSnapshot = week?.status === "closed" && week.lines.length > 0;
-  if (useClosedSnapshot && week) {
-    const ids = week.lines.map((line) => line.confirmationId);
-    const snaps = ids.length
-      ? await prisma.csOrderConfirmation.findMany({
-          where: { id: { in: ids } },
-          select: {
-            id: true,
-            customerSnapshot: true,
-            depositAmount: true,
-            depositPaid: true,
-            depositApprovalStatus: true,
-            orderTotalDelta: true,
-            discountApprovalStatus: true,
-            courierOutcome: true,
-            courierRefusalReason: true,
-            ...SHEET_DAY_SELECT,
-          },
-        })
-      : [];
-    const snapById = new Map(snaps.map((row) => [row.id, row]));
-    const overrides = await depositOverrides(ids);
-    const days = await sheetDayById(sunday, saturday);
-    const cutoffs = await listTemimaCutoffs();
-    const edits = await listTemimaSheetEdits();
-    const rows: TemimaSheetRow[] = week.lines
-      .map((line) => {
-        const order = snapById.get(line.confirmationId);
-        const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-        const carried = Boolean(line.resolvesLineId);
-        const override = overrides.get(line.confirmationId) ?? null;
-        const disposition = storedDisposition(line.disposition);
-        return {
-          confirmationId: line.confirmationId,
-          wooOrderNumber: line.wooOrderNumber,
-          customerName: customerNameOf(order?.customerSnapshot),
-          productNames: productNamesOf(order?.customerSnapshot),
-          ...contactOf(order?.customerSnapshot),
-          cashAmount: Number(line.cashAmount),
-          depositAmount: order ? settlementSplit(order, override, false).deposit : 0,
-          orderTotal: order ? orderTotalOf(order, override, false) : money(snap.total),
-          fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
-          disposition,
-          isLarge: line.isLarge,
-          carried,
-          carryLocked: carried && (disposition === "collect" || disposition === "return"),
-          postponeLineId: line.resolvesLineId,
-          sheetDay: carried ? "" : days.get(line.confirmationId) || fallbackSheetDay(order, cutoffs, edits, sunday, saturday),
-          refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
-        } satisfies TemimaSheetRow;
-      })
-      .filter((row) => {
-        if (row.carried || !row.sheetDay) return range.fullWeek;
-        return row.sheetDay >= range.start && row.sheetDay <= range.end;
-      });
-    const due = collectDueBreakdown(rows);
-    return {
-      ok: true as const,
-      weekStart: range.start,
-      weekEnd: range.end,
-      fullWeek: range.fullWeek,
-      status: "closed" as const,
-      cashDue: Number(week.cashDue),
-      weekCollectDue: due.weekCollectDue,
-      priorPostponeCollectDue: due.priorPostponeCollectDue,
-      priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,
-      cashPaid: Number(week.cashPaid),
-      monthId: week.monthId,
-      rows,
-      refusals: refusalRowsOf(rows),
-      history: historyOf(weeks),
-    };
-  }
-
-  const days = await sheetDayById(range.start, range.end);
-  const sheetIds = [...days.keys()];
+  const overlappingWeeks = weeks.filter((item) => {
+    if (isCarryDayWeek(item)) return false;
+    const from = cairoYmdFromIso(item.weekStart.toISOString());
+    const to = cairoYmdFromIso(item.weekEnd.toISOString());
+    return from <= range.end && to >= range.start;
+  });
+  const days = await listSettlementSheetDayMap(range.start, range.end);
+  const weekLineIds = overlappingWeeks.flatMap((item) =>
+    item.lines.filter((line) => !line.resolvesLineId).map((line) => line.confirmationId),
+  );
+  const sheetIds = [...new Set([...days.keys(), ...weekLineIds])];
   const sheetIdSet = new Set(sheetIds);
   const carryIds = range.fullWeek
     ? openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIdSet.has(id))
@@ -571,46 +512,58 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         },
       })
     : [];
+  const orderById = new Map(orders.map((row) => [row.id, row]));
 
-  const postponeIds = new Set(openPostpones.map((row) => row.confirmationId));
-  const draft = new Map((week?.lines || []).map((line) => [line.confirmationId, line]));
+  const draft = new Map(overlappingWeeks.flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)));
+  if (week) {
+    for (const line of week.lines) {
+      if (!draft.has(line.confirmationId)) draft.set(line.confirmationId, line);
+    }
+  }
   const overrides = await depositOverrides(orderIds);
   const cutoffs = await listTemimaCutoffs();
   const edits = await listTemimaSheetEdits();
 
   const rows: TemimaSheetRow[] = [];
-  for (const order of orders) {
-    if (!sheetIdSet.has(order.id)) continue;
-    if (settledIds.has(order.id) || postponeIds.has(order.id)) continue;
-    const saved = draft.get(order.id);
-    const snap = (order.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
-    const override = overrides.get(order.id) ?? null;
-    const split = settlementSplit(order, override, true, true);
+  for (const id of sheetIds) {
+    const order = orderById.get(id);
+    const saved = draft.get(id);
+    if (!order && !saved) continue;
+    if (saved?.resolvesLineId) continue;
+    if (settledIds.has(id) && !days.has(id)) continue;
+    const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
+    const override = overrides.get(id) ?? null;
+    const split = order ? settlementSplit(order, override, !rangeClosed, true) : { net: Number(saved?.cashAmount || 0), deposit: 0 };
     const disposition = storedDisposition(saved?.disposition);
+    const sheetDay =
+      days.get(id) ||
+      (order ? fallbackSheetDay(order, cutoffs, edits, range.start, range.end) : "") ||
+      range.start;
     rows.push({
-      confirmationId: order.id,
-      wooOrderNumber: order.wooOrderNumber,
-      customerName: customerNameOf(order.customerSnapshot),
-      productNames: productNamesOf(order.customerSnapshot),
-      ...contactOf(order.customerSnapshot),
-      cashAmount: split.net,
-      depositAmount: split.deposit,
-      orderTotal: split.deposit + split.net,
+      confirmationId: id,
+      wooOrderNumber: order?.wooOrderNumber || saved?.wooOrderNumber || "",
+      customerName: order ? customerNameOf(order.customerSnapshot) : "—",
+      productNames: order ? productNamesOf(order.customerSnapshot) : "—",
+      ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
+      cashAmount: saved && rangeClosed ? Number(saved.cashAmount) : split.net,
+      depositAmount: order ? (rangeClosed ? settlementSplit(order, override, false).deposit : split.deposit) : 0,
+      orderTotal: order ? (rangeClosed ? orderTotalOf(order, override, false) : split.deposit + split.net) : Number(saved?.cashAmount || 0),
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition,
       isLarge: saved?.isLarge || false,
       carried: false,
       carryLocked: false,
       postponeLineId: null,
-      sheetDay: days.get(order.id) || fallbackSheetDay(order, cutoffs, edits, range.start, range.end),
-      refusalReason: disposition === "return" ? refusalReasonOf(order) : undefined,
+      sheetDay,
+      refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
     });
   }
 
   if (range.fullWeek) {
     for (const carried of openPostpones) {
+      if (sheetIdSet.has(carried.confirmationId)) continue;
       const saved = draft.get(carried.confirmationId);
-      const order = orders.find((row) => row.id === carried.confirmationId);
+      const order = orderById.get(carried.confirmationId);
       const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
       const override = overrides.get(carried.confirmationId) ?? null;
       const disposition = (saved?.disposition as TemimaDisposition) || "postpone";
@@ -645,8 +598,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     weekStart: range.start,
     weekEnd: range.end,
     fullWeek: range.fullWeek,
-    status: "open" as const,
-    cashDue: due.cashDue,
+    status: rangeClosed ? ("closed" as const) : ("open" as const),
+    cashDue: rangeClosed && range.fullWeek && week ? Number(week.cashDue) : due.cashDue,
     weekCollectDue: due.weekCollectDue,
     priorPostponeCollectDue: due.priorPostponeCollectDue,
     priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,

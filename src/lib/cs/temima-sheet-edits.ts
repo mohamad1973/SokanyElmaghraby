@@ -469,6 +469,47 @@ async function loadSayedSheetCandidates(dateFrom: string, dateTo: string, edits:
   return [...rows, ...extra];
 }
 
+function clockYmd(value: Date | string | null | undefined) {
+  if (!value) return "";
+  const iso = value instanceof Date ? value.toISOString() : String(value);
+  return cairoClock(iso)?.ymd || "";
+}
+
+/** Settlement day map: live save/handoff dates plus freeze pairs. Does not freeze days on read. */
+export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string) {
+  const map = new Map<number, string>();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return map;
+  const [pairs, cutoffs, edits] = await Promise.all([
+    listTemimaFreezePairs(dateFrom, dateTo),
+    listTemimaCutoffs(),
+    listTemimaSheetEdits(),
+  ]);
+  for (const pair of pairs) {
+    if (pair.dayYmd < dateFrom || pair.dayYmd > dateTo || map.has(pair.confirmationId)) continue;
+    map.set(pair.confirmationId, pair.dayYmd);
+  }
+  const candidates = await loadSayedSheetCandidates(dateFrom, dateTo, edits);
+  for (const row of candidates) {
+    if (map.has(row.id)) continue;
+    const day = sayedSheetYmd(row, cutoffs);
+    if (day && day >= dateFrom && day <= dateTo && !edits.some((edit) => edit.confirmationId === row.id && edit.dayYmd === day && edit.kind === "exclude")) {
+      map.set(row.id, day);
+      continue;
+    }
+    const include = edits.find(
+      (edit) => edit.kind === "include" && edit.confirmationId === row.id && edit.dayYmd >= dateFrom && edit.dayYmd <= dateTo,
+    );
+    if (include) {
+      map.set(row.id, include.dayYmd);
+      continue;
+    }
+    const clocks = [clockYmd(row.handedToCarrierAt), clockYmd(row.confirmationEditedAt), clockYmd(row.confirmedAt)];
+    const inRange = clocks.find((ymd) => ymd >= dateFrom && ymd <= dateTo);
+    map.set(row.id, inRange || dateFrom);
+  }
+  return map;
+}
+
 /** Settlement day assignment in one pass. The first day in the range keeps the order. */
 export async function sayedSheetDayMap(dateFrom: string, dateTo: string) {
   const map = new Map<number, string>();
