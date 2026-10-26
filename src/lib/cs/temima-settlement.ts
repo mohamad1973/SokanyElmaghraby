@@ -406,10 +406,20 @@ export async function listTemimaCarryForward(): Promise<TemimaCarryForward> {
   };
 }
 
+async function reopenAllTemimaWeeks() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await prisma.csCarrierWeek.updateMany({
+    where: { carrierCompany: TEMIMA_COMPANY, carryKey: 0, status: "closed" },
+    data: { status: "open", closedAt: null },
+  });
+}
+
 export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, _agentId = 0) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureCsTables();
+  await reopenAllTemimaWeeks();
 
   const weeks = await loadWeeks();
   const range = resolveSettlementRange(
@@ -427,7 +437,6 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   const { sunday } = range;
   const week =
     weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday && !isCarryDayWeek(row)) || null;
-  const rangeClosed = week?.status === "closed";
 
   const resolvedPostponeIds = new Set<number>();
   for (const item of weeks) {
@@ -437,7 +446,6 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     }
   }
 
-  const settledIds = new Set<number>();
   const openPostpones: Array<{
     lineId: number;
     confirmationId: number;
@@ -467,13 +475,6 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         }
         continue;
       }
-      settledIds.add(line.confirmationId);
-    }
-  }
-  for (const item of weeks) {
-    if (!isCarryDayWeek(item)) continue;
-    for (const line of item.lines) {
-      if (line.disposition === "collect" || line.disposition === "return") settledIds.add(line.confirmationId);
     }
   }
 
@@ -530,10 +531,9 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const saved = draft.get(id);
     if (!order && !saved) continue;
     if (saved?.resolvesLineId) continue;
-    if (settledIds.has(id) && !days.has(id)) continue;
     const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
     const override = overrides.get(id) ?? null;
-    const split = order ? settlementSplit(order, override, !rangeClosed, true) : { net: Number(saved?.cashAmount || 0), deposit: 0 };
+    const split = order ? settlementSplit(order, override, true, true) : { net: Number(saved?.cashAmount || 0), deposit: 0 };
     const disposition = storedDisposition(saved?.disposition);
     const sheetDay =
       days.get(id) ||
@@ -545,9 +545,9 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       customerName: order ? customerNameOf(order.customerSnapshot) : "—",
       productNames: order ? productNamesOf(order.customerSnapshot) : "—",
       ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
-      cashAmount: saved && rangeClosed ? Number(saved.cashAmount) : split.net,
-      depositAmount: order ? (rangeClosed ? settlementSplit(order, override, false).deposit : split.deposit) : 0,
-      orderTotal: order ? (rangeClosed ? orderTotalOf(order, override, false) : split.deposit + split.net) : Number(saved?.cashAmount || 0),
+      cashAmount: split.net,
+      depositAmount: order ? split.deposit : 0,
+      orderTotal: order ? split.deposit + split.net : Number(saved?.cashAmount || 0),
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition,
       isLarge: saved?.isLarge || false,
@@ -598,8 +598,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     weekStart: range.start,
     weekEnd: range.end,
     fullWeek: range.fullWeek,
-    status: rangeClosed ? ("closed" as const) : ("open" as const),
-    cashDue: rangeClosed && range.fullWeek && week ? Number(week.cashDue) : due.cashDue,
+    status: "open" as const,
+    cashDue: due.cashDue,
     weekCollectDue: due.weekCollectDue,
     priorPostponeCollectDue: due.priorPostponeCollectDue,
     priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,

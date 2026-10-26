@@ -475,22 +475,46 @@ function clockYmd(value: Date | string | null | undefined) {
   return cairoClock(iso)?.ymd || "";
 }
 
-/** Settlement day map: live save/handoff dates plus freeze pairs. Does not freeze days on read. */
+/** Settlement day map: live save/handoff/assign dates. Ignores freeze and does not lock days. */
 export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string) {
   const map = new Map<number, string>();
+  const prisma = getPrismaClient();
+  if (!prisma) return map;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return map;
-  const [pairs, cutoffs, edits] = await Promise.all([
-    listTemimaFreezePairs(dateFrom, dateTo),
-    listTemimaCutoffs(),
-    listTemimaSheetEdits(),
-  ]);
-  for (const pair of pairs) {
-    if (pair.dayYmd < dateFrom || pair.dayYmd > dateTo || map.has(pair.confirmationId)) continue;
-    map.set(pair.confirmationId, pair.dayYmd);
-  }
-  const candidates = await loadSayedSheetCandidates(dateFrom, dateTo, edits);
-  for (const row of candidates) {
-    if (map.has(row.id)) continue;
+  const from = cairoYmdBounds(dateFrom);
+  const to = cairoYmdBounds(dateTo);
+  if (!from || !to) return map;
+  const [cutoffs, edits] = await Promise.all([listTemimaCutoffs(), listTemimaSheetEdits()]);
+  const rows = await prisma.csOrderConfirmation.findMany({
+    where: {
+      status: "CONFIRMED",
+      shippingCompany: "sayed_temima",
+      OR: [
+        { confirmedAt: { gte: from.start, lt: to.endExclusive } },
+        { confirmationEditedAt: { gte: from.start, lt: to.endExclusive } },
+        { handedToCarrierAt: { gte: from.start, lt: to.endExclusive } },
+        { shippingAssignedAt: { gte: from.start, lt: to.endExclusive } },
+      ],
+    },
+    select: SHEET_PICK,
+    orderBy: { id: "desc" },
+    take: 5000,
+  });
+  const have = new Set(rows.map((row) => row.id));
+  const includeIds = [
+    ...new Set(
+      edits
+        .filter((row) => row.kind === "include" && row.dayYmd >= dateFrom && row.dayYmd <= dateTo && !have.has(row.confirmationId))
+        .map((row) => row.confirmationId),
+    ),
+  ];
+  const extra = includeIds.length
+    ? await prisma.csOrderConfirmation.findMany({
+        where: { id: { in: includeIds } },
+        select: SHEET_PICK,
+      })
+    : [];
+  for (const row of [...rows, ...extra]) {
     const day = sayedSheetYmd(row, cutoffs);
     if (day && day >= dateFrom && day <= dateTo && !edits.some((edit) => edit.confirmationId === row.id && edit.dayYmd === day && edit.kind === "exclude")) {
       map.set(row.id, day);
@@ -503,7 +527,12 @@ export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string
       map.set(row.id, include.dayYmd);
       continue;
     }
-    const clocks = [clockYmd(row.handedToCarrierAt), clockYmd(row.confirmationEditedAt), clockYmd(row.confirmedAt)];
+    const clocks = [
+      clockYmd(row.handedToCarrierAt),
+      clockYmd(row.confirmationEditedAt),
+      clockYmd(row.confirmedAt),
+      clockYmd(row.shippingAssignedAt),
+    ];
     const inRange = clocks.find((ymd) => ymd >= dateFrom && ymd <= dateTo);
     map.set(row.id, inRange || dateFrom);
   }
