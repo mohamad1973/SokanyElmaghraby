@@ -180,9 +180,9 @@ function resolveSettlementRange(weekStartInput: string | undefined, weekEndInput
   const start = isYmd(weekStartInput) ? weekStartInput : fallbackStart;
   const sunday = sundayOnOrBefore(start);
   const saturday = addDaysYmd(sunday, 6);
-  let end = isYmd(weekEndInput) ? weekEndInput : isYmd(weekStartInput) ? start : saturday > cairoTodayYmd() ? cairoTodayYmd() : saturday;
+  const today = cairoTodayYmd();
+  let end = isYmd(weekEndInput) ? weekEndInput : isYmd(weekStartInput) ? start : today < start ? start : today;
   if (end < start) end = start;
-  if (end > saturday) end = saturday;
   return { start, end, sunday, saturday, fullWeek: start === sunday && end === saturday };
 }
 
@@ -613,7 +613,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     return sourceWeekById.get(confirmationId) || { fromYmd: fallbackCarryFrom, toYmd: fallbackCarryTo };
   }
 
-  if (week?.status === "closed") {
+  if (week?.status === "closed" && range.end <= saturday) {
     const ids = week.lines.map((line) => line.confirmationId);
     const snaps = ids.length
       ? await prisma.csOrderConfirmation.findMany({
@@ -725,7 +725,16 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     : [];
 
   const postponeIds = new Set(openPostpones.map((row) => row.confirmationId));
-  const draft = new Map((week?.lines || []).map((line) => [line.confirmationId, line]));
+  const draft = new Map(
+    weeks
+      .filter((item) => {
+        if (isCarryDayWeek(item)) return false;
+        const from = cairoYmdFromIso(item.weekStart.toISOString());
+        const to = cairoYmdFromIso(item.weekEnd.toISOString());
+        return from <= range.end && to >= range.start;
+      })
+      .flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)),
+  );
   const overrides = await depositOverrides(orderIds);
   const cutoffs = await listTemimaCutoffs();
   const edits = await listTemimaSheetEdits();

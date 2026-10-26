@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cairoTodayYmd } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
 import { formatSayedSheetHeading } from "@/lib/cs/temima-sheet";
 
 type Disposition = "collect" | "return" | "postpone" | "";
@@ -197,8 +197,8 @@ export function TemimaSettlementClient({
   canEdit: boolean;
   canEditDeposit?: boolean;
 }) {
-  const [weekStart, setWeekStart] = useState("");
-  const [weekEnd, setWeekEnd] = useState("");
+  const [weekStart, setWeekStart] = useState(cairoYesterdayYmd);
+  const [weekEnd, setWeekEnd] = useState(cairoTodayYmd);
   const [fullWeek, setFullWeek] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [rows, setRows] = useState<SheetRow[]>([]);
@@ -243,8 +243,10 @@ export function TemimaSettlementClient({
       setMessage(data.message || "تعذر التحميل.");
       return;
     }
-    setWeekStart(data.weekStart || "");
-    setWeekEnd(data.weekEnd || "");
+    if (data.weekStart && /^\d{4}-\d{2}-\d{2}$/.test(data.weekStart)) setWeekStart(data.weekStart);
+    else if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) setWeekStart(week);
+    if (data.weekEnd && /^\d{4}-\d{2}-\d{2}$/.test(data.weekEnd)) setWeekEnd(data.weekEnd);
+    else if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) setWeekEnd(end);
     setFullWeek(data.fullWeek === true);
     setStatus(data.status || "open");
     editedIds.current.clear();
@@ -257,8 +259,10 @@ export function TemimaSettlementClient({
   }, []);
 
   useEffect(() => {
-    void load(undefined, undefined, closeDate);
-  }, [load, closeDate]);
+    void load(weekStart, weekEnd, closeDate);
+    // First paint uses yesterday→today like the orders date boxes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -451,7 +455,11 @@ export function TemimaSettlementClient({
           <input
             type="date"
             value={weekStart}
-            onChange={(e) => void load(e.target.value, weekEnd, closeDate)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setWeekStart(next);
+              void load(next, weekEnd, closeDate);
+            }}
             className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
           />
         </div>
@@ -460,7 +468,11 @@ export function TemimaSettlementClient({
           <input
             type="date"
             value={weekEnd}
-            onChange={(e) => void load(weekStart, e.target.value, closeDate)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setWeekEnd(next);
+              void load(weekStart, next, closeDate);
+            }}
             className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
           />
         </div>
@@ -782,7 +794,11 @@ export function TemimaSettlementClient({
               <input
                 type="date"
                 value={closeDate}
-                onChange={(e) => setCloseDate(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setCloseDate(next);
+                  void load(weekStart, weekEnd, next);
+                }}
                 className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
               />
             </div>
