@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { formatDisplayYmd } from "@/lib/cs/order-window";
+import { formatDisplayYmd, parseDisplayYmd } from "@/lib/cs/order-window";
 
 type DateFieldProps = {
   value?: string;
@@ -27,14 +27,27 @@ export function DateField({
   className = "",
   onChange,
 }: DateFieldProps) {
+  const nativeRef = useRef<HTMLInputElement>(null);
   const [inner, setInner] = useState(defaultValue ?? "");
+  const [focused, setFocused] = useState(false);
   const ymd = value ?? inner;
-  const display = formatDisplayYmd(ymd);
+  const [text, setText] = useState(() => formatDisplayYmd(ymd));
 
-  function openPicker(event: MouseEvent<HTMLDivElement>) {
-    const input = event.currentTarget.querySelector("input[type='date']");
-    if (!(input instanceof HTMLInputElement) || disabled) return;
-    input.focus();
+  useEffect(() => {
+    if (focused) return;
+    setText(formatDisplayYmd(value ?? inner));
+  }, [value, inner, focused]);
+
+  function commitYmd(next: string) {
+    setInner(next);
+    if (next) setText(formatDisplayYmd(next));
+    onChange?.(next);
+  }
+
+  function openPicker() {
+    if (disabled) return;
+    const input = nativeRef.current;
+    if (!input) return;
     try {
       input.showPicker();
     } catch {
@@ -48,22 +61,42 @@ export function DateField({
       onClick={openPicker}
       className={`cs-date-field relative flex h-9 min-w-0 cursor-pointer items-center rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] ${className}`}
     >
-      <span className="pointer-events-none min-w-0 flex-1 truncate text-right">
-        {display || "يوم-شهر-سنة"}
-      </span>
       <input
+        type="text"
+        inputMode="numeric"
+        disabled={disabled}
+        value={text}
+        placeholder=""
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          const parsed = parseDisplayYmd(text);
+          if (parsed) commitYmd(parsed);
+          else setText(formatDisplayYmd(ymd));
+        }}
+        onChange={(event) => {
+          const next = event.target.value.replace(/[^\d/\-]/g, "").slice(0, 10);
+          setText(next);
+          const parsed = parseDisplayYmd(next);
+          if (parsed) commitYmd(parsed);
+        }}
+        className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-right text-xs font-bold text-[#14213D] outline-none"
+      />
+      <input
+        ref={nativeRef}
         type="date"
         name={name}
         required={required}
         disabled={disabled}
         max={max}
         min={min}
-        value={value ?? inner}
+        tabIndex={-1}
+        aria-hidden="true"
+        value={/^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : ""}
         onChange={(event) => {
-          setInner(event.target.value);
-          onChange?.(event.target.value);
+          if (event.target.value) commitYmd(event.target.value);
         }}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        className="cs-date-native"
       />
     </div>
   );
