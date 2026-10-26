@@ -211,7 +211,7 @@ export function TemimaSettlementClient({
   const [shippingPaid, setShippingPaid] = useState(0);
   const [month, setMonth] = useState<MonthPreview | null>(null);
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<"week" | "orders">("week");
   const [orderHits, setOrderHits] = useState<OrderHit[]>([]);
@@ -223,12 +223,22 @@ export function TemimaSettlementClient({
 
   const load = useCallback(async (week?: string, end?: string, monthDate?: string) => {
     const seq = ++loadSeq.current;
+    setLoading(true);
     const qs = new URLSearchParams();
     if (week) qs.set("week", week);
     if (end) qs.set("weekEnd", end);
     if (monthDate) qs.set("closeDate", monthDate);
-    const res = await fetch(`/api/cs/settlement/temima?${qs}`);
-    const data = (await res.json()) as {
+    let res: Response;
+    try {
+      res = await fetch(`/api/cs/settlement/temima?${qs}`);
+    } catch {
+      if (seq !== loadSeq.current) return;
+      setMessage("تعذر التحميل.");
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    let data: {
       message?: string;
       weekStart?: string;
       weekEnd?: string;
@@ -241,9 +251,20 @@ export function TemimaSettlementClient({
       history?: HistoryRow[];
       month?: MonthPreview | null;
     };
+    try {
+      data = (await res.json()) as typeof data;
+    } catch {
+      if (seq !== loadSeq.current) return;
+      setMessage("تعذر التحميل.");
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     if (seq !== loadSeq.current) return;
     if (!res.ok) {
       setMessage(data.message || "تعذر التحميل.");
+      setRows([]);
+      setLoading(false);
       return;
     }
     if (data.weekStart && /^\d{4}-\d{2}-\d{2}$/.test(data.weekStart)) setWeekStart(data.weekStart);
@@ -259,6 +280,7 @@ export function TemimaSettlementClient({
     setCashPaid(data.cashPaid || 0);
     setHistory(data.history || []);
     setMonth(data.month || null);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -568,7 +590,13 @@ export function TemimaSettlementClient({
             {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={12} className="border border-[#14213D]/15 px-3 py-8 text-center font-bold text-[#14213D]/60">
-                  {rows.length ? "لا توجد نتيجة في هذا الأسبوع." : "لا توجد أوردرات لهذا الأسبوع."}
+                  {loading
+                    ? "جاري تحميل الشيت..."
+                    : message
+                      ? message
+                      : rows.length
+                        ? "لا توجد نتيجة في هذا الأسبوع."
+                        : "لا توجد أوردرات لهذا الأسبوع."}
                 </td>
               </tr>
             ) : (

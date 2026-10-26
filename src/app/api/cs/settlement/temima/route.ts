@@ -14,6 +14,8 @@ import {
 } from "@/lib/cs/temima-settlement";
 import { requireCsSession } from "@/lib/session-guards";
 
+export const maxDuration = 60;
+
 async function viewerOf(requestAgentId: number, sessionRole: string | undefined) {
   const viewer = await resolveCsViewer(requestAgentId);
   const shipping = viewer.isAdmin || viewer.isShipping || isShippingRole(viewer.role) || isShippingRole(sessionRole);
@@ -22,34 +24,45 @@ async function viewerOf(requestAgentId: number, sessionRole: string | undefined)
 }
 
 export async function GET(request: Request) {
-  const session = await requireCsSession();
-  if (!session?.user.csAgentId) {
-    return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
-  }
-  const access = await viewerOf(session.user.csAgentId, session.user.csRole);
-  if (!access.shipping && !access.follow) {
-    return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
-  }
+  try {
+    const session = await requireCsSession();
+    if (!session?.user.csAgentId) {
+      return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+    }
+    const access = await viewerOf(session.user.csAgentId, session.user.csRole);
+    if (!access.shipping && !access.follow) {
+      return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    }
 
-  const url = new URL(request.url);
-  const query = (url.searchParams.get("q") || "").trim();
-  if (query) {
-    const found = await searchTemimaSettlementOrders(query);
-    if (!found.ok) return NextResponse.json({ message: found.message }, { status: 503 });
-    return NextResponse.json({ matches: found.matches });
+    const url = new URL(request.url);
+    const query = (url.searchParams.get("q") || "").trim();
+    if (query) {
+      const found = await searchTemimaSettlementOrders(query);
+      if (!found.ok) return NextResponse.json({ message: found.message }, { status: 503 });
+      return NextResponse.json({ matches: found.matches });
+    }
+    const week = url.searchParams.get("week") || undefined;
+    const weekEnd = url.searchParams.get("weekEnd") || undefined;
+    const closeDate = url.searchParams.get("closeDate") || undefined;
+    const sheet = await getTemimaWeekSheet(week, weekEnd, session.user.csAgentId);
+    if (!sheet.ok) return NextResponse.json({ message: sheet.message }, { status: 503 });
+    let month: Awaited<ReturnType<typeof previewTemimaMonth>> | null = null;
+    try {
+      const preview = await previewTemimaMonth(closeDate);
+      month = preview.ok ? preview : null;
+    } catch (error) {
+      console.warn("[temima-settlement] month preview skipped", error instanceof Error ? error.message : error);
+    }
+    return NextResponse.json({
+      ...sheet,
+      ok: true,
+      canEdit: access.shipping,
+      month,
+    });
+  } catch (error) {
+    console.error("[temima-settlement] GET failed", error instanceof Error ? error.message : error);
+    return NextResponse.json({ message: "تعذر تحميل شيت التصفية." }, { status: 500 });
   }
-  const week = url.searchParams.get("week") || undefined;
-  const weekEnd = url.searchParams.get("weekEnd") || undefined;
-  const closeDate = url.searchParams.get("closeDate") || undefined;
-  const sheet = await getTemimaWeekSheet(week, weekEnd, session.user.csAgentId);
-  if (!sheet.ok) return NextResponse.json({ message: sheet.message }, { status: 503 });
-  const month = await previewTemimaMonth(closeDate);
-  return NextResponse.json({
-    ...sheet,
-    ok: true,
-    canEdit: access.shipping,
-    month: month.ok ? month : null,
-  });
 }
 
 export async function POST(request: Request) {

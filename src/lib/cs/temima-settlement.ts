@@ -420,8 +420,13 @@ async function reopenAllTemimaWeeks() {
 export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, _agentId = 0) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
-  await ensureCsTables();
-  await reopenAllTemimaWeeks();
+  try {
+    await ensureCsTables();
+    try {
+      await reopenAllTemimaWeeks();
+    } catch (error) {
+      console.warn("[temima-settlement] reopen weeks skipped", error instanceof Error ? error.message : error);
+    }
 
   const weeks = await loadWeeks();
   const range = resolveSettlementRange(
@@ -611,6 +616,10 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     refusals: refusalRowsOf(rows),
     history: historyOf(weeks),
   };
+  } catch (error) {
+    console.error("[temima-settlement] sheet failed", error instanceof Error ? error.message : error);
+    return { ok: false as const, message: "تعذر تحميل شيت التصفية." };
+  }
 }
 
 function refusalRowsOf(rows: TemimaSheetRow[]): TemimaRefusalRow[] {

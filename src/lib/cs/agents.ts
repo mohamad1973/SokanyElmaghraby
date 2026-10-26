@@ -192,6 +192,40 @@ async function ensureCsSpeedIndexes(prisma: NonNullable<ReturnType<typeof getPri
   }
 }
 
+async function ensureCarrierWeekExtraColumns(prisma: NonNullable<ReturnType<typeof getPrismaClient>>) {
+  for (const sql of [
+    "ALTER TABLE `CsCarrierWeek` ADD COLUMN `carryKey` INT NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeek` ADD COLUMN `sourceWeekId` INT NULL",
+  ]) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Duplicate column|already exists|1060/i.test(message)) {
+        console.warn("[cs] carrier week column:", message.slice(0, 200));
+      }
+    }
+  }
+  try {
+    await prisma.$executeRawUnsafe("ALTER TABLE `CsCarrierWeek` DROP INDEX `CsCarrierWeek_company_week_key`");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/check that it exists|1091|Can't DROP|Unknown key|doesn't exist/i.test(message)) {
+      console.warn("[cs] carry week old unique:", message.slice(0, 200));
+    }
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      "CREATE UNIQUE INDEX `CsCarrierWeek_company_week_carry_key` ON `CsCarrierWeek` (`carrierCompany`, `weekStart`, `carryKey`)",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate|already exists|1061/i.test(message)) {
+      console.warn("[cs] carry week unique:", message.slice(0, 200));
+    }
+  }
+}
+
 async function runEnsureCsTables() {
   const prisma = getPrismaClient();
   if (!prisma) return;
@@ -204,6 +238,7 @@ async function runEnsureCsTables() {
      LIMIT 1`,
   );
   if (ready.length) {
+    await ensureCarrierWeekExtraColumns(prisma);
     await ensureCsSpeedIndexes(prisma);
     await ensureSokanyAwbTables();
     return;
