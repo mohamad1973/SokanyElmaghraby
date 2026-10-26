@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { DateField } from "@/components/date-field";
 import {
   cairoTodayYmd,
   cairoYmdFromIso,
@@ -366,18 +365,20 @@ export function CsAssignClient({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
             <span className="shrink-0 text-[#14213D]/60">من</span>
-            <DateField
+            <input
+              type="date"
               value={draftFrom}
-              onChange={setDraftFrom}
-              className="h-full min-w-0 flex-1 border-0 bg-transparent px-0"
+              onChange={(e) => setDraftFrom(e.target.value)}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
           </div>
           <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
             <span className="shrink-0 text-[#14213D]/60">إلى</span>
-            <DateField
+            <input
+              type="date"
               value={draftTo}
-              onChange={setDraftTo}
-              className="h-full min-w-0 flex-1 border-0 bg-transparent px-0"
+              onChange={(e) => setDraftTo(e.target.value)}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
             />
           </div>
           <button

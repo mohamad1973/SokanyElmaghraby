@@ -6,7 +6,7 @@ import {
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
-import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso, formatDisplayYmd } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
@@ -65,7 +65,9 @@ export type TemimaRefusalRow = {
 };
 
 export function formatTemimaDayAr(ymd: string) {
-  return formatDisplayYmd(ymd) || ymd;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const [year, month, day] = ymd.split("-");
+  return `${Number(day)}-${Number(month)}-${year}`;
 }
 
 export function temimaCarrySheetTitle(fromYmd: string, toYmd: string) {

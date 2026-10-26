@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
-import { DateField } from "@/components/date-field";
-
 type Row = {
   id: number;
   wooOrderNumber: string;
@@ -100,11 +98,21 @@ export function BostaBoardClient() {
         <form onSubmit={onSearch} className="flex flex-wrap items-end gap-2">
           <label className="text-xs font-extrabold text-[#14213D]">
             من
-            <DateField value={from} onChange={setFrom} className="mt-1 h-10 rounded-xl px-3 text-sm" />
+            <input
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+            />
           </label>
           <label className="text-xs font-extrabold text-[#14213D]">
             إلى
-            <DateField value={to} onChange={setTo} className="mt-1 h-10 rounded-xl px-3 text-sm" />
+            <input
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+            />
           </label>
           <label className="min-w-48 flex-1 text-xs font-extrabold text-[#14213D]">
             بحث

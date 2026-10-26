@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { DateField } from "@/components/date-field";
 import { cairoTodayYmd } from "@/lib/cs/order-window";
 
 import { TrackingScanBox } from "../tracking-scan";
@@ -192,11 +191,12 @@ export function CouriersClient({
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm font-extrabold text-[#14213D]">
             التاريخ
-            <DateField
+            <input
+              type="date"
               value={day}
               max={cairoTodayYmd()}
-              onChange={(ymd) => setDay(ymd || cairoTodayYmd())}
-              className="mt-1 h-11 rounded-xl bg-white px-3"
+              onChange={(event) => setDay(event.target.value || cairoTodayYmd())}
+              className="mt-1 block h-11 rounded-xl border border-[#E5E5E5] bg-white px-3"
             />
           </label>
           {day !== cairoTodayYmd() ? (

@@ -162,32 +162,16 @@ export function isWithinCairoLastDays(iso: string | null | undefined, daysBack =
   return t >= fromStart && t < tomorrowStart;
 }
 
-/** Visible site date: day-month-year from the right in RTL (`26-10-2026`). */
-export function formatDisplayYmd(ymd: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd || "";
-  const [year, month, day] = ymd.split("-");
-  return `${Number(day)}-${Number(month)}-${year}`;
-}
-
-/** Parse typed day-month-year (`26-10-2026` or `26/10/2026`) into `YYYY-MM-DD`. */
-export function parseDisplayYmd(raw: string) {
-  const text = raw.trim().replace(/\s/g, "").replace(/\//g, "-");
-  const match = text.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (!match) return "";
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
-  if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return "";
-  if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return "";
-  const probe = new Date(Date.UTC(year, month - 1, day));
-  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return "";
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 export function formatCairoOrderDate(iso: string | null | undefined) {
   if (!iso) return "—";
-  const ymd = cairoYmdFromIso(iso);
-  return ymd ? formatDisplayYmd(ymd) : "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("ar-EG", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 export function isFawryMethod(paymentMethod?: string | null, paymentMethodId?: string | null) {
@@ -412,16 +396,15 @@ export function formatCairoOrderDateTime(iso: string | null | undefined) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return { absolute: "—", relative: "" };
 
-  const ymd = cairoYmdFromIso(date.toISOString());
-  const clockParts = new Intl.DateTimeFormat("en-GB", {
+  const absolute = new Intl.DateTimeFormat("ar-EG", {
     timeZone: "Africa/Cairo",
-    hour: "numeric",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
     minute: "2-digit",
     hour12: true,
-  }).formatToParts(date);
-  const pick = (type: Intl.DateTimeFormatPartTypes) => clockParts.find((part) => part.type === type)?.value || "";
-  const period = /p/i.test(pick("dayPeriod")) ? "م" : "ص";
-  const absolute = `${ymd ? formatDisplayYmd(ymd) : "—"} ${pick("hour")}:${pick("minute")} ${period}`;
+  }).format(date);
 
   const diffMs = Date.now() - date.getTime();
   const mins = Math.max(0, Math.floor(diffMs / 60000));

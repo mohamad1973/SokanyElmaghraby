@@ -1,8 +1,6 @@
 import { getAdminOrders } from "@/lib/orders";
 import { listDrivers } from "@/lib/dispatch/drivers";
 import Link from "next/link";
-import { DateField } from "@/components/date-field";
-import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 import { OrdersExportActions } from "./orders-export-actions";
 import { OrderShippingActions } from "./order-shipping-actions";
 export const dynamic = "force-dynamic";
@@ -78,11 +76,21 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
           </select>
           <label className="grid gap-1 text-xs font-bold text-zinc-600">
             من تاريخ
-            <DateField name="after" defaultValue={params.after || ""} className="rounded-md bg-white px-3 py-2 text-sm" />
+            <input
+              type="date"
+              name="after"
+              defaultValue={params.after || ""}
+              className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-gold"
+            />
           </label>
           <label className="grid gap-1 text-xs font-bold text-zinc-600">
             إلى تاريخ
-            <DateField name="before" defaultValue={params.before || ""} className="rounded-md bg-white px-3 py-2 text-sm" />
+            <input
+              type="date"
+              name="before"
+              defaultValue={params.before || ""}
+              className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-brand-gold"
+            />
           </label>
           <button className="rounded-md bg-[#2271b1] px-4 py-2 text-sm font-bold text-white" type="submit">
             فلترة
@@ -175,7 +183,10 @@ export default async function AdminOrdersPage({ searchParams }: OrdersPageProps)
                     </span>
                   </td>
                   <td className="border-b border-[#dcdcde] px-3 py-4">
-                    {formatCairoOrderDateTime(order.dateCreated).absolute}
+                    {new Intl.DateTimeFormat("ar-EG", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(order.dateCreated))}
                   </td>
                 </tr>
               ))}

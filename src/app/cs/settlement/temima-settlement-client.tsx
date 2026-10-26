@@ -2,8 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { DateField } from "@/components/date-field";
-import { cairoTodayYmd, formatDisplayYmd } from "@/lib/cs/order-window";
+import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { formatSayedSheetHeading } from "@/lib/cs/temima-sheet";
 
 type Disposition = "collect" | "return" | "postpone" | "";
@@ -114,7 +113,9 @@ function orderNumber(row: SheetRow) {
 }
 
 function formatDayAr(ymd: string) {
-  return formatDisplayYmd(ymd) || ymd;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const [year, month, day] = ymd.split("-");
+  return `${Number(day)}-${Number(month)}-${year}`;
 }
 
 function carryBlockTitle(from: string, to: string) {
@@ -433,18 +434,20 @@ export function TemimaSettlementClient({
       <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
         <label className="text-xs font-bold text-[#14213D]">
           من
-          <DateField
+          <input
+            type="date"
             value={weekStart}
-            onChange={(ymd) => void load(ymd, weekEnd, closeDate)}
-            className="mr-2 mt-1"
+            onChange={(e) => void load(e.target.value, weekEnd, closeDate)}
+            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
           />
         </label>
         <label className="text-xs font-bold text-[#14213D]">
           إلى
-          <DateField
+          <input
+            type="date"
             value={weekEnd}
-            onChange={(ymd) => void load(weekStart, ymd, closeDate)}
-            className="mr-2 mt-1"
+            onChange={(e) => void load(weekStart, e.target.value, closeDate)}
+            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
           />
         </label>
         <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "الأسبوع مقفل" : fullWeek ? "أسبوع كامل" : "فترة مفتوحة"}</span>
@@ -761,7 +764,12 @@ export function TemimaSettlementClient({
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm font-bold">
             تاريخ القفل
-            <DateField value={closeDate} onChange={setCloseDate} className="mt-1" />
+            <input
+              type="date"
+              value={closeDate}
+              onChange={(e) => setCloseDate(e.target.value)}
+              className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2"
+            />
           </label>
           <label className="text-sm font-bold">
             أجر الشحن المصروف
