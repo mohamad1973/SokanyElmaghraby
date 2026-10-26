@@ -217,10 +217,12 @@ export function TemimaSettlementClient({
   const [orderHits, setOrderHits] = useState<OrderHit[]>([]);
   const [searchingOrders, setSearchingOrders] = useState(false);
   const searchSeq = useRef(0);
+  const loadSeq = useRef(0);
   const editedIds = useRef(new Set<number>());
   const largePending = useRef(new Set<string>());
 
   const load = useCallback(async (week?: string, end?: string, monthDate?: string) => {
+    const seq = ++loadSeq.current;
     const qs = new URLSearchParams();
     if (week) qs.set("week", week);
     if (end) qs.set("weekEnd", end);
@@ -239,6 +241,7 @@ export function TemimaSettlementClient({
       history?: HistoryRow[];
       month?: MonthPreview | null;
     };
+    if (seq !== loadSeq.current) return;
     if (!res.ok) {
       setMessage(data.message || "تعذر التحميل.");
       return;

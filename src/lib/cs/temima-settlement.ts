@@ -608,12 +608,28 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   const fallbackCarryFrom = closedOther[0] ? weekYmd(closedOther[0].weekStart) : LATE_FROM_YMD;
   const fallbackCarryTo = saturday;
 
-  const rangeClosed = week?.status === "closed" && range.end <= saturday;
+  const overlappingWeeks = weeks.filter((item) => {
+    if (isCarryDayWeek(item)) return false;
+    const from = cairoYmdFromIso(item.weekStart.toISOString());
+    const to = cairoYmdFromIso(item.weekEnd.toISOString());
+    return from <= range.end && to >= range.start;
+  });
+  const rangeClosed =
+    (week?.status === "closed" && range.end <= saturday) ||
+    overlappingWeeks.some(
+      (item) =>
+        item.status === "closed" &&
+        cairoYmdFromIso(item.weekStart.toISOString()) <= range.start &&
+        cairoYmdFromIso(item.weekEnd.toISOString()) >= range.end,
+    );
   const [days, sheetIdList] = await Promise.all([
     sheetDayById(range.start, range.end),
     listUnifiedSayedSheetIds(range.start, range.end),
   ]);
-  const sheetIds = [...new Set([...sheetIdList, ...days.keys()])];
+  const weekLineIds = overlappingWeeks.flatMap((item) =>
+    item.lines.filter((line) => !line.resolvesLineId).map((line) => line.confirmationId),
+  );
+  const sheetIds = [...new Set([...sheetIdList, ...days.keys(), ...weekLineIds])];
   const sheetIdSet = new Set(sheetIds);
   const carryIds = openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIdSet.has(id));
   const orderIds = [...sheetIds, ...carryIds];
@@ -638,16 +654,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     : [];
   const orderById = new Map(orders.map((row) => [row.id, row]));
 
-  const draft = new Map(
-    weeks
-      .filter((item) => {
-        if (isCarryDayWeek(item)) return false;
-        const from = cairoYmdFromIso(item.weekStart.toISOString());
-        const to = cairoYmdFromIso(item.weekEnd.toISOString());
-        return from <= range.end && to >= range.start;
-      })
-      .flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)),
-  );
+  const draft = new Map(overlappingWeeks.flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)));
   if (week) {
     for (const line of week.lines) {
       if (!draft.has(line.confirmationId)) draft.set(line.confirmationId, line);
@@ -660,35 +667,35 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   const rows: TemimaSheetRow[] = [];
   for (const id of sheetIds) {
     const order = orderById.get(id);
-    if (!order) continue;
     const saved = draft.get(id);
-    const snap = (order.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
+    if (!order && !saved) continue;
+    const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
     const override = overrides.get(id) ?? null;
-    const split = settlementSplit(order, override, !rangeClosed, true);
+    const split = order ? settlementSplit(order, override, !rangeClosed, true) : { net: Number(saved?.cashAmount || 0), deposit: 0 };
     const disposition = storedDisposition(saved?.disposition);
-    const resolvedCarry = Boolean(saved?.resolvesLineId);
+    if (saved?.resolvesLineId) continue;
     const sheetDay =
       days.get(id) ||
-      fallbackSheetDay(order, cutoffs, edits, range.start, range.end) ||
-      (range.start === range.end ? range.start : "");
+      (order ? fallbackSheetDay(order, cutoffs, edits, range.start, range.end) : "") ||
+      (range.start === range.end || saved ? range.start : "");
     if (!sheetDay || sheetDay < range.start || sheetDay > range.end) continue;
     rows.push({
       confirmationId: id,
-      wooOrderNumber: order.wooOrderNumber,
-      customerName: customerNameOf(order.customerSnapshot),
-      productNames: productNamesOf(order.customerSnapshot),
-      ...contactOf(order.customerSnapshot),
+      wooOrderNumber: order?.wooOrderNumber || saved?.wooOrderNumber || "",
+      customerName: order ? customerNameOf(order.customerSnapshot) : "—",
+      productNames: order ? productNamesOf(order.customerSnapshot) : "—",
+      ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
       cashAmount: saved && rangeClosed ? Number(saved.cashAmount) : split.net,
-      depositAmount: rangeClosed ? settlementSplit(order, override, false).deposit : split.deposit,
-      orderTotal: rangeClosed ? orderTotalOf(order, override, false) : split.deposit + split.net,
+      depositAmount: order ? (rangeClosed ? settlementSplit(order, override, false).deposit : split.deposit) : 0,
+      orderTotal: order ? (rangeClosed ? orderTotalOf(order, override, false) : split.deposit + split.net) : Number(saved?.cashAmount || 0),
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition,
       isLarge: saved?.isLarge || false,
       carried: false,
-      carryLocked: Boolean(resolvedCarry && (disposition === "collect" || disposition === "return")),
-      postponeLineId: saved?.resolvesLineId || null,
+      carryLocked: false,
+      postponeLineId: null,
       sheetDay,
-      refusalReason: disposition === "return" ? refusalReasonOf(order) : undefined,
+      refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
     });
   }
 
