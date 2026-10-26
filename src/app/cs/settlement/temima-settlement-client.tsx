@@ -66,6 +66,20 @@ type OrderHit = {
 const money = (n: number) =>
   new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(Math.round(n));
 
+const DATE_CONTROL =
+  "h-9 min-w-[11rem] rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
+
+function openDateField(event: React.MouseEvent<HTMLDivElement>) {
+  const input = event.currentTarget.querySelector("input[type='date']");
+  if (!(input instanceof HTMLInputElement)) return;
+  input.focus();
+  try {
+    input.showPicker();
+  } catch {
+    // Picker already open, or this browser only opens it from the calendar control.
+  }
+}
+
 function rowMatchesQuery(row: SheetRow, raw: string) {
   const q = raw.trim().toLowerCase();
   if (!q) return true;
@@ -432,24 +446,24 @@ export function TemimaSettlementClient({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
-        <label className="text-xs font-bold text-[#14213D]">
-          من
+        <div className={`${DATE_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+          <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
           <input
             type="date"
             value={weekStart}
             onChange={(e) => void load(e.target.value, weekEnd, closeDate)}
-            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+            className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
           />
-        </label>
-        <label className="text-xs font-bold text-[#14213D]">
-          إلى
+        </div>
+        <div className={`${DATE_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+          <span className="pointer-events-none shrink-0 text-[#14213D]/60">إلى</span>
           <input
             type="date"
             value={weekEnd}
             onChange={(e) => void load(weekStart, e.target.value, closeDate)}
-            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+            className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
           />
-        </label>
+        </div>
         <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "الأسبوع مقفل" : fullWeek ? "أسبوع كامل" : "فترة مفتوحة"}</span>
         <button
           type="button"
@@ -762,15 +776,17 @@ export function TemimaSettlementClient({
           يجمع الأسابيع المقفلة وشيتات المؤجلات المحصّلة أول بأول حتى التاريخ المختار، وكل شيت مؤجلات مقفول يتتحسب كيوم عادي. الشحن 75 ج، والكبير 100 ج.
         </p>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-sm font-bold">
-            تاريخ القفل
-            <input
-              type="date"
-              value={closeDate}
-              onChange={(e) => setCloseDate(e.target.value)}
-              className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2"
-            />
-          </label>
+          <div className="space-y-1">
+            <span className="block text-sm font-bold">تاريخ القفل</span>
+            <div className={`${DATE_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+              <input
+                type="date"
+                value={closeDate}
+                onChange={(e) => setCloseDate(e.target.value)}
+                className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+              />
+            </div>
+          </div>
           <label className="text-sm font-bold">
             أجر الشحن المصروف
             <input
