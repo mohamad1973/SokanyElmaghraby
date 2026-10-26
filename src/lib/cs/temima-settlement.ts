@@ -6,7 +6,7 @@ import {
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
-import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
+import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso, formatDisplayYmd } from "@/lib/cs/order-window";
 import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
@@ -17,6 +17,7 @@ import { getPrismaClient } from "@/lib/db";
 export const TEMIMA_COMPANY = "sayed_temima";
 const FEE_NORMAL = 75;
 const FEE_LARGE = 100;
+const CARRY_DAY_KEY = 1;
 
 export type TemimaDisposition = "collect" | "return" | "postpone";
 
@@ -39,6 +40,7 @@ export type TemimaSheetRow = {
   disposition: TemimaDisposition | "";
   isLarge: boolean;
   carried: boolean;
+  carryLocked?: boolean;
   postponeLineId: number | null;
   sheetDay: string;
   carryFromStart?: string;
@@ -63,9 +65,7 @@ export type TemimaRefusalRow = {
 };
 
 export function formatTemimaDayAr(ymd: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
-  const [year, month, day] = ymd.split("-");
-  return `${Number(day)}-${Number(month)}-${year}`;
+  return formatDisplayYmd(ymd) || ymd;
 }
 
 export function temimaCarrySheetTitle(fromYmd: string, toYmd: string) {
@@ -150,7 +150,9 @@ async function ensureClosedTemimaWeeksFrom(fromYmd: string, agentId: number) {
       const start = cairoYmdBounds(sunday)?.start;
       if (!start) continue;
       const existing = await prisma.csCarrierWeek.findUnique({
-        where: { carrierCompany_weekStart: { carrierCompany: TEMIMA_COMPANY, weekStart: start } },
+        where: {
+          carrierCompany_weekStart_carryKey: { carrierCompany: TEMIMA_COMPANY, weekStart: start, carryKey: 0 },
+        },
       });
       if (existing?.status === "closed") continue;
       const closed = await saveTemimaWeek({
@@ -382,6 +384,24 @@ function weekYmd(value: Date) {
   return cairoYmdFromIso(value.toISOString());
 }
 
+function carryKeyOf(week: { carryKey?: number | null }) {
+  return Number(week.carryKey || 0);
+}
+
+function isCarryDayWeek(week: { carryKey?: number | null }) {
+  return carryKeyOf(week) !== 0;
+}
+
+function regularWeekLookup(start: Date) {
+  return {
+    carrierCompany_weekStart_carryKey: {
+      carrierCompany: TEMIMA_COMPANY,
+      weekStart: start,
+      carryKey: 0,
+    },
+  };
+}
+
 function refusalReasonOf(row: {
   courierOutcome?: string | null;
   courierRefusalReason?: string | null;
@@ -391,6 +411,80 @@ function refusalReasonOf(row: {
     return detail ? `رفض استلام · ${detail}` : "رفض استلام";
   }
   return "الغاء الشيت";
+}
+
+async function lockedCarryRowsInRange(
+  weeks: Awaited<ReturnType<typeof loadWeeks>>,
+  range: { start: string; end: string },
+  skipIds: Set<number>,
+  postponeSourceByLineId: Map<number, { fromYmd: string; toYmd: string }>,
+  fallback: { fromYmd: string; toYmd: string },
+) {
+  const prisma = getPrismaClient();
+  if (!prisma) return [] as TemimaSheetRow[];
+  const pending: Array<{
+    line: Awaited<ReturnType<typeof loadWeeks>>[number]["lines"][number];
+    source: { fromYmd: string; toYmd: string };
+  }> = [];
+  for (const item of weeks) {
+    if (!isCarryDayWeek(item)) continue;
+    const lockYmd = weekYmd(item.weekStart);
+    if (lockYmd < range.start || lockYmd > range.end) continue;
+    for (const line of item.lines) {
+      if (skipIds.has(line.confirmationId)) continue;
+      const disposition = storedDisposition(line.disposition);
+      if (disposition !== "collect" && disposition !== "return") continue;
+      pending.push({
+        line,
+        source: (line.resolvesLineId ? postponeSourceByLineId.get(line.resolvesLineId) : null) || fallback,
+      });
+      skipIds.add(line.confirmationId);
+    }
+  }
+  if (!pending.length) return [] as TemimaSheetRow[];
+  const ids = pending.map((row) => row.line.confirmationId);
+  const orders = await prisma.csOrderConfirmation.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      customerSnapshot: true,
+      depositAmount: true,
+      depositPaid: true,
+      depositApprovalStatus: true,
+      orderTotalDelta: true,
+      discountApprovalStatus: true,
+      courierOutcome: true,
+      courierRefusalReason: true,
+    },
+  });
+  const orderById = new Map(orders.map((row) => [row.id, row]));
+  const overrides = await depositOverrides(ids);
+  return pending.map(({ line, source }) => {
+    const order = orderById.get(line.confirmationId);
+    const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
+    const override = overrides.get(line.confirmationId) ?? null;
+    const disposition = storedDisposition(line.disposition) || "collect";
+    return {
+      confirmationId: line.confirmationId,
+      wooOrderNumber: line.wooOrderNumber,
+      customerName: order ? customerNameOf(order.customerSnapshot) : "—",
+      productNames: order ? productNamesOf(order.customerSnapshot) : "—",
+      ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
+      cashAmount: Number(line.cashAmount),
+      depositAmount: order ? settlementSplit(order, override, true).deposit : 0,
+      orderTotal: order ? orderTotalOf(order, override, true) : money(snap.total),
+      fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
+      disposition,
+      isLarge: line.isLarge,
+      carried: true,
+      carryLocked: true,
+      postponeLineId: line.resolvesLineId,
+      sheetDay: "",
+      carryFromStart: source.fromYmd,
+      carryFromEnd: source.toYmd,
+      refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
+    } satisfies TemimaSheetRow;
+  });
 }
 
 export async function listTemimaCarryForward(): Promise<TemimaCarryForward> {
@@ -437,13 +531,18 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   const range = resolveSettlementRange(
     weekStartInput,
     weekEndInput,
-    openWeekToClose(weeks.map((row) => ({
-      weekStart: cairoYmdFromIso(row.weekStart.toISOString()),
-      status: row.status,
-    }))),
+    openWeekToClose(
+      weeks
+        .filter((row) => !isCarryDayWeek(row))
+        .map((row) => ({
+          weekStart: cairoYmdFromIso(row.weekStart.toISOString()),
+          status: row.status,
+        })),
+    ),
   );
   const { sunday, saturday } = range;
-  const week = weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday) || null;
+  const week =
+    weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday && !isCarryDayWeek(row)) || null;
 
   const resolvedPostponeIds = new Set<number>();
   for (const item of weeks) {
@@ -464,11 +563,26 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     toYmd: string;
   }> = [];
   const seenCarry = new Set<number>();
+  const postponeSourceByLineId = new Map<number, { fromYmd: string; toYmd: string }>();
+  for (const item of weeks) {
+    if (isCarryDayWeek(item)) continue;
+    for (const line of item.lines) {
+      if (line.disposition === "postpone") {
+        postponeSourceByLineId.set(line.id, { fromYmd: weekYmd(item.weekStart), toYmd: weekYmd(item.weekEnd) });
+      }
+    }
+  }
   const closedOther = weeks
-    .filter((item) => item.status === "closed" && (!week || item.id !== week.id))
+    .filter((item) => item.status === "closed" && !isCarryDayWeek(item) && (!week || item.id !== week.id))
     .slice()
     .sort((a, b) => a.weekStart.getTime() - b.weekStart.getTime());
   for (const item of closedOther) {
+    for (const line of item.lines) {
+      if (line.disposition === "collect" || line.disposition === "return") settledIds.add(line.confirmationId);
+    }
+  }
+  for (const item of weeks) {
+    if (!isCarryDayWeek(item)) continue;
     for (const line of item.lines) {
       if (line.disposition === "collect" || line.disposition === "return") settledIds.add(line.confirmationId);
     }
@@ -545,6 +659,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         disposition,
         isLarge: line.isLarge,
         carried,
+        carryLocked: Boolean(resolvedCarry || (carried && (disposition === "collect" || disposition === "return"))),
         postponeLineId: line.resolvesLineId,
         sheetDay: carried ? "" : naturalDay,
         carryFromStart: source?.fromYmd,
@@ -555,6 +670,15 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       if (row.carried || !row.sheetDay) return range.fullWeek;
       return row.sheetDay >= range.start && row.sheetDay <= range.end;
     });
+    rows.push(
+      ...(await lockedCarryRowsInRange(
+        weeks,
+        range,
+        new Set(rows.map((row) => row.confirmationId)),
+        postponeSourceByLineId,
+        { fromYmd: fallbackCarryFrom, toYmd: fallbackCarryTo },
+      )),
+    );
     const due = collectDueBreakdown(rows);
     return {
       ok: true as const,
@@ -656,6 +780,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       disposition: (saved?.disposition as TemimaDisposition) || "postpone",
       isLarge: saved?.isLarge ?? carried.isLarge,
       carried: true,
+      carryLocked: storedDisposition(saved?.disposition) === "collect" || storedDisposition(saved?.disposition) === "return",
       postponeLineId: carried.lineId,
       sheetDay: "",
       carryFromStart: carried.fromYmd,
@@ -664,6 +789,15 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     });
   }
 
+  rows.push(
+    ...(await lockedCarryRowsInRange(
+      weeks,
+      range,
+      new Set(rows.map((row) => row.confirmationId)),
+      postponeSourceByLineId,
+      { fromYmd: fallbackCarryFrom, toYmd: fallbackCarryTo },
+    )),
+  );
   rows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
   const due = collectDueBreakdown(rows);
 
@@ -730,6 +864,7 @@ function historyOf(
     cashDue: unknown;
     cashPaid: unknown;
     monthId: number | null;
+    carryKey?: number | null;
   }>,
 ) {
   return weeks.slice(0, 12).map((row) => ({
@@ -739,6 +874,7 @@ function historyOf(
     cashDue: Number(row.cashDue),
     cashPaid: Number(row.cashPaid),
     inMonth: Boolean(row.monthId),
+    carryDay: isCarryDayWeek(row),
   }));
 }
 
@@ -749,7 +885,7 @@ async function upsertOpenWeek(sunday: string, endYmd: string, agentId: number) {
   const end = cairoYmdBounds(endYmd)?.start;
   if (!start || !end) return null;
   const existing = await prisma.csCarrierWeek.findUnique({
-    where: { carrierCompany_weekStart: { carrierCompany: TEMIMA_COMPANY, weekStart: start } },
+    where: regularWeekLookup(start),
   });
   if (existing?.status === "closed") return existing;
   if (existing) {
@@ -763,8 +899,78 @@ async function upsertOpenWeek(sunday: string, endYmd: string, agentId: number) {
       weekEnd: end,
       status: "open",
       closedById: agentId,
+      carryKey: 0,
     },
   });
+}
+
+async function refreshWeekCashDue(weekId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const lines = await prisma.csCarrierWeekLine.findMany({ where: { weekId } });
+  const cashDue = lines
+    .filter((row) => row.disposition === "collect")
+    .reduce((sum, row) => sum + Number(row.cashAmount || 0), 0);
+  await prisma.csCarrierWeek.update({ where: { id: weekId }, data: { cashDue } });
+}
+
+async function upsertCarryDayWeek(lockYmd: string, agentId: number) {
+  const prisma = getPrismaClient();
+  const start = cairoYmdBounds(lockYmd)?.start;
+  if (!prisma || !start) return null;
+  const existing = await prisma.csCarrierWeek.findUnique({
+    where: {
+      carrierCompany_weekStart_carryKey: {
+        carrierCompany: TEMIMA_COMPANY,
+        weekStart: start,
+        carryKey: CARRY_DAY_KEY,
+      },
+    },
+  });
+  if (existing) return existing;
+  return prisma.csCarrierWeek.create({
+    data: {
+      carrierCompany: TEMIMA_COMPANY,
+      weekStart: start,
+      weekEnd: start,
+      status: "closed",
+      closedById: agentId,
+      closedAt: new Date(),
+      carryKey: CARRY_DAY_KEY,
+    },
+  });
+}
+
+async function lockResolvedCarryLines(agentId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const carryWeek = await upsertCarryDayWeek(cairoTodayYmd(), agentId);
+  if (!carryWeek) return;
+  const sources = await prisma.csCarrierWeek.findMany({
+    where: {
+      carrierCompany: TEMIMA_COMPANY,
+      carryKey: 0,
+      OR: [{ status: "open" }, { status: "closed", monthId: null }],
+    },
+    include: { lines: true },
+  });
+  const moveIds: number[] = [];
+  const touched = new Set<number>([carryWeek.id]);
+  for (const week of sources) {
+    if (week.id === carryWeek.id) continue;
+    for (const line of week.lines) {
+      if (!line.resolvesLineId) continue;
+      if (line.disposition !== "collect" && line.disposition !== "return") continue;
+      moveIds.push(line.id);
+      touched.add(week.id);
+    }
+  }
+  if (!moveIds.length) return;
+  await prisma.csCarrierWeekLine.updateMany({
+    where: { id: { in: moveIds } },
+    data: { weekId: carryWeek.id },
+  });
+  for (const weekId of touched) await refreshWeekCashDue(weekId);
 }
 
 function linePayload(weekId: number, row: TemimaSheetRow) {
@@ -791,7 +997,10 @@ export async function markTemimaLarge(confirmationId: number, isLarge: boolean) 
     where: {
       confirmationId,
       disposition: "collect",
-      week: { carrierCompany: TEMIMA_COMPANY, status: "open" },
+      week: {
+        carrierCompany: TEMIMA_COMPANY,
+        OR: [{ status: "open" }, { carryKey: { not: 0 }, monthId: null }],
+      },
     },
     data: { isLarge },
   });
@@ -837,8 +1046,17 @@ export async function saveTemimaWeek(input: {
     const marked = edited.filter((row) => storedDisposition(row.disposition));
     if (marked.length) {
       await prisma.csCarrierWeekLine.createMany({ data: marked.map((row) => linePayload(week.id, row)) });
+      for (const row of marked) {
+        const disposition = storedDisposition(row.disposition);
+        if (!disposition) continue;
+        await prisma.$executeRaw`
+          UPDATE CsOrderConfirmation SET temimaSupervisorResult = ${disposition} WHERE id = ${row.confirmationId}
+        `;
+      }
     }
   }
+
+  await lockResolvedCarryLines(input.agentId);
 
   if (input.close) {
     const live = await getTemimaWeekSheet(range.sunday, range.saturday, input.agentId);
@@ -859,10 +1077,11 @@ export async function saveTemimaWeek(input: {
       );
     }
     await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id } });
-    const marked = snapshotRows.filter((row) => storedDisposition(row.disposition));
+    const marked = snapshotRows.filter((row) => storedDisposition(row.disposition) && !row.carried);
     if (marked.length) {
       await prisma.csCarrierWeekLine.createMany({ data: marked.map((row) => linePayload(week.id, row)) });
     }
+    await lockResolvedCarryLines(input.agentId);
   }
 
   const storedLines = await prisma.csCarrierWeekLine.findMany({ where: { weekId: week.id } });
@@ -1036,6 +1255,7 @@ export async function applySupervisorOrderResult(input: {
     WHERE id = ${order.id}
   `;
   await captureDeskReturnFromConfirmation(order.id);
+  await lockResolvedCarryLines(input.agentId);
 
   return { ok: true as const, result: input.result, disposition };
 }
@@ -1069,6 +1289,7 @@ export async function setFawrySettlementDeposit(input: { confirmationId: number;
     WHERE l.confirmationId = ${input.confirmationId}
       AND w.status = 'closed'
       AND w.carrierCompany = ${TEMIMA_COMPANY}
+      AND w.carryKey = 0
     LIMIT 1
   `;
   if (closed.length) return { ok: false as const, message: "الأسبوع مقفل." };
@@ -1127,6 +1348,7 @@ export async function previewTemimaMonth(closeDateInput?: string) {
       weekStart: cairoYmdFromIso(week.weekStart.toISOString()),
       weekEnd: cairoYmdFromIso(week.weekEnd.toISOString()),
       cashPaid: Number(week.cashPaid),
+      carryDay: isCarryDayWeek(week),
     })),
     deliveredOrders: orders,
     shippingTotal,

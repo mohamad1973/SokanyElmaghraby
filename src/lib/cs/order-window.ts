@@ -162,16 +162,17 @@ export function isWithinCairoLastDays(iso: string | null | undefined, daysBack =
   return t >= fromStart && t < tomorrowStart;
 }
 
+/** Visible site date: day-month-year from the right in RTL (`26-10-2026`). */
+export function formatDisplayYmd(ymd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd || "";
+  const [year, month, day] = ymd.split("-");
+  return `${Number(day)}-${Number(month)}-${year}`;
+}
+
 export function formatCairoOrderDate(iso: string | null | undefined) {
   if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("ar-EG", {
-    timeZone: "Africa/Cairo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  const ymd = cairoYmdFromIso(iso);
+  return ymd ? formatDisplayYmd(ymd) : "—";
 }
 
 export function isFawryMethod(paymentMethod?: string | null, paymentMethodId?: string | null) {
@@ -396,15 +397,16 @@ export function formatCairoOrderDateTime(iso: string | null | undefined) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return { absolute: "—", relative: "" };
 
-  const absolute = new Intl.DateTimeFormat("ar-EG", {
+  const ymd = cairoYmdFromIso(date.toISOString());
+  const clockParts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Africa/Cairo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  }).format(date);
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => clockParts.find((part) => part.type === type)?.value || "";
+  const period = /p/i.test(pick("dayPeriod")) ? "م" : "ص";
+  const absolute = `${ymd ? formatDisplayYmd(ymd) : "—"} ${pick("hour")}:${pick("minute")} ${period}`;
 
   const diffMs = Date.now() - date.getTime();
   const mins = Math.max(0, Math.floor(diffMs / 60000));

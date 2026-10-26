@@ -1465,9 +1465,15 @@ export function CsCallSheet({
           return (
             <div
               key={item.key}
-              className={`flex flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
+              className={`flex cursor-pointer flex-col rounded-xl bg-white p-1.5 shadow-sm ring-2 ${
                 isMissing ? "ring-red-500" : "ring-[#E5E5E5]"
               }`}
+              onClick={(event) => {
+                if (locked) return;
+                const target = event.target as HTMLElement;
+                if (target.closest("input, textarea, select, button, a, label")) return;
+                update(item.key, { confirmed: !state.confirmed });
+              }}
             >
               <label className="flex items-center justify-between gap-1">
                 <span className="min-w-0 text-xs font-extrabold leading-4 text-[#14213D]">{item.label}</span>
@@ -1696,17 +1702,23 @@ export function CsCallSheet({
 
   function depositCard() {
     return (
-      <div className="flex h-full flex-col justify-between rounded-xl bg-[#0D9488]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#0D9488]">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setDepositOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setDepositOpen(true);
+          }
+        }}
+        className="flex h-full cursor-pointer flex-col justify-between rounded-xl bg-[#0D9488]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#0D9488]"
+      >
         <div className="flex items-start justify-between gap-1">
           <p className="text-xs font-extrabold text-[#14213D]">طلب ديبوزت</p>
-          <button
-            type="button"
-            onClick={() => setDepositOpen(true)}
-            aria-label="تكبير كارت الديبوزت"
-            className="grid size-6 place-items-center rounded-md bg-[#0D9488] text-sm font-extrabold text-white"
-          >
+          <span className="grid size-6 place-items-center rounded-md bg-[#0D9488] text-sm font-extrabold text-white">
             ↗
-          </button>
+          </span>
         </div>
         <p className={`mt-1 text-[11px] font-extrabold ${depositPayLabel ? "text-[#0D9488]" : "text-[#14213D]/50"}`}>
           {depositPayLabel || "اختياري"}
@@ -2232,13 +2244,27 @@ export function CsCallSheet({
 
         {showFollowUp && lockedShipping === "bosta" ? bostaShipmentCard() : null}
 
-        <div className="flex h-full flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#059669]">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (printingWaybill || creatingWaybill) return;
+            void printWaybill();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              if (printingWaybill || creatingWaybill) return;
+              void printWaybill();
+            }
+          }}
+          className="flex h-full cursor-pointer flex-col rounded-xl bg-[#059669]/15 p-1.5 shadow-sm ring-2 ring-inset ring-[#059669]"
+        >
           <p className="text-xs font-extrabold text-[#14213D]">طباعة البوليصة</p>
         <button
           type="button"
           disabled={printingWaybill || creatingWaybill}
-          onClick={() => void printWaybill()}
-          className={`mt-1 rounded-lg px-2 py-1 text-xs font-extrabold ring-1 ring-[#059669] ${
+          className={`pointer-events-none mt-1 rounded-lg px-2 py-1 text-xs font-extrabold ring-1 ring-[#059669] ${
             waybillPrinted ? "bg-[#059669] text-white" : "bg-white text-[#14213D]"
           }`}
         >

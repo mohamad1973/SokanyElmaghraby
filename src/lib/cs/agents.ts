@@ -354,9 +354,11 @@ async function runEnsureCsTables() {
       \`closedById\` INT NULL,
       \`closedAt\` DATETIME(3) NULL,
       \`monthId\` INT NULL,
+      \`carryKey\` INT NOT NULL DEFAULT 0,
+      \`sourceWeekId\` INT NULL,
       \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-      UNIQUE INDEX \`CsCarrierWeek_company_week_key\`(\`carrierCompany\`, \`weekStart\`),
+      UNIQUE INDEX \`CsCarrierWeek_company_week_carry_key\`(\`carrierCompany\`, \`weekStart\`, \`carryKey\`),
       INDEX \`CsCarrierWeek_monthId_idx\`(\`monthId\`),
       PRIMARY KEY (\`id\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -566,6 +568,8 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `settlementDepositOverride` DECIMAL(12,2) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `parentConfirmationId` INT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `fulfillmentKind` VARCHAR(16) NULL",
+    "ALTER TABLE `CsCarrierWeek` ADD COLUMN `carryKey` INT NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeek` ADD COLUMN `sourceWeekId` INT NULL",
   ];
 
   for (const sql of alters) {
@@ -587,6 +591,25 @@ async function runEnsureCsTables() {
     const message = error instanceof Error ? error.message : String(error);
     if (!/Duplicate|already exists|1061/i.test(message)) {
       console.warn("[cs] username index:", message.slice(0, 200));
+    }
+  }
+
+  try {
+    await prisma.$executeRawUnsafe("ALTER TABLE `CsCarrierWeek` DROP INDEX `CsCarrierWeek_company_week_key`");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/check that it exists|1091|Can't DROP|Unknown key|doesn't exist/i.test(message)) {
+      console.warn("[cs] carry week old unique:", message.slice(0, 200));
+    }
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      "CREATE UNIQUE INDEX `CsCarrierWeek_company_week_carry_key` ON `CsCarrierWeek` (`carrierCompany`, `weekStart`, `carryKey`)",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate|already exists|1061/i.test(message)) {
+      console.warn("[cs] carry week unique:", message.slice(0, 200));
     }
   }
 

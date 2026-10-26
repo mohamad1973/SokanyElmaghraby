@@ -44,7 +44,7 @@ export function formatSayedSheetHeading(ymd: string) {
     weekday: "short",
   }).format(new Date(Date.UTC(year, month - 1, day, 12, 0, 0)));
   const weekday = CAIRO_WEEKDAYS[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short)] || "";
-  return `شيت مخزن سيد تميمة يوم ${weekday} ${day}-${month}`;
+  return `شيت مخزن سيد تميمة يوم ${weekday} ${day}-${month}-${year}`;
 }
 
 export function formatCutoffClock12(minutes: number) {

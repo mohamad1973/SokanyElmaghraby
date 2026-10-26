@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cairoTodayYmd } from "@/lib/cs/order-window";
+import { DateField } from "@/components/date-field";
+import { cairoTodayYmd, formatDisplayYmd } from "@/lib/cs/order-window";
 import { formatSayedSheetHeading } from "@/lib/cs/temima-sheet";
 
 type Disposition = "collect" | "return" | "postpone" | "";
@@ -21,6 +22,7 @@ type SheetRow = {
   disposition: Disposition;
   isLarge: boolean;
   carried: boolean;
+  carryLocked?: boolean;
   postponeLineId: number | null;
   sheetDay?: string;
   carryFromStart?: string;
@@ -45,11 +47,12 @@ type HistoryRow = {
   cashDue: number;
   cashPaid: number;
   inMonth: boolean;
+  carryDay?: boolean;
 };
 
 type MonthPreview = {
   closeDate: string;
-  weeks: Array<{ weekStart: string; weekEnd: string; cashPaid: number }>;
+  weeks: Array<{ weekStart: string; weekEnd: string; cashPaid: number; carryDay?: boolean }>;
   deliveredOrders: number;
   shippingTotal: number;
 };
@@ -111,9 +114,7 @@ function orderNumber(row: SheetRow) {
 }
 
 function formatDayAr(ymd: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
-  const [year, month, day] = ymd.split("-");
-  return `${Number(day)}-${Number(month)}-${year}`;
+  return formatDisplayYmd(ymd) || ymd;
 }
 
 function carryBlockTitle(from: string, to: string) {
@@ -390,7 +391,7 @@ export function TemimaSettlementClient({
     setMessage("اتحفظ ديبوزت فوري.");
   }
 
-  async function submit(action: "save" | "close-week" | "close-month") {
+  async function submit(action: "save" | "close-week" | "close-month", overrideRows?: SheetRow[]) {
     setLoading(true);
     setMessage("");
     const res = await fetch("/api/cs/settlement/temima", {
@@ -404,7 +405,7 @@ export function TemimaSettlementClient({
               weekStart,
               weekEnd,
               cashPaid,
-              rows: rows.filter((row) => editedIds.current.has(row.confirmationId)),
+              rows: overrideRows || rows.filter((row) => editedIds.current.has(row.confirmationId)),
             },
       ),
     });
@@ -432,20 +433,18 @@ export function TemimaSettlementClient({
       <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/10">
         <label className="text-xs font-bold text-[#14213D]">
           من
-          <input
-            type="date"
+          <DateField
             value={weekStart}
-            onChange={(e) => void load(e.target.value, weekEnd, closeDate)}
-            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+            onChange={(ymd) => void load(ymd, weekEnd, closeDate)}
+            className="mr-2 mt-1"
           />
         </label>
         <label className="text-xs font-bold text-[#14213D]">
           إلى
-          <input
-            type="date"
+          <DateField
             value={weekEnd}
-            onChange={(e) => void load(weekStart, e.target.value, closeDate)}
-            className="mr-2 h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
+            onChange={(ymd) => void load(weekStart, ymd, closeDate)}
+            className="mr-2 mt-1"
           />
         </label>
         <span className="text-xs font-bold text-[#14213D]/70">{status === "closed" ? "الأسبوع مقفل" : fullWeek ? "أسبوع كامل" : "فترة مفتوحة"}</span>
@@ -615,9 +614,15 @@ export function TemimaSettlementClient({
                       </td>
                       <td className="border border-[#14213D]/15 px-2 py-2">
                         <select
-                          disabled={locked}
+                          disabled={locked || Boolean(row.carryLocked)}
                           value={row.disposition}
-                          onChange={(e) => patchRow(row.confirmationId, { disposition: e.target.value as Disposition }, true)}
+                          onChange={(e) => {
+                            const disposition = e.target.value as Disposition;
+                            const carryLocked = row.carried && (disposition === "collect" || disposition === "return");
+                            const next = { ...row, disposition, carryLocked: carryLocked || row.carryLocked };
+                            patchRow(row.confirmationId, { disposition, carryLocked: next.carryLocked }, true);
+                            if (carryLocked && !locked) void submit("save", [next]);
+                          }}
                           className="h-8 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2 text-xs font-bold"
                         >
                           <option value="">لم يسجل</option>
@@ -751,17 +756,12 @@ export function TemimaSettlementClient({
       <div className="space-y-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
         <h2 className="text-lg font-extrabold text-[#14213D]">قفل الشهر</h2>
         <p className="text-xs font-bold text-[#14213D]/70">
-          يجمع الأسابيع المقفلة التي لم تُقفل في شهر حتى التاريخ المختار. الشحن 75 ج، والكبير 100 ج.
+          يجمع الأسابيع المقفلة وشيتات المؤجلات المحصّلة أول بأول حتى التاريخ المختار، وكل شيت مؤجلات مقفول يتتحسب كيوم عادي. الشحن 75 ج، والكبير 100 ج.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm font-bold">
             تاريخ القفل
-            <input
-              type="date"
-              value={closeDate}
-              onChange={(e) => setCloseDate(e.target.value)}
-              className="mt-1 block h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2"
-            />
+            <DateField value={closeDate} onChange={setCloseDate} className="mt-1" />
           </label>
           <label className="text-sm font-bold">
             أجر الشحن المصروف
@@ -795,8 +795,11 @@ export function TemimaSettlementClient({
       {history.length ? (
         <div className="rounded-2xl bg-white p-3 text-xs font-bold text-[#14213D]/80 shadow ring-1 ring-[#14213D]/10">
           {history.map((row) => (
-            <p key={row.weekStart}>
-              {row.weekStart} → {row.weekEnd}: {row.status === "closed" ? "مقفل" : "مفتوح"} · مدفوع {money(row.cashPaid)}{" "}
+            <p key={`${row.weekStart}-${row.carryDay ? "carry" : "week"}`}>
+              {row.carryDay
+                ? `شيت مؤجلات مقفل يوم ${formatDayAr(row.weekStart)}`
+                : `${formatDayAr(row.weekStart)} → ${formatDayAr(row.weekEnd)}`}
+              : {row.status === "closed" ? "مقفل" : "مفتوح"} · مدفوع {money(row.cashPaid)}{" "}
               {row.inMonth ? "· داخل شهر" : ""}
             </p>
           ))}
@@ -850,7 +853,9 @@ export function TemimaSettlementClient({
 
       <div className={`print-only hidden ${printKind === "week" ? "print-target" : ""}`} dir="rtl">
         <h1 className="mb-2 text-center text-lg font-extrabold">
-          {weekStart && weekStart === weekEnd ? formatSayedSheetHeading(weekStart) : `تصفية سيد تميمة من ${weekStart} إلى ${weekEnd}`}
+          {weekStart && weekStart === weekEnd
+            ? formatSayedSheetHeading(weekStart)
+            : `تصفية سيد تميمة من ${formatDayAr(weekStart)} إلى ${formatDayAr(weekEnd)}`}
         </h1>
         <table className="w-full border-collapse text-[11px]">
           <thead>
@@ -932,7 +937,7 @@ export function TemimaSettlementClient({
 
       <div className={`print-only hidden ${printKind === "refusals" ? "print-target" : ""}`} dir="rtl">
         <h1 className="mb-2 text-center text-lg font-extrabold">
-          بيان الأوردرات المرفوضة من {weekStart} إلى {weekEnd}
+          بيان الأوردرات المرفوضة من {formatDayAr(weekStart)} إلى {formatDayAr(weekEnd)}
         </h1>
         <table className="w-full border-collapse text-[11px]">
           <thead>

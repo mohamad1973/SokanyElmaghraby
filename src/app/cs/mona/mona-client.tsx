@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
+import { DateField } from "@/components/date-field";
+import { formatDisplayYmd } from "@/lib/cs/order-window";
+
 type Outcome = "delivered" | "refused" | "postponed";
 
 type OrderCard = {
@@ -93,17 +96,6 @@ function phoneDigits(value: string | null | undefined) {
   return String(value || "").replace(/\D/g, "");
 }
 
-function openDateField(event: { currentTarget: HTMLElement }) {
-  const input = event.currentTarget.querySelector("input[type='date']");
-  if (!(input instanceof HTMLInputElement)) return;
-  input.focus();
-  try {
-    input.showPicker();
-  } catch {
-    // Picker already open, or this browser only opens it from the calendar control.
-  }
-}
-
 function matchesAccountSearch(order: OrderCard, rawQuery: string) {
   const q = rawQuery.trim().toLowerCase();
   if (!q) return true;
@@ -150,17 +142,9 @@ function AccountDateField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div
-      className="cs-date-field flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-[#14213D]/15 bg-[#F5F5F0] px-2"
-      onClick={openDateField}
-    >
+    <div className="flex h-10 items-center gap-1.5 rounded-xl border border-[#14213D]/15 bg-[#F5F5F0] px-2">
       <span className="pointer-events-none shrink-0 text-xs font-extrabold text-[#14213D]/60">{label}</span>
-      <input
-        type="date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-sm font-bold text-[#14213D] outline-none"
-      />
+      <DateField value={value} onChange={onChange} className="h-full min-w-0 flex-1 border-0 bg-transparent px-0" />
     </div>
   );
 }
@@ -178,7 +162,7 @@ function monaDayHeading(ymd: string) {
     weekday: "short",
   }).format(new Date(Date.UTC(year, month - 1, day, 12, 0, 0)));
   const weekday = weekdays[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short)] || "";
-  return `يوم ${weekday} ${day}-${month}`;
+  return `يوم ${weekday} ${formatDisplayYmd(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`) || `${day}-${month}-${year}`}`;
 }
 
 function dayInSpan(day: string, from: string, to: string) {
@@ -1072,12 +1056,11 @@ export function MonaCourierPanel({
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm font-extrabold text-[#14213D]">
             التاريخ
-            <input
-              type="date"
+            <DateField
               value={courierDay}
               max={cairoToday()}
-              onChange={(event) => setCourierDay(event.target.value || cairoToday())}
-              className="mt-1 block h-11 rounded-xl border border-[#E5E5E5] bg-white px-3 text-sm font-bold"
+              onChange={(ymd) => setCourierDay(ymd || cairoToday())}
+              className="mt-1 h-11 rounded-xl bg-white px-3 text-sm"
             />
           </label>
           {courierDay !== cairoToday() ? (

@@ -18,6 +18,7 @@ import {
   sheetCollectedSplit,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
+import { DateField } from "@/components/date-field";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
   formatCutoffClock12,
@@ -236,17 +237,6 @@ type DupMeta = { key: string; count: number; colorClass: string };
 
 const FILTER_CONTROL =
   "h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
-
-function openDateField(event: React.MouseEvent<HTMLDivElement>) {
-  const input = event.currentTarget.querySelector("input[type='date']");
-  if (!(input instanceof HTMLInputElement)) return;
-  input.focus();
-  try {
-    input.showPicker();
-  } catch {
-    // Picker already open, or this browser only opens it from the calendar control.
-  }
-}
 
 function defaultDraft(): DraftFilters {
   return {
@@ -1841,24 +1831,22 @@ export function CsQueueClient({
           {isCourierSupervisor || !temimaDateMode(draft) ? null : (
             <p className={`${FILTER_CONTROL} flex items-center text-[11px] font-extrabold`}>تاريخ الحفظ</p>
           )}
-          <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">من</span>
-            <input
-              type="date"
+            <DateField
               max={dateMaxYmd()}
               value={draft.dateFrom}
-              onChange={(e) => patchDraft({ dateFrom: e.target.value })}
-              className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+              onChange={(ymd) => patchDraft({ dateFrom: ymd })}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-0"
             />
           </div>
-          <div className={`${FILTER_CONTROL} cs-date-field flex cursor-pointer items-center gap-1.5`} onClick={openDateField}>
+          <div className={`${FILTER_CONTROL} flex items-center gap-1.5`}>
             <span className="pointer-events-none shrink-0 text-[#14213D]/60">إلى</span>
-            <input
-              type="date"
+            <DateField
               max={dateMaxYmd()}
               value={draft.dateTo}
-              onChange={(e) => patchDraft({ dateTo: e.target.value })}
-              className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
+              onChange={(ymd) => patchDraft({ dateTo: ymd })}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent px-0"
             />
           </div>
           {isCourierSupervisor ? null : (

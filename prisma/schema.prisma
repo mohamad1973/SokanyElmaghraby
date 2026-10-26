@@ -437,12 +437,14 @@ model CsCarrierWeek {
   closedById     Int?
   closedAt       DateTime?
   monthId        Int?
+  carryKey       Int                 @default(0)
+  sourceWeekId   Int?
   month          CsCarrierMonth?     @relation(fields: [monthId], references: [id], onDelete: SetNull)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   lines          CsCarrierWeekLine[]
 
-  @@unique([carrierCompany, weekStart])
+  @@unique([carrierCompany, weekStart, carryKey], map: "CsCarrierWeek_company_week_carry_key")
   @@index([monthId])
 }
 
