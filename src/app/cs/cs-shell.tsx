@@ -80,6 +80,15 @@ type NotifPayload = {
     stockQuantity: number;
     threshold: number;
   }>;
+  scInbox?: Array<{
+    id: number;
+    kind: string;
+    customerName: string;
+    customerPhone: string;
+    productName: string;
+    centerName: string;
+    statusLabel: string;
+  }>;
   totals: {
     handedToCarrier: number;
     confirmDelivery: number;
@@ -88,6 +97,7 @@ type NotifPayload = {
     pendingDeposits?: number;
     pendingDiscounts?: number;
     pendingItemAdds?: number;
+    scInbox?: number;
     stockAlerts?: number;
     all: number;
   };
@@ -257,9 +267,10 @@ function CsNotificationsBell() {
   const pendingDeposits = data?.pendingDeposits || [];
   const pendingDiscounts = data?.pendingDiscounts || [];
   const pendingItemAdds = data?.pendingItemAdds || [];
+  const scInbox = data?.scInbox || [];
   const alertActive = isCsAdmin
-    ? pendingDeposits.length > 0 || pendingDiscounts.length > 0 || pendingItemAdds.length > 0
-    : depositDecisions.length > 0 || total > 0;
+    ? pendingDeposits.length > 0 || pendingDiscounts.length > 0 || pendingItemAdds.length > 0 || scInbox.length > 0
+    : depositDecisions.length > 0 || total > 0 || scInbox.length > 0;
 
   async function markDepositSeen() {
     if (!depositDecisions.length) return;
@@ -632,6 +643,27 @@ function CsNotificationsBell() {
                     </ul>
                   </div>
                 ) : null}
+                {scInbox.length ? (
+                  <div>
+                    <p className="font-extrabold text-[#14213D]">مراكز الصيانة ({scInbox.length})</p>
+                    <ul className="mt-1 space-y-1.5">
+                      {scInbox.map((row) => (
+                        <li key={`sc-${row.id}`}>
+                          <Link
+                            href={`/cs/centers/desk?ticket=${row.id}`}
+                            className="block rounded-lg bg-[#F8F4EA] px-3 py-2.5 text-right font-bold hover:bg-[#efe6d4]"
+                            onClick={() => setOpen(false)}
+                          >
+                            <span className="block">{row.statusLabel} · {row.customerName}</span>
+                            <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                              {row.centerName} · {row.productName} · <span dir="ltr">{row.customerPhone}</span>
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {data.stockAlerts && data.stockAlerts.length ? (
                   <div>
                     <p className="font-bold text-amber-600">حد الأدنى للمخزون ({data.totals.stockAlerts || 0})</p>
@@ -654,6 +686,27 @@ function CsNotificationsBell() {
               </div>
             ) : (
               <div className="space-y-3">
+                {scInbox.length ? (
+                  <div>
+                    <p className="font-extrabold text-[#14213D]">مراكز الصيانة ({scInbox.length})</p>
+                    <ul className="mt-1 space-y-1.5">
+                      {scInbox.map((row) => (
+                        <li key={`sc-${row.id}`}>
+                          <Link
+                            href={`/cs/centers/desk?ticket=${row.id}`}
+                            className="block rounded-lg bg-[#F8F4EA] px-3 py-2.5 text-right font-bold hover:bg-[#efe6d4]"
+                            onClick={() => setOpen(false)}
+                          >
+                            <span className="block">{row.statusLabel} · {row.customerName}</span>
+                            <span className="mt-0.5 block text-[10px] font-bold text-zinc-600">
+                              {row.centerName} · {row.productName} · <span dir="ltr">{row.customerPhone}</span>
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {depositDecisions.length ? (
                   <div>
                     <p className="font-bold text-emerald-700">قرارات الديبوزت ({depositDecisions.length})</p>
@@ -912,7 +965,7 @@ function CsHeader() {
             </p>
           </div>
           <div className="shrink-0 overflow-visible">
-            {canSeeOrders || isSupervisor ? <CsNotificationsBell /> : null}
+            {canSeeOrders || isSupervisor || isScManager ? <CsNotificationsBell /> : null}
           </div>
         </div>
         <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 text-sm font-bold [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -957,7 +1010,12 @@ function CsHeader() {
             </Link>
           ) : null}
           {canScCenters ? (
-            <Link href="/cs/centers" className={navClass(pathname.startsWith("/cs/centers"))}>
+            <Link href="/cs/centers/desk" className={navClass(pathname.startsWith("/cs/centers/desk"))}>
+              الاستقبال
+            </Link>
+          ) : null}
+          {canScCenters ? (
+            <Link href="/cs/centers" className={navClass(pathname.startsWith("/cs/centers") && !pathname.startsWith("/cs/centers/desk"))}>
               مراكز الصيانة
             </Link>
           ) : null}

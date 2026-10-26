@@ -249,7 +249,7 @@ export function ScCentersClient() {
     return (
       <div className="rounded-2xl bg-white p-6 text-center shadow ring-1 ring-[#14213D]/10" dir="rtl">
         <h1 className="text-xl font-extrabold text-[#14213D]">مراكز الصيانة</h1>
-        <p className="mt-3 text-sm font-bold text-[#14213D]/70">وظيفتك لسه ما عليهاش شاشات. المرتجعات هتتضاف لاحقًا.</p>
+        <p className="mt-3 text-sm font-bold text-[#14213D]/70">وظيفتك لسه ما عليهاش شاشات إدارة. لو الاستقبال متاح لوظيفتك افتح تاب الاستقبال.</p>
       </div>
     );
   }

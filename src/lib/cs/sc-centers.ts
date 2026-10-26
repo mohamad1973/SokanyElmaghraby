@@ -40,14 +40,16 @@ export const SC_PERMISSION_CATALOG = [
   { id: "jobs.manage", label: "إدارة الوظائف", later: false },
   { id: "employees.manage", label: "إدارة الموظفين", later: false },
   { id: "permissions.manage", label: "مصفوفة الصلاحيات", later: false },
-  { id: "returns.inspect", label: "مرتجعات · فحص", later: true },
-  { id: "returns.tech", label: "مرتجعات · فني", later: true },
-  { id: "returns.receive", label: "مرتجعات · استلام", later: true },
+  { id: "returns.inspect", label: "استقبال وتسجيل العميل", later: false },
+  { id: "returns.tech", label: "تقييم فني وعرض الإصلاح", later: false },
+  { id: "returns.receive", label: "استلام المنتج للإصلاح", later: false },
+  { id: "returns.refund", label: "طلب استرجاع / استبدال", later: false },
 ] as const;
 
 export type ScPermissionId = (typeof SC_PERMISSION_CATALOG)[number]["id"];
 
 const MANAGE_KEYS = ["centers.manage", "jobs.manage", "employees.manage", "permissions.manage"] as const;
+const INTAKE_KEYS = ["returns.inspect", "returns.tech", "returns.receive", "returns.refund"] as const;
 
 function parseJsonList(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map((item) => String(item).trim()).filter(Boolean);
@@ -134,6 +136,82 @@ async function createScCenterTables() {
       PRIMARY KEY (\`id\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`ScCustomer\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`phone\` VARCHAR(32) NOT NULL,
+      \`name\` VARCHAR(191) NOT NULL,
+      \`address\` TEXT NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      UNIQUE INDEX \`ScCustomer_phone_key\`(\`phone\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`ScTicket\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`customerId\` INT NOT NULL,
+      \`centerId\` INT NOT NULL,
+      \`agentId\` INT NOT NULL,
+      \`techAgentId\` INT NULL,
+      \`wooProductId\` INT NULL,
+      \`productName\` VARCHAR(191) NOT NULL DEFAULT '',
+      \`productCode\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`purchaseSource\` VARCHAR(32) NOT NULL DEFAULT '',
+      \`purchaseSourceNote\` TEXT NOT NULL,
+      \`purchaseDate\` DATE NULL,
+      \`usageKind\` VARCHAR(16) NOT NULL DEFAULT '',
+      \`visualKind\` VARCHAR(16) NOT NULL DEFAULT '',
+      \`powerCut\` BOOLEAN NOT NULL DEFAULT false,
+      \`defects\` TEXT NOT NULL,
+      \`defectOther\` TEXT NOT NULL,
+      \`techSpecs\` TEXT NOT NULL,
+      \`inWarranty\` BOOLEAN NULL,
+      \`partAvailable\` BOOLEAN NULL,
+      \`chargeType\` VARCHAR(32) NULL,
+      \`cost\` INT NULL,
+      \`durationText\` VARCHAR(191) NOT NULL DEFAULT '',
+      \`techNotes\` TEXT NOT NULL,
+      \`refundKind\` VARCHAR(16) NULL,
+      \`refundReason\` TEXT NOT NULL,
+      \`hqDecision\` VARCHAR(16) NULL,
+      \`hqNote\` TEXT NOT NULL,
+      \`hqDecidedAt\` DATETIME(3) NULL,
+      \`status\` VARCHAR(32) NOT NULL DEFAULT 'intake',
+      \`quotedAt\` DATETIME(3) NULL,
+      \`acceptedAt\` DATETIME(3) NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      INDEX \`ScTicket_customerId_idx\`(\`customerId\`),
+      INDEX \`ScTicket_centerId_idx\`(\`centerId\`),
+      INDEX \`ScTicket_status_idx\`(\`status\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`ScTicketPhoto\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`ticketId\` INT NOT NULL,
+      \`kind\` VARCHAR(16) NOT NULL,
+      \`url\` VARCHAR(255) NOT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`ScTicketPhoto_ticketId_idx\`(\`ticketId\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS \`ScTicketEvent\` (
+      \`id\` INT NOT NULL AUTO_INCREMENT,
+      \`ticketId\` INT NOT NULL,
+      \`kind\` VARCHAR(32) NOT NULL,
+      \`message\` TEXT NOT NULL,
+      \`agentId\` INT NULL,
+      \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX \`ScTicketEvent_ticketId_idx\`(\`ticketId\`),
+      PRIMARY KEY (\`id\`)
+    ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
 }
 
 export type ScAccess = {
@@ -143,7 +221,14 @@ export type ScAccess = {
   canJobs: boolean;
   canEmployees: boolean;
   canPermissions: boolean;
+  canInspect: boolean;
+  canTech: boolean;
+  canReceive: boolean;
+  canRefund: boolean;
+  canDesk: boolean;
   canOpen: boolean;
+  centerId: number | null;
+  centerName: string;
 };
 
 export async function resolveScAccess(agentId: number): Promise<ScAccess> {
@@ -152,18 +237,32 @@ export async function resolveScAccess(agentId: number): Promise<ScAccess> {
   const viewer = await resolveCsViewer(agentId);
   const manager = Boolean(viewer.isAdmin || viewer.isScManager);
   let keys = new Set<string>();
-  if (manager) {
-    for (const key of MANAGE_KEYS) keys.add(key);
-  } else if (viewer.isScStaff) {
-    const prisma = getPrismaClient();
-    if (prisma) {
-      const rows = await prisma.$queryRawUnsafe<Array<{ permissions: string | null }>>(
-        `SELECT j.permissions FROM ScEmployee e LEFT JOIN ScJob j ON j.id = e.jobId WHERE e.agentId = ? LIMIT 1`,
-        agentId,
-      );
-      keys = new Set(cleanPermissions(rows[0]?.permissions));
+  let centerId: number | null = null;
+  let centerName = "";
+  const prisma = getPrismaClient();
+  if (prisma) {
+    const emp = await prisma.$queryRawUnsafe<Array<{ centerId: number; centerName: string | null; permissions: string | null }>>(
+      `SELECT e.centerId, c.name AS centerName, j.permissions
+       FROM ScEmployee e
+       LEFT JOIN ScCenter c ON c.id = e.centerId
+       LEFT JOIN ScJob j ON j.id = e.jobId
+       WHERE e.agentId = ? LIMIT 1`,
+      agentId,
+    );
+    if (emp[0]) {
+      centerId = Number(emp[0].centerId) || null;
+      centerName = emp[0].centerName || "";
+      if (!manager) keys = new Set(cleanPermissions(emp[0].permissions));
     }
   }
+  if (manager) {
+    for (const key of MANAGE_KEYS) keys.add(key);
+    for (const key of INTAKE_KEYS) keys.add(key);
+  }
+  const canInspect = keys.has("returns.inspect");
+  const canTech = keys.has("returns.tech");
+  const canReceive = keys.has("returns.receive");
+  const canRefund = keys.has("returns.refund");
   return {
     isAdmin: Boolean(viewer.isAdmin),
     isManager: manager,
@@ -171,7 +270,14 @@ export async function resolveScAccess(agentId: number): Promise<ScAccess> {
     canJobs: keys.has("jobs.manage"),
     canEmployees: keys.has("employees.manage"),
     canPermissions: keys.has("permissions.manage"),
+    canInspect,
+    canTech,
+    canReceive,
+    canRefund,
+    canDesk: canInspect || canTech || canReceive || canRefund,
     canOpen: manager || viewer.isScStaff || Boolean(viewer.canAccessScCenters),
+    centerId,
+    centerName,
   };
 }
 

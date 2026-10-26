@@ -6,6 +6,7 @@ import { listPendingDiscountApprovals } from "@/lib/cs/discount-approvals";
 import { listPendingOrderItemAdds } from "@/lib/cs/order-item-adds";
 import { getCsNotificationsForAgent } from "@/lib/cs/notifications";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
+import { listScManagerInbox } from "@/lib/cs/sc-intake";
 import { requireCsSession } from "@/lib/session-guards";
 
 export async function GET() {
@@ -19,6 +20,18 @@ export async function GET() {
   const isCsAdmin =
     Boolean(session.user.csIsAdmin) || viewer.role === "admin" || session.user.csRole === "admin";
   const transfersOnly = isTransfersRole(viewer.role) || Boolean(session.user.csIsTransfers);
+  const scInbox =
+    viewer.isScManager || viewer.isAdmin
+      ? (await listScManagerInbox()).map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          customerName: item.customerName,
+          customerPhone: item.customerPhone,
+          productName: item.productName,
+          centerName: item.centerName,
+          statusLabel: item.statusLabel,
+        }))
+      : [];
 
   // Stock threshold is report-only — never surface in the CS notification bell.
   const emptyStock = [] as const;
@@ -38,6 +51,7 @@ export async function GET() {
       pendingDeposits,
       pendingDiscounts,
       pendingItemAdds,
+      scInbox,
       stockAlerts: emptyStock,
       totals: {
         handedToCarrier: 0,
@@ -47,8 +61,9 @@ export async function GET() {
         pendingDeposits: pendingDeposits.length,
         pendingDiscounts: pendingDiscounts.length,
         pendingItemAdds: pendingItemAdds.length,
+        scInbox: scInbox.length,
         stockAlerts: 0,
-        all: pendingDeposits.length + pendingDiscounts.length + pendingItemAdds.length,
+        all: pendingDeposits.length + pendingDiscounts.length + pendingItemAdds.length + scInbox.length,
       },
     });
   }
@@ -60,6 +75,7 @@ export async function GET() {
       followUpDue: [],
       depositDecisions: [],
       pendingDeposits: [],
+      scInbox,
       stockAlerts: emptyStock,
       totals: {
         handedToCarrier: 0,
@@ -67,8 +83,9 @@ export async function GET() {
         followUpDue: 0,
         depositDecisions: 0,
         pendingDeposits: 0,
+        scInbox: scInbox.length,
         stockAlerts: 0,
-        all: 0,
+        all: scInbox.length,
       },
     });
   }
@@ -81,12 +98,14 @@ export async function GET() {
   return NextResponse.json({
     ...data,
     pendingDeposits: [],
+    scInbox,
     stockAlerts: emptyStock,
     totals: {
       ...data.totals,
       pendingDeposits: 0,
+      scInbox: scInbox.length,
       stockAlerts: 0,
-      all: data.totals.all,
+      all: data.totals.all + scInbox.length,
     },
   });
 }

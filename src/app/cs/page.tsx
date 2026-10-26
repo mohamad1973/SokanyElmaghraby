@@ -34,7 +34,10 @@ export default async function CsHomePage() {
   if (!viewer.canSeeOrders && (viewer.isShipping || isShippingRole(session.user.csRole))) {
     redirect("/cs/settlement");
   }
-  if (!viewer.canSeeOrders && (viewer.isScManager || viewer.isScStaff || viewer.canAccessScCenters)) {
+  if (!viewer.canSeeOrders && viewer.isScStaff && !viewer.isScManager && !viewer.isAdmin) {
+    redirect("/cs/centers/desk");
+  }
+  if (!viewer.canSeeOrders && (viewer.isScManager || viewer.canAccessScCenters)) {
     redirect("/cs/centers");
   }
   if (!viewer.canSeeOrders && (viewer.isMaintenance || viewer.isMaintenanceTech)) {

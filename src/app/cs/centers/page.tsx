@@ -14,5 +14,8 @@ export default async function ScCentersPage() {
   const viewer = await resolveCsViewer(session.user.csAgentId);
   const access = await resolveScAccess(session.user.csAgentId);
   if (!access.canOpen && !viewer.isAdmin) redirect("/cs");
+  if (!access.canCenters && !access.canJobs && !access.canEmployees && !access.canPermissions && access.canDesk) {
+    redirect("/cs/centers/desk");
+  }
   return <ScCentersClient />;
 }

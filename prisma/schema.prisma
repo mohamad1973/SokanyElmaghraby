@@ -719,6 +719,82 @@ model ScEmployee {
   @@index([jobId])
 }
 
+model ScCustomer {
+  id        Int        @id @default(autoincrement())
+  phone     String     @unique @db.VarChar(32)
+  name      String     @db.VarChar(191)
+  address   String     @db.Text
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  tickets   ScTicket[]
+}
+
+model ScTicket {
+  id                 Int             @id @default(autoincrement())
+  customerId         Int
+  customer           ScCustomer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  centerId           Int
+  agentId            Int
+  techAgentId        Int?
+  wooProductId       Int?
+  productName        String          @default("") @db.VarChar(191)
+  productCode        String          @default("") @db.VarChar(64)
+  purchaseSource     String          @default("") @db.VarChar(32)
+  purchaseSourceNote String          @db.Text
+  purchaseDate       DateTime?       @db.Date
+  usageKind          String          @default("") @db.VarChar(16)
+  visualKind         String          @default("") @db.VarChar(16)
+  powerCut           Boolean         @default(false)
+  defects            String          @db.Text
+  defectOther        String          @db.Text
+  techSpecs          String          @db.Text
+  inWarranty         Boolean?
+  partAvailable      Boolean?
+  chargeType         String?         @db.VarChar(32)
+  cost               Int?
+  durationText       String          @default("") @db.VarChar(191)
+  techNotes          String          @db.Text
+  refundKind         String?         @db.VarChar(16)
+  refundReason       String          @db.Text
+  hqDecision         String?         @db.VarChar(16)
+  hqNote             String          @db.Text
+  hqDecidedAt        DateTime?
+  status             String          @default("intake") @db.VarChar(32)
+  quotedAt           DateTime?
+  acceptedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  photos             ScTicketPhoto[]
+  events             ScTicketEvent[]
+
+  @@index([customerId])
+  @@index([centerId])
+  @@index([status])
+}
+
+model ScTicketPhoto {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    ScTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  kind      String   @db.VarChar(16)
+  url       String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model ScTicketEvent {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    ScTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  kind      String   @db.VarChar(32)
+  message   String   @db.Text
+  agentId   Int?
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
 model ThemeSettings {
   id        String   @id @db.VarChar(64)
   settings  String   @db.LongText
