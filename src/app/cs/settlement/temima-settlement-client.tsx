@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cairoTodayYmd, cairoYesterdayYmd } from "@/lib/cs/order-window";
+import { cairoTodayYmd } from "@/lib/cs/order-window";
 import { formatSayedSheetHeading } from "@/lib/cs/temima-sheet";
 
 type Disposition = "collect" | "return" | "postpone" | "";
@@ -197,8 +197,8 @@ export function TemimaSettlementClient({
   canEdit: boolean;
   canEditDeposit?: boolean;
 }) {
-  const [weekStart, setWeekStart] = useState(cairoYesterdayYmd);
-  const [weekEnd, setWeekEnd] = useState(cairoTodayYmd);
+  const [weekStart, setWeekStart] = useState("");
+  const [weekEnd, setWeekEnd] = useState("");
   const [fullWeek, setFullWeek] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [rows, setRows] = useState<SheetRow[]>([]);
@@ -262,8 +262,8 @@ export function TemimaSettlementClient({
   }, []);
 
   useEffect(() => {
-    void load(weekStart, weekEnd, closeDate);
-    // First paint uses yesterday→today like the orders date boxes.
+    void load(undefined, undefined, closeDate);
+    // Server picks the open week like 24 Oct; month close date is sent but does not reset the week.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
