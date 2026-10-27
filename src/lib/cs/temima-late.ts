@@ -5,7 +5,6 @@ import { getPrismaClient } from "@/lib/db";
 import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { ensureTemimaFreezeTables } from "@/lib/cs/temima-sheet-freeze";
 
-export const LATE_AFTER_MS = 65 * 60 * 60 * 1000;
 export const LATE_FROM_YMD = "2026-09-27";
 const ID_CHUNK = 400;
 
@@ -83,9 +82,8 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
   if (!prisma) return [];
   await ensureCsTables();
   await ensureTemimaFreezeTables();
-  const cutoff = new Date(now.getTime() - LATE_AFTER_MS);
-  const cutoffYmd = cairoYmdFromIso(cutoff.toISOString());
-  if (!cutoffYmd || cutoffYmd < LATE_FROM_YMD) return [];
+  const todayYmd = cairoTodayYmd();
+  if (todayYmd < LATE_FROM_YMD) return [];
   const pairs = await prisma.$queryRawUnsafe<
     Array<{ dayYmd: string; confirmationId: number | bigint }>
   >(
@@ -96,7 +94,7 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
        AND d.dayYmd <= ?
      ORDER BY d.dayYmd ASC`,
     LATE_FROM_YMD,
-    cutoffYmd,
+    todayYmd,
   );
   if (!pairs.length) return [];
 
@@ -106,7 +104,7 @@ export async function listTemimaLateDeliveries(now = new Date()): Promise<Temima
     const dayYmd = String(row.dayYmd);
     if (!Number.isInteger(id) || id <= 0 || freezeById.has(id) || dayYmd < LATE_FROM_YMD) continue;
     const freezeAt = cairoYmdBounds(dayYmd)?.start ?? null;
-    if (!freezeAt || freezeAt.getTime() > cutoff.getTime()) continue;
+    if (!freezeAt) continue;
     freezeById.set(id, { dayYmd, freezeAt });
   }
   const ids = [...freezeById.keys()];

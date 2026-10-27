@@ -751,7 +751,7 @@ type TemimaAddMatch = {
   status: string;
 };
 
-type PrintMode = "none" | "sheet" | "queue";
+type PrintMode = "none" | "sheet" | "queue" | "late";
 
 function officialActions(disposition: "" | "collect" | "return" | "postpone" | undefined, editing: boolean) {
   const all = ["delivered", "returned", "postponed"] as const;
@@ -1315,6 +1315,18 @@ export function CsQueueClient({
     setMessage(data.message || "اتفتح الشيت.");
   }
 
+  function printLateSheet() {
+    if (printing || lateLoading) return;
+    if (!visibleLateRows.length) {
+      setMessage("مفيش أوردرات متأخرة للطباعة.");
+      return;
+    }
+    setPrinting(true);
+    setPrintingCourierId(null);
+    setSheetPrintRows(null);
+    setPrintMode("late");
+  }
+
   async function printApplied() {
     if (printing) return;
     setPrinting(true);
@@ -1644,7 +1656,16 @@ export function CsQueueClient({
               توزيع
             </Link>
           ) : null}
-          {canPrintQueue ? (
+          {isCourierSupervisor && sheetTab === "late" ? (
+            <button
+              type="button"
+              disabled={printing || lateLoading || visibleLateRows.length === 0}
+              onClick={() => void printLateSheet()}
+              className="shrink-0 rounded-xl bg-black px-3 py-2 text-xs font-extrabold text-white disabled:opacity-60 sm:py-2.5 sm:text-sm"
+            >
+              {printing ? "جاري التحميل" : "طباعة المتأخرة"}
+            </button>
+          ) : canPrintQueue ? (
           <div className="flex shrink-0 items-center gap-2">
             {isCourierSupervisor || temimaDateMode(applied) ? (
               <label className="flex flex-col gap-0.5 text-[11px] font-extrabold text-[#14213D]">
@@ -2551,7 +2572,42 @@ export function CsQueueClient({
       </div>
 
       <div className="print-only hidden" dir="rtl">
-        {printMode === "sheet" || applied.shipping === "sayed_temima" ? (
+        {printMode === "late" ? (
+          <section>
+            <h1 className="mb-2 text-center text-lg font-bold">أوردرات متأخرة في التسليم</h1>
+            <p className="mb-2 text-center text-xs">
+              {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {visibleLateRows.length}
+              {lateDateFilter ? ` · يوم القفل ${formatLateFreezeDay(lateDateFilter)}` : " · كل الأيام المقفولة"}
+            </p>
+            <table className="w-full border-collapse text-[10px]">
+              <thead>
+                <tr>
+                  {["الأوردر", "العميل", "الموبايل", "تاريخ القفل", "العمر", "الحالة"].map((h) => (
+                    <th key={h} className="border border-black px-1 py-1 text-right">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleLateRows.map((row) => (
+                  <tr key={row.confirmationId}>
+                    <td className="border border-black px-1 py-1">#{row.wooOrderNumber}</td>
+                    <td className="border border-black px-1 py-1">{row.customerName || "—"}</td>
+                    <td className="border border-black px-1 py-1" dir="ltr">
+                      {row.phone || "—"}
+                    </td>
+                    <td className="border border-black px-1 py-1" dir="ltr">
+                      {formatLateFreezeDay(row.freezeDay)}
+                    </td>
+                    <td className="border border-black px-1 py-1">{lateSinceFreezeLabel(lateDaysSinceFreezeDay(row.freezeDay))}</td>
+                    <td className="border border-black px-1 py-1">{row.statusLabel}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : printMode === "sheet" || applied.shipping === "sayed_temima" ? (
           Array.from({ length: Math.max(1, printingCourierId ? 1 : printCopyCount) }, (_, copy) => (
           <section key={copy} className={copy + 1 < Math.max(1, printingCourierId ? 1 : printCopyCount) ? "print-copy" : undefined}>
           <h1 className="mb-2 text-center text-lg font-bold">
