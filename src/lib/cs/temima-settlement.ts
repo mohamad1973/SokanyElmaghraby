@@ -988,12 +988,15 @@ export async function applySupervisorOrderResult(input: {
     `SELECT temimaSupervisorResult AS disposition FROM CsOrderConfirmation WHERE id = ${order.id} LIMIT 1`,
   );
   const currentMark = storedDisposition(priorMark[0]?.disposition);
-  if (!input.allowClosed && (currentMark === "collect" || currentMark === "return")) {
-    return { ok: false as const, message: "تم بنجاح والغاء متقفلين. التعديل للمؤجل فقط." };
-  }
-
   const disposition: TemimaDisposition =
     input.result === "returned" ? "return" : input.result === "postponed" ? "postpone" : "collect";
+  if (
+    !input.allowClosed &&
+    (currentMark === "collect" || currentMark === "return") &&
+    disposition === "postpone"
+  ) {
+    return { ok: false as const, message: "تم بنجاح والغاء يتعدلوا لبعض. مؤجل مش متاح من الواجهة." };
+  }
   const convertingPostpone =
     currentMark === "postpone" && (disposition === "collect" || disposition === "return");
 

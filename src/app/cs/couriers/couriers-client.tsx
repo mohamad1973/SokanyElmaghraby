@@ -327,10 +327,12 @@ export function CouriersClient({
               <div className="flex flex-wrap gap-2">
                 {officialActions(order.official, editingStatusId === order.id).map((action) => {
                   const weekClosed = Boolean(order.weekClosed);
+                  const editing = editingStatusId === order.id;
                   const label = action === "delivered" ? "تم بنجاح" : "الغاء";
                   const selectedStatus =
-                    (action === "delivered" && order.official === "collect") ||
-                    (action === "returned" && order.official === "return");
+                    !editing &&
+                    ((action === "delivered" && order.official === "collect") ||
+                      (action === "returned" && order.official === "return"));
                   const tone =
                     action === "delivered"
                       ? selectedStatus
@@ -345,20 +347,12 @@ export function CouriersClient({
                       type="button"
                       onClick={() => {
                         if (weekClosed && !canEditClosedWeek) return;
-                        if (
-                          !canEditClosedWeek &&
-                          (order.official === "collect" || order.official === "return") &&
-                          editingStatusId !== order.id
-                        ) {
-                          return;
-                        }
                         if (editingStatusId !== order.id && currentStatusAction(order.official) === action) return;
                         void post({ action: "result", confirmationId: order.id, outcome: action });
                       }}
                       onDoubleClick={() => {
                         if (!order.official || editingStatusId === order.id) return;
                         if (weekClosed && !canEditClosedWeek) return;
-                        if (!canEditClosedWeek && (order.official === "collect" || order.official === "return")) return;
                         if (!window.confirm("هل تريد التعديل؟")) return;
                         setEditingStatusId(order.id);
                       }}

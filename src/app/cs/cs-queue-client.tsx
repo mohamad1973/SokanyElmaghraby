@@ -1089,8 +1089,6 @@ export function CsQueueClient({
   ) {
     if (editingStatusId === id) return;
     if (weekClosed && !canEditClosedWeek && disposition !== "postpone") return;
-    // Supervisors may only re-edit مؤجل; تم بنجاح / الغاء stay locked (admin override via canEditClosedWeek).
-    if (!canEditClosedWeek && (disposition === "collect" || disposition === "return")) return;
     if (!window.confirm("هل تريد التعديل؟")) return;
     setEditingStatusId(id);
   }
@@ -1102,13 +1100,6 @@ export function CsQueueClient({
     weekClosed: boolean,
   ) {
     if (weekClosed && !canEditClosedWeek && disposition !== "postpone") return;
-    if (
-      !canEditClosedWeek &&
-      (disposition === "collect" || disposition === "return") &&
-      editingStatusId !== id
-    ) {
-      return;
-    }
     if (editingStatusId !== id && currentStatusAction(disposition) === action) return;
     void markSupervisorResult(id, action);
   }
@@ -2278,10 +2269,12 @@ export function CsQueueClient({
                       <div className="mt-1 flex flex-wrap gap-1">
                         {officialActions(item.settlementDisposition, editingStatusId === item.id).map((action) => {
                           const weekClosed = Boolean(item.temimaWeekClosed);
+                          const editing = editingStatusId === item.id;
                           const label = action === "delivered" ? "تم بنجاح" : "الغاء";
                           const selected =
-                            (action === "delivered" && item.settlementDisposition === "collect") ||
-                            (action === "returned" && item.settlementDisposition === "return");
+                            !editing &&
+                            ((action === "delivered" && item.settlementDisposition === "collect") ||
+                              (action === "returned" && item.settlementDisposition === "return"));
                           const tone =
                             action === "delivered"
                               ? selected
