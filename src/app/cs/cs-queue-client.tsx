@@ -754,11 +754,10 @@ type TemimaAddMatch = {
 type PrintMode = "none" | "sheet" | "queue" | "late";
 
 function officialActions(disposition: "" | "collect" | "return" | "postpone" | undefined, editing: boolean) {
-  const all = ["delivered", "returned", "postponed"] as const;
-  if (editing || !disposition) return all;
+  const all = ["delivered", "returned"] as const;
+  if (editing || !disposition || disposition === "postpone") return all;
   if (disposition === "collect") return ["delivered"] as const;
   if (disposition === "return") return ["returned"] as const;
-  if (disposition === "postpone") return ["postponed"] as const;
   return all;
 }
 
@@ -873,7 +872,7 @@ export function CsQueueClient({
   const [queueTotal, setQueueTotal] = useState(initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
-  const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked" | "postpone">("sheet");
+  const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked">("sheet");
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
   const [lateDateFilter, setLateDateFilter] = useState("");
@@ -1021,10 +1020,6 @@ export function CsQueueClient({
     () => baseFiltered.filter((item) => !item.settlementDisposition).length,
     [baseFiltered],
   );
-  const postponeCount = useMemo(
-    () => baseFiltered.filter((item) => item.settlementDisposition === "postpone").length,
-    [baseFiltered],
-  );
 
   const filtered = useMemo(() => {
     const wantDupOnly = Boolean(isSupervisor) && draft.duplicates === "only";
@@ -1040,8 +1035,6 @@ export function CsQueueClient({
     }
     if (isCourierSupervisor && sheetTab === "unmarked") {
       list = list.filter((item) => !item.settlementDisposition);
-    } else if (isCourierSupervisor && sheetTab === "postpone") {
-      list = list.filter((item) => item.settlementDisposition === "postpone");
     }
     return list;
   }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor, isCourierSupervisor, sheetTab]);
@@ -1625,15 +1618,6 @@ export function CsQueueClient({
               </button>
               <button
                 type="button"
-                onClick={() => setSheetTab("postpone")}
-                className={`rounded-xl px-3 py-2 text-xs font-extrabold sm:text-sm ${
-                  sheetTab === "postpone" ? "bg-orange-500 text-black" : "bg-orange-100 text-orange-900"
-                }`}
-              >
-                مؤجل ({postponeCount})
-              </button>
-              <button
-                type="button"
                 onClick={() => {
                   setSheetTab("late");
                   void loadTemimaLate();
@@ -2175,8 +2159,6 @@ export function CsQueueClient({
           <div className="rounded-2xl bg-white px-4 py-10 text-center text-[#14213D]/70">
             {isCourierSupervisor && sheetTab === "unmarked" ? (
               <p className="font-bold">مفيش أوردرات لم تسجل في الفترة دي.</p>
-            ) : isCourierSupervisor && sheetTab === "postpone" ? (
-              <p className="font-bold">مفيش أوردرات مؤجلة في الفترة دي.</p>
             ) : items.length === 0 ? (
               isCourierSupervisor ? (
                 <p className="font-bold">مفيش أوردرات مؤكدة لسيد تميمة في اليوم ده.</p>
@@ -2296,23 +2278,18 @@ export function CsQueueClient({
                       <div className="mt-1 flex flex-wrap gap-1">
                         {officialActions(item.settlementDisposition, editingStatusId === item.id).map((action) => {
                           const weekClosed = Boolean(item.temimaWeekClosed);
-                          const label = action === "delivered" ? "تم بنجاح" : action === "returned" ? "الغاء" : "مؤجل";
+                          const label = action === "delivered" ? "تم بنجاح" : "الغاء";
                           const selected =
                             (action === "delivered" && item.settlementDisposition === "collect") ||
-                            (action === "returned" && item.settlementDisposition === "return") ||
-                            (action === "postponed" && item.settlementDisposition === "postpone");
+                            (action === "returned" && item.settlementDisposition === "return");
                           const tone =
                             action === "delivered"
                               ? selected
                                 ? "bg-emerald-800 text-white ring-2 ring-emerald-300"
                                 : "bg-emerald-700 text-white"
-                              : action === "returned"
-                                ? selected
-                                  ? "bg-red-800 text-white ring-2 ring-red-300"
-                                  : "bg-red-700 text-white"
-                                : selected
-                                  ? "bg-orange-600 text-black ring-2 ring-orange-300"
-                                  : "bg-orange-500 text-black";
+                              : selected
+                                ? "bg-red-800 text-white ring-2 ring-red-300"
+                                : "bg-red-700 text-white";
                           return (
                             <button
                               key={action}

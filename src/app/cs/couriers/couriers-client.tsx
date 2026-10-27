@@ -42,11 +42,10 @@ type SupervisorData = {
 type CourierData = { mode: "courier"; orders: OrderCard[] };
 
 function officialActions(official: OrderCard["official"], editing: boolean) {
-  const all = ["delivered", "returned", "postponed"] as const;
-  if (editing || !official) return all;
+  const all = ["delivered", "returned"] as const;
+  if (editing || !official || official === "postpone") return all;
   if (official === "collect") return ["delivered"] as const;
   if (official === "return") return ["returned"] as const;
-  if (official === "postpone") return ["postponed"] as const;
   return all;
 }
 
@@ -328,23 +327,18 @@ export function CouriersClient({
               <div className="flex flex-wrap gap-2">
                 {officialActions(order.official, editingStatusId === order.id).map((action) => {
                   const weekClosed = Boolean(order.weekClosed);
-                  const label = action === "delivered" ? "تم بنجاح" : action === "returned" ? "الغاء" : "مؤجل";
+                  const label = action === "delivered" ? "تم بنجاح" : "الغاء";
                   const selectedStatus =
                     (action === "delivered" && order.official === "collect") ||
-                    (action === "returned" && order.official === "return") ||
-                    (action === "postponed" && order.official === "postpone");
+                    (action === "returned" && order.official === "return");
                   const tone =
                     action === "delivered"
                       ? selectedStatus
                         ? "bg-emerald-900 text-white ring-2 ring-emerald-300"
                         : "bg-emerald-700 text-white"
-                      : action === "returned"
-                        ? selectedStatus
-                          ? "bg-red-900 text-white ring-2 ring-red-300"
-                          : "bg-red-700 text-white"
-                        : selectedStatus
-                          ? "bg-orange-600 text-black ring-2 ring-orange-300"
-                          : "bg-orange-500 text-black";
+                      : selectedStatus
+                        ? "bg-red-900 text-white ring-2 ring-red-300"
+                        : "bg-red-700 text-white";
                   return (
                     <button
                       key={action}
