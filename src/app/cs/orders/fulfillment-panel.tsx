@@ -30,6 +30,8 @@ type FulfillmentChild = {
 
 type MonaCourierOpt = { id: number; name: string; bucket: "eid" | "momen" | null };
 
+export type FulfillmentPanelParts = "all" | "card" | "waybill";
+
 const inputCls = "w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold text-[#14213D]";
 const compactBtn = "rounded-lg px-2.5 py-1 text-[11px] font-extrabold";
 
@@ -46,6 +48,7 @@ export function CsFulfillmentPanel({
   leadingSlot = null,
   trailingSlot = null,
   showSummary = false,
+  parts = "all",
   onMessage,
   onTrackingChange,
   onWaybillPrinted,
@@ -62,10 +65,13 @@ export function CsFulfillmentPanel({
   leadingSlot?: ReactNode;
   trailingSlot?: ReactNode;
   showSummary?: boolean;
+  parts?: FulfillmentPanelParts;
   onMessage?: (message: string) => void;
   onTrackingChange?: (tracking: string) => void;
   onWaybillPrinted?: () => void;
 }) {
+  const showCard = parts === "all" || parts === "card";
+  const showWaybill = parts === "all" || parts === "waybill";
   const lockedShipping = String(shippingCompany || "").trim() || null;
   const printSokanyAwb = usesSokanyWaybillPrint(lockedShipping, sokanyWaybill);
   const [trackingNumber, setTrackingNumber] = useState(String(initialTracking || snapshot?.trackingNumber || "").trim());
@@ -128,7 +134,7 @@ export function CsFulfillmentPanel({
   }
 
   useEffect(() => {
-    if (!canCreateFulfillment) return;
+    if (!canCreateFulfillment || !showCard) return;
     void fetch(`/api/cs/confirmations/${confirmationId}/fulfillment`)
       .then((res) => res.json())
       .then((data: { items?: FulfillmentChild[]; couriers?: MonaCourierOpt[] }) => {
@@ -136,7 +142,7 @@ export function CsFulfillmentPanel({
         setMonaCouriers(data.couriers || []);
       })
       .catch(() => undefined);
-  }, [canCreateFulfillment, confirmationId]);
+  }, [canCreateFulfillment, confirmationId, showCard]);
 
   useEffect(() => {
     const query = fulfillmentHitTarget === "out" ? fulfillmentOutboundQ : fulfillmentReturnQ;
@@ -427,11 +433,23 @@ export function CsFulfillmentPanel({
           ))}
         </div>
       ) : null}
-      {message && showSummary ? (
+      {message && (showSummary || showCard) ? (
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-bold text-white">{message}</p>
       ) : null}
 
-      {canCreateFulfillment ? (
+      {parts === "card" && !canCreateFulfillment ? (
+        <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
+          <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
+          <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
+            الاسترجاع محتاج أوردر تأكيد تميمة أو عيد أو مؤمن لنفس العميل.
+          </p>
+          <p className="mt-2 text-[10px] font-bold text-[#14213D]/60" dir="ltr">
+            {snapshot?.phone || "—"} · {snapshot?.customerName || "—"}
+          </p>
+        </div>
+      ) : null}
+
+      {showCard && canCreateFulfillment ? (
         <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
           <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
           <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
@@ -647,6 +665,7 @@ export function CsFulfillmentPanel({
         </div>
       ) : null}
 
+      {showWaybill ? (
       <div className="grid shrink-0 grid-cols-1 items-stretch gap-2 sm:grid-cols-3">
         {leadingSlot}
 
@@ -697,8 +716,9 @@ export function CsFulfillmentPanel({
           </button>
         </div>
       </div>
+      ) : null}
 
-      {waybillCreatePrompt ? (
+      {showWaybill && waybillCreatePrompt ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4" dir="rtl">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-[#14213D]/15">
             <p className="text-base font-extrabold text-[#14213D]">مفيش بوليصة على بوسطة</p>

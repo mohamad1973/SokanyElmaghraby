@@ -121,24 +121,18 @@ function shortWhen(value?: string) {
   return text.slice(0, 16).replace("T", " ");
 }
 
-function DeskOrderPane({
-  confirmationId,
-  wooOrderNumber,
-  onMessage,
-}: {
-  confirmationId: number | null;
-  wooOrderNumber: string;
-  onMessage: (text: string) => void;
-}) {
-  const [loaded, setLoaded] = useState<{
-    confirmationId: number;
-    status: string;
-    shippingCompany: string | null;
-    trackingNumber: string | null;
-    waybillPrinted: boolean;
-    sokanyWaybill: boolean;
-    snapshot: FulfillmentSnapshot | null;
-  } | null>(null);
+type DeskOrderLoaded = {
+  confirmationId: number;
+  status: string;
+  shippingCompany: string | null;
+  trackingNumber: string | null;
+  waybillPrinted: boolean;
+  sokanyWaybill: boolean;
+  snapshot: FulfillmentSnapshot | null;
+};
+
+function useDeskOrder(confirmationId: number | null) {
+  const [loaded, setLoaded] = useState<DeskOrderLoaded | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -146,6 +140,7 @@ function DeskOrderPane({
     if (!confirmationId) {
       setLoaded(null);
       setError("");
+      setLoading(false);
       return;
     }
     let cancelled = false;
@@ -193,12 +188,49 @@ function DeskOrderPane({
     };
   }, [confirmationId]);
 
+  return { loaded, error, loading };
+}
+
+function DeskFulfillmentSlot({
+  parts,
+  confirmationId,
+  wooOrderNumber,
+  loaded,
+  loading,
+  error,
+  snapshot,
+  onMessage,
+  showSummary = false,
+}: {
+  parts: "card" | "waybill";
+  confirmationId: number | null;
+  wooOrderNumber: string;
+  loaded: DeskOrderLoaded | null;
+  loading: boolean;
+  error: string;
+  snapshot: FulfillmentSnapshot | null;
+  onMessage: (text: string) => void;
+  showSummary?: boolean;
+}) {
   if (!confirmationId) {
+    if (parts === "card") {
+      return (
+        <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
+          <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
+          <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">الاسترجاع محتاج أوردر تأكيد لنفس العميل.</p>
+          {snapshot?.phone || snapshot?.customerName ? (
+            <p className="mt-2 text-[10px] font-bold text-[#14213D]/60" dir="ltr">
+              {snapshot?.phone || "—"} · {snapshot?.customerName || "—"}
+            </p>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <div className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">
         {wooOrderNumber
-          ? `أوردر #${wooOrderNumber} من غير تأكيد CS. الاستبدال والبوليصة محتاجين أوردر تأكيد.`
-          : "اختَر أوردر تأكيد من شحنات سيد والمندوب عشان الاستبدال وطباعة البوليصة."}
+          ? `أوردر #${wooOrderNumber} من غير تأكيد CS. طباعة البوليصة محتاجة أوردر تأكيد.`
+          : "اختَر أوردر تأكيد من شحنات سيد والمندوب عشان طباعة البوليصة."}
       </div>
     );
   }
@@ -210,15 +242,16 @@ function DeskOrderPane({
   }
   return (
     <CsFulfillmentPanel
-      key={loaded.confirmationId}
+      key={`${loaded.confirmationId}-${parts}`}
       confirmationId={loaded.confirmationId}
-      snapshot={loaded.snapshot}
+      snapshot={snapshot || loaded.snapshot}
       shippingCompany={loaded.shippingCompany}
       sokanyWaybill={loaded.sokanyWaybill}
       confirmed={loaded.status === "CONFIRMED"}
       trackingNumber={loaded.trackingNumber}
       waybillPrinted={loaded.waybillPrinted}
-      showSummary
+      parts={parts}
+      showSummary={showSummary}
       onMessage={onMessage}
     />
   );
@@ -281,6 +314,19 @@ export function ScDeskClient() {
   const [refund, setRefund] = useState({ kind: "return" as "return" | "exchange", reason: "" });
   const [inbox, setInbox] = useState<Ticket[]>([]);
   const [uploading, setUploading] = useState("");
+  const confirmationId = selected?.confirmationId || form.confirmationId || null;
+  const wooOrderNumber = selected?.wooOrderNumber || form.wooOrderNumber || "";
+  const deskOrder = useDeskOrder(confirmationId);
+  const fulfillmentSnapshot: FulfillmentSnapshot | null = deskOrder.loaded
+    ? {
+        ...(deskOrder.loaded.snapshot || {}),
+        customerName: deskOrder.loaded.snapshot?.customerName || form.name || undefined,
+        phone: deskOrder.loaded.snapshot?.phone || form.phone || undefined,
+        address: deskOrder.loaded.snapshot?.address || form.address || undefined,
+      }
+    : form.name || form.phone
+      ? { customerName: form.name, phone: form.phone, address: form.address }
+      : null;
 
   const loadMeta = useCallback(async () => {
     const res = await fetch("/api/cs/centers/intake");
@@ -613,6 +659,17 @@ export function ScDeskClient() {
             </div>
           ) : null}
 
+          <DeskFulfillmentSlot
+            parts="card"
+            confirmationId={confirmationId}
+            wooOrderNumber={wooOrderNumber}
+            loaded={deskOrder.loaded}
+            loading={deskOrder.loading}
+            error={deskOrder.error}
+            snapshot={fulfillmentSnapshot}
+            onMessage={setMessage}
+          />
+
           {selected ? (
             <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
               <h2 className="font-extrabold text-[#14213D]">
@@ -902,10 +959,16 @@ export function ScDeskClient() {
           ) : null}
           </div>
           <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
-            <DeskOrderPane
-              confirmationId={selected?.confirmationId || form.confirmationId || null}
-              wooOrderNumber={selected?.wooOrderNumber || form.wooOrderNumber || ""}
+            <DeskFulfillmentSlot
+              parts="waybill"
+              confirmationId={confirmationId}
+              wooOrderNumber={wooOrderNumber}
+              loaded={deskOrder.loaded}
+              loading={deskOrder.loading}
+              error={deskOrder.error}
+              snapshot={fulfillmentSnapshot}
               onMessage={setMessage}
+              showSummary
             />
           </div>
         </div>
