@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  getCsConfirmation,
   saveCsConfirmation,
   setCsHandedToCarrier,
   setCsInvoiceNumber,
@@ -8,6 +9,8 @@ import {
   resolveCsViewer,
 } from "@/lib/cs/confirmations";
 import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
+import { getCsCarrierByCode } from "@/lib/cs/sokany-waybill";
+import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 import { requireCsSession } from "@/lib/session-guards";
 
 type Context = { params: Promise<{ id: string }> };
@@ -44,6 +47,35 @@ type Body = {
   };
   sheetDayChoice?: "previous" | "today";
 };
+
+export async function GET(_request: Request, context: Context) {
+  const session = await requireCsSession();
+  if (!session?.user.csAgentId) {
+    return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  const { id } = await context.params;
+  const numericId = Number(id);
+  if (!Number.isInteger(numericId)) {
+    return NextResponse.json({ message: "معرف غير صالح." }, { status: 400 });
+  }
+  const confirmation = await getCsConfirmation(numericId);
+  if (!confirmation) {
+    return NextResponse.json({ message: "الأوردر غير موجود." }, { status: 404 });
+  }
+  const carrier = await getCsCarrierByCode(String(confirmation.shippingCompany || ""));
+  const snap = (confirmation.customerSnapshot || null) as Record<string, unknown> | null;
+  const row = confirmation as { trackingNumber?: string | null; waybillPrinted?: boolean | null };
+  return NextResponse.json({
+    ok: true,
+    confirmationId: confirmation.id,
+    status: confirmation.status,
+    shippingCompany: confirmation.shippingCompany,
+    trackingNumber: row.trackingNumber || (typeof snap?.trackingNumber === "string" ? snap.trackingNumber : null),
+    waybillPrinted: Boolean(row.waybillPrinted),
+    sokanyWaybill: usesSokanyWaybillPrint(confirmation.shippingCompany, carrier?.waybillProvider === "sokany"),
+    snapshot: snap,
+  });
+}
 
 export async function PUT(request: Request, context: Context) {
   const session = await requireCsSession();

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { CsFulfillmentPanel, type FulfillmentSnapshot } from "@/app/cs/orders/fulfillment-panel";
+
 type Access = {
   isManager: boolean;
   canInspect: boolean;
@@ -117,6 +119,109 @@ function shortWhen(value?: string) {
     return new Date(parsed).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" });
   }
   return text.slice(0, 16).replace("T", " ");
+}
+
+function DeskOrderPane({
+  confirmationId,
+  wooOrderNumber,
+  onMessage,
+}: {
+  confirmationId: number | null;
+  wooOrderNumber: string;
+  onMessage: (text: string) => void;
+}) {
+  const [loaded, setLoaded] = useState<{
+    confirmationId: number;
+    status: string;
+    shippingCompany: string | null;
+    trackingNumber: string | null;
+    waybillPrinted: boolean;
+    sokanyWaybill: boolean;
+    snapshot: FulfillmentSnapshot | null;
+  } | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!confirmationId) {
+      setLoaded(null);
+      setError("");
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    void fetch(`/api/cs/confirmations/${confirmationId}`)
+      .then(async (res) => {
+        const body = (await res.json()) as {
+          message?: string;
+          confirmationId?: number;
+          status?: string;
+          shippingCompany?: string | null;
+          trackingNumber?: string | null;
+          waybillPrinted?: boolean;
+          sokanyWaybill?: boolean;
+          snapshot?: FulfillmentSnapshot | null;
+        };
+        if (cancelled) return;
+        if (!res.ok || !body.confirmationId) {
+          setLoaded(null);
+          setError(body.message || "تعذر فتح أوردر التأكيد.");
+          return;
+        }
+        setLoaded({
+          confirmationId: body.confirmationId,
+          status: body.status || "",
+          shippingCompany: body.shippingCompany || null,
+          trackingNumber: body.trackingNumber || null,
+          waybillPrinted: Boolean(body.waybillPrinted),
+          sokanyWaybill: Boolean(body.sokanyWaybill),
+          snapshot: body.snapshot || null,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoaded(null);
+          setError("تعذر فتح أوردر التأكيد.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmationId]);
+
+  if (!confirmationId) {
+    return (
+      <div className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">
+        {wooOrderNumber
+          ? `أوردر #${wooOrderNumber} من غير تأكيد CS. الاستبدال والبوليصة محتاجين أوردر تأكيد.`
+          : "اختَر أوردر تأكيد من شحنات سيد والمندوب عشان الاستبدال وطباعة البوليصة."}
+      </div>
+    );
+  }
+  if (loading && !loaded) {
+    return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">جارٍ فتح الأوردر…</p>;
+  }
+  if (error || !loaded) {
+    return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-red-700 shadow ring-1 ring-[#14213D]/10">{error || "تعذر فتح أوردر التأكيد."}</p>;
+  }
+  return (
+    <CsFulfillmentPanel
+      key={loaded.confirmationId}
+      confirmationId={loaded.confirmationId}
+      snapshot={loaded.snapshot}
+      shippingCompany={loaded.shippingCompany}
+      sokanyWaybill={loaded.sokanyWaybill}
+      confirmed={loaded.status === "CONFIRMED"}
+      trackingNumber={loaded.trackingNumber}
+      waybillPrinted={loaded.waybillPrinted}
+      showSummary
+      onMessage={onMessage}
+    />
+  );
 }
 
 function emptyForm() {
@@ -407,7 +512,8 @@ export function ScDeskClient() {
           {!inbox.length ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70">مفيش طلبات معلّقة.</p> : null}
         </div>
       ) : (
-        <>
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="space-y-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
           <form
             className="flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
             onSubmit={(event) => {
@@ -422,7 +528,7 @@ export function ScDeskClient() {
           </form>
 
           {history ? (
-            <div className="grid gap-3 lg:grid-cols-3">
+            <div className="grid gap-3">
               <section className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
                 <h2 className="font-extrabold text-[#14213D]">أوردرات الموقع ({history.siteOrders.length})</h2>
                 {history.siteError ? <p className="text-xs font-bold text-red-700">{history.siteError}</p> : null}
@@ -616,7 +722,8 @@ export function ScDeskClient() {
                 </div>
               ) : null}
 
-              {["return_approved", "exchange_approved"].includes(selected.status) ? (
+              {["return_approved", "exchange_approved"].includes(selected.status) &&
+              !(form.confirmationId || selected.confirmationId) ? (
                 <div className="space-y-2 border-t border-[#14213D]/10 pt-3">
                   <h3 className="text-sm font-extrabold">بوليصة الاسترجاع / الاستبدال</h3>
                   {selected.waybillTracking ? (
@@ -645,6 +752,10 @@ export function ScDeskClient() {
                     </>
                   )}
                 </div>
+              ) : selected.waybillTracking ? (
+                <p className="text-sm font-bold">
+                  {selected.waybillCarrier} · <span dir="ltr">{selected.waybillTracking}</span>
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -789,7 +900,15 @@ export function ScDeskClient() {
               </button>
             </form>
           ) : null}
-        </>
+          </div>
+          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+            <DeskOrderPane
+              confirmationId={selected?.confirmationId || form.confirmationId || null}
+              wooOrderNumber={selected?.wooOrderNumber || form.wooOrderNumber || ""}
+              onMessage={setMessage}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
