@@ -134,7 +134,8 @@ export function CsFulfillmentPanel({
   }
 
   useEffect(() => {
-    if (!canCreateFulfillment || !showCard) return;
+    if (!showCard || !confirmationId) return;
+    if (parts !== "card" && !canCreateFulfillment) return;
     void fetch(`/api/cs/confirmations/${confirmationId}/fulfillment`)
       .then((res) => res.json())
       .then((data: { items?: FulfillmentChild[]; couriers?: MonaCourierOpt[] }) => {
@@ -142,7 +143,7 @@ export function CsFulfillmentPanel({
         setMonaCouriers(data.couriers || []);
       })
       .catch(() => undefined);
-  }, [canCreateFulfillment, confirmationId, showCard]);
+  }, [canCreateFulfillment, confirmationId, parts, showCard]);
 
   useEffect(() => {
     const query = fulfillmentHitTarget === "out" ? fulfillmentOutboundQ : fulfillmentReturnQ;
@@ -178,6 +179,10 @@ export function CsFulfillmentPanel({
   }
 
   async function submitFulfillment() {
+    if (!confirmationId || !canCreateFulfillment) {
+      tell("اختَر أوردر تأكيد تميمة أو عيد أو مؤمن من شحنات سيد والمندوب.");
+      return;
+    }
     setFulfillmentBusy(true);
     tell("");
     const answer = (key: string) => answers.find((row) => row.itemKey === key)?.value || "";
@@ -437,7 +442,7 @@ export function CsFulfillmentPanel({
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-bold text-white">{message}</p>
       ) : null}
 
-      {showCard && canCreateFulfillment ? (
+      {showCard && (parts === "card" || canCreateFulfillment) ? (
         <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
           <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
           <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
