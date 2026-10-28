@@ -1,6 +1,9 @@
 import "server-only";
 
 import { ensureScCenterTables, resolveScAccess, type ScAccess } from "@/lib/cs/sc-centers";
+import { loadScPhoneHistory } from "@/lib/cs/sc-intake-history";
+import { createFulfillmentFromOrder } from "@/lib/cs/fulfillment-return";
+import { listMonaCourierAgents, monaCourierBucketFromName } from "@/lib/cs/mona-courier";
 import { getPrismaClient } from "@/lib/db";
 
 export const SC_PURCHASE_SOURCES = [
@@ -101,6 +104,15 @@ type TicketRow = {
   hqDecision: string | null;
   hqNote: string;
   hqDecidedAt: Date | string | null;
+  complaintNote: string | null;
+  customerRequest: string | null;
+  staffProposal: string | null;
+  managementNote: string | null;
+  confirmationId: number | null;
+  wooOrderNumber: string | null;
+  fulfillmentConfirmationId: number | null;
+  waybillCarrier: string | null;
+  waybillTracking: string | null;
   status: string;
   quotedAt: Date | string | null;
   acceptedAt: Date | string | null;
@@ -178,6 +190,15 @@ function mapTicket(
     hqDecision: row.hqDecision || "",
     hqNote: row.hqNote || "",
     hqDecidedAt: iso(row.hqDecidedAt),
+    complaintNote: row.complaintNote || "",
+    customerRequest: row.customerRequest || "",
+    staffProposal: row.staffProposal || "",
+    managementNote: row.managementNote || "",
+    confirmationId: row.confirmationId == null ? null : Number(row.confirmationId),
+    wooOrderNumber: row.wooOrderNumber || "",
+    fulfillmentConfirmationId: row.fulfillmentConfirmationId == null ? null : Number(row.fulfillmentConfirmationId),
+    waybillCarrier: row.waybillCarrier || "",
+    waybillTracking: row.waybillTracking || "",
     status: row.status,
     statusLabel: SC_TICKET_STATUS[row.status] || row.status,
     quotedAt: iso(row.quotedAt),
@@ -188,6 +209,7 @@ function mapTicket(
     customerAddress: row.customerAddress,
     invoicePhotos: photos.filter((photo) => photo.kind === "invoice"),
     productPhotos: photos.filter((photo) => photo.kind === "product"),
+    complaintPhotos: photos.filter((photo) => photo.kind === "complaint"),
     events,
   };
 }
@@ -196,7 +218,9 @@ const TICKET_SELECT = `
   t.id, t.customerId, t.centerId, t.agentId, t.techAgentId, t.wooProductId, t.productName, t.productCode,
   t.purchaseSource, t.purchaseSourceNote, t.purchaseDate, t.usageKind, t.visualKind, t.powerCut, t.defects,
   t.defectOther, t.techSpecs, t.inWarranty, t.partAvailable, t.chargeType, t.cost, t.durationText, t.techNotes,
-  t.refundKind, t.refundReason, t.hqDecision, t.hqNote, t.hqDecidedAt, t.status, t.quotedAt, t.acceptedAt, t.createdAt,
+  t.refundKind, t.refundReason, t.hqDecision, t.hqNote, t.hqDecidedAt, t.complaintNote, t.customerRequest,
+  t.staffProposal, t.managementNote, t.confirmationId, t.wooOrderNumber, t.fulfillmentConfirmationId,
+  t.waybillCarrier, t.waybillTracking, t.status, t.quotedAt, t.acceptedAt, t.createdAt,
   cu.name AS customerName, cu.phone AS customerPhone, cu.address AS customerAddress,
   c.name AS centerName
 `;
@@ -216,9 +240,10 @@ export async function searchScCustomer(access: ScAccess, phoneQuery: string) {
     tail,
     `%${digits}%`,
   );
+  const history = await loadScPhoneHistory(digits);
   const customer = customers[0];
   if (!customer) {
-    return { ok: true as const, found: false as const, phone: digits };
+    return { ok: true as const, found: false as const, phone: digits, history };
   }
   const centerFilter = access.isManager ? "" : " AND t.centerId = ?";
   const params: Array<string | number> = [Number(customer.id)];
@@ -246,6 +271,7 @@ export async function searchScCustomer(access: ScAccess, phoneQuery: string) {
       address: customer.address,
     },
     tickets: tickets.map((row) => mapTicket(row, photoMap.get(Number(row.id)) || [])),
+    history,
   };
 }
 
@@ -365,6 +391,12 @@ export async function saveScIntake(
     defectOther?: string;
     invoiceUrls?: string[];
     productUrls?: string[];
+    complaintUrls?: string[];
+    complaintNote?: string;
+    customerRequest?: string;
+    staffProposal?: string;
+    confirmationId?: number | null;
+    wooOrderNumber?: string;
   },
 ) {
   if (!access.canInspect) return { ok: false as const, message: "غير مصرح بالاستقبال." };
@@ -377,8 +409,8 @@ export async function saveScIntake(
   if (!center[0]) return { ok: false as const, message: "المركز غير موجود." };
   const productName = input.productName.trim();
   if (productName.length < 2) return { ok: false as const, message: "اختار منتج سوكاني." };
-  if (input.usageKind !== "new" && input.usageKind !== "used") return { ok: false as const, message: "حدد المنتج جديد أو مستخدم." };
-  if (input.visualKind !== "intact" && input.visualKind !== "broken") return { ok: false as const, message: "حدد سليم ظاهريًا أو به كسر." };
+  if (input.usageKind && input.usageKind !== "new" && input.usageKind !== "used") return { ok: false as const, message: "حدد المنتج جديد أو مستخدم." };
+  if (input.visualKind && input.visualKind !== "intact" && input.visualKind !== "broken") return { ok: false as const, message: "حدد سليم ظاهريًا أو به كسر." };
   const sourceOk = SC_PURCHASE_SOURCES.some((row) => row.id === input.purchaseSource);
   if (!sourceOk) return { ok: false as const, message: "حدد من أين اشتري المنتج." };
   const customer = await upsertCustomer({ name: input.name, phone: input.phone, address: input.address });
@@ -386,12 +418,14 @@ export async function saveScIntake(
   const allowedDefects = new Set<string>(SC_DEFECTS.map((row) => row.id));
   const defects = (input.defects || []).filter((id) => allowedDefects.has(id));
   const purchaseDate = input.purchaseDate && /^\d{4}-\d{2}-\d{2}$/.test(input.purchaseDate) ? input.purchaseDate : null;
+  const confirmationId = Number(input.confirmationId);
   await prisma.$executeRawUnsafe(
     `INSERT INTO ScTicket (
       customerId, centerId, agentId, wooProductId, productName, productCode, purchaseSource, purchaseSourceNote,
       purchaseDate, usageKind, visualKind, powerCut, defects, defectOther, techSpecs, durationText, techNotes,
-      refundReason, hqNote, status, createdAt, updatedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', '', '', 'intake', NOW(3), NOW(3))`,
+      refundReason, hqNote, complaintNote, customerRequest, staffProposal, managementNote, confirmationId, wooOrderNumber,
+      waybillCarrier, waybillTracking, status, createdAt, updatedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', '', '', ?, ?, ?, '', ?, ?, '', '', 'intake', NOW(3), NOW(3))`,
     customer.id,
     centerId,
     agentId,
@@ -401,11 +435,16 @@ export async function saveScIntake(
     input.purchaseSource,
     String(input.purchaseSourceNote || "").trim(),
     purchaseDate,
-    input.usageKind,
-    input.visualKind,
+    input.usageKind === "new" || input.usageKind === "used" ? input.usageKind : "",
+    input.visualKind === "intact" || input.visualKind === "broken" ? input.visualKind : "",
     input.powerCut ? 1 : 0,
     JSON.stringify(defects),
     String(input.defectOther || "").trim(),
+    String(input.complaintNote || "").trim(),
+    String(input.customerRequest || "").trim(),
+    String(input.staffProposal || "").trim(),
+    Number.isInteger(confirmationId) && confirmationId > 0 ? confirmationId : null,
+    String(input.wooOrderNumber || "").slice(0, 64),
   );
   const created = await prisma.$queryRawUnsafe<Array<{ id: number }>>(
     `SELECT id FROM ScTicket WHERE customerId = ? AND centerId = ? ORDER BY id DESC LIMIT 1`,
@@ -416,11 +455,15 @@ export async function saveScIntake(
   if (!ticketId) return { ok: false as const, message: "تعذر حفظ الزيارة." };
   const invoices = cleanUrls(input.invoiceUrls);
   const products = cleanUrls(input.productUrls);
+  const complaints = cleanUrls(input.complaintUrls);
   for (const url of invoices) {
     await prisma.$executeRawUnsafe(`INSERT INTO ScTicketPhoto (ticketId, kind, url, createdAt) VALUES (?, 'invoice', ?, NOW(3))`, ticketId, url.slice(0, 255));
   }
   for (const url of products) {
     await prisma.$executeRawUnsafe(`INSERT INTO ScTicketPhoto (ticketId, kind, url, createdAt) VALUES (?, 'product', ?, NOW(3))`, ticketId, url.slice(0, 255));
+  }
+  for (const url of complaints) {
+    await prisma.$executeRawUnsafe(`INSERT INTO ScTicketPhoto (ticketId, kind, url, createdAt) VALUES (?, 'complaint', ?, NOW(3))`, ticketId, url.slice(0, 255));
   }
   await addEvent(ticketId, "intake", `استقبال ${productName}`, agentId);
   return { ok: true as const, id: ticketId, customerId: customer.id };
@@ -536,13 +579,88 @@ export async function decideScRefund(
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   const approved = input.decision === "approved";
   const nextStatus = approved ? (loaded.ticket.refundKind === "exchange" ? "exchange_approved" : "return_approved") : "request_rejected";
+  const note = String(input.note || "").trim();
   await prisma.$executeRawUnsafe(
-    `UPDATE ScTicket SET hqDecision = ?, hqNote = ?, hqDecidedAt = NOW(3), status = ?, updatedAt = NOW(3) WHERE id = ?`,
+    `UPDATE ScTicket SET hqDecision = ?, hqNote = ?, managementNote = ?, hqDecidedAt = NOW(3), status = ?, updatedAt = NOW(3) WHERE id = ?`,
     input.decision,
-    String(input.note || "").trim(),
+    note,
+    note,
     nextStatus,
     input.ticketId,
   );
   await addEvent(input.ticketId, "hq_decision", approved ? "موافقة مدير المراكز" : "رفض مدير المراكز", agentId);
   return { ok: true as const };
+}
+
+export async function createScTicketWaybill(
+  access: ScAccess,
+  agentId: number,
+  input: { ticketId: number; carrier: "bosta" | "sayed_temima" | "eid" | "momen"; monaCourierId?: number | null },
+) {
+  if (!access.canRefund && !access.isManager) return { ok: false as const, message: "غير مصرح بإنشاء البوليصة." };
+  const loaded = await loadScTicket(access, input.ticketId);
+  if (!loaded.ok) return loaded;
+  if (!["return_approved", "exchange_approved"].includes(loaded.ticket.status)) {
+    return { ok: false as const, message: "البوليصة بعد موافقة الاسترجاع أو الاستبدال." };
+  }
+  let confirmationId = Number(loaded.ticket.confirmationId);
+  const prisma = getPrismaClient();
+  if ((!Number.isInteger(confirmationId) || confirmationId <= 0) && loaded.ticket.wooOrderNumber && prisma) {
+    const found = await prisma.csOrderConfirmation.findFirst({
+      where: { wooOrderNumber: loaded.ticket.wooOrderNumber, parentConfirmationId: null },
+      select: { id: true },
+    });
+    confirmationId = Number(found?.id || 0);
+  }
+  if (!Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: false as const, message: "البوليصة محتاجة أوردر من الموقع. شراء التاجر يتعمل استلام حضوري." };
+  }
+  let monaCourierId = input.monaCourierId ?? null;
+  if ((input.carrier === "eid" || input.carrier === "momen") && !monaCourierId) {
+    const agents = await listMonaCourierAgents();
+    const match = agents.find((agent) => monaCourierBucketFromName(agent.name) === input.carrier);
+    if (!match) return { ok: false as const, message: "مفيش مندوب عيد أو مؤمن متاح." };
+    monaCourierId = match.id;
+  }
+  const kind = loaded.ticket.refundKind === "exchange" ? ("exchange" as const) : ("return" as const);
+  const returning = {
+    name: loaded.ticket.productName,
+    productId: loaded.ticket.wooProductId,
+    quantity: 1,
+  };
+  const created = await createFulfillmentFromOrder({
+    parentId: confirmationId,
+    agentId,
+    kind,
+    desk: input.carrier,
+    allowAnyParent: true,
+    monaCourierId,
+    collectAmount: 0,
+    returning,
+    outbound: kind === "exchange" ? returning : null,
+    phone: loaded.ticket.customerPhone,
+    address: loaded.ticket.customerAddress,
+    customerName: loaded.ticket.customerName,
+  });
+  if (!created.ok) return { ok: false as const, message: created.message };
+  if (prisma) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE ScTicket SET fulfillmentConfirmationId = ?, waybillCarrier = ?, waybillTracking = ?, updatedAt = NOW(3) WHERE id = ?`,
+      created.confirmationId,
+      input.carrier,
+      created.trackingNumber || "",
+      input.ticketId,
+    );
+  }
+  await addEvent(input.ticketId, "waybill", `بوليصة ${input.carrier} ${created.trackingNumber || created.confirmationId}`, agentId);
+  return {
+    ok: true as const,
+    confirmationId: created.confirmationId,
+    trackingNumber: created.trackingNumber || "",
+    carrier: input.carrier,
+    printUrl:
+      input.carrier === "bosta"
+        ? `/api/cs/confirmations/${created.confirmationId}/bosta-awb`
+        : `/cs/print/sokany-awb/${created.confirmationId}`,
+  };
 }

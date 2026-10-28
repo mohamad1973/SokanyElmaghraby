@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
+import { ensureCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import { ensureCsSokanyWaybill } from "@/lib/cs/sokany-waybill";
 import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
 import { listMonaCourierAgents, monaCourierBucketFromName } from "@/lib/cs/mona-courier";
@@ -8,6 +9,7 @@ import { getPrismaClient } from "@/lib/db";
 
 export type FulfillmentKind = "return" | "exchange";
 export type FulfillmentDesk = "sayed_temima" | "eid" | "momen";
+export type FulfillmentCarrier = FulfillmentDesk | "bosta";
 export type SettlementDirection = "collect" | "refund" | "none";
 
 export type FulfillmentLine = {
@@ -66,7 +68,7 @@ async function nextSyntheticWoo(parentId: number, seq: number) {
 /** Writes only to the child confirmation id — never the original order. */
 async function restoreDeskOwnership(input: {
   confirmationId: number;
-  desk: FulfillmentDesk;
+  desk: FulfillmentCarrier;
   monaCourierId: number | null;
   assignedAt: Date;
 }) {
@@ -164,7 +166,8 @@ export async function createFulfillmentFromOrder(input: {
   parentId: number;
   agentId: number;
   kind: FulfillmentKind;
-  desk: FulfillmentDesk;
+  desk: FulfillmentCarrier;
+  allowAnyParent?: boolean;
   monaCourierId?: number | null;
   collectAmount?: number | string | null;
   outbound?: FulfillmentLine | null;
@@ -182,8 +185,8 @@ export async function createFulfillmentFromOrder(input: {
   if (input.kind !== "return" && input.kind !== "exchange") {
     return { ok: false as const, message: "نوع غير صالح." };
   }
-  if (input.desk !== "sayed_temima" && input.desk !== "eid" && input.desk !== "momen") {
-    return { ok: false as const, message: "اختَر سيد تميمة أو عيد أو مؤمن." };
+  if (input.desk !== "sayed_temima" && input.desk !== "eid" && input.desk !== "momen" && input.desk !== "bosta") {
+    return { ok: false as const, message: "اختَر بوسطة أو سيد تميمة أو عيد أو مؤمن." };
   }
 
   const parent = await prisma.csOrderConfirmation.findUnique({
@@ -203,7 +206,7 @@ export async function createFulfillmentFromOrder(input: {
   if (parentTyped.parentConfirmationId) {
     return { ok: false as const, message: "لا يمكن عمل استبدال من أوردر استبدال/استرجاع." };
   }
-  if (!parentEligible(parentTyped.shippingCompany, parentTyped.monaCourierId)) {
+  if (!input.allowAnyParent && input.desk !== "bosta" && !parentEligible(parentTyped.shippingCompany, parentTyped.monaCourierId)) {
     return { ok: false as const, message: "الاستبدال/الاسترجاع لتميمة وعيد ومؤمن فقط." };
   }
 
@@ -374,10 +377,24 @@ export async function createFulfillmentFromOrder(input: {
     });
   }
 
-  let waybill: Awaited<ReturnType<typeof ensureCsSokanyWaybill>> | null = null;
+  let trackingNumber = "";
   let waybillCrash: string | null = null;
   try {
-    waybill = await ensureCsSokanyWaybill(created.id);
+    if (input.desk === "bosta") {
+      const bosta = await ensureCsBostaWaybill(created.id, { preserveShippingCompany: true });
+      if (!bosta.ok) {
+        waybillCrash = bosta.message;
+      } else {
+        trackingNumber = String(bosta.state.trackingNumber || "").trim();
+      }
+    } else {
+      const waybill = await ensureCsSokanyWaybill(created.id);
+      if (!waybill.ok) {
+        waybillCrash = waybill.message;
+      } else {
+        trackingNumber = String(waybill.waybill.tracking || "").trim();
+      }
+    }
   } catch (error) {
     waybillCrash = error instanceof Error ? error.message : String(error);
   } finally {
@@ -407,25 +424,13 @@ export async function createFulfillmentFromOrder(input: {
     };
   }
 
-  if (!waybill || !waybill.ok) {
-    return {
-      ok: false as const,
-      message: waybillCrash
-        ? `تعذر إنشاء بوليصة سوكانى: ${waybillCrash.slice(0, 180)}`
-        : !waybill
-          ? "تعذر إنشاء بوليصة سوكانى للطباعة."
-          : `تعذر إنشاء بوليصة سوكانى: ${waybill.message}`,
-      confirmationId: created.id,
-      wooOrderNumber,
-      kind: input.kind,
-      desk: input.desk,
-    };
-  }
-  const trackingNumber = String(waybill.waybill.tracking || "").trim();
+  const billName = input.desk === "bosta" ? "بوسطة" : "سوكانى";
   if (!trackingNumber) {
     return {
       ok: false as const,
-      message: "تعذر إنشاء بوليصة سوكانى للطباعة.",
+      message: waybillCrash
+        ? `تعذر إنشاء بوليصة ${billName}: ${waybillCrash.slice(0, 180)}`
+        : `تعذر إنشاء بوليصة ${billName} للطباعة.`,
       confirmationId: created.id,
       wooOrderNumber,
       kind: input.kind,

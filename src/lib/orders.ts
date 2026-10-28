@@ -305,6 +305,39 @@ export async function getAdminOrders(query: OrdersQuery = {}): Promise<AdminOrde
   };
 }
 
+export async function listWooOrdersByPhone(phone: string) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  const tail = digits.slice(-10);
+  if (tail.length < 10) return { orders: [] as AdminOrder[] };
+  const local = digits.length === 11 && digits.startsWith("01") ? digits : `0${tail}`;
+  const merged = new Map<number, AdminOrder>();
+  const remember = (orders: AdminOrder[], requirePhone: boolean) => {
+    for (const order of orders) {
+      const orderTail = String(order.phone || "").replace(/\D/g, "").slice(-10);
+      if (requirePhone && orderTail !== tail) continue;
+      if (orderTail && orderTail !== tail) continue;
+      merged.set(order.id, order);
+    }
+  };
+  const searched = await getAdminOrders({ search: local, perPage: "30" });
+  remember(searched.orders, true);
+  const customers = await wooOrdersFetch<Array<{ id: number }>>(`customers?search=${encodeURIComponent(local)}&per_page=20`);
+  if (customers.ok) {
+    for (const customer of customers.data.slice(0, 5)) {
+      const more = await wooOrdersFetch<WooOrder[]>(`orders?customer=${customer.id}&per_page=50&orderby=date&order=desc`);
+      if (!more.ok) continue;
+      remember(
+        more.data.map((row) => mapOrder(row)),
+        false,
+      );
+    }
+  }
+  return {
+    orders: [...merged.values()].sort((a, b) => Date.parse(b.dateCreated) - Date.parse(a.dateCreated)).slice(0, 40),
+    error: searched.error,
+  };
+}
+
 export async function getAdminOrder(id: string) {
   const order = await wooOrdersFetch<WooOrder>(`orders/${id}`);
 

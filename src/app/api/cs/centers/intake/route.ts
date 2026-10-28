@@ -14,6 +14,7 @@ import {
   saveScIntake,
   saveScQuote,
   searchScCustomer,
+  createScTicketWaybill,
 } from "@/lib/cs/sc-intake";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -84,6 +85,14 @@ export async function POST(request: Request) {
     defectOther?: string;
     invoiceUrls?: string[];
     productUrls?: string[];
+    complaintUrls?: string[];
+    complaintNote?: string;
+    customerRequest?: string;
+    staffProposal?: string;
+    confirmationId?: number | null;
+    wooOrderNumber?: string;
+    carrier?: "bosta" | "sayed_temima" | "eid" | "momen";
+    monaCourierId?: number | null;
     techSpecs?: string;
     inWarranty?: boolean;
     partAvailable?: boolean;
@@ -122,6 +131,12 @@ export async function POST(request: Request) {
       defectOther: body.defectOther,
       invoiceUrls: body.invoiceUrls,
       productUrls: body.productUrls,
+      complaintUrls: body.complaintUrls,
+      complaintNote: body.complaintNote,
+      customerRequest: body.customerRequest,
+      staffProposal: body.staffProposal,
+      confirmationId: body.confirmationId,
+      wooOrderNumber: body.wooOrderNumber,
     });
     if (!saved.ok) return NextResponse.json({ message: saved.message }, { status: 400 });
     return NextResponse.json({ ok: true, id: saved.id });
@@ -172,6 +187,21 @@ export async function POST(request: Request) {
     });
     if (!saved.ok) return NextResponse.json({ message: saved.message }, { status: 400 });
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === "waybill") {
+    const carrier =
+      body.carrier === "bosta" || body.carrier === "sayed_temima" || body.carrier === "eid" || body.carrier === "momen"
+        ? body.carrier
+        : null;
+    if (!carrier) return NextResponse.json({ message: "اختار شركة الشحن." }, { status: 400 });
+    const saved = await createScTicketWaybill(ctx.access, ctx.agentId, {
+      ticketId: Number(body.ticketId),
+      carrier,
+      monaCourierId: body.monaCourierId,
+    });
+    if (!saved.ok) return NextResponse.json({ message: saved.message }, { status: 400 });
+    return NextResponse.json(saved);
   }
 
   return NextResponse.json({ message: "طلب ناقص." }, { status: 400 });

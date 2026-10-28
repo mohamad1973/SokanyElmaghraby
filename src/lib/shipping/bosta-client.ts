@@ -300,6 +300,48 @@ export async function findBostaDeliveryByCustomer(input: {
   };
 }
 
+export async function listBostaDeliveriesByPhone(phone: string) {
+  const phoneKey = bostaPhoneKey(phone);
+  if (phoneKey.length < 10) return { shipments: [] as Array<ReturnType<typeof readBostaLiveDetails> & { businessReference: string }>, error: "رقم الموبايل غير مكتمل." };
+  const variants = [`0${phoneKey}`, phoneKey, `20${phoneKey}`, `+20${phoneKey}`];
+  const found: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const searched = await bostaFetch("/deliveries/search", {
+    method: "POST",
+    body: JSON.stringify({
+      mobilePhones: variants,
+      phones: variants,
+      phone: variants[0],
+      mobilePhone: variants[0],
+      receiverPhone: variants[0],
+      pageNumber: 0,
+      pageLimit: 50,
+      limit: 50,
+    }),
+  });
+  if (!searched.ok) return { shipments: [], error: searched.message };
+  for (const row of deliveryRecords(searched.data)) {
+    if (!rowHasPhone(row, phoneKey)) continue;
+    const key = rowTracking(row) || JSON.stringify(row).slice(0, 120);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push(row);
+  }
+  const shipments = found.slice(0, 30).map((row) => {
+    const details = readBostaLiveDetails(row);
+    return {
+      trackingNumber: details.trackingNumber || rowTracking(row) || "",
+      status: details.status || "",
+      statusLabel: getBostaStatusLabelAr(details.status || ""),
+      lastEvent: details.lastEvent || "",
+      placeLabel: details.placeLabel || "",
+      cod: details.cod,
+      businessReference: rowBusinessReference(row),
+    };
+  }).filter((row) => row.trackingNumber);
+  return { shipments, error: shipments.length ? undefined : "مفيش شحنات بوسطة على الرقم ده." };
+}
+
 function rowBusinessReference(row: Record<string, unknown>) {
   const nested = asRecord(row.delivery) || asRecord(row.shipment) || {};
   return String(

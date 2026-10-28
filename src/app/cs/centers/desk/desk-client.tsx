@@ -41,6 +41,15 @@ type Ticket = {
   refundReason: string;
   hqDecision: string;
   hqNote: string;
+  complaintNote: string;
+  customerRequest: string;
+  staffProposal: string;
+  managementNote: string;
+  confirmationId: number | null;
+  wooOrderNumber: string;
+  fulfillmentConfirmationId: number | null;
+  waybillCarrier: string;
+  waybillTracking: string;
   status: string;
   statusLabel: string;
   createdAt: string | null;
@@ -49,7 +58,38 @@ type Ticket = {
   customerAddress: string;
   invoicePhotos: Photo[];
   productPhotos: Photo[];
+  complaintPhotos?: Photo[];
   events?: Array<{ id: number; kind: string; message: string; createdAt: string | null }>;
+};
+
+type HistoryOrder = {
+  wooOrderId?: number;
+  wooOrderNumber: string;
+  confirmationId?: number | null;
+  dateCreated: string;
+  statusLabel: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  total: string;
+  items: Array<{ name: string; quantity: number; total: string; productId?: number }>;
+  shippingLabel?: string;
+  trackingNumber?: string;
+};
+
+type History = {
+  siteOrders: HistoryOrder[];
+  csOrders: HistoryOrder[];
+  bostaShipments: Array<{
+    trackingNumber: string;
+    statusLabel: string;
+    lastEvent: string;
+    placeLabel: string;
+    cod: number | null;
+    businessReference: string;
+  }>;
+  siteError: string;
+  bostaError: string;
 };
 
 type Customer = { id: number; phone: string; name: string; address: string };
@@ -83,6 +123,12 @@ function emptyForm() {
     defectOther: "",
     invoiceUrls: [] as string[],
     productUrls: [] as string[],
+    complaintUrls: [] as string[],
+    complaintNote: "",
+    customerRequest: "",
+    staffProposal: "",
+    confirmationId: null as number | null,
+    wooOrderNumber: "",
   };
 }
 
@@ -98,6 +144,8 @@ export function ScDeskClient() {
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [history, setHistory] = useState<History | null>(null);
+  const [carrier, setCarrier] = useState<"bosta" | "sayed_temima" | "eid" | "momen">("bosta");
   const [form, setForm] = useState(emptyForm());
   const [hits, setHits] = useState<Array<{ id: number; name: string; displayCode: string; sku: string }>>([]);
   const [selected, setSelected] = useState<Ticket | null>(null);
@@ -175,6 +223,7 @@ export function ScDeskClient() {
       customer?: Customer;
       tickets?: Ticket[];
       access?: Access;
+      history?: History;
     };
     setLoading(false);
     if (!res.ok) {
@@ -182,6 +231,7 @@ export function ScDeskClient() {
       return;
     }
     if (data.access) setAccess(data.access);
+    setHistory(data.history || null);
     if (data.found && data.customer) {
       setCustomer(data.customer);
       setTickets(data.tickets || []);
@@ -218,7 +268,24 @@ export function ScDeskClient() {
     return () => window.clearTimeout(timer);
   }, [form.productName, form.wooProductId]);
 
-  async function upload(kind: "invoice" | "product", file: File) {
+  function pickOrder(row: HistoryOrder) {
+    const first = row.items[0];
+    setForm((prev) => ({
+      ...prev,
+      confirmationId: row.confirmationId || prev.confirmationId,
+      wooOrderNumber: row.wooOrderNumber,
+      purchaseSource: "online",
+      purchaseDate: String(row.dateCreated || "").slice(0, 10),
+      name: row.customerName || prev.name,
+      phone: row.phone || prev.phone,
+      address: row.address || prev.address,
+      productName: first?.name || prev.productName,
+      wooProductId: first?.productId || prev.wooProductId,
+    }));
+    setMessage(`اتربط التكت بأوردر #${row.wooOrderNumber}`);
+  }
+
+  async function upload(kind: "invoice" | "product" | "complaint", file: File) {
     setUploading(kind);
     const body = new FormData();
     body.set("file", file);
@@ -231,7 +298,11 @@ export function ScDeskClient() {
       return;
     }
     setForm((prev) =>
-      kind === "invoice" ? { ...prev, invoiceUrls: [...prev.invoiceUrls, data.url!] } : { ...prev, productUrls: [...prev.productUrls, data.url!] },
+      kind === "invoice"
+        ? { ...prev, invoiceUrls: [...prev.invoiceUrls, data.url!] }
+        : kind === "complaint"
+          ? { ...prev, complaintUrls: [...prev.complaintUrls, data.url!] }
+          : { ...prev, productUrls: [...prev.productUrls, data.url!] },
     );
   }
 
@@ -243,13 +314,14 @@ export function ScDeskClient() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const data = (await res.json()) as { message?: string; id?: number };
+    const data = (await res.json()) as { message?: string; id?: number; printUrl?: string; trackingNumber?: string };
     setLoading(false);
     if (!res.ok) {
       setMessage(data.message || "تعذر الحفظ.");
       return false;
     }
-    setMessage(okText);
+    setMessage(data.trackingNumber ? `${okText} · تتبع ${data.trackingNumber}` : okText);
+    if (data.printUrl) window.open(data.printUrl, "_blank", "noopener,noreferrer");
     if (data.id) await openTicket(data.id);
     else if (selected) await openTicket(selected.id);
     if (form.phone) {
@@ -282,7 +354,7 @@ export function ScDeskClient() {
       <div>
         <h1 className="text-2xl font-extrabold text-[#14213D]">استقبال المركز</h1>
         <p className="text-sm font-bold text-[#14213D]/70">
-          {access?.centerName ? `فرع ${access.centerName}` : "بحث بالهاتف ثم تسجيل المنتج والمعاينة."}
+          {access?.centerName ? `فرع ${access.centerName}` : "بحث بالموبايل: أوردرات الموقع والشحنات ثم تسجيل الشكوى."}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -331,6 +403,65 @@ export function ScDeskClient() {
             </button>
           </form>
 
+          {history ? (
+            <div className="grid gap-3 lg:grid-cols-3">
+              <section className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+                <h2 className="font-extrabold text-[#14213D]">أوردرات الموقع ({history.siteOrders.length})</h2>
+                {history.siteError ? <p className="text-xs font-bold text-red-700">{history.siteError}</p> : null}
+                <div className="mt-2 space-y-2">
+                  {history.siteOrders.map((row) => (
+                    <button
+                      key={`woo-${row.wooOrderNumber}`}
+                      type="button"
+                      onClick={() => pickOrder(row)}
+                      className={`block w-full rounded-xl px-3 py-2 text-right text-xs font-bold ${form.wooOrderNumber === row.wooOrderNumber ? "bg-[#14213D] text-white" : "bg-[#F5F5F0]"}`}
+                    >
+                      #{row.wooOrderNumber} · {row.statusLabel} · {row.total} ج.م
+                      <span className="block text-[11px] opacity-80">{String(row.dateCreated || "").slice(0, 10)}</span>
+                      {row.items.map((item) => (
+                        <span key={`${item.name}-${item.quantity}`} className="block opacity-90">
+                          {item.name} × {item.quantity}
+                        </span>
+                      ))}
+                    </button>
+                  ))}
+                  {!history.siteOrders.length ? <p className="text-xs font-bold text-[#14213D]/70">مفيش أوردرات على الموقع بالرقم ده.</p> : null}
+                </div>
+              </section>
+              <section className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+                <h2 className="font-extrabold text-[#14213D]">شحنات سيد والمندوب ({history.csOrders.length})</h2>
+                <div className="mt-2 space-y-2">
+                  {history.csOrders.map((row) => (
+                    <button
+                      key={`cs-${row.confirmationId || row.wooOrderNumber}`}
+                      type="button"
+                      onClick={() => pickOrder(row)}
+                      className={`block w-full rounded-xl px-3 py-2 text-right text-xs font-bold ${form.confirmationId && form.confirmationId === row.confirmationId ? "bg-[#14213D] text-white" : "bg-[#F5F5F0]"}`}
+                    >
+                      #{row.wooOrderNumber} · {row.shippingLabel || ""} · {row.statusLabel}
+                      {row.trackingNumber ? <span className="block" dir="ltr">{row.trackingNumber}</span> : null}
+                      {row.total ? <span className="block">{row.total} ج.م</span> : null}
+                    </button>
+                  ))}
+                  {!history.csOrders.length ? <p className="text-xs font-bold text-[#14213D]/70">مفيش أوردرات تأكيد بنفس الرقم.</p> : null}
+                </div>
+              </section>
+              <section className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+                <h2 className="font-extrabold text-[#14213D]">شحنات بوسطة ({history.bostaShipments.length})</h2>
+                {history.bostaError ? <p className="text-xs font-bold text-[#14213D]/70">{history.bostaError}</p> : null}
+                <div className="mt-2 space-y-2">
+                  {history.bostaShipments.map((row) => (
+                    <div key={row.trackingNumber} className="rounded-xl bg-[#F5F5F0] px-3 py-2 text-xs font-bold">
+                      <p dir="ltr">{row.trackingNumber}</p>
+                      <p>{row.statusLabel || "بدون حالة"}</p>
+                      {row.lastEvent ? <p className="text-[#14213D]/70">{row.lastEvent}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
           {customer ? (
             <div className="rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
               <p className="font-extrabold text-[#14213D]">{customer.name}</p>
@@ -361,13 +492,20 @@ export function ScDeskClient() {
                 {selected.productName} · {selected.statusLabel}
               </h2>
               <p className="text-xs font-bold text-[#14213D]/70">
-                {selected.usageKind === "new" ? "جديد" : "مستخدم"} · {selected.visualKind === "broken" ? "به كسر" : "سليم ظاهريًا"}
+                {selected.usageKind === "new" ? "جديد" : selected.usageKind === "used" ? "مستخدم" : "بدون معاينة"} · {selected.visualKind === "broken" ? "به كسر" : selected.visualKind === "intact" ? "سليم ظاهريًا" : ""}
                 {selected.powerCut ? " · فاصل باور" : ""}
                 {selected.defects.map((id) => ` · ${DEFECT_LABEL[id] || id}`).join("")}
                 {selected.defectOther ? ` · ${selected.defectOther}` : ""}
               </p>
+              {selected.wooOrderNumber ? (
+                <p className="text-xs font-bold text-[#14213D]/70">أوردر مربوط #{selected.wooOrderNumber}</p>
+              ) : null}
+              {selected.complaintNote ? <p className="text-sm font-bold">الشكوى: {selected.complaintNote}</p> : null}
+              {selected.customerRequest ? <p className="text-sm font-bold">طلب العميل: {selected.customerRequest}</p> : null}
+              {selected.staffProposal ? <p className="text-sm font-bold">اقتراح الموظف: {selected.staffProposal}</p> : null}
+              {selected.managementNote ? <p className="text-sm font-bold">قرار الإدارة: {selected.managementNote}</p> : null}
               <div className="flex flex-wrap gap-2">
-                {[...selected.invoicePhotos, ...selected.productPhotos].map((photo) => (
+                {[...selected.invoicePhotos, ...selected.productPhotos, ...(selected.complaintPhotos || [])].map((photo) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img key={photo.id} src={photo.url} alt="" className="h-16 w-16 rounded-lg object-cover" />
                 ))}
@@ -444,13 +582,47 @@ export function ScDeskClient() {
               ) : null}
 
               {access?.isManager && ["return_pending", "exchange_pending"].includes(selected.status) ? (
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={loading} className="h-10 rounded-xl bg-emerald-700 px-4 text-sm font-extrabold text-white" onClick={() => void post({ action: "decide", ticketId: selected.id, decision: "approved", note: refund.reason }, "تمت الموافقة.")}>
-                    موافقة
-                  </button>
-                  <button type="button" disabled={loading} className="h-10 rounded-xl bg-red-700 px-4 text-sm font-extrabold text-white" onClick={() => void post({ action: "decide", ticketId: selected.id, decision: "rejected", note: refund.reason }, "تم الرفض.")}>
-                    رفض
-                  </button>
+                <div className="space-y-2">
+                  <textarea className={`${FIELD} h-16 py-2`} placeholder="قرار الإدارة الاستثنائي" value={refund.reason} onChange={(e) => setRefund({ ...refund, reason: e.target.value })} />
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={loading} className="h-10 rounded-xl bg-emerald-700 px-4 text-sm font-extrabold text-white" onClick={() => void post({ action: "decide", ticketId: selected.id, decision: "approved", note: refund.reason }, "تمت الموافقة.")}>
+                      موافقة
+                    </button>
+                    <button type="button" disabled={loading} className="h-10 rounded-xl bg-red-700 px-4 text-sm font-extrabold text-white" onClick={() => void post({ action: "decide", ticketId: selected.id, decision: "rejected", note: refund.reason }, "تم الرفض.")}>
+                      رفض
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {["return_approved", "exchange_approved"].includes(selected.status) ? (
+                <div className="space-y-2 border-t border-[#14213D]/10 pt-3">
+                  <h3 className="text-sm font-extrabold">بوليصة الاسترجاع / الاستبدال</h3>
+                  {selected.waybillTracking ? (
+                    <p className="text-sm font-bold">
+                      {selected.waybillCarrier} · <span dir="ltr">{selected.waybillTracking}</span>
+                    </p>
+                  ) : null}
+                  {!selected.confirmationId && !selected.wooOrderNumber ? (
+                    <p className="text-xs font-bold text-red-700">البوليصة محتاجة أوردر من الموقع. شراء التاجر يتعمل استلام حضوري.</p>
+                  ) : (
+                    <>
+                      <select className={FIELD} value={carrier} onChange={(e) => setCarrier(e.target.value as typeof carrier)}>
+                        <option value="bosta">بوسطة</option>
+                        <option value="sayed_temima">سيد تميمة</option>
+                        <option value="eid">عيد</option>
+                        <option value="momen">مؤمن</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        className="h-10 rounded-xl bg-[#FCA311] px-4 text-sm font-extrabold text-black disabled:opacity-60"
+                        onClick={() => void post({ action: "waybill", ticketId: selected.id, carrier }, "تم إنشاء البوليصة.")}
+                      >
+                        إنشاء البوليصة
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -472,7 +644,10 @@ export function ScDeskClient() {
                 if (ok) setForm((prev) => ({ ...emptyForm(), name: prev.name, phone: prev.phone, address: prev.address, centerId: prev.centerId }));
               }}
             >
-              <h2 className="font-extrabold text-[#14213D]">زيارة جديدة</h2>
+              <h2 className="font-extrabold text-[#14213D]">تكت استقبال جديد</h2>
+              {form.wooOrderNumber ? (
+                <p className="text-xs font-bold text-emerald-800">مربوط بأوردر #{form.wooOrderNumber}{form.confirmationId ? ` · تأكيد ${form.confirmationId}` : ""}</p>
+              ) : null}
               <input className={FIELD} placeholder="اسم العميل" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               <input className={FIELD} dir="ltr" placeholder="رقم الموبايل" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               <textarea className={`${FIELD} h-16 py-2`} placeholder="العنوان" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
@@ -566,6 +741,9 @@ export function ScDeskClient() {
                 ))}
               </div>
               <input className={FIELD} placeholder="عيب صناعة آخر" value={form.defectOther} onChange={(e) => setForm({ ...form, defectOther: e.target.value })} />
+              <textarea className={`${FIELD} h-20 py-2`} placeholder="شكوى العميل" value={form.complaintNote} onChange={(e) => setForm({ ...form, complaintNote: e.target.value })} />
+              <textarea className={`${FIELD} h-16 py-2`} placeholder="طلب العميل" value={form.customerRequest} onChange={(e) => setForm({ ...form, customerRequest: e.target.value })} />
+              <textarea className={`${FIELD} h-16 py-2`} placeholder="اقتراح موظف الاستقبال لحل المشكلة" value={form.staffProposal} onChange={(e) => setForm({ ...form, staffProposal: e.target.value })} />
               <label className="block text-xs font-bold">
                 صورة الفاتورة
                 <input type="file" accept="image/*" capture="environment" className="mt-1 block w-full text-xs" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload("invoice", file); }} />
@@ -574,9 +752,13 @@ export function ScDeskClient() {
                 صور المنتج
                 <input type="file" accept="image/*" capture="environment" className="mt-1 block w-full text-xs" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload("product", file); }} />
               </label>
+              <label className="block text-xs font-bold">
+                صور الشكوى (من واتساب أو الموبايل)
+                <input type="file" accept="image/*" className="mt-1 block w-full text-xs" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload("complaint", file); }} />
+              </label>
               {uploading ? <p className="text-xs font-bold">جاري رفع الصورة...</p> : null}
               <div className="flex flex-wrap gap-2">
-                {form.invoiceUrls.concat(form.productUrls).map((url) => (
+                {form.invoiceUrls.concat(form.productUrls, form.complaintUrls).map((url) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img key={url} src={url} alt="" className="h-14 w-14 rounded-lg object-cover" />
                 ))}

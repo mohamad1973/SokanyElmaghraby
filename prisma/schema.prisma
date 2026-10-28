@@ -759,6 +759,15 @@ model ScTicket {
   hqDecision         String?         @db.VarChar(16)
   hqNote             String          @db.Text
   hqDecidedAt        DateTime?
+  complaintNote      String          @db.Text
+  customerRequest    String          @db.Text
+  staffProposal      String          @db.Text
+  managementNote     String          @db.Text
+  confirmationId     Int?
+  wooOrderNumber     String          @default("") @db.VarChar(64)
+  fulfillmentConfirmationId Int?
+  waybillCarrier     String          @default("") @db.VarChar(64)
+  waybillTracking    String          @default("") @db.VarChar(191)
   status             String          @default("intake") @db.VarChar(32)
   quotedAt           DateTime?
   acceptedAt         DateTime?

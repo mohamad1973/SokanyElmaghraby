@@ -178,6 +178,15 @@ async function createScCenterTables() {
       \`hqDecision\` VARCHAR(16) NULL,
       \`hqNote\` TEXT NOT NULL,
       \`hqDecidedAt\` DATETIME(3) NULL,
+      \`complaintNote\` TEXT NULL,
+      \`customerRequest\` TEXT NULL,
+      \`staffProposal\` TEXT NULL,
+      \`managementNote\` TEXT NULL,
+      \`confirmationId\` INT NULL,
+      \`wooOrderNumber\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`fulfillmentConfirmationId\` INT NULL,
+      \`waybillCarrier\` VARCHAR(64) NOT NULL DEFAULT '',
+      \`waybillTracking\` VARCHAR(191) NOT NULL DEFAULT '',
       \`status\` VARCHAR(32) NOT NULL DEFAULT 'intake',
       \`quotedAt\` DATETIME(3) NULL,
       \`acceptedAt\` DATETIME(3) NULL,
@@ -189,6 +198,26 @@ async function createScCenterTables() {
       PRIMARY KEY (\`id\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+  for (const sql of [
+    "ALTER TABLE `ScTicket` ADD COLUMN `complaintNote` TEXT NULL",
+    "ALTER TABLE `ScTicket` ADD COLUMN `customerRequest` TEXT NULL",
+    "ALTER TABLE `ScTicket` ADD COLUMN `staffProposal` TEXT NULL",
+    "ALTER TABLE `ScTicket` ADD COLUMN `managementNote` TEXT NULL",
+    "ALTER TABLE `ScTicket` ADD COLUMN `confirmationId` INT NULL",
+    "ALTER TABLE `ScTicket` ADD COLUMN `wooOrderNumber` VARCHAR(64) NOT NULL DEFAULT ''",
+    "ALTER TABLE `ScTicket` ADD COLUMN `fulfillmentConfirmationId` INT NULL",
+    "ALTER TABLE `ScTicket` ADD COLUMN `waybillCarrier` VARCHAR(64) NOT NULL DEFAULT ''",
+    "ALTER TABLE `ScTicket` ADD COLUMN `waybillTracking` VARCHAR(191) NOT NULL DEFAULT ''",
+  ]) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Duplicate column|already exists|1060/i.test(message)) {
+        console.warn("[sc] ticket column:", message.slice(0, 200));
+      }
+    }
+  }
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS \`ScTicketPhoto\` (
       \`id\` INT NOT NULL AUTO_INCREMENT,
