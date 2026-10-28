@@ -16,6 +16,7 @@ import {
   listTemimaReturns,
   maintenanceRange,
 } from "@/lib/cs/maintenance-returns";
+import { loadScTicketById } from "@/lib/cs/sc-intake";
 import { requireCsSession } from "@/lib/session-guards";
 
 function canHub(viewer: Awaited<ReturnType<typeof resolveCsViewer>>) {
@@ -44,6 +45,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
     }
     const url = new URL(request.url);
+    const ticketId = Number(url.searchParams.get("ticketId") || 0);
+    if (ticketId) {
+      const loaded = await loadScTicketById(ticketId);
+      if (!loaded.ok) return NextResponse.json({ message: loaded.message }, { status: 404 });
+      return NextResponse.json({ ok: true, ticket: loaded.ticket });
+    }
     const range = maintenanceRange(url.searchParams.get("from") || "", url.searchParams.get("to") || "");
     const wantVariance = url.searchParams.get("variance") === "1";
     const loadTemima = viewer.isMaintenance || viewer.isAdmin;

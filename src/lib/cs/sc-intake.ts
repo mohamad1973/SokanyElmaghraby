@@ -283,7 +283,7 @@ export async function searchScCustomer(access: ScAccess, phoneQuery: string) {
   };
 }
 
-export async function loadScTicket(access: ScAccess, ticketId: number) {
+export async function loadScTicketById(ticketId: number) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   await ensureScCenterTables();
@@ -296,9 +296,6 @@ export async function loadScTicket(access: ScAccess, ticketId: number) {
     ticketId,
   );
   if (!rows[0]) return { ok: false as const, message: "التذكرة غير موجودة." };
-  if (!access.isManager && access.centerId !== Number(rows[0].centerId)) {
-    return { ok: false as const, message: "غير مصرح." };
-  }
   const photoMap = await photosOf([ticketId]);
   const events = await prisma.$queryRawUnsafe<Array<{ id: number; kind: string; message: string; createdAt: Date | string }>>(
     `SELECT id, kind, message, createdAt FROM ScTicketEvent WHERE ticketId = ? ORDER BY id DESC LIMIT 40`,
@@ -317,6 +314,15 @@ export async function loadScTicket(access: ScAccess, ticketId: number) {
       })),
     ),
   };
+}
+
+export async function loadScTicket(access: ScAccess, ticketId: number) {
+  const loaded = await loadScTicketById(ticketId);
+  if (!loaded.ok) return loaded;
+  if (!access.isManager && access.centerId !== loaded.ticket.centerId) {
+    return { ok: false as const, message: "غير مصرح." };
+  }
+  return loaded;
 }
 
 export async function listScManagerInbox() {

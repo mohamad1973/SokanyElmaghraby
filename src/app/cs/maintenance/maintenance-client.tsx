@@ -50,6 +50,49 @@ type LinkedProduct = {
 
 type Source = "bosta" | "temima" | "eid" | "momen";
 
+type DeskTicketBadge = {
+  id: number;
+  statusLabel: string;
+  wooOrderNumber: string;
+};
+
+type Photo = { id: number; kind: string; url: string };
+
+type DeskTicketDetail = {
+  id: number;
+  productName: string;
+  productCode: string;
+  statusLabel: string;
+  wooOrderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  centerName: string;
+  usageKind: string;
+  visualKind: string;
+  powerCut: boolean;
+  defects: string[];
+  defectOther: string;
+  complaintNote: string;
+  customerRequest: string;
+  staffProposal: string;
+  managementNote: string;
+  techSpecs: string;
+  techNotes: string;
+  inWarranty: boolean | null;
+  partAvailable: boolean | null;
+  chargeType: string;
+  cost: number | null;
+  durationText: string;
+  refundKind: string;
+  refundReason: string;
+  hqDecision: string;
+  hqNote: string;
+  invoicePhotos: Photo[];
+  productPhotos: Photo[];
+  complaintPhotos?: Photo[];
+};
+
 type BostaRow = {
   trackingNumber: string;
   confirmationId: number | null;
@@ -68,6 +111,8 @@ type BostaRow = {
   orderProduct: string;
   linkedProducts: LinkedProduct[];
   source?: Source;
+  deskTicket?: DeskTicketBadge | null;
+  deskTickets?: DeskTicketBadge[];
 };
 
 type CourierSection = {
@@ -161,6 +206,143 @@ function matchesQuery(searchText: string, raw: string) {
 
 function productText(product: LinkedProduct) {
   return [product.productName, product.productCode].filter(Boolean).join(" · ");
+}
+
+const SC_DEFECT_AR: Record<string, string> = {
+  chop: "لا يفرم",
+  grind: "لا يطحن",
+  suction: "لا يشفط",
+  heat: "لا يسخن",
+};
+
+function DeskTicketModal({
+  tickets,
+  onClose,
+}: {
+  tickets: DeskTicketBadge[];
+  onClose: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState(tickets[0]?.id || 0);
+  const [ticket, setTicket] = useState<DeskTicketDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    void fetch(`/api/cs/maintenance/returns?ticketId=${selectedId}`)
+      .then(async (response) => {
+        const body = (await response.json()) as { message?: string; ticket?: DeskTicketDetail };
+        if (cancelled) return;
+        if (!response.ok || !body.ticket) {
+          setTicket(null);
+          setError(body.message || "تعذر فتح التكت.");
+          return;
+        }
+        setTicket(body.ticket);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTicket(null);
+          setError("تعذر فتح التكت.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  const photos = ticket
+    ? [...ticket.invoicePhotos, ...ticket.productPhotos, ...(ticket.complaintPhotos || [])]
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 p-4 sm:items-center" dir="rtl">
+      <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-3xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-base font-extrabold text-[#14213D]">تكت الاستقبال</h3>
+          <button type="button" onClick={onClose} className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold">
+            إغلاق
+          </button>
+        </div>
+        {tickets.length > 1 ? (
+          <div className="flex flex-wrap gap-2">
+            {tickets.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedId(item.id)}
+                className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                  selectedId === item.id ? "bg-red-600 text-white" : "bg-[#F5F5F0] text-[#14213D]"
+                }`}
+              >
+                تكت {item.id}
+                {item.wooOrderNumber ? ` · #${item.wooOrderNumber}` : ""}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {loading ? <p className="text-sm font-bold text-[#14213D]/60">جارٍ فتح التكت…</p> : null}
+        {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
+        {ticket ? (
+          <div className="space-y-2 text-sm font-bold text-[#14213D]">
+            <h4 className="text-lg font-extrabold">
+              {ticket.productName || "منتج"} · {ticket.statusLabel}
+            </h4>
+            <p className="text-xs text-[#14213D]/70">
+              {ticket.centerName || "مركز"} · {ticket.customerName} · <span dir="ltr">{ticket.customerPhone}</span>
+            </p>
+            {ticket.customerAddress ? <p className="text-xs text-[#14213D]/70">{ticket.customerAddress}</p> : null}
+            {ticket.wooOrderNumber ? <p className="text-xs text-[#14213D]/70">أوردر مربوط #{ticket.wooOrderNumber}</p> : null}
+            <p className="text-xs text-[#14213D]/70">
+              {ticket.usageKind === "new" ? "جديد" : ticket.usageKind === "used" ? "مستخدم" : "بدون معاينة"}
+              {ticket.visualKind === "broken" ? " · به كسر" : ticket.visualKind === "intact" ? " · سليم ظاهريًا" : ""}
+              {ticket.powerCut ? " · فاصل باور" : ""}
+              {ticket.defects.map((id) => ` · ${SC_DEFECT_AR[id] || id}`).join("")}
+              {ticket.defectOther ? ` · ${ticket.defectOther}` : ""}
+            </p>
+            {ticket.complaintNote ? (
+              <p className="whitespace-pre-wrap rounded-2xl bg-red-50 px-3 py-3 text-[#7F1D1D]">
+                الشكوى: {ticket.complaintNote}
+              </p>
+            ) : (
+              <p className="text-[#14213D]/60">مفيش نص شكوى مكتوب على التكت.</p>
+            )}
+            {ticket.customerRequest ? <p>طلب العميل: {ticket.customerRequest}</p> : null}
+            {ticket.staffProposal ? <p>اقتراح الموظف: {ticket.staffProposal}</p> : null}
+            {ticket.managementNote ? <p>قرار الإدارة: {ticket.managementNote}</p> : null}
+            {ticket.refundKind ? (
+              <p>
+                طلب {ticket.refundKind === "exchange" ? "استبدال" : "استرجاع"}: {ticket.refundReason}
+                {ticket.hqDecision ? ` · قرار: ${ticket.hqDecision === "approved" ? "موافقة" : "رفض"} ${ticket.hqNote}` : ""}
+              </p>
+            ) : null}
+            {ticket.techSpecs ? (
+              <p>
+                التقييم: {ticket.techSpecs} · {ticket.inWarranty ? "في الضمان" : "خارج الضمان"} ·{" "}
+                {ticket.partAvailable ? "القطعة متوفرة" : "القطعة غير متوفرة"} ·{" "}
+                {ticket.chargeType === "warranty_free" ? "مجاني" : `${ticket.cost ?? 0} ج.م`} · {ticket.durationText}
+              </p>
+            ) : null}
+            {ticket.techNotes ? <p>ملاحظات الفني: {ticket.techNotes}</p> : null}
+            {photos.length ? (
+              <div className="flex flex-wrap gap-2">
+                {photos.map((photo) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={photo.id} src={photo.url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function productsLabel(products: LinkedProduct[], orderProduct: string) {
@@ -503,6 +685,7 @@ export function MaintenanceClient({
   const [active, setActive] = useState<BostaRow | null>(null);
   const [linking, setLinking] = useState<BostaRow | null>(null);
   const [noteRow, setNoteRow] = useState<BostaRow | null>(null);
+  const [ticketRow, setTicketRow] = useState<BostaRow | null>(null);
   const [printMode, setPrintMode] = useState<"all" | "maintenance">("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -981,7 +1164,24 @@ export function MaintenanceClient({
                       >
                         <td className="px-3 py-2">{row.day || "—"}</td>
                         <td className="px-3 py-2 font-bold">{row.trackingNumber}</td>
-                        <td className="px-3 py-2 font-extrabold">{row.wooOrderNumber || "—"}</td>
+                        <td className="px-3 py-2 font-extrabold">
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            {row.deskTicket ? (
+                              <button
+                                type="button"
+                                title="فتح تكت الاستقبال"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setTicketRow(row);
+                                }}
+                                className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-extrabold text-white"
+                              >
+                                تكت
+                              </button>
+                            ) : null}
+                            <span>{row.wooOrderNumber || "—"}</span>
+                          </span>
+                        </td>
                         <td className="px-3 py-2">{row.customerName || "—"}</td>
                         <td className="px-3 py-2">{row.phone || "—"}</td>
                         <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
@@ -1064,6 +1264,13 @@ export function MaintenanceClient({
           onSaved={(note) => {
             patchCapturedRow(noteRow.trackingNumber, (row) => ({ ...row, note }));
           }}
+        />
+      ) : null}
+      {ticketRow?.deskTicket ? (
+        <DeskTicketModal
+          key={`ticket-${ticketRow.trackingNumber}-${ticketRow.deskTicket.id}`}
+          tickets={ticketRow.deskTickets?.length ? ticketRow.deskTickets : [ticketRow.deskTicket]}
+          onClose={() => setTicketRow(null)}
         />
       ) : null}
       {active && canInspect ? (

@@ -15,6 +15,7 @@ import { linkedProductLabel, listBostaReturnProducts, type LinkedReturnProduct }
 import { listBostaReturnReviews, type BostaReturnReview } from "@/lib/cs/bosta-return-review";
 import { ensureMaintenanceLifecycleColumns, listCaptureExtras } from "@/lib/cs/bosta-return-lifecycle";
 import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
+import { attachDeskTicketsToReturns, type DeskTicketBadge } from "@/lib/cs/sc-return-tickets";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -36,6 +37,8 @@ export type MaintenanceBostaRow = {
   review: BostaReturnReview | null;
   searchText: string;
   source: ReturnCaptureSource;
+  deskTicket: DeskTicketBadge | null;
+  deskTickets: DeskTicketBadge[];
 };
 
 export type MaintenanceCourierSection = {
@@ -164,59 +167,64 @@ async function hydrateCapturedReturnRows(stored: StoredBostaReturn[]): Promise<M
     listBostaReturnProducts(trackings),
     listCaptureExtras(trackings),
   ]);
-  return stored
-    .map((row) => {
-      const local =
-        matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
-      const snap = local?.snap || {};
-      const orderProduct = productLabel(snap.items);
-      const linked = linkedProducts.get(row.trackingNumber) || [];
-      const product = linked.length ? linkedProductLabel(linked) : orderProduct;
-      const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
-      const customerName = snap.customerName || row.customerName;
-      const phone = snap.phone || row.phone;
-      const extra = extras.get(row.trackingNumber);
-      const review = reviews.get(row.trackingNumber) || null;
-      return {
-        trackingNumber: row.trackingNumber,
-        confirmationId: local?.id ?? row.confirmationId,
-        day: row.seenDay,
+  const mapped = stored.map((row) => {
+    const local =
+      matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
+    const snap = local?.snap || {};
+    const orderProduct = productLabel(snap.items);
+    const linked = linkedProducts.get(row.trackingNumber) || [];
+    const product = linked.length ? linkedProductLabel(linked) : orderProduct;
+    const wooOrderNumber = local?.wooOrderNumber || row.wooOrderNumber || orderDigits(row.businessReference);
+    const customerName = snap.customerName || row.customerName;
+    const phone = snap.phone || row.phone;
+    const extra = extras.get(row.trackingNumber);
+    const review = reviews.get(row.trackingNumber) || null;
+    return {
+      trackingNumber: row.trackingNumber,
+      confirmationId: local?.id ?? row.confirmationId,
+      day: row.seenDay,
+      wooOrderNumber,
+      customerName,
+      phone,
+      product,
+      orderProduct,
+      linkedProducts: linked,
+      kind: row.kind,
+      statusLabel: KIND_LABEL[row.kind],
+      reasonText: row.reasonText,
+      note: extra?.note || "",
+      openedAt: extra?.openedAt || null,
+      review,
+      source: row.source,
+      searchText: searchBlob([
+        row.trackingNumber,
+        row.businessReference,
         wooOrderNumber,
         customerName,
         phone,
+        row.phone,
         product,
-        orderProduct,
-        linkedProducts: linked,
-        kind: row.kind,
-        statusLabel: KIND_LABEL[row.kind],
-        reasonText: row.reasonText,
-        note: extra?.note || "",
-        openedAt: extra?.openedAt || null,
-        review,
-        source: row.source,
-        searchText: searchBlob([
-          row.trackingNumber,
-          row.businessReference,
-          wooOrderNumber,
-          customerName,
-          phone,
-          row.phone,
-          product,
-          KIND_LABEL[row.kind],
-          review?.label,
-          row.reasonText,
-          extra?.note,
-          review?.techNote,
-          snap.address,
-          snap.addressFull,
-          snap.area,
-          snap.governorate,
-          snap.trackingNumber,
-          local?.invoiceNumber,
-          local?.trackingNumber,
-        ]),
-      };
-    })
+        KIND_LABEL[row.kind],
+        review?.label,
+        row.reasonText,
+        extra?.note,
+        review?.techNote,
+        snap.address,
+        snap.addressFull,
+        snap.area,
+        snap.governorate,
+        snap.trackingNumber,
+        local?.invoiceNumber,
+        local?.trackingNumber,
+      ]),
+    };
+  });
+  const withTickets = await attachDeskTicketsToReturns(mapped);
+  return withTickets
+    .map((row) => ({
+      ...row,
+      searchText: row.deskTicket ? searchBlob([row.searchText, "تكت", String(row.deskTicket.id)]) : row.searchText,
+    }))
     .sort(
       (left, right) =>
         right.day.localeCompare(left.day) || right.trackingNumber.localeCompare(left.trackingNumber),
