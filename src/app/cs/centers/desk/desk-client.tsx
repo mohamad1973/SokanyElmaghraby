@@ -191,6 +191,14 @@ function useDeskOrder(confirmationId: number | null) {
   return { loaded, error, loading };
 }
 
+function canShowReturnCard(loaded: DeskOrderLoaded | null) {
+  const shipping = String(loaded?.shippingCompany || "").trim();
+  return (
+    loaded?.status === "CONFIRMED" &&
+    (shipping === "sayed_temima" || shipping === "eid" || shipping === "momen")
+  );
+}
+
 function DeskFulfillmentSlot({
   parts,
   confirmationId,
@@ -201,7 +209,7 @@ function DeskFulfillmentSlot({
   onMessage,
   showSummary = false,
 }: {
-  parts: "card" | "waybill";
+  parts: "card" | "all";
   confirmationId: number | null;
   wooOrderNumber: string;
   loaded: DeskOrderLoaded | null;
@@ -211,25 +219,15 @@ function DeskFulfillmentSlot({
   onMessage: (text: string) => void;
   showSummary?: boolean;
 }) {
+  if (parts === "card" && (!confirmationId || (loaded && !canShowReturnCard(loaded)))) {
+    return null;
+  }
   if (!confirmationId) {
-    if (parts === "card") {
-      return (
-        <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
-          <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
-          <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">الاسترجاع محتاج أوردر تأكيد لنفس العميل.</p>
-          {snapshot?.phone || snapshot?.customerName ? (
-            <p className="mt-2 text-[10px] font-bold text-[#14213D]/60" dir="ltr">
-              {snapshot?.phone || "—"} · {snapshot?.customerName || "—"}
-            </p>
-          ) : null}
-        </div>
-      );
-    }
     return (
       <div className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">
         {wooOrderNumber
-          ? `أوردر #${wooOrderNumber} من غير تأكيد CS. طباعة البوليصة محتاجة أوردر تأكيد.`
-          : "اختَر أوردر تأكيد من شحنات سيد والمندوب عشان طباعة البوليصة."}
+          ? `أوردر #${wooOrderNumber} من غير تأكيد CS. الاستبدال والبوليصة محتاجين أوردر تأكيد.`
+          : "اختَر أوردر تأكيد من شحنات سيد والمندوب عشان الاستبدال وطباعة البوليصة."}
       </div>
     );
   }
@@ -237,6 +235,7 @@ function DeskFulfillmentSlot({
     if (error) {
       return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-red-700 shadow ring-1 ring-[#14213D]/10">{error}</p>;
     }
+    if (parts === "card") return null;
     return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">جارٍ فتح الأوردر…</p>;
   }
   return (
@@ -557,8 +556,8 @@ export function ScDeskClient() {
           {!inbox.length ? <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70">مفيش طلبات معلّقة.</p> : null}
         </div>
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          <div className="space-y-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+        <div className="grid items-start gap-4 lg:grid-cols-2" dir="ltr">
+          <div className="space-y-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" dir="rtl">
           <form
             className="flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
             onSubmit={(event) => {
@@ -957,9 +956,9 @@ export function ScDeskClient() {
             </form>
           ) : null}
           </div>
-          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" dir="rtl">
             <DeskFulfillmentSlot
-              parts="waybill"
+              parts="all"
               confirmationId={confirmationId}
               wooOrderNumber={wooOrderNumber}
               loaded={deskOrder.loaded}

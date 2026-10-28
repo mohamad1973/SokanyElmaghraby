@@ -437,18 +437,6 @@ export function CsFulfillmentPanel({
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-xs font-bold text-white">{message}</p>
       ) : null}
 
-      {parts === "card" && !canCreateFulfillment ? (
-        <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
-          <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
-          <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
-            الاسترجاع محتاج أوردر تأكيد تميمة أو عيد أو مؤمن لنفس العميل.
-          </p>
-          <p className="mt-2 text-[10px] font-bold text-[#14213D]/60" dir="ltr">
-            {snapshot?.phone || "—"} · {snapshot?.customerName || "—"}
-          </p>
-        </div>
-      ) : null}
-
       {showCard && canCreateFulfillment ? (
         <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
           <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
