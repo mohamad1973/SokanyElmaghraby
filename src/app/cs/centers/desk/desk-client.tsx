@@ -557,6 +557,18 @@ export function ScDeskClient() {
         </div>
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-2" dir="ltr">
+          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" dir="rtl">
+            <DeskFulfillmentSlot
+              parts="card"
+              confirmationId={confirmationId}
+              wooOrderNumber={wooOrderNumber}
+              loaded={deskOrder.loaded}
+              loading={deskOrder.loading}
+              error={deskOrder.error}
+              snapshot={fulfillmentSnapshot}
+              onMessage={setMessage}
+            />
+          </div>
           <div className="space-y-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" dir="rtl">
           <form
             className="flex flex-wrap gap-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
@@ -656,17 +668,6 @@ export function ScDeskClient() {
               </div>
             </div>
           ) : null}
-
-          <DeskFulfillmentSlot
-            parts="card"
-            confirmationId={confirmationId}
-            wooOrderNumber={wooOrderNumber}
-            loaded={deskOrder.loaded}
-            loading={deskOrder.loading}
-            error={deskOrder.error}
-            snapshot={fulfillmentSnapshot}
-            onMessage={setMessage}
-          />
 
           {selected ? (
             <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
@@ -955,19 +956,6 @@ export function ScDeskClient() {
               </button>
             </form>
           ) : null}
-          </div>
-          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto" dir="rtl">
-            <DeskFulfillmentSlot
-              parts="all"
-              confirmationId={confirmationId}
-              wooOrderNumber={wooOrderNumber}
-              loaded={deskOrder.loaded}
-              loading={deskOrder.loading}
-              error={deskOrder.error}
-              snapshot={fulfillmentSnapshot}
-              onMessage={setMessage}
-              showSummary
-            />
           </div>
         </div>
       )}
