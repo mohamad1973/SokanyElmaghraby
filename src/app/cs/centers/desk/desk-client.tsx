@@ -196,7 +196,6 @@ function DeskFulfillmentSlot({
   confirmationId,
   wooOrderNumber,
   loaded,
-  loading,
   error,
   snapshot,
   onMessage,
@@ -234,11 +233,11 @@ function DeskFulfillmentSlot({
       </div>
     );
   }
-  if (loading && !loaded) {
+  if (!loaded) {
+    if (error) {
+      return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-red-700 shadow ring-1 ring-[#14213D]/10">{error}</p>;
+    }
     return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">جارٍ فتح الأوردر…</p>;
-  }
-  if (error || !loaded) {
-    return <p className="rounded-2xl bg-white p-4 text-sm font-bold text-red-700 shadow ring-1 ring-[#14213D]/10">{error || "تعذر فتح أوردر التأكيد."}</p>;
   }
   return (
     <CsFulfillmentPanel
