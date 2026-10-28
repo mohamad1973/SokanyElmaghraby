@@ -237,10 +237,6 @@ export async function findBostaDeliveryByCustomer(input: {
     method: "POST",
     body: JSON.stringify({
       mobilePhones: variants,
-      phones: variants,
-      phone: variants[0],
-      mobilePhone: variants[0],
-      receiverPhone: variants[0],
       pageNumber: 0,
       pageLimit: 50,
       limit: 50,
@@ -300,46 +296,117 @@ export async function findBostaDeliveryByCustomer(input: {
   };
 }
 
+export type BostaPhoneShipment = {
+  trackingNumber: string;
+  status: string;
+  statusLabel: string;
+  typeLabel: string;
+  createdAt: string;
+  lastEvent: string;
+  placeLabel: string;
+  cod: number | null;
+  businessReference: string;
+  customerName: string;
+  phone: string;
+  address: string;
+};
+
+function rowTypeLabel(row: Record<string, unknown>) {
+  const type = asRecord(row.type);
+  const code = String(type?.code ?? type?.value ?? row.typeCode ?? row.type ?? "").trim();
+  if (code === "25" || /return|crp|استرجاع/i.test(code)) return "استرجاع";
+  if (code === "30" || /exchange|استبدال/i.test(code)) return "استبدال";
+  if (code === "20" || /rto/i.test(code)) return "مرتجع للراسل";
+  return "توصيل";
+}
+
+function rowCreatedAt(row: Record<string, unknown>) {
+  const direct = String(row.createdAt || row.orderedAt || "").trim();
+  if (direct) return direct;
+  const events = readBostaTransitEvents(row);
+  const first = events.find((event) => event.at);
+  const last = [...events].reverse().find((event) => event.at);
+  return String(first?.at || last?.at || row.updatedAt || "").trim();
+}
+
+function rowAddress(row: Record<string, unknown>) {
+  const drop = asRecord(row.dropOffAddress) || asRecord(row.dropoffAddress) || asRecord(asRecord(row.receiver)?.dropOffAddress);
+  const first = String(drop?.firstLine || drop?.secondLine || drop?.address || "").trim();
+  const place = readBostaPlaceLabel(row) || "";
+  return [first, place].filter(Boolean).join(" — ");
+}
+
+function mapBostaPhoneShipment(row: Record<string, unknown>): BostaPhoneShipment | null {
+  const details = readBostaLiveDetails(row);
+  const trackingNumber = details.trackingNumber || rowTracking(row) || "";
+  if (!trackingNumber) return null;
+  return {
+    trackingNumber,
+    status: details.status || "",
+    statusLabel: getBostaStatusLabelAr(details.status || ""),
+    typeLabel: rowTypeLabel(row),
+    createdAt: rowCreatedAt(row),
+    lastEvent: details.lastEvent || "",
+    placeLabel: details.placeLabel || "",
+    cod: details.cod,
+    businessReference: rowBusinessReference(row),
+    customerName: rowName(row).trim(),
+    phone: rowPhone(row),
+    address: rowAddress(row),
+  };
+}
+
 export async function listBostaDeliveriesByPhone(phone: string) {
   const phoneKey = bostaPhoneKey(phone);
-  if (phoneKey.length < 10) return { shipments: [] as Array<ReturnType<typeof readBostaLiveDetails> & { businessReference: string }>, error: "رقم الموبايل غير مكتمل." };
-  const variants = [`0${phoneKey}`, phoneKey, `20${phoneKey}`, `+20${phoneKey}`];
+  if (phoneKey.length < 10) return { shipments: [] as BostaPhoneShipment[], error: "رقم الموبايل غير مكتمل." };
+  const local = `0${phoneKey}`;
+  const intl = `+20${phoneKey}`;
+  const variants = [local, phoneKey, `20${phoneKey}`, intl];
   const found: Record<string, unknown>[] = [];
   const seen = new Set<string>();
-  const searched = await bostaFetch("/deliveries/search", {
-    method: "POST",
-    body: JSON.stringify({
-      mobilePhones: variants,
-      phones: variants,
-      phone: variants[0],
-      mobilePhone: variants[0],
-      receiverPhone: variants[0],
-      pageNumber: 0,
-      pageLimit: 50,
-      limit: 50,
-    }),
-  });
-  if (!searched.ok) return { shipments: [], error: searched.message };
-  for (const row of deliveryRecords(searched.data)) {
-    if (!rowHasPhone(row, phoneKey)) continue;
-    const key = rowTracking(row) || JSON.stringify(row).slice(0, 120);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    found.push(row);
+  const phoneMatch = (row: Record<string, unknown>) => rowHasPhone(row, phoneKey) || bostaPhoneKey(rowPhone(row)) === phoneKey;
+  const remember = (raw: unknown) => {
+    const batch = deliveryRecords(raw);
+    const hits = batch.filter(phoneMatch);
+    const keep = hits.length ? hits : batch.length > 0 && batch.length <= 20 ? batch : [];
+    for (const row of keep) {
+      const key = rowTracking(row) || JSON.stringify(row).slice(0, 120);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push(row);
+    }
+  };
+  let lastError = "";
+  const searchBody = (body: Record<string, unknown>) =>
+    bostaFetch("/deliveries/search", {
+      method: "POST",
+      body: JSON.stringify({ pageNumber: 0, pageLimit: 50, limit: 50, ...body }),
+    });
+  const attempts: Array<() => Promise<{ ok: true; data: unknown } | { ok: false; message: string }>> = [
+    () => searchBody({ mobilePhones: variants }),
+    () => searchBody({ mobilePhones: local }),
+    () => searchBody({ mobilePhones: variants.join(",") }),
+    () => searchBody({ search: local }),
+    () => searchBody({ phone: local, receiverPhone: local }),
+  ];
+  for (const attempt of attempts) {
+    const result = await attempt();
+    if (!result.ok) {
+      lastError = result.message;
+      continue;
+    }
+    remember(result.data);
+    if (found.length) break;
   }
-  const shipments = found.slice(0, 30).map((row) => {
-    const details = readBostaLiveDetails(row);
-    return {
-      trackingNumber: details.trackingNumber || rowTracking(row) || "",
-      status: details.status || "",
-      statusLabel: getBostaStatusLabelAr(details.status || ""),
-      lastEvent: details.lastEvent || "",
-      placeLabel: details.placeLabel || "",
-      cod: details.cod,
-      businessReference: rowBusinessReference(row),
-    };
-  }).filter((row) => row.trackingNumber);
-  return { shipments, error: shipments.length ? undefined : "مفيش شحنات بوسطة على الرقم ده." };
+  const shipments = found
+    .map(mapBostaPhoneShipment)
+    .filter((row): row is BostaPhoneShipment => Boolean(row))
+    .sort((a, b) => Date.parse(b.createdAt || "0") - Date.parse(a.createdAt || "0"))
+    .slice(0, 30);
+  return {
+    shipments,
+    error: shipments.length ? undefined : lastError || "مفيش شحنات بوسطة على الرقم ده.",
+  };
 }
 
 function rowBusinessReference(row: Record<string, unknown>) {

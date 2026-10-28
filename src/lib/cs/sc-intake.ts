@@ -240,8 +240,16 @@ export async function searchScCustomer(access: ScAccess, phoneQuery: string) {
     tail,
     `%${digits}%`,
   );
-  const history = await loadScPhoneHistory(digits);
+  const loadedHistory = await loadScPhoneHistory(digits);
   const customer = customers[0];
+  const history = {
+    ...loadedHistory,
+    profile: {
+      name: String(customer?.name || loadedHistory.profile.name || "").trim(),
+      phone: String(customer?.phone || loadedHistory.profile.phone || digits).trim(),
+      address: String(customer?.address || loadedHistory.profile.address || "").trim() || loadedHistory.profile.address,
+    },
+  };
   if (!customer) {
     return { ok: true as const, found: false as const, phone: digits, history };
   }
@@ -266,9 +274,9 @@ export async function searchScCustomer(access: ScAccess, phoneQuery: string) {
     found: true as const,
     customer: {
       id: Number(customer.id),
-      phone: customer.phone,
-      name: customer.name,
-      address: customer.address,
+      phone: history.profile.phone || customer.phone,
+      name: history.profile.name || customer.name,
+      address: history.profile.address || customer.address,
     },
     tickets: tickets.map((row) => mapTicket(row, photoMap.get(Number(row.id)) || [])),
     history,

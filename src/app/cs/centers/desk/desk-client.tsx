@@ -83,13 +83,18 @@ type History = {
   bostaShipments: Array<{
     trackingNumber: string;
     statusLabel: string;
+    typeLabel?: string;
+    createdAt?: string;
     lastEvent: string;
     placeLabel: string;
     cod: number | null;
     businessReference: string;
+    customerName?: string;
+    address?: string;
   }>;
   siteError: string;
   bostaError: string;
+  profile?: { name: string; phone: string; address: string };
 };
 
 type Customer = { id: number; phone: string; name: string; address: string };
@@ -103,6 +108,16 @@ const DEFECT_LABEL: Record<string, string> = {
   suction: "لا يشفط",
   heat: "لا يسخن",
 };
+
+function shortWhen(value?: string) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const parsed = Date.parse(text);
+  if (!Number.isNaN(parsed)) {
+    return new Date(parsed).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" });
+  }
+  return text.slice(0, 16).replace("T", " ");
+}
 
 function emptyForm() {
   return {
@@ -232,22 +247,25 @@ export function ScDeskClient() {
     }
     if (data.access) setAccess(data.access);
     setHistory(data.history || null);
+    const profile = data.history?.profile;
+    const filledName = (data.customer?.name || profile?.name || "").trim();
+    const filledPhone = (data.customer?.phone || profile?.phone || data.phone || phone).trim();
+    const filledAddress = (data.customer?.address || profile?.address || "").trim();
+    setForm((prev) => ({
+      ...emptyForm(),
+      name: filledName,
+      phone: filledPhone,
+      address: filledAddress,
+      centerId: prev.centerId || access?.centerId || "",
+    }));
     if (data.found && data.customer) {
       setCustomer(data.customer);
       setTickets(data.tickets || []);
-      setForm((prev) => ({
-        ...emptyForm(),
-        name: data.customer!.name,
-        phone: data.customer!.phone,
-        address: data.customer!.address,
-        centerId: prev.centerId || access?.centerId || "",
-      }));
-      setMessage(data.tickets?.length ? `اتفتح ملف ${data.customer.name}` : "العميل معروف. مفيش زيارات في الفرع ده.");
+      setMessage(data.tickets?.length ? `اتفتح ملف ${filledName || data.customer.name}` : "العميل معروف. مفيش زيارات في الفرع ده.");
     } else {
       setCustomer(null);
       setTickets([]);
-      setForm((prev) => ({ ...emptyForm(), phone: data.phone || phone, centerId: prev.centerId || access?.centerId || "" }));
-      setMessage("عميل جديد. سجّل بياناته.");
+      setMessage(filledName ? `اتعبّت بيانات ${filledName} من السيستم.` : "عميل جديد. سجّل بياناته.");
     }
   }
 
@@ -453,7 +471,10 @@ export function ScDeskClient() {
                   {history.bostaShipments.map((row) => (
                     <div key={row.trackingNumber} className="rounded-xl bg-[#F5F5F0] px-3 py-2 text-xs font-bold">
                       <p dir="ltr">{row.trackingNumber}</p>
-                      <p>{row.statusLabel || "بدون حالة"}</p>
+                      <p>
+                        {row.typeLabel || "توصيل"} · {row.statusLabel || "بدون حالة"}
+                      </p>
+                      {row.createdAt ? <p className="text-[#14213D]/70">{shortWhen(row.createdAt)}</p> : null}
                       {row.lastEvent ? <p className="text-[#14213D]/70">{row.lastEvent}</p> : null}
                     </div>
                   ))}

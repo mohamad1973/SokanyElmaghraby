@@ -144,12 +144,27 @@ export async function loadScPhoneHistory(phone: string) {
       total: item.total,
     })),
   }));
+  const pick = (...values: Array<string | null | undefined>) =>
+    values.map((value) => String(value || "").trim()).find((value) => value && value !== "غير محدد") || "";
+  const site = siteOrders[0];
+  const csRow = cs[0];
+  const bostaRow = bosta.shipments[0];
+  const localPhone = digits.length === 11 && digits.startsWith("01") ? digits : digits.slice(-10).length === 10 ? `0${digits.slice(-10)}` : digits;
   return {
     siteOrders,
     siteError: woo.error || "",
     csOrders: cs,
     bostaShipments: bosta.shipments,
     bostaError: bosta.error || "",
+    profile: {
+      name: pick(site?.customerName, csRow?.customerName, bostaRow?.customerName),
+      phone: pick(site?.phone, csRow?.phone, bostaRow?.phone, localPhone),
+      address: pick(
+        site?.address,
+        [csRow?.address, csRow?.area, csRow?.governorate].filter(Boolean).join(" — "),
+        bostaRow?.address,
+      ),
+    },
   };
 }
 
