@@ -22,6 +22,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 export type MaintenanceBostaRow = {
   trackingNumber: string;
   confirmationId: number | null;
+  parentConfirmationId: number | null;
   day: string;
   wooOrderNumber: string;
   customerName: string;
@@ -116,6 +117,7 @@ type MatchedOrder = {
   wooOrderNumber: string;
   invoiceNumber: string;
   trackingNumber: string;
+  parentConfirmationId: number | null;
   snap: Snap;
 };
 
@@ -136,7 +138,14 @@ async function matchLocalOrders(rows: Array<{ trackingNumber: string; businessRe
         ...(numbers.length ? [{ wooOrderNumber: { in: numbers } }] : []),
       ],
     },
-    select: { id: true, wooOrderNumber: true, trackingNumber: true, invoiceNumber: true, customerSnapshot: true },
+    select: {
+      id: true,
+      wooOrderNumber: true,
+      trackingNumber: true,
+      invoiceNumber: true,
+      customerSnapshot: true,
+      parentConfirmationId: true,
+    },
   });
   for (const row of found) {
     const packed: MatchedOrder = {
@@ -144,6 +153,7 @@ async function matchLocalOrders(rows: Array<{ trackingNumber: string; businessRe
       wooOrderNumber: row.wooOrderNumber,
       invoiceNumber: String(row.invoiceNumber || ""),
       trackingNumber: String(row.trackingNumber || "").trim(),
+      parentConfirmationId: row.parentConfirmationId == null ? null : Number(row.parentConfirmationId),
       snap: snapshotOf(row.customerSnapshot),
     };
     if (packed.trackingNumber) byTracking.set(packed.trackingNumber, packed);
@@ -182,6 +192,7 @@ async function hydrateCapturedReturnRows(stored: StoredBostaReturn[]): Promise<M
     return {
       trackingNumber: row.trackingNumber,
       confirmationId: local?.id ?? row.confirmationId,
+      parentConfirmationId: local?.parentConfirmationId ?? null,
       day: row.seenDay,
       wooOrderNumber,
       customerName,

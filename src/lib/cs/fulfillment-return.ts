@@ -424,6 +424,16 @@ export async function createFulfillmentFromOrder(input: {
     };
   }
 
+  const { linkDeskTicketsToFulfillment } = await import("@/lib/cs/sc-return-tickets");
+  await linkDeskTicketsToFulfillment({
+    parentConfirmationId: parent.id,
+    childConfirmationId: created.id,
+    parentWooOrderNumber: parent.wooOrderNumber,
+    phone,
+    carrier: input.desk,
+    trackingNumber,
+  });
+
   const billName = input.desk === "bosta" ? "بوسطة" : "سوكانى";
   if (!trackingNumber) {
     return {

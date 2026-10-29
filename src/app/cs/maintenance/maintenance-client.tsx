@@ -308,13 +308,19 @@ function DeskTicketModal({
             </p>
             {ticket.complaintNote ? (
               <p className="whitespace-pre-wrap rounded-2xl bg-red-50 px-3 py-3 text-[#7F1D1D]">
-                الشكوى: {ticket.complaintNote}
+                شكوى العميل: {ticket.complaintNote}
               </p>
             ) : (
               <p className="text-[#14213D]/60">مفيش نص شكوى مكتوب على التكت.</p>
             )}
-            {ticket.customerRequest ? <p>طلب العميل: {ticket.customerRequest}</p> : null}
-            {ticket.staffProposal ? <p>اقتراح الموظف: {ticket.staffProposal}</p> : null}
+            {ticket.customerRequest ? (
+              <p className="whitespace-pre-wrap rounded-2xl bg-[#F5F5F0] px-3 py-3">طلب العميل: {ticket.customerRequest}</p>
+            ) : null}
+            {ticket.staffProposal ? (
+              <p className="whitespace-pre-wrap rounded-2xl bg-[#FFF8E7] px-3 py-3">
+                قرار موظف الاستقبال: {ticket.staffProposal}
+              </p>
+            ) : null}
             {ticket.managementNote ? <p>قرار الإدارة: {ticket.managementNote}</p> : null}
             {ticket.refundKind ? (
               <p>

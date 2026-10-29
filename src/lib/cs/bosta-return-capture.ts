@@ -273,7 +273,11 @@ export async function backfillDeskReturnCaptures(from: string, to: string) {
              OR c.courierOutcome = 'refused'
              OR (
                (c.temimaSupervisorResult = 'collect' OR c.monaSupervisorResult = 'delivered' OR c.courierOutcome = 'delivered')
-               AND c.fulfillmentKind IN ('return', 'exchange')
+               AND (
+                 c.fulfillmentKind IN ('return', 'exchange')
+                 OR c.customerSnapshot LIKE '%"fulfillmentKind":"return"%'
+                 OR c.customerSnapshot LIKE '%"fulfillmentKind":"exchange"%'
+               )
              )
            )
            AND c.confirmedAt >= ? AND c.confirmedAt < ?
