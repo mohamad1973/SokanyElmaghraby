@@ -180,15 +180,50 @@ export function CsFulfillmentPanel({
     tell("اتفتحت بوليصة سوكانى للطباعة 10×15.");
   }
 
+  async function printOrCreateChildBosta(child: FulfillmentChild) {
+    const tracking = String(child.trackingNumber || "").trim();
+    if (tracking) {
+      await printWaybillPdf(tracking, child.id);
+      return;
+    }
+    setFulfillmentBusy(true);
+    tell("");
+    const res = await fetch(`/api/cs/confirmations/${child.id}/bosta`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create" }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      message?: string;
+      trackingNumber?: string | null;
+      bostaSyncError?: string | null;
+    };
+    setFulfillmentBusy(false);
+    if (!res.ok || !data.trackingNumber) {
+      tell(data.message || data.bostaSyncError || "تعذر إنشاء بوليصة بوسطة.");
+      return;
+    }
+    setFulfillmentChildren((prev) =>
+      prev.map((row) => (row.id === child.id ? { ...row, trackingNumber: data.trackingNumber || null } : row)),
+    );
+    tell(data.message || "تم إنشاء بوليصة بوسطة.");
+    await printWaybillPdf(data.trackingNumber, child.id);
+  }
+
   async function submitFulfillment() {
     if (!confirmationId) {
-      tell("اختَر الأوردر من اليمين.");
+      tell("اختَر الأوردر من اليمين عشان تنشئ بوليصة استرجاع أو استبدال.");
+      return;
+    }
+    const answer = (key: string) => answers.find((row) => row.itemKey === key)?.value || "";
+    const governorate = String(snapshot?.governorate || answer("governorate_confirm") || "").trim();
+    if (!governorate) {
+      tell("المحافظة ناقصة على الأوردر. بوسطة مش هتنشئ البوليصة من غيرها.");
       return;
     }
     const preview = window.open("about:blank", fulfillmentDesk === "bosta" ? "bosta-awb" : "sokany-awb");
     setFulfillmentBusy(true);
     tell("");
-    const answer = (key: string) => answers.find((row) => row.itemKey === key)?.value || "";
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/fulfillment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -216,7 +251,7 @@ export function CsFulfillmentPanel({
           : null,
         phone: snapshot?.phone || answer("primary_phone"),
         address: snapshot?.address || answer("address_complete"),
-        governorate: snapshot?.governorate || answer("governorate_confirm"),
+        governorate,
         area: snapshot?.area || answer("area_confirm"),
         customerName: snapshot?.customerName || answer("customer_name"),
       }),
@@ -256,7 +291,7 @@ export function CsFulfillmentPanel({
     const billName = fulfillmentDesk === "bosta" ? "بوسطة" : "سوكانى";
     tell(`تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber} وبوليصة ${billName}.`);
     if (fulfillmentDesk === "bosta") {
-      await printWaybillPdf(data.trackingNumber || "ok", data.confirmationId);
+      await printWaybillPdf(data.trackingNumber, data.confirmationId);
     } else {
       printFulfillmentWaybill(data.confirmationId, preview);
     }
@@ -436,6 +471,11 @@ export function CsFulfillmentPanel({
 
   const deskCouriers = monaCouriers.filter((row) => row.bucket === fulfillmentDesk);
   const originalItems = snapshot?.items || [];
+  const cardGovernorate = String(
+    snapshot?.governorate || answers.find((row) => row.itemKey === "governorate_confirm")?.value || "",
+  ).trim();
+  const missingOrder = !confirmationId;
+  const missingGovernorate = Boolean(confirmationId) && !cardGovernorate;
 
   return (
     <div className="space-y-2" dir="rtl">
@@ -541,8 +581,12 @@ export function CsFulfillmentPanel({
             />
             <span className="mt-0.5 block text-[10px] font-bold text-[#14213D]/65">
               {fulfillmentKind === "return"
-                ? "الاسترجاع ينقص حساب المندوب لأنه يدفع للعميل. بوليصة سوكانى نوع استرجاع، والوصف فيه اسم المنتج الراجع، وقيمة المرتجع تظهر على البوليصة."
-                : "موجب = مبلغ التحصيل على بوليصة استبدال سوكانى · سالب = رد فرق ينقص الحساب · الوصف: منتج خارج + منتج راجع"}
+                ? fulfillmentDesk === "bosta"
+                  ? "الاسترجاع على بوسطة نوع 25: استلام من عنوان العميل، وقيمة المرتجع على البوليصة."
+                  : "الاسترجاع ينقص حساب المندوب لأنه يدفع للعميل. بوليصة سوكانى نوع استرجاع، والوصف فيه اسم المنتج الراجع، وقيمة المرتجع تظهر على البوليصة."
+                : fulfillmentDesk === "bosta"
+                  ? "الاستبدال على بوسطة نوع 30: توصيل البديل لعنوان العميل. موجب = تحصيل على البوليصة · سالب = رد فرق في الوصف."
+                  : "موجب = مبلغ التحصيل على بوليصة استبدال سوكانى · سالب = رد فرق ينقص الحساب · الوصف: منتج خارج + منتج راجع"}
             </span>
           </label>
           {fulfillmentKind === "exchange" ? (
@@ -641,9 +685,19 @@ export function CsFulfillmentPanel({
             {snapshot?.phone || answers.find((row) => row.itemKey === "primary_phone")?.value || "—"} ·{" "}
             {snapshot?.customerName || answers.find((row) => row.itemKey === "customer_name")?.value || "—"}
           </p>
+          {missingOrder ? (
+            <p className="mt-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-extrabold text-red-800">
+              اختَر الأوردر من اليمين عشان تنشئ بوليصة استرجاع أو استبدال.
+            </p>
+          ) : null}
+          {missingGovernorate ? (
+            <p className="mt-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-extrabold text-red-800">
+              المحافظة ناقصة على الأوردر. بوسطة مش هتنشئ البوليصة من غيرها.
+            </p>
+          ) : null}
           <button
             type="button"
-            disabled={fulfillmentBusy}
+            disabled={fulfillmentBusy || missingOrder || missingGovernorate}
             onClick={() => void submitFulfillment()}
             className="mt-2 w-full rounded-xl bg-[#14213D] px-3 py-2 text-xs font-extrabold text-white disabled:opacity-60"
           >
@@ -661,10 +715,11 @@ export function CsFulfillmentPanel({
                   </Link>
                   <button
                     type="button"
-                    className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white"
+                    disabled={fulfillmentBusy || printingWaybill}
+                    className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white disabled:opacity-60"
                     onClick={() => {
                       if (child.shippingCompany === "bosta") {
-                        void printWaybillPdf(child.trackingNumber || "ok", child.id);
+                        void printOrCreateChildBosta(child);
                       } else {
                         printFulfillmentWaybill(child.id);
                       }

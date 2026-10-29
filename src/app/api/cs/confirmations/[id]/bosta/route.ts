@@ -28,6 +28,7 @@ export async function POST(request: Request, context: Context) {
   if (body.action === "create") {
     const created = await ensureCsBostaWaybill(numericId, {
       answers: Array.isArray(body.answers) ? body.answers : undefined,
+      preserveShippingCompany: true,
     });
     if (!created.ok) {
       return NextResponse.json({ message: created.message }, { status: 400 });
