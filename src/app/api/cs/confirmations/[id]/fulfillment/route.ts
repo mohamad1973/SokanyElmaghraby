@@ -4,7 +4,7 @@ import { resolveCsViewer } from "@/lib/cs/confirmations";
 import {
   createFulfillmentFromOrder,
   listFulfillmentChildren,
-  type FulfillmentDesk,
+  type FulfillmentCarrier,
   type FulfillmentKind,
   type FulfillmentLine,
 } from "@/lib/cs/fulfillment-return";
@@ -69,8 +69,10 @@ export async function POST(request: Request, context: Context) {
 
   const kind: FulfillmentKind | null =
     body.kind === "return" || body.kind === "exchange" ? body.kind : null;
-  const desk: FulfillmentDesk | null =
-    body.desk === "sayed_temima" || body.desk === "eid" || body.desk === "momen" ? body.desk : null;
+  const desk: FulfillmentCarrier | null =
+    body.desk === "sayed_temima" || body.desk === "eid" || body.desk === "momen" || body.desk === "bosta"
+      ? body.desk
+      : null;
   if (!kind || !desk) {
     return NextResponse.json({ message: "اختَر نوع العملية والحساب." }, { status: 400 });
   }
@@ -80,6 +82,7 @@ export async function POST(request: Request, context: Context) {
     agentId: session.user.csAgentId,
     kind,
     desk,
+    allowAnyParent: true,
     monaCourierId: body.monaCourierId ?? null,
     collectAmount: body.collectAmount,
     outbound: body.outbound,

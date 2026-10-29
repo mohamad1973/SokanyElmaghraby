@@ -372,6 +372,11 @@ export function ScDeskClient() {
       phone: filledPhone,
       address: filledAddress,
       centerId: prev.centerId || access?.centerId || "",
+      confirmationId: filledPhone === prev.phone ? prev.confirmationId : null,
+      wooOrderNumber: filledPhone === prev.phone ? prev.wooOrderNumber : "",
+      productName: filledPhone === prev.phone ? prev.productName : "",
+      productCode: filledPhone === prev.phone ? prev.productCode : "",
+      wooProductId: filledPhone === prev.phone ? prev.wooProductId : null,
     }));
     if (data.found && data.customer) {
       setCustomer(data.customer);
@@ -794,7 +799,21 @@ export function ScDeskClient() {
                   },
                   "اتسجل الاستقبال واتبعت إشعار لمدير المراكز.",
                 );
-                if (ok) setForm((prev) => ({ ...emptyForm(), name: prev.name, phone: prev.phone, address: prev.address, centerId: prev.centerId }));
+                if (ok)
+                  setForm((prev) => ({
+                    ...emptyForm(),
+                    name: prev.name,
+                    phone: prev.phone,
+                    address: prev.address,
+                    centerId: prev.centerId,
+                    confirmationId: prev.confirmationId,
+                    wooOrderNumber: prev.wooOrderNumber,
+                    productName: prev.productName,
+                    productCode: prev.productCode,
+                    wooProductId: prev.wooProductId,
+                    purchaseSource: prev.purchaseSource,
+                    purchaseDate: prev.purchaseDate,
+                  }));
               }}
             >
               <h2 className="font-extrabold text-[#14213D]">تكت استقبال جديد</h2>

@@ -52,7 +52,8 @@ function rowMatchesTicket(row: MatchRow, ticket: TicketHit) {
   const rowPhone = last10(row.phone);
   const ticketPhone = last10(ticket.customerPhone);
   const phoneOk = rowPhone.length === 10 && ticketPhone.length === 10 && rowPhone === ticketPhone;
-  if (!ticketHasOrder(ticket)) return phoneOk;
+  if (phoneOk) return true;
+  if (!ticketHasOrder(ticket)) return false;
   const rowOrder = orderDigits(row.wooOrderNumber);
   const ticketOrder = orderDigits(ticket.wooOrderNumber);
   const orderOk = Boolean(rowOrder && ticketOrder && rowOrder === ticketOrder);
@@ -63,9 +64,7 @@ function rowMatchesTicket(row: MatchRow, ticket: TicketHit) {
   const trackOk = Boolean(
     row.trackingNumber && ticket.waybillTracking && row.trackingNumber.trim() === ticket.waybillTracking.trim(),
   );
-  if (!orderOk && !confOk && !trackOk) return false;
-  if (rowPhone.length === 10 && ticketPhone.length === 10 && rowPhone !== ticketPhone) return false;
-  return true;
+  return Boolean(orderOk || confOk || trackOk);
 }
 
 function badgeOf(ticket: TicketHit): DeskTicketBadge {

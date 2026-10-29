@@ -93,8 +93,8 @@ export function CsFulfillmentPanel({
       Boolean(shippingCompany === "eid" || shippingCompany === "momen" || shippingCompany === "sayed_temima"));
 
   const [fulfillmentKind, setFulfillmentKind] = useState<"return" | "exchange">("exchange");
-  const [fulfillmentDesk, setFulfillmentDesk] = useState<"sayed_temima" | "eid" | "momen">(
-    lockedShipping === "eid" || lockedShipping === "momen" || lockedShipping === "sayed_temima"
+  const [fulfillmentDesk, setFulfillmentDesk] = useState<"sayed_temima" | "eid" | "momen" | "bosta">(
+    lockedShipping === "eid" || lockedShipping === "momen" || lockedShipping === "sayed_temima" || lockedShipping === "bosta"
       ? lockedShipping
       : "sayed_temima",
   );
@@ -179,8 +179,8 @@ export function CsFulfillmentPanel({
   }
 
   async function submitFulfillment() {
-    if (!confirmationId || !canCreateFulfillment) {
-      tell("اختَر أوردر تأكيد تميمة أو عيد أو مؤمن من شحنات سيد والمندوب.");
+    if (!confirmationId) {
+      tell("اختَر الأوردر من اليمين.");
       return;
     }
     setFulfillmentBusy(true);
@@ -242,16 +242,23 @@ export function CsFulfillmentPanel({
       tell(
         data?.message ||
           (!data?.trackingNumber && data?.confirmationId
-            ? "تم حفظ الأوردر لكن تعذر إنشاء بوليصة سوكانى — لا يمكن الطباعة."
+            ? fulfillmentDesk === "bosta"
+              ? "تم حفظ الأوردر لكن تعذر إنشاء بوليصة بوسطة — لا يمكن الطباعة."
+              : "تم حفظ الأوردر لكن تعذر إنشاء بوليصة سوكانى — لا يمكن الطباعة."
             : "تعذر إنشاء الاستبدال/الاسترجاع."),
       );
       return;
     }
-    tell(`تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber} وبوليصة سوكانى.`);
-    printFulfillmentWaybill(data.confirmationId);
+    const billName = fulfillmentDesk === "bosta" ? "بوسطة" : "سوكانى";
+    tell(`تم إنشاء ${fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"} #${data.wooOrderNumber} وبوليصة ${billName}.`);
+    if (fulfillmentDesk === "bosta") {
+      await printWaybillPdf(data.trackingNumber || "ok", data.confirmationId);
+    } else {
+      printFulfillmentWaybill(data.confirmationId);
+    }
   }
 
-  async function printWaybillPdf(currentTracking: string) {
+  async function printWaybillPdf(currentTracking: string, targetId = confirmationId) {
     if (!currentTracking.trim()) {
       setWaybillCreatePrompt(true);
       return;
@@ -259,14 +266,18 @@ export function CsFulfillmentPanel({
     const preview = window.open("", "bosta-awb");
     setPrintingWaybill(true);
     tell("");
-    const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`);
+    const res = await fetch(`/api/cs/confirmations/${targetId}/bosta-awb`);
     if (!res.ok) {
       preview?.close();
       const data = (await res.json().catch(() => null)) as { message?: string; code?: string } | null;
       setPrintingWaybill(false);
       if (data?.code === "missing_waybill" || /مفيش بوليصة|غير موجود|not found|404/i.test(data?.message || "")) {
-        setWaybillCreatePrompt(true);
-        tell("");
+        if (targetId === confirmationId) {
+          setWaybillCreatePrompt(true);
+          tell("");
+        } else {
+          tell(data?.message || "تعذر طباعة بوليصة بوسطة.");
+        }
         return;
       }
       tell(data?.message || "تعذر طباعة بوليصة بوسطة.");
@@ -296,7 +307,7 @@ export function CsFulfillmentPanel({
       setWaybillPrinted(true);
       onWaybillPrinted?.();
       tell("البوليصة اتطبعت. تقدر تحفظ الأوردر.");
-      void fetch(`/api/cs/confirmations/${confirmationId}/bosta-awb`, { method: "POST" });
+      void fetch(`/api/cs/confirmations/${targetId}/bosta-awb`, { method: "POST" });
     };
     const printWhenReady = (target: Window, frame?: HTMLIFrameElement, alreadyLoaded = false) => {
       let started = false;
@@ -446,7 +457,7 @@ export function CsFulfillmentPanel({
         <div className="rounded-2xl bg-[#FFF8E7] p-3 shadow-sm ring-2 ring-inset ring-[#FCA311]">
           <p className="text-sm font-extrabold text-[#14213D]">استبدال / استرجاع</p>
           <p className="mt-0.5 text-[11px] font-bold text-[#14213D]/70">
-            لا يغيّر الأوردر الأصلي — ينشئ بوليصة سوكانى مرتبطة ويطبعها، وتظهر في حساب تميمة أو عيد أو مؤمن. رسوم الشحن عند تم بنجاح.
+            لا يغيّر الأوردر الأصلي — سيد/عيد/مؤمن يطبعوا بوليصة سوكانى، وبوسطة تطبع بوليصة بوسطة. رسوم الشحن عند تم بنجاح.
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <div className="flex flex-wrap gap-1">
@@ -474,6 +485,7 @@ export function CsFulfillmentPanel({
                   ["sayed_temima", "سيد تميمة"],
                   ["eid", "عيد"],
                   ["momen", "مؤمن"],
+                  ["bosta", "بوسطة"],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -647,7 +659,13 @@ export function CsFulfillmentPanel({
                     type="button"
                     disabled={!child.trackingNumber}
                     className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white disabled:opacity-40"
-                    onClick={() => printFulfillmentWaybill(child.id)}
+                    onClick={() => {
+                      if (child.shippingCompany === "bosta") {
+                        void printWaybillPdf(child.trackingNumber || "ok", child.id);
+                      } else {
+                        printFulfillmentWaybill(child.id);
+                      }
+                    }}
                   >
                     {child.trackingNumber ? "طباعة" : "بدون بوليصة"}
                   </button>
