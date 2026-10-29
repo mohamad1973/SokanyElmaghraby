@@ -24,6 +24,7 @@ type Ticket = {
   centerName: string;
   productName: string;
   productCode: string;
+  wooProductId?: number | null;
   purchaseSource: string;
   purchaseSourceNote: string;
   purchaseDate: string;
@@ -249,6 +250,34 @@ function emptyForm() {
   };
 }
 
+function formFromTicket(ticket: Ticket, centerId: number | "") {
+  return {
+    name: ticket.customerName || "",
+    phone: ticket.customerPhone || "",
+    address: ticket.customerAddress || "",
+    centerId: ticket.centerId || centerId,
+    productName: ticket.productName || "",
+    productCode: ticket.productCode || "",
+    wooProductId: ticket.wooProductId ?? null,
+    purchaseSource: ticket.purchaseSource || "",
+    purchaseSourceNote: ticket.purchaseSourceNote || "",
+    purchaseDate: ticket.purchaseDate || "",
+    usageKind: ticket.usageKind || "",
+    visualKind: ticket.visualKind || "",
+    powerCut: Boolean(ticket.powerCut),
+    defects: ticket.defects || [],
+    defectOther: ticket.defectOther || "",
+    invoiceUrls: ticket.invoicePhotos.map((photo) => photo.url),
+    productUrls: ticket.productPhotos.map((photo) => photo.url),
+    complaintUrls: (ticket.complaintPhotos || []).map((photo) => photo.url),
+    complaintNote: ticket.complaintNote || "",
+    customerRequest: ticket.customerRequest || "",
+    staffProposal: ticket.staffProposal || "",
+    confirmationId: ticket.confirmationId,
+    wooOrderNumber: ticket.wooOrderNumber || "",
+  };
+}
+
 export function ScDeskClient() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<"desk" | "approvals">("desk");
@@ -333,6 +362,7 @@ export function ScDeskClient() {
       techNotes: data.ticket.techNotes,
     });
     setRefund({ kind: data.ticket.refundKind === "exchange" ? "exchange" : "return", reason: data.ticket.refundReason });
+    setForm((prev) => formFromTicket(data.ticket!, prev.centerId));
     setTab("desk");
   }, []);
 
@@ -797,20 +827,7 @@ export function ScDeskClient() {
           ) : null}
 
           {access?.canInspect ? (
-            <form
-              className="space-y-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                await post(
-                  {
-                    action: "intake",
-                    ...form,
-                    centerId: form.centerId || access.centerId || undefined,
-                  },
-                  "اتسجل الاستقبال واتبعت إشعار لمدير المراكز.",
-                );
-              }}
-            >
+            <div className="space-y-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-extrabold text-[#14213D]">تكت استقبال جديد</h2>
                 <button
@@ -949,10 +966,26 @@ export function ScDeskClient() {
                   <img key={url} src={url} alt="" className="h-14 w-14 rounded-lg object-cover" />
                 ))}
               </div>
-              <button disabled={loading} className="h-10 rounded-xl bg-[#FCA311] px-4 text-sm font-extrabold text-black disabled:opacity-60">
+              <button
+                type="button"
+                disabled={loading}
+                className="h-10 rounded-xl bg-[#FCA311] px-4 text-sm font-extrabold text-black disabled:opacity-60"
+                onClick={async () => {
+                  const snapshot = { ...form };
+                  const ok = await post(
+                    {
+                      action: "intake",
+                      ...snapshot,
+                      centerId: snapshot.centerId || access.centerId || undefined,
+                    },
+                    "اتسجل الاستقبال واتبعت إشعار لمدير المراكز.",
+                  );
+                  if (ok) setForm(snapshot);
+                }}
+              >
                 تسجيل الاستقبال
               </button>
-            </form>
+            </div>
           ) : null}
           </div>
         </div>
