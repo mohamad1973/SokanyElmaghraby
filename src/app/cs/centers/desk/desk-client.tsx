@@ -373,7 +373,6 @@ export function ScDeskClient() {
 
   async function search() {
     const keepId = selected?.id;
-    const keepPhone = form.phone.trim();
     setLoading(true);
     setMessage("");
     const res = await fetch(`/api/cs/centers/intake?phone=${encodeURIComponent(phone)}`);
@@ -397,34 +396,37 @@ export function ScDeskClient() {
     const filledName = (data.customer?.name || profile?.name || "").trim();
     const filledPhone = (data.customer?.phone || profile?.phone || data.phone || phone).trim();
     const filledAddress = (data.customer?.address || profile?.address || "").trim();
-    const last10 = (value: string) => value.replace(/\D/g, "").slice(-10);
-    const samePhone = Boolean(last10(filledPhone) && (last10(filledPhone) === last10(keepPhone) || last10(filledPhone) === last10(phone)));
-    setForm((prev) => ({
-      ...emptyForm(),
-      name: filledName,
-      phone: filledPhone,
-      address: filledAddress,
-      centerId: prev.centerId || access?.centerId || "",
-      confirmationId: samePhone ? prev.confirmationId : null,
-      wooOrderNumber: samePhone ? prev.wooOrderNumber : "",
-      productName: samePhone ? prev.productName : "",
-      productCode: samePhone ? prev.productCode : "",
-      wooProductId: samePhone ? prev.wooProductId : null,
-      complaintNote: samePhone ? prev.complaintNote : "",
-      customerRequest: samePhone ? prev.customerRequest : "",
-      staffProposal: samePhone ? prev.staffProposal : "",
-    }));
+    const tickets = data.tickets || [];
+    const latest = (keepId && tickets.find((row) => row.id === keepId)) || tickets[0] || null;
     if (data.found && data.customer) {
       setCustomer(data.customer);
-      setTickets(data.tickets || []);
-      const stillOpen = samePhone && keepId && (data.tickets || []).some((row) => row.id === keepId);
-      if (stillOpen && keepId) void openTicket(keepId);
-      else if (!samePhone) setSelected(null);
-      setMessage(data.tickets?.length ? `اتفتح ملف ${filledName || data.customer.name}` : "العميل معروف. مفيش زيارات في الفرع ده.");
+      setTickets(tickets);
+      if (latest) {
+        setForm((prev) => formFromTicket(latest, prev.centerId || access?.centerId || ""));
+        void openTicket(latest.id);
+        setMessage(`اتفتح ملف ${filledName || data.customer.name}`);
+      } else {
+        setSelected(null);
+        setForm((prev) => ({
+          ...emptyForm(),
+          name: filledName,
+          phone: filledPhone,
+          address: filledAddress,
+          centerId: prev.centerId || access?.centerId || "",
+        }));
+        setMessage("العميل معروف. مفيش زيارات في الفرع ده.");
+      }
     } else {
       setCustomer(null);
       setTickets([]);
-      if (!samePhone) setSelected(null);
+      setSelected(null);
+      setForm((prev) => ({
+        ...emptyForm(),
+        name: filledName,
+        phone: filledPhone,
+        address: filledAddress,
+        centerId: prev.centerId || access?.centerId || "",
+      }));
       setMessage(filledName ? `اتعبّت بيانات ${filledName} من السيستم.` : "عميل جديد. سجّل بياناته.");
     }
   }
