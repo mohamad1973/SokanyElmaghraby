@@ -719,32 +719,37 @@ export async function includeTemimaOrders(dayYmd: string, confirmationIds: numbe
   });
   if (!rows.length) return { ok: false as const, message: "مش موجود في الأوردرات." };
   const owners = await listEarliestFreezeDays(rows.map((row) => row.id));
-  const allowed = rows.filter((row) => {
-    const owner = owners.get(row.id);
-    return !owner || owner === dayYmd;
-  });
-  if (!allowed.length) {
-    return { ok: false as const, message: "الأوردر على شيت يوم مقفول، وما ينفعش يظهر في يوم تاني." };
-  }
-  for (const row of allowed) {
+  const edits: Array<{ dayYmd: string; confirmationId: number; kind: "include" | "exclude" }> = [];
+  let moved = 0;
+  for (const row of rows) {
+    const owner = owners.get(row.id) || "";
+    if (owner && owner !== dayYmd) {
+      await removeTemimaFreezeExcept(row.id, dayYmd);
+      await prisma.csTemimaSheetEdit.upsert({
+        where: { dayYmd_confirmationId: { dayYmd: owner, confirmationId: row.id } },
+        create: { dayYmd: owner, confirmationId: row.id, kind: "exclude" },
+        update: { kind: "exclude" },
+      });
+      edits.push({ dayYmd: owner, confirmationId: row.id, kind: "exclude" });
+      moved += 1;
+    }
     await prisma.csTemimaSheetEdit.upsert({
       where: { dayYmd_confirmationId: { dayYmd, confirmationId: row.id } },
       create: { dayYmd, confirmationId: row.id, kind: "include" },
       update: { kind: "include" },
     });
+    edits.push({ dayYmd, confirmationId: row.id, kind: "include" });
   }
   if (await hasTemimaFreezeDay(dayYmd)) {
-    const added = allowed.map((row) => row.id);
+    const added = rows.map((row) => row.id);
     await addTemimaFreezeIds(dayYmd, added);
     await markTemimaSheetHandedToCarrier(added);
   }
-  const edits = allowed.map((row) => ({ dayYmd, confirmationId: row.id, kind: "include" as const }));
-  const skipped = rows.length - allowed.length;
   return {
     ok: true as const,
     edits,
-    items: allowed.map((row) => serializeCsQueueItem(row)),
-    message: skipped ? `اتضاف ${allowed.length}. والباقي على يوم مقفول.` : `اتضاف ${allowed.length}.`,
+    items: rows.map((row) => serializeCsQueueItem(row)),
+    message: moved ? `اتضاف ${rows.length} من شيت يوم مقفول.` : `اتضاف ${rows.length}.`,
   };
 }
 
