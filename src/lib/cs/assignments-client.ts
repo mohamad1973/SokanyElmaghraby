@@ -1,5 +1,6 @@
 /** Client-safe helpers (no server-only). */
 export function parseWooOrderNumber(value: string | number | null | undefined) {
-  const digits = String(value ?? "").replace(/\D/g, "");
+  const stripped = String(value ?? "").replace(/-(R|X)\d+$/i, "");
+  const digits = stripped.replace(/\D/g, "");
   return Number(digits) || 0;
 }

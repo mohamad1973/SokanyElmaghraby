@@ -52,9 +52,16 @@ export function trackingPrefixForCarrier(code: string) {
 
 export function buildSokanyTracking(carrierCode: string, wooOrderNumber: string, kind?: string) {
   const raw = String(wooOrderNumber || "").replace(/^#/, "").replace(/\s+/g, "").slice(0, 32);
-  const stripped = raw.replace(/-(R|X)\d+$/i, "");
-  const suffix = kind === "return" ? "R1" : kind === "exchange" ? "X1" : "";
-  const order = suffix ? `${stripped || "0"}-${suffix}` : raw || "0";
+  const tagged = raw.match(/^(.*)-(R|X)(\d+)$/i);
+  const suffix = tagged
+    ? `${tagged[2].toUpperCase()}${tagged[3]}`
+    : kind === "return"
+      ? "R1"
+      : kind === "exchange"
+        ? "X1"
+        : "";
+  const base = (tagged ? tagged[1] : raw) || "0";
+  const order = suffix ? `${base}-${suffix}` : raw || "0";
   return `SK-${trackingPrefixForCarrier(carrierCode)}-${order}`;
 }
 

@@ -342,9 +342,10 @@ export function ScDeskClient() {
   }, [openTicket, searchParams]);
 
   async function search() {
+    const keepId = selected?.id;
+    const keepPhone = form.phone.trim();
     setLoading(true);
     setMessage("");
-    setSelected(null);
     const res = await fetch(`/api/cs/centers/intake?phone=${encodeURIComponent(phone)}`);
     const data = (await res.json()) as {
       message?: string;
@@ -366,25 +367,34 @@ export function ScDeskClient() {
     const filledName = (data.customer?.name || profile?.name || "").trim();
     const filledPhone = (data.customer?.phone || profile?.phone || data.phone || phone).trim();
     const filledAddress = (data.customer?.address || profile?.address || "").trim();
+    const last10 = (value: string) => value.replace(/\D/g, "").slice(-10);
+    const samePhone = Boolean(last10(filledPhone) && (last10(filledPhone) === last10(keepPhone) || last10(filledPhone) === last10(phone)));
     setForm((prev) => ({
       ...emptyForm(),
       name: filledName,
       phone: filledPhone,
       address: filledAddress,
       centerId: prev.centerId || access?.centerId || "",
-      confirmationId: filledPhone === prev.phone ? prev.confirmationId : null,
-      wooOrderNumber: filledPhone === prev.phone ? prev.wooOrderNumber : "",
-      productName: filledPhone === prev.phone ? prev.productName : "",
-      productCode: filledPhone === prev.phone ? prev.productCode : "",
-      wooProductId: filledPhone === prev.phone ? prev.wooProductId : null,
+      confirmationId: samePhone ? prev.confirmationId : null,
+      wooOrderNumber: samePhone ? prev.wooOrderNumber : "",
+      productName: samePhone ? prev.productName : "",
+      productCode: samePhone ? prev.productCode : "",
+      wooProductId: samePhone ? prev.wooProductId : null,
+      complaintNote: samePhone ? prev.complaintNote : "",
+      customerRequest: samePhone ? prev.customerRequest : "",
+      staffProposal: samePhone ? prev.staffProposal : "",
     }));
     if (data.found && data.customer) {
       setCustomer(data.customer);
       setTickets(data.tickets || []);
+      const stillOpen = samePhone && keepId && (data.tickets || []).some((row) => row.id === keepId);
+      if (stillOpen && keepId) void openTicket(keepId);
+      else if (!samePhone) setSelected(null);
       setMessage(data.tickets?.length ? `اتفتح ملف ${filledName || data.customer.name}` : "العميل معروف. مفيش زيارات في الفرع ده.");
     } else {
       setCustomer(null);
       setTickets([]);
+      if (!samePhone) setSelected(null);
       setMessage(filledName ? `اتعبّت بيانات ${filledName} من السيستم.` : "عميل جديد. سجّل بياناته.");
     }
   }
@@ -791,7 +801,7 @@ export function ScDeskClient() {
               className="space-y-2 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
               onSubmit={async (event) => {
                 event.preventDefault();
-                const ok = await post(
+                await post(
                   {
                     action: "intake",
                     ...form,
@@ -799,24 +809,28 @@ export function ScDeskClient() {
                   },
                   "اتسجل الاستقبال واتبعت إشعار لمدير المراكز.",
                 );
-                if (ok)
-                  setForm((prev) => ({
-                    ...emptyForm(),
-                    name: prev.name,
-                    phone: prev.phone,
-                    address: prev.address,
-                    centerId: prev.centerId,
-                    confirmationId: prev.confirmationId,
-                    wooOrderNumber: prev.wooOrderNumber,
-                    productName: prev.productName,
-                    productCode: prev.productCode,
-                    wooProductId: prev.wooProductId,
-                    purchaseSource: prev.purchaseSource,
-                    purchaseDate: prev.purchaseDate,
-                  }));
               }}
             >
-              <h2 className="font-extrabold text-[#14213D]">تكت استقبال جديد</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-extrabold text-[#14213D]">تكت استقبال جديد</h2>
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#F5F5F0] px-3 py-1 text-xs font-extrabold text-[#14213D]"
+                  onClick={() => {
+                    setSelected(null);
+                    setRefund({ kind: "return", reason: "" });
+                    setForm((prev) => ({
+                      ...emptyForm(),
+                      name: prev.name,
+                      phone: prev.phone,
+                      address: prev.address,
+                      centerId: prev.centerId,
+                    }));
+                  }}
+                >
+                  تكت جديد
+                </button>
+              </div>
               {form.wooOrderNumber ? (
                 <p className="text-xs font-bold text-emerald-800">مربوط بأوردر #{form.wooOrderNumber}{form.confirmationId ? ` · تأكيد ${form.confirmationId}` : ""}</p>
               ) : null}

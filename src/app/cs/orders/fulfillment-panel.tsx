@@ -169,12 +169,14 @@ export function CsFulfillmentPanel({
     return () => window.clearTimeout(timer);
   }, [fulfillmentHitTarget, fulfillmentOutboundQ, fulfillmentReturnQ]);
 
-  function printFulfillmentWaybill(childId: number) {
-    const popup = window.open(`/cs/print/sokany-awb/${childId}`, "sokany-awb");
+  function printFulfillmentWaybill(childId: number, existing?: Window | null) {
+    const url = `/cs/print/sokany-awb/${childId}`;
+    const popup = existing || window.open(url, "sokany-awb");
     if (!popup) {
       tell("المتصفح منع نافذة الطباعة. اسمح بالنوافذ المنبثقة ثم أعيدي المحاولة.");
       return;
     }
+    if (existing) popup.location.href = url;
     tell("اتفتحت بوليصة سوكانى للطباعة 10×15.");
   }
 
@@ -183,6 +185,7 @@ export function CsFulfillmentPanel({
       tell("اختَر الأوردر من اليمين.");
       return;
     }
+    const preview = window.open("about:blank", fulfillmentDesk === "bosta" ? "bosta-awb" : "sokany-awb");
     setFulfillmentBusy(true);
     tell("");
     const answer = (key: string) => answers.find((row) => row.itemKey === key)?.value || "";
@@ -239,6 +242,7 @@ export function CsFulfillmentPanel({
       ]);
     }
     if (!res.ok || !data?.confirmationId || !data.trackingNumber) {
+      preview?.close();
       tell(
         data?.message ||
           (!data?.trackingNumber && data?.confirmationId
@@ -254,7 +258,7 @@ export function CsFulfillmentPanel({
     if (fulfillmentDesk === "bosta") {
       await printWaybillPdf(data.trackingNumber || "ok", data.confirmationId);
     } else {
-      printFulfillmentWaybill(data.confirmationId);
+      printFulfillmentWaybill(data.confirmationId, preview);
     }
   }
 
@@ -657,8 +661,7 @@ export function CsFulfillmentPanel({
                   </Link>
                   <button
                     type="button"
-                    disabled={!child.trackingNumber}
-                    className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white disabled:opacity-40"
+                    className="rounded-lg bg-[#059669] px-2 py-1 text-[10px] font-extrabold text-white"
                     onClick={() => {
                       if (child.shippingCompany === "bosta") {
                         void printWaybillPdf(child.trackingNumber || "ok", child.id);
@@ -667,7 +670,7 @@ export function CsFulfillmentPanel({
                       }
                     }}
                   >
-                    {child.trackingNumber ? "طباعة" : "بدون بوليصة"}
+                    {child.trackingNumber ? "طباعة" : "إنشاء وطباعة"}
                   </button>
                 </li>
               ))}

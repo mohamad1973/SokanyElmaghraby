@@ -3,13 +3,11 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 
 import { ensureCsTables } from "@/lib/cs/agents";
+import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import { cairoTodayYmd, cairoYmdBounds, isWithinCairoDateRange } from "@/lib/cs/order-window";
 import { getPrismaClient } from "@/lib/db";
 
-export function parseWooOrderNumber(value: string | number | null | undefined) {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  return Number(digits) || 0;
-}
+export { parseWooOrderNumber };
 
 export async function listAssignmentsDetailed(opts?: { fromYmd?: string; toYmd?: string }) {
   const prisma = getPrismaClient();

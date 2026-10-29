@@ -336,7 +336,7 @@ export async function createFulfillmentFromOrder(input: {
       wooOrderId,
       wooOrderNumber,
       status: CS_CONFIRMATION_STATUS.CONFIRMED,
-      assignedAgentId: input.agentId,
+      assignedAgentId: parent.assignedAgentId || input.agentId,
       customerSnapshot: snapshot,
       shippingCompany: input.desk,
       confirmedAt: now,
