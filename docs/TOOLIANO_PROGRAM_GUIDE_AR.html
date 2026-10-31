@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>دليل تشغيل Tooliano / سوكانى</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6478;
+      --accent: #b8860b;
+      --accent-dark: #8b6914;
+      --border: #e2e6ef;
+      --code-bg: #f1f3f8;
+      --sidebar-width: 280px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      color: var(--text);
+      background: var(--bg);
+      direction: rtl;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      padding: 1.25rem 1rem;
+    }
+    .sidebar h2 {
+      font-size: 0.95rem;
+      margin: 0 0 0.75rem;
+      color: var(--accent-dark);
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 0.35rem 0.5rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.88rem;
+      border-radius: 6px;
+    }
+    .sidebar nav a:hover {
+      background: var(--code-bg);
+      color: var(--accent-dark);
+    }
+    .content {
+      max-width: 960px;
+      padding: 2rem 2.5rem 4rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #fff8e6;
+      color: var(--accent-dark);
+      border: 1px solid #f0d78c;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 2rem;
+      margin: 0 0 0.5rem;
+      color: var(--accent-dark);
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 0.5rem;
+    }
+    h2 {
+      font-size: 1.45rem;
+      margin: 2.5rem 0 1rem;
+      color: var(--accent-dark);
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 1.15rem;
+      margin: 1.75rem 0 0.75rem;
+      color: #2d3344;
+    }
+    p { margin: 0.75rem 0; }
+    strong { color: #111; }
+    a { color: var(--accent-dark); }
+    ul, ol { padding-right: 1.5rem; margin: 0.75rem 0; }
+    li { margin: 0.35rem 0; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.75rem 1rem;
+      background: #fff8e6;
+      border-right: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      color: #4a4020;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.92rem;
+      background: var(--surface);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.7rem;
+      text-align: right;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f5fa;
+      font-weight: 700;
+    }
+    tr:nth-child(even) td { background: #fafbfc; }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+    pre {
+      background: #1e2433;
+      color: #e8ecf4;
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      direction: ltr;
+      text-align: left;
+      margin: 1rem 0;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+      font-size: 0.85rem;
+    }
+    .footer-note {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar {
+        position: relative;
+        height: auto;
+        border-left: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .content { padding: 1.25rem 1rem 3rem; }
+    }
+    @page { size: A4; margin: 14mm; }
+    @media print {
+      .sidebar { display: none; }
+      .layout { display: block; }
+      body { background: white; font-size: 12.5px; }
+      .content { max-width: none; padding: 0; }
+      h2 { break-after: avoid; }
+      table, pre, blockquote { break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>فهرس سريع</h2>
+      <nav>
+        <a href="#1-إزاي-تقرأ-الدليل-والكود">1. إزاي تقرأ</a>
+        <a href="#2-خريطة-البرنامج">2. خريطة البرنامج</a>
+        <a href="#3-فين-ملفات-الشرح-في-المشروع">3. ملفات الشرح</a>
+        <a href="#4-قاعدة-الطبقات-الأربع-أهم-حاجة-تفهمها">4. الطبقات الأربع</a>
+        <a href="#5-نموذج-من-الكود-استقبال">5. نموذج كود</a>
+        <a href="#6-كتالوج-الشاشات--الرابط-والملف">6. كتالوج الشاشات</a>
+        <a href="#7-تشغيل-العملاء-بالتفصيل">7. تشغيل العملاء</a>
+        <a href="#8-قاعدة-البيانات-من-غير-أسرار">8. قاعدة البيانات</a>
+        <a href="#9-ووردبريس-خارج-nextjs">9. ووردبريس</a>
+        <a href="#10-إزاي-تعدّل-بعدين-خطوات-عملية">10. إزاي تعدّل</a>
+        <a href="#11-ملاحظات-أمان-قراءة-فقط--لا-إصلاح-في-هذا-التسليم">11. أمان</a>
+        <a href="#12-إيه-ينفع-يتظبط-لاحقاً-من-غير-تنفيذ-الآن">12. تنظيم لاحقاً</a>
+        <a href="#13-أوامر-مفيدة-مرجع">13. أوامر</a>
+        <a href="#14-فهرس-سريع-عايز-أغيّر-إيه--فين-الملف">14. فهرس التعديل</a>
+        <a href="#15-حالة-الخصائص-مختصر">15. حالة الخصائص</a>
+      </nav>
+    </aside>
+    <main class="content">
+      <div class="badge">Tooliano / سوكانى — دليل تشغيل للقراءة فقط</div>
+      <h1>دليل تشغيل Tooliano / سوكانى</h1>
+<p><strong>المشروع:</strong> sokany-storefront على GitHub (<code>mohamad1973/SokanyElmaghraby</code>)<br><strong>الإنتاج:</strong> <a href="https://sokany-storefront.vercel.app">https://sokany-storefront.vercel.app</a><br><strong>المجلد المحلي:</strong> <code>C:\Users\mm\SokanyElmaghraby\sokany-storefront</code><br><strong>تاريخ هذا الدليل:</strong> 31 أكتوبر 2026  </p>
+<p>هذا الملف للفهم والقراءة. <strong>لا يغيّر</strong> شاشات الموقع ولا وظائفه. أي تنظيم أو إصلاح أمان مذكور في آخر الدليل للتنفيذ لاحقاً بعد موافقة منفصلة.</p>
+<hr>
+<h2>1. إزاي تقرأ الدليل والكود</h2>
+<p>الموقع مش ملفات HTML منفصلة زي صفحات ووردبريس القديمة. كل شاشة غالباً ملف TypeScript/React اسمه ينتهي بـ <code>.tsx</code>. جواه:</p>
+<ul>
+<li><strong>نصوص عربية وأزرار</strong> تقدر تقرأها حتى لو مش خبير جافاسكربت.</li>
+<li><strong><code>className=&quot;...&quot;</code></strong> دي ألوان ومسافات Tailwind (قريبة من CSS).</li>
+<li><strong><code>fetch(&quot;/api/...&quot;)</code></strong> ده طلب للحفظ أو البحث. متلمسّوش لو عايز تغيّر الشكل بس.</li>
+<li><strong><code>src/lib/</code></strong> منطق الحفظ والشحن والتكت. متلمسّوش من غير مساعدة.</li>
+</ul>
+<p><strong>قاعدة ذهبية:</strong> افتح شاشة واحدة في المرة. دور على الملف اللي اسمه زي الشاشة (<code>desk-client</code> للاستقبال، <code>maintenance-client</code> للمرتجعات).</p>
+<table>
+<thead>
+<tr>
+<th>أنت تعرف</th>
+<th>تقدر تعدّل بأمان</th>
+<th>سيبه لحد فاهم TypeScript</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HTML / CSS</td>
+<td>نصوص الأزرار، <code>className</code> في ملفات <code>*-client.tsx</code></td>
+<td><code>src/lib/</code> و <code>src/app/api/</code></td>
+</tr>
+<tr>
+<td>لاحقاً بعد تدريب</td>
+<td>إضافة جملة توضيحية على الكارت</td>
+<td>جداول قاعدة البيانات، بوسطة، كلمات السر</td>
+</tr>
+</tbody></table>
+<p>لو غيّرت قوس <code>{</code> أو فاصلة في <code>fetch</code> البناء <code>npm run build</code> بيفشل والموقع ما ينزلش.</p>
+<hr>
+<h2>2. خريطة البرنامج</h2>
+<pre><code>المتصفح (عميل / أدمن / سائق / موظف CS)
+        │
+        ▼
+Next.js  (مجلد src/app/)
+   صفحات الشاشات + واجهات API
+        │
+        ▼
+src/lib/   منطق الأعمال
+        ├── WooCommerce  (منتجات وطلبات الموقع: sokany-eg.com)
+        ├── Prisma / MySQL  (تأكيدات CS، تكت استقبال، مرتجعات، شيت تميمة)
+        └── بوسطة API     (بوليصة توصيل / استرجاع / استبدال)
+</code></pre>
+<p><strong>ثلاث طبقات حماية:</strong></p>
+<ol>
+<li><code>middleware.ts</code> في جذر المشروع — يقفل <code>/cs</code> و <code>/admin</code> و <code>/driver</code> إلا بعد جلسة.</li>
+<li><code>src/lib/session-guards.ts</code> — كل API تقريباً يطلب جلسة: عميل أو أدمن أو سائق أو CS.</li>
+<li>صلاحيات الموظف داخل CS (مكالمات / مشرف / أدمن / صيانة / استقبال).</li>
+</ol>
+<p><strong>من أين تشتغل كل حاجة؟</strong></p>
+<table>
+<thead>
+<tr>
+<th>الطبقة</th>
+<th>المجلد</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>شاشات المتجر والأدمن والسائق وCS</td>
+<td><code>src/app/</code></td>
+</tr>
+<tr>
+<td>أزرار وهيدر مشترك للمتجر</td>
+<td><code>src/components/</code></td>
+</tr>
+<tr>
+<td>منطق الحفظ والشحن والتكت</td>
+<td><code>src/lib/</code> وخصوصاً <code>src/lib/cs/</code></td>
+</tr>
+<tr>
+<td>واجهات الشبكة</td>
+<td><code>src/app/api/</code></td>
+</tr>
+<tr>
+<td>شكل الجداول</td>
+<td><code>prisma/schema.prisma</code></td>
+</tr>
+<tr>
+<td>بلجن واتساب OTP</td>
+<td><code>wordpress-plugin/</code></td>
+</tr>
+<tr>
+<td>شرح للمساعدين</td>
+<td><code>.cursor/PROJECT_GUIDE.md</code> و <code>docs/</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>3. فين ملفات الشرح في المشروع</h2>
+<table>
+<thead>
+<tr>
+<th>الملف</th>
+<th>ماذا فيه</th>
+<th>متى تفتحه</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>هذا الدليل</strong> <code>docs/TOOLIANO_PROGRAM_GUIDE_AR.md</code></td>
+<td>خرائط + شاشات + تشغيل العملاء + نموذج كود</td>
+<td>القراءة اليومية</td>
+</tr>
+<tr>
+<td>HTML من هذا الدليل <code>docs/TOOLIANO_PROGRAM_GUIDE_AR.html</code></td>
+<td>نفس المحتوى بفهرس جانبي</td>
+<td>المتصفح</td>
+</tr>
+<tr>
+<td>PDF <code>docs/TOOLIANO_PROGRAM_GUIDE_AR.pdf</code></td>
+<td>للطباعة</td>
+<td>الديسكتوب أيضاً</td>
+</tr>
+<tr>
+<td><code>.cursor/PROJECT_GUIDE.md</code></td>
+<td>روابط الإنتاج، جدول «أي ملف أعدّل»، سجل الجلسات</td>
+<td>قبل أي تعديل مع Cursor</td>
+</tr>
+<tr>
+<td><code>docs/SOKANY_HANDBOOK_AR.html</code></td>
+<td>دليل المتجر والأدمن (أقدم؛ يوليو 2026)</td>
+<td>شكل المتجر والهيدر</td>
+</tr>
+<tr>
+<td><code>docs/SOKANY_HANDBOOK_AR.md</code></td>
+<td>مصدر الـ HTML القديم</td>
+<td>إعادة توليد: <code>node scripts/handbook-to-html.mjs</code></td>
+</tr>
+<tr>
+<td><code>.cursor/plans/</code></td>
+<td>خطط جلسات العمل (استقبال، بوسطة، تكت)</td>
+<td>تفهم «ليه اتكتب الكود كده»</td>
+</tr>
+<tr>
+<td><code>docs/HOSTINGER_REMOTE_MYSQL_AR.md</code></td>
+<td>اتصال قاعدة هوستنجر</td>
+<td><strong>لا تنشر محتواه؛ فيه بيانات حساسة</strong></td>
+</tr>
+<tr>
+<td><code>docs/VERCEL_TOOLIANO_CUTOVER_AR.md</code></td>
+<td>نقل النطاق</td>
+<td>نشر الإنتاج</td>
+</tr>
+</tbody></table>
+<p>نسخة الديسكتوب: <code>C:\Users\mm\OneDrive\Desktop\دليل_تشغيل_Tooliano.pdf</code> (أو <code>Desktop</code> العادي إن لم يكن OneDrive).</p>
+<hr>
+<h2>4. قاعدة الطبقات الأربع (أهم حاجة تفهمها)</h2>
+<p>كل ميزة CS تقريباً أربعة ملفات، مش ملف واحد.</p>
+<table>
+<thead>
+<tr>
+<th>الطبقة</th>
+<th>مثال الاستقبال</th>
+<th>مثال المرتجعات</th>
+<th>دورها</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>المسار</td>
+<td><code>src/app/cs/centers/desk/page.tsx</code></td>
+<td><code>src/app/cs/maintenance/page.tsx</code></td>
+<td>يتأكد إن الموظف داخل، وإلا يحوّله لصفحة الدخول</td>
+</tr>
+<tr>
+<td>الشكل</td>
+<td><code>src/app/cs/centers/desk/desk-client.tsx</code></td>
+<td><code>src/app/cs/maintenance/maintenance-client.tsx</code></td>
+<td>الأزرار، الخانات، الألوان، النصوص العربية</td>
+</tr>
+<tr>
+<td>الـ API</td>
+<td><code>src/app/api/cs/centers/intake/route.ts</code></td>
+<td><code>src/app/api/cs/maintenance/returns/route.ts</code></td>
+<td>يستقبل الطلب من المتصفح بعد التحقق من الجلسة</td>
+</tr>
+<tr>
+<td>المنطق</td>
+<td><code>src/lib/cs/sc-intake.ts</code></td>
+<td><code>src/lib/cs/maintenance-returns.ts</code></td>
+<td>يحفظ في MySQL ويربط التكت بالأوردر</td>
+</tr>
+</tbody></table>
+<p>نفس الفكرة في قائمة المكالمات:</p>
+<ul>
+<li>الشاشة: <code>src/app/cs/page.tsx</code> + <code>src/app/cs/cs-queue-client.tsx</code></li>
+<li>الحفظ: <code>src/app/api/cs/confirmations/[id]/route.ts</code></li>
+<li>المنطق: <code>src/lib/cs/confirmations.ts</code></li>
+</ul>
+<p><strong>لو عايز تغيّر لون زر أو كلمة عربية:</strong> الملف <code>*-client.tsx</code>.<br><strong>لو عايز تغيّر إزاي التكت بيتسجل:</strong> <code>src/lib/cs/</code> — اطلب مساعدة قبل التعديل.</p>
+<hr>
+<h2>5. نموذج من الكود (استقبال)</h2>
+<p>الملف: <code>src/app/cs/centers/desk/desk-client.tsx</code></p>
+<p>الجزء اللي <strong>شكل</strong> (تقدر تقرأه زي HTML):</p>
+<pre><code class="language-tsx">&lt;input
+  className=&quot;w-full rounded-xl border px-3 py-2&quot;
+  placeholder=&quot;رقم الموبايل&quot;
+  value={form.phone}
+  onChange={(e) =&gt; setForm({ ...form, phone: e.target.value })}
+/&gt;
+</code></pre>
+<ul>
+<li><code>placeholder</code> = الكلام الرمادي داخل الخانة.</li>
+<li><code>className</code> = الشكل (حدود، حواف، مسافة). قريب من CSS.</li>
+<li><code>value</code> / <code>onChange</code> = ربط الخانة بالبيانات. لو مسحت <code>onChange</code> الخانة مش هتكتب.</li>
+</ul>
+<p>الجزء اللي <strong>منطق</strong> (متلمسّوش عشان الشكل):</p>
+<pre><code class="language-tsx">async function search() {
+  const res = await fetch(`/api/cs/centers/intake?phone=${encodeURIComponent(phone)}`);
+  const data = await res.json();
+  // بعد البحث: يفتح آخر تكت لنفس الرقم ويملأ الشكوى وطلب العميل واقتراح الموظف
+}
+</code></pre>
+<p><code>fetch</code> يكلّم السيرفر. السيرفر في <code>src/app/api/cs/centers/intake/route.ts</code> ينادي <code>src/lib/cs/sc-intake.ts</code> اللي بيقرأ جدول <code>ScTicket</code>.</p>
+<hr>
+<h2>6. كتالوج الشاشات — الرابط والملف</h2>
+<p>الإنتاج: <a href="https://sokany-storefront.vercel.app">https://sokany-storefront.vercel.app</a><br>نفس المسارات محلياً بعد <code>npm run dev</code> على <a href="http://localhost:3000">http://localhost:3000</a></p>
+<h3>6.1 المتجر (العميل)</h3>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد</th>
+<th>الرابط</th>
+<th>ملف الواجهة</th>
+<th>المنطق</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>الرئيسية</td>
+<td><code>/</code></td>
+<td><code>src/app/page.tsx</code></td>
+<td><code>src/lib/theme-settings.ts</code>, <code>src/lib/woocommerce.ts</code></td>
+</tr>
+<tr>
+<td>المتجر</td>
+<td><code>/shop</code></td>
+<td><code>src/app/shop/page.tsx</code></td>
+<td><code>woocommerce.ts</code></td>
+</tr>
+<tr>
+<td>منتج</td>
+<td><code>/product/[slug]</code></td>
+<td><code>src/app/product/[slug]/page.tsx</code></td>
+<td>مواصفات + صور</td>
+</tr>
+<tr>
+<td>عروض</td>
+<td><code>/offers</code></td>
+<td><code>src/app/offers/page.tsx</code></td>
+<td>منتجات بتخفيض</td>
+</tr>
+<tr>
+<td>مقارنة</td>
+<td><code>/compare</code></td>
+<td><code>src/app/compare/page.tsx</code></td>
+<td><code>src/lib/compare-utils.ts</code></td>
+</tr>
+<tr>
+<td>سلة</td>
+<td><code>/cart</code></td>
+<td><code>src/app/cart/page.tsx</code></td>
+<td>السلة في المتصفح</td>
+</tr>
+<tr>
+<td>دفع COD / فوري</td>
+<td><code>/checkout</code></td>
+<td><code>src/app/checkout/page.tsx</code></td>
+<td><code>src/app/api/checkout/route.ts</code></td>
+</tr>
+<tr>
+<td>شكر</td>
+<td><code>/checkout/thank-you</code></td>
+<td><code>src/app/checkout/thank-you/page.tsx</code></td>
+<td>رقم الأوردر</td>
+</tr>
+<tr>
+<td>دخول / OTP</td>
+<td><code>/account/login</code></td>
+<td><code>src/components/account-auth-form.tsx</code></td>
+<td><code>src/lib/customer-account.ts</code>, <code>whatsapp-otp.ts</code></td>
+</tr>
+<tr>
+<td>حسابي</td>
+<td><code>/account</code></td>
+<td><code>src/app/account/page.tsx</code></td>
+<td>طلبات + كلمة مرور</td>
+</tr>
+<tr>
+<td>تواصل</td>
+<td><code>/contact</code></td>
+<td><code>src/app/contact/page.tsx</code></td>
+<td><code>src/app/api/contact/route.ts</code></td>
+</tr>
+</tbody></table>
+<p>هيدر وفوتر وأزرار واتساب: <code>src/components/site-chrome.tsx</code>. الألوان من <code>/admin/theme</code>.</p>
+<h3>6.2 لوحة الأدمن (شكل المتجر)</h3>
+<p>دخول: <code>/admin/login</code> — الملف <code>src/app/admin/login/</code></p>
+<table>
+<thead>
+<tr>
+<th>الشاشة</th>
+<th>الرابط</th>
+<th>أين الكود</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>الرئيسية</td>
+<td><code>/admin</code></td>
+<td><code>src/app/admin/page.tsx</code></td>
+</tr>
+<tr>
+<td>ألوان وشعار</td>
+<td><code>/admin/theme</code></td>
+<td><code>src/app/admin/theme/</code> + <code>theme-settings.ts</code></td>
+</tr>
+<tr>
+<td>هيدر</td>
+<td><code>/admin/header</code></td>
+<td><code>src/app/admin/header/</code></td>
+</tr>
+<tr>
+<td>فوتر</td>
+<td><code>/admin/footer</code></td>
+<td><code>src/app/admin/footer/</code></td>
+</tr>
+<tr>
+<td>بانرات</td>
+<td><code>/admin/banners</code></td>
+<td><code>src/app/admin/banners/</code></td>
+</tr>
+<tr>
+<td>سوشيال / واتساب</td>
+<td><code>/admin/social-media</code></td>
+<td><code>widget-placement.ts</code></td>
+</tr>
+<tr>
+<td>منتجات</td>
+<td><code>/admin/products</code></td>
+<td>وكومرس</td>
+</tr>
+<tr>
+<td>طلبات</td>
+<td><code>/admin/orders</code></td>
+<td><code>src/lib/orders.ts</code></td>
+</tr>
+<tr>
+<td>توزيع</td>
+<td><code>/admin/dispatch/*</code></td>
+<td><code>src/lib/dispatch/</code></td>
+</tr>
+</tbody></table>
+<p>حماية الأدمن: <code>middleware.ts</code> + <code>requireAdminSession</code> في <code>src/lib/session-guards.ts</code>.</p>
+<h3>6.3 السائق</h3>
+<table>
+<thead>
+<tr>
+<th>الشاشة</th>
+<th>الرابط</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>دخول</td>
+<td><code>/driver/login</code></td>
+<td><code>src/app/driver/login/</code></td>
+</tr>
+<tr>
+<td>مسار اليوم</td>
+<td><code>/driver/today</code></td>
+<td><code>src/app/driver/today/</code></td>
+</tr>
+<tr>
+<td>ترتيب المحطات</td>
+<td><code>/driver/route</code></td>
+<td><code>src/app/driver/route/</code></td>
+</tr>
+<tr>
+<td>تسليم + OTP</td>
+<td><code>/driver/order/[id]</code></td>
+<td><code>src/app/driver/order/[id]/</code></td>
+</tr>
+</tbody></table>
+<p>المنطق: <code>src/lib/dispatch/</code> و <code>src/lib/security.ts</code> (OTP التسليم).</p>
+<h3>6.4 تشغيل العملاء (CS) — قلب النظام اللي اتبنى على Tooliano</h3>
+<p>دخول: <code>/cs/login</code> — الإطار <code>src/app/cs/cs-shell.tsx</code> (الثيم أسود وذهبي).</p>
+<table>
+<thead>
+<tr>
+<th>ماذا تريد</th>
+<th>الرابط</th>
+<th>ملف الشكل</th>
+<th>المنطق</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>قائمة الانتظار</td>
+<td><code>/cs</code></td>
+<td><code>cs-queue-client.tsx</code></td>
+<td><code>src/lib/cs/confirmations.ts</code></td>
+</tr>
+<tr>
+<td>سكربت المكالمة</td>
+<td><code>/cs/orders/[id]</code></td>
+<td><code>orders/[id]/call-sheet.tsx</code></td>
+<td>نفس التأكيد + بوليصة</td>
+</tr>
+<tr>
+<td>شيت سيد تميمة</td>
+<td><code>/cs/temima</code></td>
+<td><code>cs-queue-client.tsx</code> (وضع تميمة)</td>
+<td><code>temima-settlement.ts</code></td>
+</tr>
+<tr>
+<td>استقبال مركز</td>
+<td><code>/cs/centers/desk</code></td>
+<td><code>centers/desk/desk-client.tsx</code></td>
+<td><code>sc-intake.ts</code></td>
+</tr>
+<tr>
+<td>مراكز</td>
+<td><code>/cs/centers</code></td>
+<td><code>centers/</code></td>
+<td><code>sc-centers.ts</code></td>
+</tr>
+<tr>
+<td>صيانة / مرتجعات</td>
+<td><code>/cs/maintenance</code></td>
+<td><code>maintenance-client.tsx</code></td>
+<td><code>maintenance-returns.ts</code></td>
+</tr>
+<tr>
+<td>لوحة بوسطة</td>
+<td><code>/cs/bosta</code></td>
+<td><code>bosta/</code></td>
+<td><code>bosta-waybill.ts</code></td>
+</tr>
+<tr>
+<td>شركات الشحن</td>
+<td><code>/cs/carriers</code></td>
+<td><code>carriers/</code></td>
+<td><code>sokany-waybill.ts</code></td>
+</tr>
+<tr>
+<td>طباعة سوكانى 10×15</td>
+<td><code>/cs/print/sokany-awb/[id]</code></td>
+<td>صفحة طباعة</td>
+<td><code>CsSokanyWaybill</code></td>
+</tr>
+<tr>
+<td>مناديب عيد/مؤمن</td>
+<td><code>/cs/mona</code></td>
+<td><code>mona/mona-client.tsx</code></td>
+<td><code>mona-courier.ts</code></td>
+</tr>
+<tr>
+<td>تحويلات مخزون</td>
+<td><code>/cs/transfers</code></td>
+<td><code>transfers/</code></td>
+<td><code>src/lib/cs/</code> تحويلات</td>
+</tr>
+<tr>
+<td>مستخدمين CS</td>
+<td><code>/cs/users</code></td>
+<td><code>users/users-client.tsx</code></td>
+<td><code>agents.ts</code></td>
+</tr>
+<tr>
+<td>تصفية تميمة</td>
+<td><code>/cs/settlement</code></td>
+<td><code>settlement/</code></td>
+<td><code>temima-settlement.ts</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>7. تشغيل العملاء بالتفصيل</h2>
+<h3>7.1 تأكيد الأوردر من المكالمة</h3>
+<ol>
+<li>الموظف يفتح <code>/cs</code> ويرى الأوردرات.</li>
+<li>يفتح <code>/cs/orders/رقم</code> ويملأ سكربت التأكيد (اسم، موبايل، عنوان، محافظة، شركة الشحن).</li>
+<li>الحفظ يكتب صف في جدول <code>CsOrderConfirmation</code> عبر <code>src/lib/cs/confirmations.ts</code>.</li>
+<li>لو الشركة <strong>بوسطة</strong>: بوليصة حقيقية من API بوسطة (<code>src/lib/cs/bosta-waybill.ts</code>) نوع توصيل عادي.</li>
+<li>لو <strong>سيد تميمة / عيد / مؤمن</strong>: بوليصة سوكانى محلية تطبع من <code>/cs/print/sokany-awb/[id]</code>.</li>
+</ol>
+<p>كارت الاسترجاع على صفحة الأوردر: <code>src/app/cs/orders/fulfillment-panel.tsx</code> (نفس الكارت يظهر في الاستقبال).</p>
+<h3>7.2 استقبال المركز <code>/cs/centers/desk</code></h3>
+<p>الشاشة نصّين: يمين بحث وتكت، شمال كارت استبدال/استرجاع.</p>
+<p><strong>بحث الموبايل</strong></p>
+<ul>
+<li>يطلب <code>/api/cs/centers/intake?phone=...</code></li>
+<li>يجيب ملف العميل، زيارات سابقة، أوردرات الموقع، شحنات بوسطة/تميمة.</li>
+<li>لو فيه تكت محفوظ: يفتح <strong>آخر تكت</strong> ويملأ الشكوى وطلب العميل واقتراح الموظف.</li>
+<li>فورم فاضي لتسجيل زيارة جديدة: زر <strong>تكت جديد</strong> فقط.</li>
+</ul>
+<p><strong>التكت يحفظ في</strong></p>
+<ul>
+<li>جدول <code>ScCustomer</code> + <code>ScTicket</code> (الملف <code>src/lib/cs/sc-intake.ts</code>)</li>
+<li>خانات مهمة: <code>complaintNote</code> شكوى العميل، <code>customerRequest</code> طلبه، <code>staffProposal</code> قرار/اقتراح موظف الاستقبال، صور الفاتورة والمنتج والشكوى.</li>
+</ul>
+<p><strong>كارت الاستبدال / الاسترجاع (شمال)</strong></p>
+<ul>
+<li>الملف المشترك: <code>src/app/cs/orders/fulfillment-panel.tsx</code></li>
+<li>يختار: استبدال أو استرجاع، ثم سيد تميمة / عيد / مؤمن / بوسطة.</li>
+<li>زر <strong>حفظ وطباعة البوليصة</strong> ينشئ <strong>أوردر ابن</strong> مربوط بالأوردر الأصلي من غير ما يغيّر الأصلي.<ul>
+<li>رقم زي <code>148344-R1</code> استرجاع أو <code>148344-X1</code> استبدال.</li>
+<li>المنطق: <code>src/lib/cs/fulfillment-return.ts</code></li>
+</ul>
+</li>
+<li><strong>بوسطة:</strong> شحنة حقيقية نوع 25 استرجاع (استلام من العميل) أو 30 استبدال (توصيل البديل). PDF من <code>/api/cs/confirmations/[id]/bosta-awb</code>.</li>
+<li><strong>سيد/عيد/مؤمن:</strong> بوليصة سوكانى <code>SK-...</code> للطباعة الحرارية 10×15.</li>
+<li>بعد الإنشاء يتربط التكت المفتوح بالابن (<code>fulfillmentConfirmationId</code> + رقم التتبع) عشان المخزن يشوف شارة «تكت».</li>
+</ul>
+<p>لازم أوردر موقع محفوظ وفيه اسم وموبايل وعنوان <strong>ومحافظة</strong>. تكت حضوري من غير أوردر موقع لا ينشئ بوليصة من الكارت.</p>
+<h3>7.3 سيد تميمة والمناديب</h3>
+<ul>
+<li>شيت اليوم: <code>/cs/temima</code> — <code>temima-settlement.ts</code></li>
+<li><strong>تم بنجاح</strong> أو <strong>الغاء</strong> على بوليصة الاسترجاع/الاستبدال (الأوردر الابن) يضيف صفاً في مرتجعات الصيانة (<code>captureDeskReturnFromConfirmation</code> في <code>bosta-return-capture.ts</code>).</li>
+<li>عيد ومؤمن: <code>/cs/mona</code> — نفس فكرة التتبع المحلي + نتيجة المندوب.</li>
+<li>إضافة أوردر لشيت يوم مقفول قبله: <code>src/lib/cs/temima-sheet-edits.ts</code>.</li>
+</ul>
+<h3>7.4 مرتجعات الصيانة <code>/cs/maintenance</code></h3>
+<p>تبويبات: بوسطة / تميمة / عيد / مؤمن.</p>
+<ul>
+<li>القائمة من جدول <code>CsBostaReturnCapture</code>.</li>
+<li>بوسطة: الشحنات «متجه إليك» (أنواع 20 رفض، 25 استرجاع، 30 استبدال) عبر الكرون أو زر «حفظ ظاهر بوسطة».</li>
+<li>لو فيه تكت استقبال مطابق (موبايل آخر 10 أرقام، أو رقم الأوردر الأب بعد شيل <code>-R1</code>/<code>-X1</code>، أو رقم التأكيد): شارة حمراء <strong>تكت</strong>.</li>
+<li>الضغط على الشارة يفتح بوباب: شكوى العميل، طلب العميل، قرار موظف الاستقبال، الصور. فحص المخزن يفضل بضغط الصف مش الشارة.</li>
+<li>الملفات: <code>maintenance-client.tsx</code>، <code>sc-return-tickets.ts</code>، <code>maintenance-returns.ts</code>.</li>
+</ul>
+<h3>7.5 مسار مختصر من الزيارة للمخزن</h3>
+<pre><code>موظف الاستقبال يبحث الموبايل
+        │
+        ▼
+يسجّل التكت (شكوى / طلب / قرار)
+        │
+        ▼
+من الكارت: استرجاع أو استبدال + شركة الشحن
+        │
+        ▼
+يتطبع بوليصة (سوكانى أو بوسطة 25/30)
+        │
+        ▼
+سيد/مندوب: تم بنجاح   أو   بوسطة: وصلت للمتجه إليك
+        │
+        ▼
+الصف يظهر في /cs/maintenance
+        │
+        ▼
+شارة حمراء «تكت» → بوباب تفاصيل الاستقبال
+</code></pre>
+<hr>
+<h2>8. قاعدة البيانات (من غير أسرار)</h2>
+<p>الجداول متعرّفة في <code>prisma/schema.prisma</code>، وجزء من جداول CS/الاستقبال بيتبني وقت التشغيل (<code>CREATE TABLE IF NOT EXISTS</code> داخل <code>src/lib/cs/agents.ts</code> و <code>sc-centers.ts</code>).</p>
+<table>
+<thead>
+<tr>
+<th>الجدول (تقريبي)</th>
+<th>الغرض</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CsAgent</code></td>
+<td>موظفو CS وصلاحياتهم</td>
+</tr>
+<tr>
+<td><code>CsOrderConfirmation</code></td>
+<td>تأكيد المكالمة + أوردرات الاسترجاع/الاستبدال الأبناء</td>
+</tr>
+<tr>
+<td><code>CsSokanyWaybill</code></td>
+<td>بوليصة سوكانى المحلية</td>
+</tr>
+<tr>
+<td><code>CsBostaReturnCapture</code></td>
+<td>صفوف مرتجعات المخزن</td>
+</tr>
+<tr>
+<td><code>ScCustomer</code> / <code>ScTicket</code></td>
+<td>عميل الاستقبال والتكت</td>
+</tr>
+<tr>
+<td><code>ScTicketPhoto</code> / <code>ScTicketEvent</code></td>
+<td>صور وأحداث التكت</td>
+</tr>
+<tr>
+<td>إعدادات المظهر</td>
+<td>ثيم، بانرات، هيدر</td>
+</tr>
+</tbody></table>
+<p>لا ترفع ملف <code>.env</code> إلى GitHub. المتغيرات تتحط في Vercel → Settings → Environment Variables.</p>
+<p>أسماء المتغيرات المهمة (القيم نفسها مش في هذا الدليل): <code>DATABASE_URL</code>, <code>NEXTAUTH_SECRET</code>, <code>WOOCOMMERCE_*</code>, <code>BOSTA_API_KEY</code>, <code>BOSTA_WEBHOOK_SECRET</code>, <code>WOOCOMMERCE_WEBHOOK_SECRET</code>, <code>ADMIN_PASSWORD</code> / <code>ADMIN_PASSWORD_MM</code>.</p>
+<hr>
+<h2>9. ووردبريس (خارج Next.js)</h2>
+<p>المتجر يقرأ المنتجات والطلبات من <a href="https://sokany-eg.com">https://sokany-eg.com</a></p>
+<table>
+<thead>
+<tr>
+<th>البلجن / القصاصة</th>
+<th>المجلد في المشروع</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>واتساب OTP (الأحدث في الريبو)</td>
+<td><code>wordpress-plugin/sokany-whatsapp-otp/</code></td>
+</tr>
+<tr>
+<td>ZIP تثبيت مستقر</td>
+<td><code>dist/sokany-whatsapp-otp-1.2.4.zip</code></td>
+</tr>
+<tr>
+<td>إعدادات هيدلس</td>
+<td><code>wordpress-plugin/</code> ملفات headless-settings</td>
+</tr>
+<tr>
+<td>تنسيق السلة</td>
+<td><code>wordpress-plugin/snippets/sokany-cart-checkout-style-v1.3.php</code></td>
+</tr>
+</tbody></table>
+<p>إعداد OTP: ووردبريس → Settings → SOKANY WhatsApp OTP. رقم الموبايل لازم يكون على حساب العميل في ووردبريس.</p>
+<hr>
+<h2>10. إزاي تعدّل بعدين (خطوات عملية)</h2>
+<ol>
+<li>افتح المشروع في Cursor: <code>C:\Users\mm\SokanyElmaghraby\sokany-storefront</code></li>
+<li>ابحث باسم الشاشة أو الزر العربي (مثلاً «تكت جديد» أو «حفظ وطباعة البوليصة»).</li>
+<li>لو الملف <code>*-client.tsx</code>: غيّر النص أو <code>className</code> فقط، احفظ.</li>
+<li>من الطرفية: <code>npm run build</code> — لازم ينجح.</li>
+<li>لو البناء نجح وعايز الإنتاج: commit ثم <code>git push origin master</code> ثم <code>npx vercel --prod --yes</code>.</li>
+<li>لو البناء فشل: ارجع التعديل (<code>git checkout -- الملف</code>) واطلب مساعدة. متكملش نشر.</li>
+</ol>
+<p><strong>أمثلة آمنة لمبتدئ HTML/CSS</strong></p>
+<ul>
+<li>تغيير كلمة زر في الاستقبال: ابحث في <code>desk-client.tsx</code>.</li>
+<li>لون كارت المرتجعات: <code>maintenance-client.tsx</code> (<code>bg-red-600</code> للشارة الحمراء).</li>
+<li>جملة تحت المبلغ في كارت بوسطة: <code>fulfillment-panel.tsx</code>.</li>
+</ul>
+<p><strong>أمثلة غير آمنة من غير مراجعة</strong></p>
+<ul>
+<li>أي ملف تحت <code>src/lib/cs/</code></li>
+<li><code>src/lib/auth.ts</code> و <code>middleware.ts</code></li>
+<li><code>prisma/schema.prisma</code></li>
+<li>مسح <code>fetch</code> أو <code>onClick</code></li>
+</ul>
+<hr>
+<h2>11. ملاحظات أمان (قراءة فقط — لا إصلاح في هذا التسليم)</h2>
+<p>الكود منظّم على طبقات، وواجهات CS التشغيلية تقريباً كلها تمر على <code>requireCsSession()</code>. ده جيد.</p>
+<p>نقاط لازم تعرفها <strong>من غير ما نغيّرها دلوقتي</strong>:</p>
+<ol>
+<li><strong>تسجيل CS الذاتي</strong> من <code>/cs/login</code> مفتوح لأي حد يقدر يوصل الصفحة، وينشئ موظف دور <code>agent</code>. الملف: <code>src/app/api/cs/register/route.ts</code>.</li>
+<li><strong>حساب أدمن ثابت في الكود</strong> يُعاد ضبطه عند تشغيل السيرفر (<code>src/lib/auth.ts</code> و <code>src/lib/cs/agents.ts</code>). تغيير الباسورد من الشاشة قد لا يثبت بعد إعادة التشغيل.</li>
+<li><strong>أسرار افتراضية</strong> لو متغيرات البيئة ناقصة على السيرفر: جلسة NextAuth، ويب هوك بوسطة، ويب هوك Woo. لازم تكون متعرفة في Vercel.</li>
+<li><strong>مستندات داخل الريبو</strong> تتكلم عن اتصال قاعدة هوستنجر. لا تشارك الملفات دي علناً. لو اتسربت: غيّر كلمة مرور قاعدة هوستنجر من لوحة الاستضافة ثم حدّث Vercel.</li>
+<li>حقن SQL من نص المستخدم: الاستعلامات الحساسة بتستخدم علامات <code>?</code>. مش ثغرة مؤكدة من مدخلات الشاشات.</li>
+</ol>
+<p>أي إصلاح مما سبق يحتاج موافقة منفصلة. هذا الدليل ما ينفّذش الإصلاح.</p>
+<hr>
+<h2>12. إيه ينفع يتظبط لاحقاً (من غير تنفيذ الآن)</h2>
+<p>تنظيم <strong>آمن نسبياً</strong> (ملفات مشغلة مؤقتة، مش وظائف):</p>
+<ul>
+<li>إضافة <code>dist/</code> وملفات <code>scripts/_tmp*</code> وZIP البلجنات إلى <code>.gitignore</code> حتى لا تكبر المستودع.</li>
+<li>عدم الالتزام بنسخ مكررة من بلجن واتساب (<code>sokany-whatsapp-otp111</code>).</li>
+<li>شيل بيانات الاتصال بقاعدة البيانات من ملفات <code>docs/</code> العامة واستبدلها بتعليمات «حط القيمة في Vercel».</li>
+</ul>
+<p>تنظيم <strong>خطر على السلوك</strong> (لا تلمسه من غير طلب صريح):</p>
+<ul>
+<li>تقطيع الملفات الضخمة مثل <code>cs-queue-client.tsx</code> (آلاف الأسطر) أو <code>confirmations.ts</code>.</li>
+<li>تغيير طريقة بناء الجداول وقت التشغيل إلى migrations فقط.</li>
+<li>قفل تسجيل CS أو تدوير باسورد الأدمن — ده تغيير تشغيل، مش ترتيب ملفات.</li>
+</ul>
+<p>الكود الحالي <strong>مرتّب بالطبقات</strong> حتى لو بعض ملفات الواجهة طويلة. الطول وحده مش عطل.</p>
+<hr>
+<h2>13. أوامر مفيدة (مرجع)</h2>
+<p>من مجلد المشروع في PowerShell:</p>
+<pre><code class="language-bash">npm install
+npm run dev
+npm run build
+git status
+git push origin master
+npx vercel --prod --yes
+node scripts/handbook-to-html.mjs
+node scripts/program-guide-to-html.mjs
+</code></pre>
+<p>إعادة توليد هذا الدليل HTML: <code>node scripts/program-guide-to-html.mjs</code></p>
+<hr>
+<h2>14. فهرس سريع «عايز أغيّر إيه → فين الملف»</h2>
+<table>
+<thead>
+<tr>
+<th>التغيير</th>
+<th>الملف</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>شكل الرئيسية</td>
+<td><code>src/app/page.tsx</code> + <code>/admin/banners</code></td>
+</tr>
+<tr>
+<td>هيدر المتجر</td>
+<td><code>src/components/site-chrome.tsx</code></td>
+</tr>
+<tr>
+<td>دخول العميل / OTP</td>
+<td><code>src/components/account-auth-form.tsx</code></td>
+</tr>
+<tr>
+<td>استقبال: بحث وشكل التكت</td>
+<td><code>src/app/cs/centers/desk/desk-client.tsx</code></td>
+</tr>
+<tr>
+<td>استقبال: حفظ التكت</td>
+<td><code>src/lib/cs/sc-intake.ts</code></td>
+</tr>
+<tr>
+<td>كارت استبدال/استرجاع</td>
+<td><code>src/app/cs/orders/fulfillment-panel.tsx</code></td>
+</tr>
+<tr>
+<td>إنشاء ابن الاسترجاع</td>
+<td><code>src/lib/cs/fulfillment-return.ts</code></td>
+</tr>
+<tr>
+<td>بوليصة بوسطة</td>
+<td><code>src/lib/cs/bosta-waybill.ts</code></td>
+</tr>
+<tr>
+<td>بوليصة سوكانى</td>
+<td><code>src/lib/cs/sokany-waybill.ts</code></td>
+</tr>
+<tr>
+<td>شيت تميمة</td>
+<td><code>src/lib/cs/temima-settlement.ts</code></td>
+</tr>
+<tr>
+<td>مرتجعات + شارة تكت</td>
+<td><code>maintenance-client.tsx</code> + <code>sc-return-tickets.ts</code></td>
+</tr>
+<tr>
+<td>حماية المسارات</td>
+<td><code>middleware.ts</code></td>
+</tr>
+<tr>
+<td>دخول أدمن/CS</td>
+<td><code>src/lib/auth.ts</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>15. حالة الخصائص (مختصر)</h2>
+<table>
+<thead>
+<tr>
+<th>الخاصية</th>
+<th>الحالة</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>متجر عربي RTL + وكومرس</td>
+<td>جاهز على الإنتاج</td>
+</tr>
+<tr>
+<td>أدمن مظهر وبانرات</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>سائق PWA</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>تأكيد مكالمات CS</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>شيت تميمة / مناديب</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>استقبال تكت + صور + شكوى/طلب/قرار</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>استرجاع/استبدال من الكارت (سوكانى وبوسطة)</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>شارة تكت على مرتجعات الصيانة</td>
+<td>جاهز</td>
+</tr>
+<tr>
+<td>تنظيم الملفات المؤقتة / تدوير الأسرار</td>
+<td>مؤجّل حتى الموافقة</td>
+</tr>
+</tbody></table>
+<hr>
+<p>آخر تحديث: 31 أكتوبر 2026 — الدليل للقراءة فقط ولا يغيّر تشغيل الموقع.</p>
+
+
+      <p class="footer-note">31 أكتوبر 2026 — لا يغيّر وظائف الموقع</p>
+    </main>
+  </div>
+</body>
+</html>
