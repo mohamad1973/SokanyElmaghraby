@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { alignCsBostaWaybillBeforePrint } from "@/lib/cs/bosta-waybill";
+import { isHomeConfirmOnlyAgent } from "@/lib/cs/home-confirm";
 import { getPrismaClient } from "@/lib/db";
 import { fetchBostaAwbPdf } from "@/lib/shipping/bosta-client";
 import { requireCsSession } from "@/lib/session-guards";
@@ -11,6 +12,9 @@ export async function GET(_request: Request, context: Context) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  if (await isHomeConfirmOnlyAgent(session.user.csAgentId)) {
+    return NextResponse.json({ message: "غير مصرح لتأكيدات المنزل." }, { status: 403 });
   }
   const { id } = await context.params;
   const numericId = Number(id);
@@ -56,6 +60,9 @@ export async function POST(_request: Request, context: Context) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  if (await isHomeConfirmOnlyAgent(session.user.csAgentId)) {
+    return NextResponse.json({ message: "غير مصرح لتأكيدات المنزل." }, { status: 403 });
   }
   const { id } = await context.params;
   const numericId = Number(id);

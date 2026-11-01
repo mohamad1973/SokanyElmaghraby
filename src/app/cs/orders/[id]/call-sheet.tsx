@@ -51,6 +51,7 @@ type Snapshot = {
   fulfillmentKind?: string;
   parentConfirmationId?: number;
   parentWooOrderNumber?: string;
+  homeConfirmNote?: string | null;
 };
 
 type AnswerState = {
@@ -1839,6 +1840,170 @@ export function CsCallSheet({
           {depositCard()}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+const HOME_STATUS_LABEL: Record<string, string> = {
+  PENDING: "جديد",
+  IN_PROGRESS: "جاري",
+  CONFIRMED: "مؤكد",
+  FAILED_CONTACT: "مؤجل",
+  CANCELLED: "ملغي",
+};
+
+export function HomeConfirmCallSheet({
+  confirmationId,
+  status,
+  snapshot,
+  failReason,
+}: {
+  confirmationId: number;
+  status: string;
+  snapshot: Snapshot | null;
+  failReason?: string | null;
+}) {
+  const [notes, setNotes] = useState(() => String(snapshot?.homeConfirmNote || failReason || "").trim());
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const when = formatCairoOrderDateTime(snapshot?.dateCreated);
+  const items = snapshot?.items || [];
+  const itemCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+  async function save(kind: "confirm" | "postpone" | "cancel") {
+    if (saving) return;
+    setSaving(true);
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        answers: [],
+        finalize: kind === "confirm",
+        failContact: kind === "postpone",
+        cancelOrder: kind === "cancel",
+        failReason: notes.trim() || undefined,
+      }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setSaving(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر الحفظ.");
+      return;
+    }
+    setMessage(kind === "confirm" ? "تم تأكيد الأوردر." : kind === "postpone" ? "تم تأجيل الأوردر." : "تم إلغاء الأوردر.");
+    window.location.href = "/cs";
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-3" dir="rtl">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <Link href="/cs" className="text-sm font-bold text-[#14213D] underline">
+            رجوع
+          </Link>
+          <h1 className="truncate text-xl font-extrabold text-[#14213D]">طلب #{snapshot?.number || confirmationId}</h1>
+          <p className="text-xs font-bold text-[#14213D]/60">
+            {when.absolute} · {when.relative} · {HOME_STATUS_LABEL[status] || status}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save("confirm")}
+            className="rounded-xl bg-[#FCA311] px-3 py-2 text-sm font-extrabold text-black disabled:opacity-60"
+          >
+            {saving ? "جاري التحميل" : "تأكيد"}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save("postpone")}
+            className="rounded-xl bg-black px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {saving ? "جاري التحميل" : "تأجيل"}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save("cancel")}
+            className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {saving ? "جاري التحميل" : "إلغاء"}
+          </button>
+        </div>
+      </div>
+
+      {message ? (
+        <p className="shrink-0 rounded-xl bg-[#FCA311]/30 px-3 py-2 text-sm font-bold text-[#14213D]">{message}</p>
+      ) : null}
+
+      <section className="rounded-2xl bg-[#14213D] px-4 py-3 text-sm text-white">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <span className="font-extrabold">{snapshot?.customerName || "—"}</span>
+          <span dir="ltr">{snapshot?.phone || "—"}</span>
+          <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
+            {snapshot?.total} {snapshot?.currency || "EGP"}
+          </span>
+        </div>
+        <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-2">
+          <span className="truncate">العنوان: {snapshot?.address || "—"}</span>
+          <span className="truncate">المحافظة: {snapshot?.governorate || "—"}</span>
+        </div>
+      </section>
+
+      <section className="rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15">
+        <table className="w-full border-collapse text-right text-sm text-[#14213D]">
+          <thead className="bg-[#F8F4EA] text-xs font-extrabold">
+            <tr>
+              {["الصنف", "الكمية", "السعر", "القيمة"].map((head) => (
+                <th key={head} className="border-b border-[#14213D]/10 px-2 py-1">
+                  {head}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, index) => {
+              const quantity = Number(item.quantity || 1);
+              const line = Number(String(item.total || "0").replace(/[^\d.]/g, "")) || 0;
+              const price = quantity ? line / quantity : line;
+              return (
+                <tr key={`${item.name}-${index}`} className="border-b border-[#14213D]/10">
+                  <td className="px-2 py-1">{item.name}</td>
+                  <td className="px-2 py-1">{quantity}</td>
+                  <td className="px-2 py-1">{price.toLocaleString("ar-EG")}</td>
+                  <td className="px-2 py-1 font-extrabold">{line.toLocaleString("ar-EG")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="mt-3 grid gap-1 rounded-xl bg-[#F8F4EA] p-3 text-sm font-extrabold text-[#14213D]">
+          <p className="flex justify-between gap-2">
+            <span>عدد القطع</span>
+            <span>{itemCount.toLocaleString("ar-EG")}</span>
+          </p>
+          <p className="flex justify-between gap-2">
+            <span>إجمالي الأوردر</span>
+            <span>
+              {snapshot?.total} {snapshot?.currency || "EGP"}
+            </span>
+          </p>
+        </div>
+      </section>
+
+      <label className="grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15">
+        ملاحظات
+        <textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          rows={4}
+          className="w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]"
+          placeholder="اكتبي ملاحظة التأكيد أو التأجيل أو الإلغاء"
+        />
+      </label>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import {
   formatCairoOrderDate,
 } from "@/lib/cs/order-window";
 
-type Agent = { id: number; name: string; email?: string };
+type Agent = { id: number; name: string; email?: string; roles?: string[] };
 type Assignment = {
   id: number;
   agentId: number;
@@ -23,7 +23,16 @@ type Assignment = {
 
 type PendingOrder = { id: number; wooOrderNumber: string; orderNum: number };
 
-type Tab = "range" | "fair" | "rules";
+type Tab = "range" | "fair" | "rules" | "home";
+
+type HomeShift = {
+  agentId: number;
+  name: string;
+  isAvailable: boolean;
+  startHm: string;
+  endHm: string;
+  inShiftNow: boolean;
+};
 
 const FILTER_CONTROL =
   "h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
@@ -56,6 +65,11 @@ export function CsAssignClient({
   const [appliedFrom, setAppliedFrom] = useState(today);
   const [appliedTo, setAppliedTo] = useState(today);
 
+  const [homeShifts, setHomeShifts] = useState<HomeShift[]>([]);
+  const [homeLastName, setHomeLastName] = useState<string | null>(null);
+  const [homeRangeAgent, setHomeRangeAgent] = useState("");
+  const [homeRangeFrom, setHomeRangeFrom] = useState("");
+  const [homeRangeTo, setHomeRangeTo] = useState("");
   const [showPendingAfterLast, setShowPendingAfterLast] = useState(false);
   const [pendingLastTo, setPendingLastTo] = useState(0);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
@@ -68,6 +82,40 @@ export function CsAssignClient({
     if (res.ok) setAssignments(data.assignments || []);
     else setMessage(data.message || "تعذر التحميل.");
   }, []);
+
+  const officeAgents = useMemo(
+    () =>
+      agents.filter((agent) => {
+        const roles = agent.roles || [];
+        const homeOnly =
+          roles.includes("home_confirm") &&
+          !roles.includes("agent") &&
+          !roles.includes("supervisor") &&
+          !roles.includes("admin") &&
+          !roles.includes("accounting");
+        return !homeOnly;
+      }),
+    [agents],
+  );
+
+  const loadHomeShifts = useCallback(async () => {
+    const res = await fetch("/api/cs/home-confirm");
+    const data = (await res.json()) as {
+      agents?: HomeShift[];
+      lastAgentName?: string | null;
+      message?: string;
+    };
+    if (!res.ok) {
+      setMessage(data.message || "تعذر تحميل شيفت تأكيدات المنزل.");
+      return;
+    }
+    setHomeShifts(data.agents || []);
+    setHomeLastName(data.lastAgentName || null);
+  }, []);
+
+  useEffect(() => {
+    if (tab === "home") void loadHomeShifts();
+  }, [tab, loadHomeShifts]);
 
   const loadPending = useCallback(async () => {
     setPendingLoading(true);
@@ -333,6 +381,65 @@ export function CsAssignClient({
     if (showPendingAfterLast) await loadPending();
   }
 
+  function patchHomeShift(agentId: number, patch: Partial<HomeShift>) {
+    setHomeShifts((prev) => prev.map((row) => (row.agentId === agentId ? { ...row, ...patch } : row)));
+  }
+
+  async function saveHomeShifts() {
+    setLoading(true);
+    setMessage("");
+    const res = await fetch("/api/cs/home-confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "shifts",
+        shifts: homeShifts.map((row) => ({
+          agentId: row.agentId,
+          isAvailable: row.isAvailable,
+          startHm: row.startHm,
+          endHm: row.endHm,
+        })),
+      }),
+    });
+    const data = (await res.json()) as { message?: string; agents?: HomeShift[]; lastAgentName?: string | null };
+    setLoading(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر حفظ الشيفت.");
+      return;
+    }
+    if (data.agents) setHomeShifts(data.agents);
+    if (data.lastAgentName !== undefined) setHomeLastName(data.lastAgentName || null);
+    setMessage("تم حفظ المتاحات وساعات الشيفت.");
+  }
+
+  async function saveHomeRange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setMessage("");
+    const res = await fetch("/api/cs/home-confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "range",
+        agentId: Number(homeRangeAgent),
+        from: Number(homeRangeFrom),
+        to: Number(homeRangeTo),
+      }),
+    });
+    const data = (await res.json()) as { message?: string; stamped?: number };
+    setLoading(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر توزيع أوردرات المنزل.");
+      return;
+    }
+    const stamped = Number(data.stamped ?? 0);
+    setMessage(
+      stamped > 0 ? `تم توزيع ${stamped} أوردر على تأكيدات المنزل.` : "الأرقام دي مش موجودة في قائمة الأوردرات.",
+    );
+    setHomeRangeFrom("");
+    setHomeRangeTo("");
+  }
+
   const tabBtn = (id: Tab, label: string) => (
     <button
       type="button"
@@ -430,6 +537,7 @@ export function CsAssignClient({
         {tabBtn("range", "نطاق أرقام")}
         {tabBtn("fair", "تقسيم عادل")}
         {tabBtn("rules", "قواعد")}
+        {tabBtn("home", "تأكيدات منزل")}
       </div>
 
       {tab === "range" ? (
@@ -441,7 +549,7 @@ export function CsAssignClient({
             مسؤول خدمة العملاء
             <select name="agentId" required className={FILTER_CONTROL}>
               <option value="">اختاري...</option>
-              {agents.map((a) => (
+              {officeAgents.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
@@ -474,7 +582,7 @@ export function CsAssignClient({
             {showPendingAfterLast ? " (بعد آخر توزيع)" : " (اليوم/أمس من القائمة)"}.
           </p>
           <div className="flex flex-wrap gap-2">
-            {agents.map((a) => (
+            {officeAgents.map((a) => (
               <label
                 key={a.id}
                 className={`cursor-pointer rounded-xl px-3 py-2 text-sm font-bold ring-1 ${
@@ -529,7 +637,7 @@ export function CsAssignClient({
                     {label} →
                     <select value={agent} onChange={(e) => setAgent(e.target.value)} className={FILTER_CONTROL}>
                       <option value="">—</option>
-                      {agents.map((item) => (
+                      {officeAgents.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name}
                         </option>
@@ -566,7 +674,7 @@ export function CsAssignClient({
                 مدفوع أونلاين →
                 <select value={paidAgent} onChange={(e) => setPaidAgent(e.target.value)} className={FILTER_CONTROL}>
                   <option value="">—</option>
-                  {agents.map((a) => (
+                  {officeAgents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
                     </option>
@@ -581,7 +689,7 @@ export function CsAssignClient({
                   className={FILTER_CONTROL}
                 >
                   <option value="">—</option>
-                  {agents.map((a) => (
+                  {officeAgents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
                     </option>
@@ -602,10 +710,119 @@ export function CsAssignClient({
         </div>
       ) : null}
 
+      {tab === "home" ? (
+        <div className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10">
+          <p className="text-sm font-bold text-[#14213D]">
+            اختاري البنات الشغالة دلوقتي وساعات الشيفت بتوقيت القاهرة. الأوردر الجديد من الموقع يتوزّع بالدور على المتاحات
+            جوه الشيفت. بعد الساعة المحددة الأوردر يفضل من غير موظفة.
+          </p>
+          <p className="text-xs font-bold text-[#14213D]/70">
+            آخر توزيع تلقائي: {homeLastName || "—"} · متاحات الآن: {homeShifts.filter((row) => row.inShiftNow).length}
+          </p>
+          {homeShifts.length === 0 ? (
+            <p className="text-sm font-bold text-[#14213D]/60">مفيش حسابات بصلاحية تأكيدات منزل. أنشئها من المستخدمون.</p>
+          ) : (
+            <div className="grid gap-2">
+              {homeShifts.map((row) => (
+                <label
+                  key={row.agentId}
+                  className={`grid items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold sm:grid-cols-[auto_1fr_auto_auto] ${
+                    row.isAvailable ? "bg-[#F8F4EA] ring-1 ring-[#FCA311]/40" : "bg-[#F5F5F0]"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[#FCA311]"
+                    checked={row.isAvailable}
+                    onChange={(e) => patchHomeShift(row.agentId, { isAvailable: e.target.checked })}
+                  />
+                  <span>
+                    {row.name}
+                    {row.inShiftNow ? (
+                      <span className="mr-2 rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-extrabold text-white">
+                        داخل الشيفت
+                      </span>
+                    ) : null}
+                  </span>
+                  <input
+                    type="time"
+                    value={row.startHm}
+                    onChange={(e) => patchHomeShift(row.agentId, { startHm: e.target.value })}
+                    className={FILTER_CONTROL}
+                  />
+                  <input
+                    type="time"
+                    value={row.endHm}
+                    onChange={(e) => patchHomeShift(row.agentId, { endHm: e.target.value })}
+                    className={FILTER_CONTROL}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            disabled={loading || homeShifts.length === 0}
+            onClick={() => void saveHomeShifts()}
+            className="rounded-xl bg-[#14213D] px-4 py-2.5 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {loading ? "جاري الحفظ..." : "حفظ المتاحات والشيفت"}
+          </button>
+          <form onSubmit={(event) => void saveHomeRange(event)} className="grid gap-2 border-t border-[#14213D]/10 pt-3 sm:grid-cols-4">
+            <label className="grid gap-1 text-sm font-bold">
+              موظفة تأكيدات منزل
+              <select
+                required
+                value={homeRangeAgent}
+                onChange={(e) => setHomeRangeAgent(e.target.value)}
+                className={FILTER_CONTROL}
+              >
+                <option value="">اختاري...</option>
+                {homeShifts.map((row) => (
+                  <option key={row.agentId} value={row.agentId}>
+                    {row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-bold">
+              من رقم أوردر
+              <input
+                required
+                value={homeRangeFrom}
+                onChange={(e) => setHomeRangeFrom(e.target.value.replace(/\D/g, ""))}
+                inputMode="numeric"
+                className={FILTER_CONTROL}
+                dir="ltr"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-bold">
+              إلى رقم أوردر
+              <input
+                required
+                value={homeRangeTo}
+                onChange={(e) => setHomeRangeTo(e.target.value.replace(/\D/g, ""))}
+                inputMode="numeric"
+                className={FILTER_CONTROL}
+                dir="ltr"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={loading}
+              className="self-end h-9 rounded-lg bg-[#FCA311] px-4 text-sm font-extrabold text-black disabled:opacity-60"
+            >
+              {loading ? "جاري الحفظ..." : "توزيع المدى"}
+            </button>
+          </form>
+        </div>
+      ) : null}
+
       {message ? (
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
+      {tab !== "home" ? (
       <div className="space-y-3">
         <h2 className="text-lg font-extrabold text-[#14213D]">
           توزيعات حسب اليوم
@@ -676,6 +893,7 @@ export function CsAssignClient({
           </div>
         ))}
       </div>
+      ) : null}
     </div>
   );
 }

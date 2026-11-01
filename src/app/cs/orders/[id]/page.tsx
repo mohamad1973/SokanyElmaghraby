@@ -7,7 +7,7 @@ import { getCsCarrierByCode } from "@/lib/cs/sokany-waybill";
 import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 import { requireCsSession } from "@/lib/session-guards";
 
-import { CsCallSheet } from "./call-sheet";
+import { CsCallSheet, HomeConfirmCallSheet } from "./call-sheet";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -24,6 +24,9 @@ export default async function CsOrderPage({ params }: Props) {
 
   const confirmation = await getCsConfirmation(numericId);
   if (!confirmation) notFound();
+  if (viewer.isHomeConfirmOnly && confirmation.assignedAgentId !== session.user.csAgentId) {
+    notFound();
+  }
 
   const snapshot = (confirmation.customerSnapshot || null) as Parameters<typeof CsCallSheet>[0]["snapshot"];
   const row = confirmation as {
@@ -59,6 +62,17 @@ export default async function CsOrderPage({ params }: Props) {
     confirmation.shippingCompany,
     carrier?.waybillProvider === "sokany",
   );
+
+  if (viewer.isHomeConfirmOnly) {
+    return (
+      <HomeConfirmCallSheet
+        confirmationId={confirmation.id}
+        status={confirmation.status}
+        snapshot={snapshot}
+        failReason={confirmation.failReason}
+      />
+    );
+  }
 
   return (
     <CsCallSheet

@@ -23,7 +23,7 @@ export async function POST(request: Request, context: Params) {
   if (!session?.user.csAgentId) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   await ensureCsTables();
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (viewer.isMonaCourier || viewer.isCourier) {
+  if (viewer.isMonaCourier || viewer.isCourier || viewer.isHomeConfirmOnly) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   }
   const { id } = await context.params;

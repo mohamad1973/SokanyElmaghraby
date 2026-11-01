@@ -23,6 +23,7 @@ export default async function CsAssignPage() {
     id: a.id,
     name: a.name,
     email: a.username || a.email,
+    roles: ((a as { roles?: string[] }).roles || [a.role]) as string[],
   }));
   const rows = await listCsConfirmationsForViewer({
     agentId: session.user.csAgentId,

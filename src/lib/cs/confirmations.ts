@@ -418,6 +418,10 @@ export async function enqueueOrderFromWebhook(order: AdminOrder) {
       knownTracking: order.bostaTrackingNumber || null,
     });
   }
+  if (saved.assignedAgentId == null) {
+    const { tryAssignHomeConfirmRoundRobin } = await import("@/lib/cs/home-confirm");
+    await tryAssignHomeConfirmRoundRobin(saved.id);
+  }
 }
 
 async function confirmationIdsForViewer(
@@ -1419,6 +1423,7 @@ export async function saveCsConfirmation(input: {
   };
   sheetDayChoice?: "previous" | "today";
   canEditSavedInfo?: boolean;
+  homeConfirmMode?: boolean;
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", missing: [] as string[] };
@@ -1429,6 +1434,62 @@ export async function saveCsConfirmation(input: {
     include: { answers: true },
   });
   if (!row) return { ok: false as const, message: "الطلب غير موجود.", missing: [] };
+
+  if (input.homeConfirmMode) {
+    if (row.assignedAgentId != null && row.assignedAgentId !== input.agentId) {
+      return { ok: false as const, message: "هذا الأوردر غير موكّل لكِ.", missing: [] as string[] };
+    }
+    const snap = ((row.customerSnapshot as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+    const note = input.failReason?.trim() || null;
+    if (input.failContact) {
+      await prisma.csOrderConfirmation.update({
+        where: { id: input.id },
+        data: {
+          status: CS_CONFIRMATION_STATUS.FAILED_CONTACT,
+          failReason: note || "تأجيل",
+          assignedAgentId: input.agentId,
+          customerSnapshot: { ...snap, homeConfirmNote: note },
+        } as never,
+      });
+      return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
+    }
+    if (input.cancelOrder) {
+      await prisma.csOrderConfirmation.update({
+        where: { id: input.id },
+        data: {
+          status: CS_CONFIRMATION_STATUS.CANCELLED,
+          failReason: note || "لاغى",
+          assignedAgentId: input.agentId,
+          customerSnapshot: { ...snap, homeConfirmNote: note },
+        } as never,
+      });
+      return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
+    }
+    if (!input.finalize) {
+      await prisma.csOrderConfirmation.update({
+        where: { id: input.id },
+        data: {
+          status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
+          assignedAgentId: input.agentId,
+          customerSnapshot: { ...snap, homeConfirmNote: note },
+        } as never,
+      });
+      return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
+    }
+    const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
+    const savedAt = new Date();
+    await prisma.csOrderConfirmation.update({
+      where: { id: input.id },
+      data: {
+        status: CS_CONFIRMATION_STATUS.CONFIRMED,
+        ...(alreadySaved ? { confirmationEditedAt: savedAt } : { confirmedAt: savedAt }),
+        failReason: null,
+        assignedAgentId: input.agentId,
+        customerSnapshot: { ...snap, homeConfirmNote: note },
+      } as never,
+    });
+    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
+  }
 
   const sheetChoice =
     input.sheetDayChoice === "previous" || input.sheetDayChoice === "today" ? input.sheetDayChoice : null;
@@ -2124,6 +2185,9 @@ export async function resolveCsViewer(agentId: number) {
       isMonaCourier: false,
       isScManager: false,
       isScStaff: false,
+      isAgent: false,
+      isHomeConfirm: false,
+      isHomeConfirmOnly: false,
       canAccessScCenters: false,
       role: "agent" as const,
       roles: ["agent"] as const,

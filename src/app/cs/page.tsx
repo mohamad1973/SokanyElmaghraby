@@ -97,6 +97,7 @@ export default async function CsHomePage() {
     <CsQueueClient
       initialItems={initialItems}
       isSupervisor={isSupervisor}
+      isHomeConfirmOnly={Boolean(viewer.isHomeConfirmOnly)}
       isAccounting={isAccounting}
       agents={agents}
       couriers={couriers}

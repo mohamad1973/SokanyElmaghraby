@@ -14,7 +14,8 @@ export type CsAgentRole =
   | "courier"
   | "mona_courier"
   | "sc_manager"
-  | "sc_staff";
+  | "sc_staff"
+  | "home_confirm";
 
 declare module "next-auth" {
   interface Session {

@@ -62,6 +62,10 @@ export async function GET(_request: Request, context: Context) {
   if (!confirmation) {
     return NextResponse.json({ message: "الأوردر غير موجود." }, { status: 404 });
   }
+  const viewer = await resolveCsViewer(session.user.csAgentId);
+  if (viewer.isHomeConfirmOnly && confirmation.assignedAgentId !== session.user.csAgentId) {
+    return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+  }
   const carrier = await getCsCarrierByCode(String(confirmation.shippingCompany || ""));
   const snap = (confirmation.customerSnapshot || null) as Record<string, unknown> | null;
   const row = confirmation as { trackingNumber?: string | null; waybillPrinted?: boolean | null };
@@ -214,29 +218,37 @@ export async function PUT(request: Request, context: Context) {
   }
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
+  const homeConfirmMode = Boolean(viewer.isHomeConfirmOnly);
+  if (homeConfirmMode) {
+    const confirmation = await getCsConfirmation(numericId);
+    if (!confirmation || confirmation.assignedAgentId !== session.user.csAgentId) {
+      return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+    }
+  }
   const result = await saveCsConfirmation({
     id: numericId,
     agentId: session.user.csAgentId,
-    answers: body.answers || [],
+    answers: homeConfirmMode ? [] : body.answers || [],
     finalize: Boolean(body.finalize),
     failContact: Boolean(body.failContact),
     cancelOrder: Boolean(body.cancelOrder),
     failReason: body.failReason,
-    trackingNumber: body.trackingNumber,
-    waybillPrinted: body.waybillPrinted,
-    depositAmount: body.depositAmount,
-    depositPaid: body.depositPaid,
-    depositPayMethod: body.depositPayMethod,
-    depositFromNumber: body.depositFromNumber,
-    depositInstapayName: body.depositInstapayName,
-    depositToPhone: body.depositToPhone,
-    depositToMethod: body.depositToMethod,
-    orderTotalDelta: body.orderTotalDelta,
-    salesOrderNumber: body.salesOrderNumber,
-    postCancel: body.postCancel,
-    followUp: body.followUp,
-    sheetDayChoice: body.sheetDayChoice,
+    trackingNumber: homeConfirmMode ? undefined : body.trackingNumber,
+    waybillPrinted: homeConfirmMode ? undefined : body.waybillPrinted,
+    depositAmount: homeConfirmMode ? undefined : body.depositAmount,
+    depositPaid: homeConfirmMode ? undefined : body.depositPaid,
+    depositPayMethod: homeConfirmMode ? undefined : body.depositPayMethod,
+    depositFromNumber: homeConfirmMode ? undefined : body.depositFromNumber,
+    depositInstapayName: homeConfirmMode ? undefined : body.depositInstapayName,
+    depositToPhone: homeConfirmMode ? undefined : body.depositToPhone,
+    depositToMethod: homeConfirmMode ? undefined : body.depositToMethod,
+    orderTotalDelta: homeConfirmMode ? undefined : body.orderTotalDelta,
+    salesOrderNumber: homeConfirmMode ? undefined : body.salesOrderNumber,
+    postCancel: homeConfirmMode ? undefined : body.postCancel,
+    followUp: homeConfirmMode ? undefined : body.followUp,
+    sheetDayChoice: homeConfirmMode ? undefined : body.sheetDayChoice,
     canEditSavedInfo: viewer.isAdmin || Boolean(session.user.csIsAdmin),
+    homeConfirmMode,
   });
 
   if (!result.ok) {

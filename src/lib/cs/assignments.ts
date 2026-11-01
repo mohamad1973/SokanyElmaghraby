@@ -132,6 +132,16 @@ export function orderNumberInRanges(orderNumber: string, ranges: Array<{ from: n
 
 type CsDb = NonNullable<ReturnType<typeof getPrismaClient>>;
 
+export async function stampAssignedAgentInOrderRange(agentId: number, from: number, to: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return 0;
+  await ensureCsTables();
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  if (!lo || !hi) return 0;
+  return stampOrdersInRange(prisma, agentId, lo, hi);
+}
+
 async function stampOrdersInRange(prisma: CsDb, agentId: number, from: number, to: number) {
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation

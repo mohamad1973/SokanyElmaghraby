@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveCsViewer } from "@/lib/cs/confirmations";
+import { isHomeConfirmOnlyAgent } from "@/lib/cs/home-confirm";
 import {
   createFulfillmentFromOrder,
   listFulfillmentChildren,
@@ -17,6 +18,9 @@ export async function GET(_request: Request, context: Context) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  if (await isHomeConfirmOnlyAgent(session.user.csAgentId)) {
+    return NextResponse.json({ message: "غير مصرح لتأكيدات المنزل." }, { status: 403 });
   }
 
   const { id } = await context.params;
@@ -38,6 +42,9 @@ export async function POST(request: Request, context: Context) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  if (await isHomeConfirmOnlyAgent(session.user.csAgentId)) {
+    return NextResponse.json({ message: "غير مصرح لتأكيدات المنزل." }, { status: 403 });
   }
 
   await resolveCsViewer(session.user.csAgentId);

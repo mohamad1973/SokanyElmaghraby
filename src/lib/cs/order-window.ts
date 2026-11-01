@@ -32,6 +32,48 @@ export function cairoTodayYmd() {
   return `${y}-${m}-${d}`;
 }
 
+/** Current Africa/Cairo clock as HH:MM (24h). */
+export function cairoNowHm(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Cairo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "00";
+  return `${get("hour")}:${get("minute")}`;
+}
+
+export function parseHmToMinutes(hm: string | null | undefined) {
+  const match = String(hm || "")
+    .trim()
+    .match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+export function normalizeHm(hm: string | null | undefined, fallback = "12:00") {
+  const minutes = parseHmToMinutes(hm);
+  if (minutes == null) return fallback;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Inclusive start, exclusive end. Overnight windows (22:00–06:00) are allowed. Equal start/end is closed. */
+export function isCairoHmInWindow(startHm: string, endHm: string, date = new Date()) {
+  const start = parseHmToMinutes(startHm);
+  const end = parseHmToMinutes(endHm);
+  const now = parseHmToMinutes(cairoNowHm(date));
+  if (start == null || end == null || now == null || start === end) return false;
+  if (end > start) return now >= start && now < end;
+  return now >= start || now < end;
+}
+
 export function cairoYesterdayYmd() {
   return getCairoYesterdayStartDateString();
 }

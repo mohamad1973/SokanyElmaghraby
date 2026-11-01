@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { cancelDiscountApproval, requestDiscountApproval } from "@/lib/cs/discount-approvals";
+import { isHomeConfirmOnlyAgent } from "@/lib/cs/home-confirm";
 import { requireCsSession } from "@/lib/session-guards";
 
 type Context = { params: Promise<{ id: string }> };
@@ -9,6 +10,9 @@ export async function POST(request: Request, context: Context) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
+  }
+  if (await isHomeConfirmOnlyAgent(session.user.csAgentId)) {
+    return NextResponse.json({ message: "غير مصرح لتأكيدات المنزل." }, { status: 403 });
   }
 
   const { id } = await context.params;

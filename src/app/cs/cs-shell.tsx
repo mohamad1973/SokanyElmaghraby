@@ -920,7 +920,20 @@ function CsHeader() {
   const isScManager = roles.includes("sc_manager") || isAdmin;
   const isScStaff = roles.includes("sc_staff");
   const canScCenters = isAdmin || isScManager || isScStaff;
-  const canSeeOrders = roles.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting");
+  const isHomeConfirm = roles.includes("home_confirm");
+  const canSeeOrders = roles.some(
+    (role) =>
+      role === "agent" ||
+      role === "supervisor" ||
+      role === "admin" ||
+      role === "accounting" ||
+      role === "home_confirm",
+  );
+  const isHomeConfirmOnly =
+    isHomeConfirm &&
+    !roles.includes("agent") &&
+    !roles.includes("supervisor") &&
+    !roles.includes("admin");
   const isTransfersOnly = isTransfers && !canSeeOrders && !isShipping;
   const canSettlement = isShipping || isSupervisor || isAdmin;
   const canTransfers = isTransfers || isSupervisor || isAdmin || Boolean(session?.user?.csCanAccessTransfers);
@@ -943,6 +956,8 @@ function CsHeader() {
             <p className="text-[11px] text-white/70 sm:text-xs">
               {isCourierSupervisor
                 ? "مشرف مناديب · توزيع أوردرات اليوم"
+                : isHomeConfirmOnly
+                  ? "تأكيدات منزل · أوردراتك"
                 : isMonaCourier && !canSeeOrders
                   ? "مندوب المشرفة · أوردراتك"
                 : isCourier && !canSeeOrders

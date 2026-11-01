@@ -722,6 +722,7 @@ function TemimaCutoffBox({
 type Props = {
   initialItems: CsQueueItem[];
   isSupervisor?: boolean;
+  isHomeConfirmOnly?: boolean;
   isAccounting?: boolean;
   isCourierSupervisor?: boolean;
   showOfficialMarks?: boolean;
@@ -771,6 +772,7 @@ function currentStatusAction(disposition: "" | "collect" | "return" | "postpone"
 export function CsQueueClient({
   initialItems,
   isSupervisor,
+  isHomeConfirmOnly = false,
   isAccounting,
   isCourierSupervisor,
   showOfficialMarks = false,
@@ -2391,7 +2393,7 @@ export function CsQueueClient({
                         {item.customerSnapshot.governorate} · {item.customerSnapshot.area}
                       </span>
                     ) : null}
-                    {!isSupervisor ? (
+                    {!isSupervisor && !isHomeConfirmOnly ? (
                       <span className="text-xs text-[#14213D]/70">
                         شحن: {SHIPPING_COMPANY_LABEL[ship] || ship}
                       </span>

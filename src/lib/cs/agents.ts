@@ -17,7 +17,8 @@ export type CsRole =
   | "courier"
   | "mona_courier"
   | "sc_manager"
-  | "sc_staff";
+  | "sc_staff"
+  | "home_confirm";
 
 export const CS_ROLES: CsRole[] = [
   "agent",
@@ -33,6 +34,7 @@ export const CS_ROLES: CsRole[] = [
   "mona_courier",
   "sc_manager",
   "sc_staff",
+  "home_confirm",
 ];
 
 export function normalizeCsUsername(value: string) {
@@ -95,11 +97,15 @@ export function csFlagsFromRoles(roles: CsRole[]) {
   const hasAdmin = roles.includes("admin");
   const list = hasAdmin ? ADMIN_ALL_ROLES : roles.length ? roles : (["agent"] as CsRole[]);
   const isAccounting = hasAdmin || list.includes("accounting");
+  const isHomeConfirm = roles.includes("home_confirm") || list.includes("home_confirm");
+  const isAgent = hasAdmin || list.includes("agent");
+  const isSupervisor = hasAdmin || list.includes("supervisor");
   return {
     roles: list,
     role: hasAdmin ? ("admin" as const) : list[0],
-    isSupervisor: hasAdmin || list.includes("supervisor"),
+    isSupervisor,
     isAdmin: hasAdmin,
+    isAgent,
     isTransfers: hasAdmin || list.includes("transfers"),
     isShipping: hasAdmin || list.includes("shipping"),
     isAccounting,
@@ -110,10 +116,13 @@ export function csFlagsFromRoles(roles: CsRole[]) {
     isMonaCourier: list.includes("mona_courier"),
     isScManager: hasAdmin || list.includes("sc_manager"),
     isScStaff: list.includes("sc_staff"),
+    isHomeConfirm,
+    isHomeConfirmOnly: isHomeConfirm && !hasAdmin && !isSupervisor && !isAgent,
     canAccessScCenters: hasAdmin || list.includes("sc_manager") || list.includes("sc_staff"),
     canAccessTransfers: hasAdmin || list.includes("transfers") || list.includes("supervisor"),
     canSeeOrders:
       hasAdmin ||
+      isHomeConfirm ||
       list.some((role) => role === "agent" || role === "supervisor" || role === "admin" || role === "accounting"),
     canAccessMaintenanceHub:
       hasAdmin ||
@@ -250,6 +259,8 @@ async function runEnsureCsTables() {
     await ensureSokanyAwbTables();
     const { ensureScCenterTables } = await import("@/lib/cs/sc-centers");
     await ensureScCenterTables();
+    const { ensureHomeConfirmTables } = await import("@/lib/cs/home-confirm");
+    await ensureHomeConfirmTables();
     return;
   }
 
@@ -695,6 +706,8 @@ async function runEnsureCsTables() {
   await ensureSokanyAwbTables();
   const { ensureScCenterTables } = await import("@/lib/cs/sc-centers");
   await ensureScCenterTables();
+  const { ensureHomeConfirmTables } = await import("@/lib/cs/home-confirm");
+  await ensureHomeConfirmTables();
 }
 
 /** Idempotent schema migration for CS tables — safe to call before every CS query. */

@@ -15,6 +15,7 @@ type AgentRow = {
 
 const PERMISSIONS = [
   { id: "agent", label: "خدمة عملاء" },
+  { id: "home_confirm", label: "تأكيدات منزل" },
   { id: "supervisor", label: "مشرف توزيع" },
   { id: "transfers", label: "التحويلات" },
   { id: "shipping", label: "شحن تميمة" },
