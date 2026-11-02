@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { CsFulfillmentPanel, type FulfillmentSnapshot } from "@/app/cs/orders/fulfillment-panel";
@@ -104,6 +104,60 @@ type Customer = { id: number; phone: string; name: string; address: string };
 
 const FIELD =
   "h-10 w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
+
+function DeskPhotoPicker({
+  label,
+  kind,
+  disabled,
+  onPick,
+}: {
+  label: string;
+  kind: "invoice" | "product";
+  disabled?: boolean;
+  onPick: (kind: "invoice" | "product", file: File) => void;
+}) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+
+  function onFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) onPick(kind, file);
+  }
+
+  return (
+    <div className="grid gap-1">
+      <p className="text-xs font-bold">{label}</p>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={disabled}
+          className="h-10 rounded-xl bg-[#14213D] px-3 text-xs font-extrabold text-white disabled:opacity-60"
+          onClick={() => cameraRef.current?.click()}
+        >
+          التقاط صورة
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          className="h-10 rounded-xl bg-white px-3 text-xs font-extrabold text-[#14213D] ring-1 ring-[#14213D]/20 disabled:opacity-60"
+          onClick={() => galleryRef.current?.click()}
+        >
+          من المعرض
+        </button>
+      </div>
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={onFile}
+      />
+      <input ref={galleryRef} type="file" accept="image/*" className="sr-only" onChange={onFile} />
+    </div>
+  );
+}
 
 const DEFECT_LABEL: Record<string, string> = {
   chop: "لا يفرم",
@@ -949,14 +1003,18 @@ export function ScDeskClient() {
               <textarea className={`${FIELD} h-20 py-2`} placeholder="شكوى العميل" value={form.complaintNote} onChange={(e) => setForm({ ...form, complaintNote: e.target.value })} />
               <textarea className={`${FIELD} h-16 py-2`} placeholder="طلب العميل" value={form.customerRequest} onChange={(e) => setForm({ ...form, customerRequest: e.target.value })} />
               <textarea className={`${FIELD} h-16 py-2`} placeholder="اقتراح موظف الاستقبال لحل المشكلة" value={form.staffProposal} onChange={(e) => setForm({ ...form, staffProposal: e.target.value })} />
-              <label className="block text-xs font-bold">
-                صورة الفاتورة
-                <input type="file" accept="image/*" capture="environment" className="mt-1 block w-full text-xs" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload("invoice", file); }} />
-              </label>
-              <label className="block text-xs font-bold">
-                صور المنتج
-                <input type="file" accept="image/*" capture="environment" className="mt-1 block w-full text-xs" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload("product", file); }} />
-              </label>
+              <DeskPhotoPicker
+                label="صورة الفاتورة"
+                kind="invoice"
+                disabled={Boolean(uploading)}
+                onPick={(kind, file) => void upload(kind, file)}
+              />
+              <DeskPhotoPicker
+                label="صور المنتج"
+                kind="product"
+                disabled={Boolean(uploading)}
+                onPick={(kind, file) => void upload(kind, file)}
+              />
               <label className="block text-xs font-bold">
                 صور الشكوى (من واتساب أو الموبايل)
                 <input type="file" accept="image/*" className="mt-1 block w-full text-xs" onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload("complaint", file); }} />
