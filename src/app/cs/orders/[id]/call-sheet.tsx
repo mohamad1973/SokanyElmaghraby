@@ -11,7 +11,7 @@ import {
   validateChecklistAnswers,
 } from "@/lib/cs/checklist";
 import { CsFulfillmentPanel } from "../fulfillment-panel";
-import { formatCairoOrderDateTime, resolvePaymentState } from "@/lib/cs/order-window";
+import { effectivePaymentState, formatCairoOrderDateTime, paymentStateBadge } from "@/lib/cs/order-window";
 import {
   BOSTA_TRACK_STAGES,
   bostaTrackMarker,
@@ -570,14 +570,14 @@ export function CsCallSheet({
         : "مدفوع جزئي"
       : null;
   const lockRecorded = showFollowUp && !canEditSavedInfo;
-  const paymentState =
-    snapshot?.paymentState ||
-    resolvePaymentState({
-      paymentMethod: snapshot?.paymentMethod,
-      paymentMethodId: snapshot?.paymentMethodId,
-      wooStatus: snapshot?.wooStatus,
-      datePaid: snapshot?.datePaid,
-    });
+  const paymentState = effectivePaymentState({
+    paymentMethod: snapshot?.paymentMethod,
+    paymentMethodId: snapshot?.paymentMethodId,
+    wooStatus: snapshot?.wooStatus || snapshot?.status,
+    datePaid: snapshot?.datePaid,
+    paymentState: snapshot?.paymentState,
+  });
+  const payBadge = paymentStateBadge(paymentState);
   const fawryPaid =
     paymentState === "paid" && /fawry|فورى|فوري/i.test(`${snapshot?.paymentMethod || ""} ${snapshot?.paymentMethodId || ""}`);
   const showCancelCard = showFollowUp && (!fu.handedToCarrier || postRefundPaid);
@@ -1532,6 +1532,9 @@ export function CsCallSheet({
           {depositPayLabel ? (
             <span className="rounded bg-[#0D9488] px-2 py-0.5 font-extrabold text-white">{depositPayLabel}</span>
           ) : null}
+          {payBadge ? (
+            <span className={`rounded px-2 py-0.5 font-extrabold ${payBadge.className}`}>{payBadge.label}</span>
+          ) : null}
           <span>{snapshot?.paymentMethod}</span>
           {lockedShipping ? (
             <span className="rounded bg-white/15 px-2 py-0.5">
@@ -1910,11 +1913,19 @@ export function HomeConfirmCallSheet({
   const [notes, setNotes] = useState(() =>
     initialHomeNotes(String(snapshot?.homeConfirmNote || failReason || "")),
   );
+  const homePaymentState = effectivePaymentState({
+    paymentMethod: snapshot?.paymentMethod,
+    paymentMethodId: snapshot?.paymentMethodId,
+    wooStatus: snapshot?.wooStatus || snapshot?.status,
+    datePaid: snapshot?.datePaid,
+    paymentState: snapshot?.paymentState,
+  });
+  const homePayBadge = paymentStateBadge(homePaymentState);
   const [answers, setAnswers] = useState(() => {
     const base = buildInitial(initialAnswers, snapshot);
     if (!base.payment_preference?.value) {
-      if (snapshot?.paymentState === "paid") base.payment_preference.value = "already_paid";
-      else if (snapshot?.paymentState === "cod") base.payment_preference.value = "cod";
+      if (homePaymentState === "paid") base.payment_preference.value = "already_paid";
+      else if (homePaymentState === "cod") base.payment_preference.value = "cod";
     }
     return base;
   });
@@ -2068,6 +2079,9 @@ export function HomeConfirmCallSheet({
           <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
             {snapshot?.total} {snapshot?.currency || "EGP"}
           </span>
+          {homePayBadge ? (
+            <span className={`rounded px-2 py-0.5 font-extrabold ${homePayBadge.className}`}>{homePayBadge.label}</span>
+          ) : null}
         </div>
         <p className="mt-2 text-[11px] font-bold text-white/80">
           فعّلي السبيكر وارجعي للتطبيق عشان تكتبي. دبل كليك على الموبايل أو الملاحظات يضيف سطر جديد بالرقم التالي.

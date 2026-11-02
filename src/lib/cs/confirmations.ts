@@ -26,6 +26,7 @@ import {
   isWithinCairoLastDays,
   isWithinCairoTodayOrYesterday,
   fulfillmentAccountAmount,
+  effectivePaymentState,
   resolvePaymentState,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
@@ -938,14 +939,13 @@ export function serializeCsQueueItem(row: {
   answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
 }) {
   const raw = (row.customerSnapshot as CsQueueSnapshot | null) || null;
-  const paymentState: CsPaymentState =
-    raw?.paymentState ||
-    resolvePaymentState({
-      paymentMethod: raw?.paymentMethod,
-      paymentMethodId: raw?.paymentMethodId,
-      wooStatus: raw?.wooStatus || raw?.status,
-      datePaid: raw?.datePaid,
-    });
+  const paymentState: CsPaymentState = effectivePaymentState({
+    paymentMethod: raw?.paymentMethod,
+    paymentMethodId: raw?.paymentMethodId,
+    wooStatus: raw?.wooStatus || raw?.status,
+    datePaid: raw?.datePaid,
+    paymentState: raw?.paymentState,
+  });
   const paidOnlineHighlight = paymentState === "paid";
 
   const shippingFromAnswer = row.answers?.find((a) => a.itemKey === "shipping_company")?.value;

@@ -231,6 +231,12 @@ export function isPaidOnlineHighlight(paymentMethod: string, paymentMethodId?: s
 
 export type CsPaymentState = "awaiting_payment" | "paid" | "cod";
 
+export function paymentStateBadge(state: CsPaymentState): { label: string; className: string } | null {
+  if (state === "paid") return { label: "مدفوع", className: "bg-emerald-600 text-white" };
+  if (state === "awaiting_payment") return { label: "حاول الدفع", className: "bg-red-700 text-white" };
+  return null;
+}
+
 export function parseMoneyAmount(value: unknown): number {
   const n = Number(String(value ?? "").replace(/[^\d.]/g, ""));
   return Number.isFinite(n) ? Math.max(0, n) : 0;
@@ -312,21 +318,13 @@ export function sheetSplitFromConfirmation(input: {
     datePaid?: string | null;
     paymentState?: CsPaymentState;
   };
-  const paymentState = input.freshPaymentState
-    ? effectivePaymentState({
-        paymentMethod: snap.paymentMethod,
-        paymentMethodId: snap.paymentMethodId,
-        wooStatus: snap.wooStatus,
-        datePaid: snap.datePaid,
-        paymentState: snap.paymentState,
-      })
-    : snap.paymentState ||
-      resolvePaymentState({
-        paymentMethod: snap.paymentMethod,
-        paymentMethodId: snap.paymentMethodId,
-        wooStatus: snap.wooStatus,
-        datePaid: snap.datePaid,
-      });
+  const paymentState = effectivePaymentState({
+    paymentMethod: snap.paymentMethod,
+    paymentMethodId: snap.paymentMethodId,
+    wooStatus: snap.wooStatus,
+    datePaid: snap.datePaid,
+    paymentState: snap.paymentState,
+  });
 
   const waybillSet = hasWaybillTotal(snap);
   const deltaRaw = Number(input.orderTotalDelta);
@@ -426,10 +424,7 @@ export function effectivePaymentState(input: {
   datePaid?: string | null;
   paymentState?: CsPaymentState | null;
 }): CsPaymentState {
-  if (isFawryMethod(input.paymentMethod, input.paymentMethodId)) return resolvePaymentState(input);
-  if (input.paymentState === "paid" || input.paymentState === "awaiting_payment" || input.paymentState === "cod") {
-    return input.paymentState;
-  }
+  void input.paymentState;
   return resolvePaymentState(input);
 }
 

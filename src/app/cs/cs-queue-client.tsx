@@ -15,6 +15,7 @@ import {
   formatCairoOrderDateTime,
   isWithinCairoDateRange,
   effectivePaymentState,
+  paymentStateBadge,
   sheetCollectedSplit,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
@@ -1773,7 +1774,7 @@ export function CsQueueClient({
             >
               <option value="all">كل الدفع</option>
               <option value="paid">مدفوع</option>
-              <option value="awaiting_payment">تحت الدفع</option>
+              <option value="awaiting_payment">حاول الدفع</option>
               <option value="cod">عند الاستلام</option>
             </select>
           )}
@@ -1785,7 +1786,7 @@ export function CsQueueClient({
             >
               <option value="all">كل الدفع</option>
               <option value="paid">مدفوع</option>
-              <option value="awaiting_payment">تحت الدفع</option>
+              <option value="awaiting_payment">حاول الدفع</option>
               <option value="cod">عند الاستلام</option>
             </select>
           ) : null}
@@ -2168,6 +2169,7 @@ export function CsQueueClient({
           filtered.map((item) => {
             const isConfirmed = item.status === "CONFIRMED";
             const paymentState = itemPaymentState(item);
+            const payBadge = paymentStateBadge(paymentState);
             const isPaid = paymentState === "paid";
             const isAwaiting = paymentState === "awaiting_payment";
             const meta = statusMeta[item.status] || { label: item.status, className: "bg-[#E5E5E5]" };
@@ -2196,7 +2198,7 @@ export function CsQueueClient({
                       : isPaid
                         ? "ring-[#14213D]/35"
                         : isAwaiting
-                          ? "ring-amber-400/70"
+                          ? "ring-red-500/70"
                           : "ring-[#E5E5E5]"
                 }`}
               >
@@ -2322,11 +2324,10 @@ export function CsQueueClient({
                         </span>
                       ) : null}
                     </span>
-                    {isPaid ? (
-                      <span className="w-fit rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white">مدفوع</span>
-                    ) : null}
-                    {isAwaiting ? (
-                      <span className="w-fit rounded bg-amber-500 px-1.5 py-0.5 text-[10px] text-black">تحت الدفع</span>
+                    {payBadge ? (
+                      <span className={`w-fit rounded px-1.5 py-0.5 text-[10px] font-extrabold ${payBadge.className}`}>
+                        {payBadge.label}
+                      </span>
                     ) : null}
                     {itemTrackingNumber(item) ? (
                       <span className="w-fit rounded bg-[#14213D] px-1.5 py-0.5 text-[10px] text-white" dir="ltr">
