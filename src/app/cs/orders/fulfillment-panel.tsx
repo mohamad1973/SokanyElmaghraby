@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { SHIPPING_COMPANY_LABEL, type CsChecklistAnswerInput } from "@/lib/cs/checklist";
+import { listCsAreasForGovernorate, listCsGovernorates } from "@/lib/cs/egypt-areas";
 import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 
 export type FulfillmentSnapshot = {
@@ -119,6 +120,26 @@ export function CsFulfillmentPanel({
   const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [fulfillmentChildren, setFulfillmentChildren] = useState<FulfillmentChild[]>([]);
   const [monaCouriers, setMonaCouriers] = useState<MonaCourierOpt[]>([]);
+  const [partyName, setPartyName] = useState("");
+  const [partyPhone, setPartyPhone] = useState("");
+  const [partyAddress, setPartyAddress] = useState("");
+  const [partyGovernorate, setPartyGovernorate] = useState("");
+  const [partyArea, setPartyArea] = useState("");
+  const answerName = String(answers.find((row) => row.itemKey === "customer_name")?.value || "").trim();
+  const answerPhone = String(answers.find((row) => row.itemKey === "primary_phone")?.value || "").trim();
+  const answerAddress = String(answers.find((row) => row.itemKey === "address_complete")?.value || "").trim();
+  const answerGovernorate = String(answers.find((row) => row.itemKey === "governorate_confirm")?.value || "").trim();
+  const answerArea = String(answers.find((row) => row.itemKey === "area_confirm")?.value || "").trim();
+  const governorateOptions = useMemo(() => {
+    const names = listCsGovernorates();
+    if (partyGovernorate && !names.includes(partyGovernorate)) names.unshift(partyGovernorate);
+    return names;
+  }, [partyGovernorate]);
+  const areaOptions = useMemo(() => {
+    const names = listCsAreasForGovernorate(partyGovernorate);
+    if (partyArea && !names.includes(partyArea)) names.unshift(partyArea);
+    return names;
+  }, [partyArea, partyGovernorate]);
 
   useEffect(() => {
     setTrackingNumber(String(initialTracking || snapshot?.trackingNumber || "").trim());
@@ -128,9 +149,55 @@ export function CsFulfillmentPanel({
     setWaybillPrinted(Boolean(initialWaybillPrinted));
   }, [confirmationId, initialWaybillPrinted]);
 
+  useEffect(() => {
+    setPartyName(String(snapshot?.customerName || answerName || "").trim());
+    setPartyPhone(String(snapshot?.phone || answerPhone || "").trim());
+    setPartyAddress(String(snapshot?.address || answerAddress || "").trim());
+    setPartyGovernorate(String(snapshot?.governorate || answerGovernorate || "").trim());
+    setPartyArea(String(snapshot?.area || answerArea || "").trim());
+  }, [
+    answerAddress,
+    answerArea,
+    answerGovernorate,
+    answerName,
+    answerPhone,
+    confirmationId,
+    snapshot?.address,
+    snapshot?.area,
+    snapshot?.customerName,
+    snapshot?.governorate,
+    snapshot?.phone,
+  ]);
+
   function tell(text: string) {
     setMessage(text);
     onMessage?.(text);
+  }
+
+  function partyAnswers(): CsChecklistAnswerInput[] {
+    return [
+      { itemKey: "customer_name", confirmed: Boolean(partyName.trim()), value: partyName.trim() },
+      { itemKey: "primary_phone", confirmed: Boolean(partyPhone.trim()), value: partyPhone.trim() },
+      { itemKey: "address_complete", confirmed: Boolean(partyAddress.trim()), value: partyAddress.trim() },
+      { itemKey: "governorate_confirm", confirmed: Boolean(partyGovernorate.trim()), value: partyGovernorate.trim() },
+      { itemKey: "area_confirm", confirmed: Boolean(partyArea.trim()), value: partyArea.trim() },
+    ];
+  }
+
+  async function persistParty() {
+    if (!confirmationId) {
+      return { ok: false as const, message: "اختَر الأوردر من اليمين عشان تنشئ بوليصة استرجاع أو استبدال." };
+    }
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update", answers: partyAnswers() }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    if (!res.ok) {
+      return { ok: false as const, message: data.message || "تعذر حفظ بيانات البوليصة." };
+    }
+    return { ok: true as const, message: data.message || "" };
   }
 
   useEffect(() => {
@@ -215,15 +282,19 @@ export function CsFulfillmentPanel({
       tell("اختَر الأوردر من اليمين عشان تنشئ بوليصة استرجاع أو استبدال.");
       return;
     }
-    const answer = (key: string) => answers.find((row) => row.itemKey === key)?.value || "";
-    const governorate = String(snapshot?.governorate || answer("governorate_confirm") || "").trim();
+    const governorate = partyGovernorate.trim();
     if (!governorate) {
-      tell("المحافظة ناقصة على الأوردر. بوسطة مش هتنشئ البوليصة من غيرها.");
+      tell("اختَر المحافظة في خانات البوليصة.");
+      return;
+    }
+    const persisted = await persistParty();
+    if (!persisted.ok) {
+      tell(persisted.message);
       return;
     }
     const preview = window.open("about:blank", fulfillmentDesk === "bosta" ? "bosta-awb" : "sokany-awb");
     setFulfillmentBusy(true);
-    tell("");
+    tell(persisted.message && /قفلت تعديل البوليصة/.test(persisted.message) ? persisted.message : "");
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/fulfillment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -249,11 +320,11 @@ export function CsFulfillmentPanel({
               quantity: 1,
             }
           : null,
-        phone: snapshot?.phone || answer("primary_phone"),
-        address: snapshot?.address || answer("address_complete"),
+        phone: partyPhone.trim(),
+        address: partyAddress.trim(),
         governorate,
-        area: snapshot?.area || answer("area_confirm"),
-        customerName: snapshot?.customerName || answer("customer_name"),
+        area: partyArea.trim(),
+        customerName: partyName.trim(),
       }),
     });
     const data = (await res.json().catch(() => null)) as {
@@ -410,6 +481,11 @@ export function CsFulfillmentPanel({
   }
 
   async function openSokanyAwb() {
+    const persisted = await persistParty();
+    if (!persisted.ok) {
+      tell(persisted.message);
+      return;
+    }
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/sokany-awb`);
     const data = (await res.json().catch(() => ({}))) as { message?: string; tracking?: string; printUrl?: string };
     if (!res.ok) {
@@ -436,6 +512,14 @@ export function CsFulfillmentPanel({
       await openSokanyAwb();
       return;
     }
+    const persisted = await persistParty();
+    if (!persisted.ok) {
+      tell(persisted.message);
+      return;
+    }
+    if (persisted.message && /قفلت تعديل البوليصة/.test(persisted.message)) {
+      tell(persisted.message);
+    }
     await printWaybillPdf(trackingNumber);
   }
 
@@ -450,7 +534,7 @@ export function CsFulfillmentPanel({
     const res = await fetch(`/api/cs/confirmations/${confirmationId}/bosta`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create", answers }),
+      body: JSON.stringify({ action: "create", answers: partyAnswers() }),
     });
     const data = (await res.json().catch(() => ({}))) as {
       message?: string;
@@ -471,11 +555,8 @@ export function CsFulfillmentPanel({
 
   const deskCouriers = monaCouriers.filter((row) => row.bucket === fulfillmentDesk);
   const originalItems = snapshot?.items || [];
-  const cardGovernorate = String(
-    snapshot?.governorate || answers.find((row) => row.itemKey === "governorate_confirm")?.value || "",
-  ).trim();
   const missingOrder = !confirmationId;
-  const missingGovernorate = Boolean(confirmationId) && !cardGovernorate;
+  const missingGovernorate = Boolean(confirmationId) && !partyGovernorate.trim();
 
   return (
     <div className="space-y-2" dir="rtl">
@@ -681,10 +762,62 @@ export function CsFulfillmentPanel({
               </ul>
             ) : null}
           </div>
-          <p className="mt-2 text-[10px] font-bold text-[#14213D]/60" dir="ltr">
-            {snapshot?.phone || answers.find((row) => row.itemKey === "primary_phone")?.value || "—"} ·{" "}
-            {snapshot?.customerName || answers.find((row) => row.itemKey === "customer_name")?.value || "—"}
-          </p>
+          <div className="mt-3 grid gap-2 rounded-xl bg-white/80 p-2 ring-1 ring-[#FCA311]/40">
+            <p className="text-[11px] font-extrabold text-[#14213D]">بيانات البوليصة</p>
+            <label className="block text-[11px] font-extrabold text-[#14213D]">
+              الاسم
+              <input value={partyName} onChange={(e) => setPartyName(e.target.value)} className={`${inputCls} mt-1`} />
+            </label>
+            <label className="block text-[11px] font-extrabold text-[#14213D]">
+              الموبايل
+              <input
+                dir="ltr"
+                value={partyPhone}
+                onChange={(e) => setPartyPhone(e.target.value)}
+                className={`${inputCls} mt-1`}
+              />
+            </label>
+            <label className="block text-[11px] font-extrabold text-[#14213D]">
+              العنوان
+              <textarea
+                value={partyAddress}
+                onChange={(e) => setPartyAddress(e.target.value)}
+                rows={2}
+                className={`${inputCls} mt-1`}
+              />
+            </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block text-[11px] font-extrabold text-[#14213D]">
+                المحافظة
+                <select
+                  value={partyGovernorate}
+                  onChange={(e) => setPartyGovernorate(e.target.value)}
+                  className={`${inputCls} mt-1`}
+                >
+                  <option value="">اختَر المحافظة</option>
+                  {governorateOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[11px] font-extrabold text-[#14213D]">
+                المنطقة
+                <input
+                  list={`cs-waybill-areas-${confirmationId || "new"}`}
+                  value={partyArea}
+                  onChange={(e) => setPartyArea(e.target.value)}
+                  className={`${inputCls} mt-1`}
+                />
+                <datalist id={`cs-waybill-areas-${confirmationId || "new"}`}>
+                  {areaOptions.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </label>
+            </div>
+          </div>
           {missingOrder ? (
             <p className="mt-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-extrabold text-red-800">
               اختَر الأوردر من اليمين عشان تنشئ بوليصة استرجاع أو استبدال.
@@ -692,7 +825,7 @@ export function CsFulfillmentPanel({
           ) : null}
           {missingGovernorate ? (
             <p className="mt-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-extrabold text-red-800">
-              المحافظة ناقصة على الأوردر. بوسطة مش هتنشئ البوليصة من غيرها.
+              اختَر المحافظة في خانات البوليصة.
             </p>
           ) : null}
           <button

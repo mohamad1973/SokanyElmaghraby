@@ -69,15 +69,27 @@ export async function GET(_request: Request, context: Context) {
   const carrier = await getCsCarrierByCode(String(confirmation.shippingCompany || ""));
   const snap = (confirmation.customerSnapshot || null) as Record<string, unknown> | null;
   const row = confirmation as { trackingNumber?: string | null; waybillPrinted?: boolean | null };
+  const text = (key: string) =>
+    String(confirmation.answers.find((answer) => answer.itemKey === key)?.value || "").trim();
+  const snapshot: Record<string, unknown> | null = snap
+    ? {
+        ...snap,
+        customerName: String(snap.customerName || text("customer_name") || "").trim() || snap.customerName,
+        phone: String(snap.phone || text("primary_phone") || "").trim() || snap.phone,
+        address: String(snap.address || text("address_complete") || "").trim() || snap.address,
+        governorate: String(snap.governorate || text("governorate_confirm") || "").trim() || snap.governorate,
+        area: String(snap.area || text("area_confirm") || "").trim() || snap.area,
+      }
+    : snap;
   return NextResponse.json({
     ok: true,
     confirmationId: confirmation.id,
     status: confirmation.status,
     shippingCompany: confirmation.shippingCompany,
-    trackingNumber: row.trackingNumber || (typeof snap?.trackingNumber === "string" ? snap.trackingNumber : null),
+    trackingNumber: row.trackingNumber || (typeof snapshot?.trackingNumber === "string" ? snapshot.trackingNumber : null),
     waybillPrinted: Boolean(row.waybillPrinted),
     sokanyWaybill: usesSokanyWaybillPrint(confirmation.shippingCompany, carrier?.waybillProvider === "sokany"),
-    snapshot: snap,
+    snapshot,
   });
 }
 

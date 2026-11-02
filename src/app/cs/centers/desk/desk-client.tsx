@@ -370,6 +370,8 @@ export function ScDeskClient() {
         customerName: deskOrder.loaded.snapshot?.customerName || form.name || undefined,
         phone: deskOrder.loaded.snapshot?.phone || form.phone || undefined,
         address: deskOrder.loaded.snapshot?.address || form.address || undefined,
+        governorate: deskOrder.loaded.snapshot?.governorate || undefined,
+        area: deskOrder.loaded.snapshot?.area || undefined,
       }
     : form.name || form.phone
       ? { customerName: form.name, phone: form.phone, address: form.address }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { ensureCsBostaWaybill, refreshCsBostaWaybill } from "@/lib/cs/bosta-waybill";
+import { ensureCsBostaWaybill, persistWaybillParty, refreshCsBostaWaybill, syncCsBostaWaybill } from "@/lib/cs/bosta-waybill";
 import type { CsChecklistAnswerInput } from "@/lib/cs/checklist";
 import { isHomeConfirmOnlyAgent } from "@/lib/cs/home-confirm";
 import { requireCsSession } from "@/lib/session-guards";
@@ -27,6 +27,41 @@ export async function POST(request: Request, context: Context) {
     body = (await request.json()) as { action?: string; answers?: CsChecklistAnswerInput[] };
   } catch {
     body = {};
+  }
+
+  if (body.action === "update") {
+    const persisted = await persistWaybillParty(numericId, Array.isArray(body.answers) ? body.answers : undefined);
+    if (!persisted.ok) {
+      return NextResponse.json({ message: persisted.message }, { status: 400 });
+    }
+    if (!persisted.trackingNumber || String(persisted.shippingCompany || "").trim() !== "bosta") {
+      return NextResponse.json({
+        ok: true,
+        trackingNumber: persisted.trackingNumber,
+        message: "تم حفظ بيانات البوليصة.",
+      });
+    }
+    const state = await syncCsBostaWaybill({
+      confirmationId: numericId,
+      wooOrderId: persisted.wooOrderId,
+      wooOrderNumber: persisted.wooOrderNumber,
+      shippingCompany: persisted.shippingCompany,
+      trackingNumber: persisted.trackingNumber,
+      bostaStatus: persisted.bostaStatus,
+      bostaShippingFee: persisted.bostaShippingFee,
+      answers: persisted.answers,
+      snapshot: persisted.snapshot,
+      orderTotalDelta: persisted.orderTotalDelta,
+      depositAmount: persisted.depositAmount,
+      depositPaid: persisted.depositPaid,
+      depositApprovalStatus: persisted.depositApprovalStatus,
+      preserveShippingCompany: true,
+    });
+    return NextResponse.json({
+      ...state,
+      ok: true,
+      message: state.message || "تم حفظ بيانات البوليصة.",
+    });
   }
 
   if (body.action === "create") {

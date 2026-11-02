@@ -99,6 +99,106 @@ function mergeChecklistAnswers(saved: CsChecklistAnswerInput[], overlay?: CsChec
   return [...map.values()];
 }
 
+const WAYBILL_PARTY_KEYS = [
+  "customer_name",
+  "primary_phone",
+  "address_complete",
+  "governorate_confirm",
+  "area_confirm",
+] as const;
+
+export function snapshotWithWaybillParty(snapshot: Snapshot, answers: CsChecklistAnswerInput[]) {
+  const next: Record<string, unknown> = { ...(snapshot || {}) };
+  const name = textOf(answers, "customer_name");
+  const phone = textOf(answers, "primary_phone");
+  const address = textOf(answers, "address_complete");
+  const governorate = textOf(answers, "governorate_confirm");
+  const area = textOf(answers, "area_confirm");
+  if (name) next.customerName = name;
+  if (phone) next.phone = phone;
+  if (address) next.address = address;
+  if (governorate) next.governorate = governorate;
+  if (area) next.area = area;
+  const full = [String(next.address || "").trim(), String(next.area || "").trim(), String(next.governorate || "").trim()]
+    .filter(Boolean)
+    .join(" — ");
+  if (full) next.addressFull = full;
+  return next;
+}
+
+export async function persistWaybillParty(confirmationId: number, overlay?: CsChecklistAnswerInput[]) {
+  const prisma = getPrismaClient();
+  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: false as const, message: "الطلب غير موجود." };
+  }
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    include: { answers: true },
+  });
+  if (!row) return { ok: false as const, message: "الطلب غير موجود." };
+  const answers = mergeChecklistAnswers(
+    row.answers.map((answer) => ({
+      itemKey: answer.itemKey,
+      confirmed: Boolean(answer.confirmed),
+      value: answer.value,
+      note: answer.note,
+    })),
+    overlay,
+  );
+  const snapshot = snapshotWithWaybillParty((row.customerSnapshot as Snapshot) || {}, answers);
+  await prisma.csOrderConfirmation.update({
+    where: { id: confirmationId },
+    data: { customerSnapshot: snapshot } as never,
+  });
+  for (const key of WAYBILL_PARTY_KEYS) {
+    const answer = answers.find((row) => row.itemKey === key);
+    if (!answer) continue;
+    await prisma.csChecklistAnswer.upsert({
+      where: { confirmationId_itemKey: { confirmationId, itemKey: key } },
+      create: {
+        confirmationId,
+        itemKey: key,
+        confirmed: Boolean(answer.confirmed),
+        value: answer.value ?? null,
+        note: answer.note ?? null,
+      },
+      update: {
+        confirmed: Boolean(answer.confirmed),
+        value: answer.value ?? null,
+        note: answer.note ?? null,
+      },
+    });
+  }
+  const typed = row as {
+    trackingNumber?: string | null;
+    bostaStatus?: string | null;
+    bostaShippingFee?: unknown;
+    orderTotalDelta?: unknown;
+    depositAmount?: unknown;
+    depositPaid?: boolean | null;
+    depositApprovalStatus?: string | null;
+    shippingCompany?: string | null;
+  };
+  return {
+    ok: true as const,
+    snapshot,
+    answers,
+    wooOrderId: row.wooOrderId,
+    wooOrderNumber: row.wooOrderNumber,
+    trackingNumber: String(typed.trackingNumber || "").trim() || null,
+    bostaStatus: typed.bostaStatus || null,
+    bostaShippingFee:
+      typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
+        ? null
+        : Number(typed.bostaShippingFee),
+    orderTotalDelta: typed.orderTotalDelta == null ? null : Number(typed.orderTotalDelta),
+    depositAmount: typed.depositAmount == null ? null : Number(typed.depositAmount),
+    depositPaid: Boolean(typed.depositPaid),
+    depositApprovalStatus: typed.depositApprovalStatus || null,
+    shippingCompany: typed.shippingCompany || null,
+  };
+}
+
 function partyFromAnswers(input: {
   answers: CsChecklistAnswerInput[];
   snapshot: Snapshot;
@@ -926,16 +1026,21 @@ export async function ensureCsBostaWaybill(
     depositApprovalStatus?: string | null;
     shippingCompany?: string | null;
   };
-  const answers = mergeChecklistAnswers(
-    row.answers.map((answer) => ({
-      itemKey: answer.itemKey,
-      confirmed: Boolean(answer.confirmed),
-      value: answer.value,
-      note: answer.note,
-    })),
-    opts?.answers,
-  );
-  const snapshot = (row.customerSnapshot as Snapshot) || null;
+  const persisted = opts?.answers?.length ? await persistWaybillParty(confirmationId, opts.answers) : null;
+  const answers =
+    persisted && persisted.ok
+      ? persisted.answers
+      : mergeChecklistAnswers(
+          row.answers.map((answer) => ({
+            itemKey: answer.itemKey,
+            confirmed: Boolean(answer.confirmed),
+            value: answer.value,
+            note: answer.note,
+          })),
+          opts?.answers,
+        );
+  const snapshot =
+    persisted && persisted.ok ? persisted.snapshot : (row.customerSnapshot as Snapshot) || null;
   const fee =
     typed.bostaShippingFee == null || !Number.isFinite(Number(typed.bostaShippingFee))
       ? null
