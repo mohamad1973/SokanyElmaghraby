@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   CS_CHECKLIST_ITEMS,
@@ -1852,6 +1852,33 @@ const HOME_STATUS_LABEL: Record<string, string> = {
   CANCELLED: "ملغي",
 };
 
+function egyptianTelHref(raw: string) {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) return `tel:+${digits.slice(2)}`;
+  if (digits.startsWith("20") && digits.length >= 11) return `tel:+${digits}`;
+  if (digits.startsWith("0")) return `tel:+20${digits.slice(1)}`;
+  if (digits.length === 10) return `tel:+20${digits}`;
+  return `tel:${digits}`;
+}
+
+function initialHomeNotes(raw: string) {
+  const text = String(raw || "").trim();
+  return text || "1- ";
+}
+
+function nextHomeNoteNumber(notes: string) {
+  const matches = [...String(notes || "").matchAll(/^\s*(\d+)\s*-/gm)];
+  const last = matches.length ? Number(matches[matches.length - 1][1]) : 0;
+  return (Number.isFinite(last) ? last : 0) + 1;
+}
+
+function appendHomeNoteLine(notes: string) {
+  const n = nextHomeNoteNumber(notes);
+  const trimmed = String(notes || "").replace(/\s+$/, "");
+  return `${trimmed ? `${trimmed}\n` : ""}${n}- `;
+}
+
 export function HomeConfirmCallSheet({
   confirmationId,
   status,
@@ -1863,12 +1890,41 @@ export function HomeConfirmCallSheet({
   snapshot: Snapshot | null;
   failReason?: string | null;
 }) {
-  const [notes, setNotes] = useState(() => String(snapshot?.homeConfirmNote || failReason || "").trim());
+  const [notes, setNotes] = useState(() =>
+    initialHomeNotes(String(snapshot?.homeConfirmNote || failReason || "")),
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const lastPhoneTap = useRef(0);
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const items = snapshot?.items || [];
   const itemCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const phone = String(snapshot?.phone || "").trim();
+  const callHref = egyptianTelHref(phone);
+
+  function addNumberedNoteLine() {
+    setNotes((prev) => appendHomeNoteLine(prev));
+    window.requestAnimationFrame(() => {
+      const box = notesRef.current;
+      if (!box) return;
+      box.focus();
+      const end = box.value.length;
+      box.setSelectionRange(end, end);
+      box.scrollTop = box.scrollHeight;
+    });
+  }
+
+  function onPhoneActivate(event: { preventDefault: () => void; type: string }) {
+    const now = Date.now();
+    if (event.type === "dblclick" || (event.type === "touchend" && now - lastPhoneTap.current < 350)) {
+      event.preventDefault();
+      lastPhoneTap.current = 0;
+      addNumberedNoteLine();
+      return;
+    }
+    if (event.type === "touchend") lastPhoneTap.current = now;
+  }
 
   async function save(kind: "confirm" | "postpone" | "cancel") {
     if (saving) return;
@@ -1940,18 +1996,51 @@ export function HomeConfirmCallSheet({
       ) : null}
 
       <section className="rounded-2xl bg-[#14213D] px-4 py-3 text-sm text-white">
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className="font-extrabold">{snapshot?.customerName || "—"}</span>
-          <span dir="ltr">{snapshot?.phone || "—"}</span>
+          <span
+            dir="ltr"
+            className="cursor-pointer select-none rounded bg-white/15 px-2 py-1 font-extrabold"
+            title="دبل كليك يضيف سطر ملاحظة جديد"
+            onDoubleClick={(event) => onPhoneActivate(event)}
+            onTouchEnd={(event) => onPhoneActivate(event)}
+          >
+            {phone || "—"}
+          </span>
+          {callHref ? (
+            <a
+              href={callHref}
+              className="rounded-xl bg-[#FCA311] px-4 py-2 text-sm font-extrabold text-black"
+            >
+              اتصال
+            </a>
+          ) : (
+            <span className="rounded-xl bg-white/20 px-4 py-2 text-sm font-extrabold text-white/70">لا يوجد رقم</span>
+          )}
           <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
             {snapshot?.total} {snapshot?.currency || "EGP"}
           </span>
         </div>
+        <p className="mt-2 text-[11px] font-bold text-white/80">
+          فعّلي السبيكر وارجعي للتطبيق عشان تكتبي. دبل كليك على الموبايل يضيف سطر ملاحظة جديد.
+        </p>
         <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-2">
           <span className="truncate">العنوان: {snapshot?.address || "—"}</span>
           <span className="truncate">المحافظة: {snapshot?.governorate || "—"}</span>
         </div>
       </section>
+
+      <label className="grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15">
+        ملاحظات العميل
+        <textarea
+          ref={notesRef}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          rows={7}
+          className="min-h-36 w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]"
+          placeholder="1- "
+        />
+      </label>
 
       <section className="rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15">
         <table className="w-full border-collapse text-right text-sm text-[#14213D]">
@@ -1993,17 +2082,6 @@ export function HomeConfirmCallSheet({
           </p>
         </div>
       </section>
-
-      <label className="grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15">
-        ملاحظات
-        <textarea
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          rows={4}
-          className="w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]"
-          placeholder="اكتبي ملاحظة التأكيد أو التأجيل أو الإلغاء"
-        />
-      </label>
     </div>
   );
 }
