@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { listHomeConfirmShifts, saveHomeConfirmShifts, stampHomeConfirmRange } from "@/lib/cs/home-confirm";
+import {
+  drainUnassignedHomeConfirmPending,
+  listHomeConfirmShifts,
+  saveHomeConfirmShifts,
+  stampHomeConfirmRange,
+} from "@/lib/cs/home-confirm";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -57,6 +62,11 @@ export async function POST(request: Request) {
       })),
   );
   if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+  try {
+    await drainUnassignedHomeConfirmPending();
+  } catch (error) {
+    console.error("[cs] home-confirm drain after shift save failed", error);
+  }
   const data = await listHomeConfirmShifts();
   return NextResponse.json({ ok: true, ...data });
 }

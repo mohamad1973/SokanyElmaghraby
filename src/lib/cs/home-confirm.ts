@@ -2,7 +2,15 @@ import "server-only";
 
 import { csFlagsFromRoles, getCsAgentById, listCsAgents, parseCsRoles, type CsRole } from "@/lib/cs/agents";
 import { stampAssignedAgentInOrderRange } from "@/lib/cs/assignments";
-import { isCairoHmInWindow, normalizeHm } from "@/lib/cs/order-window";
+import { CS_CONFIRMATION_STATUS } from "@/lib/cs/checklist";
+import {
+  cairoNowHm,
+  cairoTodayYmd,
+  cairoYmdBounds,
+  isCairoHmInWindow,
+  normalizeHm,
+  parseHmToMinutes,
+} from "@/lib/cs/order-window";
 import { getPrismaClient } from "@/lib/db";
 
 const CURSOR_ID = 1;
@@ -177,9 +185,56 @@ export async function stampHomeConfirmRange(input: { agentId: number; from: numb
   return { ok: true as const, stamped };
 }
 
-async function onShiftHomeAgentIds() {
+async function onShiftHomeAgents() {
   const { agents } = await listHomeConfirmShifts();
-  return agents.filter((row) => row.inShiftNow).map((row) => row.agentId);
+  return agents.filter((row) => row.inShiftNow);
+}
+
+function currentShiftWindowStart(startHm: string, endHm: string, now = new Date()) {
+  if (!isCairoHmInWindow(startHm, endHm, now)) return null;
+  const startMin = parseHmToMinutes(startHm);
+  const endMin = parseHmToMinutes(endHm);
+  if (startMin == null || endMin == null) return null;
+  const today = cairoYmdBounds(cairoTodayYmd());
+  if (!today) return null;
+  if (endMin > startMin) return new Date(today.start.getTime() + startMin * 60_000);
+  const nowMin = parseHmToMinutes(cairoNowHm(now));
+  if (nowMin != null && nowMin >= startMin) return new Date(today.start.getTime() + startMin * 60_000);
+  return new Date(today.start.getTime() - 24 * 60 * 60 * 1000 + startMin * 60_000);
+}
+
+async function pickNextHomeAgentId(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  ids: number[],
+) {
+  const cursorRows = await prisma.$queryRawUnsafe<Array<{ lastAgentId: number | null }>>(
+    `SELECT \`lastAgentId\` FROM \`CsHomeConfirmCursor\` WHERE \`id\` = ? LIMIT 1`,
+    CURSOR_ID,
+  );
+  const lastAgentId = cursorRows[0]?.lastAgentId != null ? Number(cursorRows[0].lastAgentId) : null;
+  const lastIndex = lastAgentId != null ? ids.indexOf(lastAgentId) : -1;
+  return ids[(lastIndex + 1) % ids.length];
+}
+
+async function stampHomeConfirmAgent(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  confirmationId: number,
+  agentId: number,
+) {
+  const updated = await prisma.$executeRawUnsafe(
+    `UPDATE \`CsOrderConfirmation\` SET \`assignedAgentId\` = ? WHERE \`id\` = ? AND \`assignedAgentId\` IS NULL`,
+    agentId,
+    confirmationId,
+  );
+  if (!Number(updated)) return null;
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO \`CsHomeConfirmCursor\` (\`id\`, \`lastAgentId\`, \`updatedAt\`)
+     VALUES (?, ?, NOW(3))
+     ON DUPLICATE KEY UPDATE \`lastAgentId\` = VALUES(\`lastAgentId\`), \`updatedAt\` = NOW(3)`,
+    CURSOR_ID,
+    agentId,
+  );
+  return agentId;
 }
 
 export async function tryAssignHomeConfirmRoundRobin(confirmationId: number) {
@@ -195,33 +250,48 @@ export async function tryAssignHomeConfirmRoundRobin(confirmationId: number) {
     );
     if (!current[0] || current[0].assignedAgentId != null) return null;
 
-    const ids = await onShiftHomeAgentIds();
+    const ids = (await onShiftHomeAgents()).map((row) => row.agentId).sort((a, b) => a - b);
     if (!ids.length) return null;
-    ids.sort((a, b) => a - b);
+    const nextId = await pickNextHomeAgentId(prisma, ids);
+    return stampHomeConfirmAgent(prisma, confirmationId, nextId);
+  } finally {
+    await prisma.$queryRawUnsafe(`SELECT RELEASE_LOCK('cs_home_confirm_rr')`);
+  }
+}
 
-    const cursorRows = await prisma.$queryRawUnsafe<Array<{ lastAgentId: number | null }>>(
-      `SELECT \`lastAgentId\` FROM \`CsHomeConfirmCursor\` WHERE \`id\` = ? LIMIT 1`,
-      CURSOR_ID,
-    );
-    const lastAgentId = cursorRows[0]?.lastAgentId != null ? Number(cursorRows[0].lastAgentId) : null;
-    const lastIndex = lastAgentId != null ? ids.indexOf(lastAgentId) : -1;
-    const nextId = ids[(lastIndex + 1) % ids.length];
+/** Assign unassigned PENDING rows created during the active home-confirm shift window. */
+export async function drainUnassignedHomeConfirmPending() {
+  const prisma = getPrismaClient();
+  if (!prisma) return { assigned: 0 };
+  await ensureHomeConfirmTables();
 
-    const updated = await prisma.$executeRawUnsafe(
-      `UPDATE \`CsOrderConfirmation\` SET \`assignedAgentId\` = ? WHERE \`id\` = ? AND \`assignedAgentId\` IS NULL`,
-      nextId,
-      confirmationId,
-    );
-    if (!Number(updated)) return null;
+  const onShift = await onShiftHomeAgents();
+  if (!onShift.length) return { assigned: 0 };
+  const starts = onShift
+    .map((row) => currentShiftWindowStart(row.startHm, row.endHm))
+    .filter((value): value is Date => Boolean(value));
+  if (!starts.length) return { assigned: 0 };
+  const from = new Date(Math.min(...starts.map((value) => value.getTime())));
+  const ids = onShift.map((row) => row.agentId).sort((a, b) => a - b);
 
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO \`CsHomeConfirmCursor\` (\`id\`, \`lastAgentId\`, \`updatedAt\`)
-       VALUES (?, ?, NOW(3))
-       ON DUPLICATE KEY UPDATE \`lastAgentId\` = VALUES(\`lastAgentId\`), \`updatedAt\` = NOW(3)`,
-      CURSOR_ID,
-      nextId,
+  await prisma.$queryRawUnsafe(`SELECT GET_LOCK('cs_home_confirm_rr', 5)`);
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: number | bigint }>>(
+      `SELECT \`id\` FROM \`CsOrderConfirmation\`
+       WHERE \`assignedAgentId\` IS NULL AND \`status\` = ? AND \`createdAt\` >= ?
+       ORDER BY \`id\` ASC
+       LIMIT 200`,
+      CS_CONFIRMATION_STATUS.PENDING,
+      from,
     );
-    return nextId;
+    let assigned = 0;
+    for (const row of rows) {
+      const confirmationId = Number(row.id);
+      if (!Number.isInteger(confirmationId) || confirmationId <= 0) continue;
+      const nextId = await pickNextHomeAgentId(prisma, ids);
+      if (await stampHomeConfirmAgent(prisma, confirmationId, nextId)) assigned += 1;
+    }
+    return { assigned };
   } finally {
     await prisma.$queryRawUnsafe(`SELECT RELEASE_LOCK('cs_home_confirm_rr')`);
   }

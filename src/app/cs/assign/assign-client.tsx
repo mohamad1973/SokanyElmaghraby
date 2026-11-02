@@ -8,6 +8,7 @@ import {
   cairoYmdFromIso,
   eachCairoYmdInclusive,
   formatCairoOrderDate,
+  isCairoHmInWindow,
 } from "@/lib/cs/order-window";
 
 type Agent = { id: number; name: string; email?: string; roles?: string[] };
@@ -36,6 +37,14 @@ type HomeShift = {
 
 const FILTER_CONTROL =
   "h-9 w-full rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
+
+function homeShiftsKey(rows: HomeShift[]) {
+  return rows.map((row) => `${row.agentId}:${row.isAvailable ? 1 : 0}:${row.startHm}:${row.endHm}`).join("|");
+}
+
+function draftInShiftNow(row: HomeShift) {
+  return row.isAvailable && isCairoHmInWindow(row.startHm, row.endHm);
+}
 
 export function CsAssignClient({
   agents,
@@ -66,6 +75,7 @@ export function CsAssignClient({
   const [appliedTo, setAppliedTo] = useState(today);
 
   const [homeShifts, setHomeShifts] = useState<HomeShift[]>([]);
+  const [savedHomeShiftsKey, setSavedHomeShiftsKey] = useState("");
   const [homeLastName, setHomeLastName] = useState<string | null>(null);
   const [homeRangeAgent, setHomeRangeAgent] = useState("");
   const [homeRangeFrom, setHomeRangeFrom] = useState("");
@@ -109,7 +119,9 @@ export function CsAssignClient({
       setMessage(data.message || "تعذر تحميل شيفت تأكيدات المنزل.");
       return;
     }
-    setHomeShifts(data.agents || []);
+    const agents = data.agents || [];
+    setHomeShifts(agents);
+    setSavedHomeShiftsKey(homeShiftsKey(agents));
     setHomeLastName(data.lastAgentName || null);
   }, []);
 
@@ -407,9 +419,12 @@ export function CsAssignClient({
       setMessage(data.message || "تعذر حفظ الشيفت.");
       return;
     }
-    if (data.agents) setHomeShifts(data.agents);
+    if (data.agents) {
+      setHomeShifts(data.agents);
+      setSavedHomeShiftsKey(homeShiftsKey(data.agents));
+    }
     if (data.lastAgentName !== undefined) setHomeLastName(data.lastAgentName || null);
-    setMessage("تم حفظ المتاحات وساعات الشيفت.");
+    setMessage("تم حفظ المتاحات وساعات الشيفت. التوزيع التلقائي شغّال على المتاحات جوه الشيفت.");
   }
 
   async function saveHomeRange(event: FormEvent<HTMLFormElement>) {
@@ -717,8 +732,14 @@ export function CsAssignClient({
             جوه الشيفت. بعد الساعة المحددة الأوردر يفضل من غير موظفة.
           </p>
           <p className="text-xs font-bold text-[#14213D]/70">
-            آخر توزيع تلقائي: {homeLastName || "—"} · متاحات الآن: {homeShifts.filter((row) => row.inShiftNow).length}
+            آخر توزيع تلقائي: {homeLastName || "—"} · متاحات الآن:{" "}
+            {homeShifts.filter((row) => draftInShiftNow(row)).length}
           </p>
+          {homeShifts.length > 0 && homeShiftsKey(homeShifts) !== savedHomeShiftsKey ? (
+            <p className="text-xs font-extrabold text-[#9A3412]">
+              التوزيع التلقائي يشتغل بعد حفظ المتاحات والشيفت. الشارة هنا للمعاينة من الساعات الظاهرة.
+            </p>
+          ) : null}
           {homeShifts.length === 0 ? (
             <p className="text-sm font-bold text-[#14213D]/60">مفيش حسابات بصلاحية تأكيدات منزل. أنشئها من المستخدمون.</p>
           ) : (
@@ -738,7 +759,7 @@ export function CsAssignClient({
                   />
                   <span>
                     {row.name}
-                    {row.inShiftNow ? (
+                    {draftInShiftNow(row) ? (
                       <span className="mr-2 rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-extrabold text-white">
                         داخل الشيفت
                       </span>

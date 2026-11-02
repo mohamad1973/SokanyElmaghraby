@@ -258,7 +258,7 @@ async function importWooOrdersForCs(
       continue;
     }
 
-    await prisma.csOrderConfirmation.create({
+    const created = await prisma.csOrderConfirmation.create({
       data: {
         wooOrderId: order.id,
         wooOrderNumber: order.number,
@@ -268,6 +268,12 @@ async function importWooOrdersForCs(
       },
     });
     imported += 1;
+    try {
+      const { tryAssignHomeConfirmRoundRobin } = await import("@/lib/cs/home-confirm");
+      await tryAssignHomeConfirmRoundRobin(created.id);
+    } catch (error) {
+      console.error("[cs] home-confirm assign on sync create failed", error);
+    }
   }
 
   return { imported, kept: kept.length };
@@ -343,6 +349,12 @@ async function runSyncRecentOrdersForCs(_options?: { perPage?: number }) {
   await writeCsSyncState(prisma, state);
   if (state.historyDone && pageOneOrders.length) {
     await linkMissingBostaWaybills(prisma, pageOneOrders);
+  }
+  try {
+    const { drainUnassignedHomeConfirmPending } = await import("@/lib/cs/home-confirm");
+    await drainUnassignedHomeConfirmPending();
+  } catch (error) {
+    console.error("[cs] home-confirm drain after sync failed", error);
   }
 
   return { ok: true as const, imported, totalFetched };
