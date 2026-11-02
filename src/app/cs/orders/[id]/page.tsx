@@ -70,6 +70,13 @@ export default async function CsOrderPage({ params }: Props) {
         status={confirmation.status}
         snapshot={snapshot}
         failReason={confirmation.failReason}
+        trackingNumber={row.trackingNumber || snapshot?.trackingNumber || null}
+        initialAnswers={confirmation.answers.map((a) => ({
+          itemKey: a.itemKey,
+          confirmed: a.confirmed,
+          value: a.value,
+          note: a.note,
+        }))}
       />
     );
   }

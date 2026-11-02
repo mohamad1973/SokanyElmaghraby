@@ -228,7 +228,7 @@ export async function PUT(request: Request, context: Context) {
   const result = await saveCsConfirmation({
     id: numericId,
     agentId: session.user.csAgentId,
-    answers: homeConfirmMode ? [] : body.answers || [],
+    answers: body.answers || [],
     finalize: Boolean(body.finalize),
     failContact: Boolean(body.failContact),
     cancelOrder: Boolean(body.cancelOrder),

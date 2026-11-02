@@ -1879,29 +1879,63 @@ function appendHomeNoteLine(notes: string) {
   return `${trimmed ? `${trimmed}\n` : ""}${n}- `;
 }
 
+const HOME_CUSTOMER_KEYS = [
+  "customer_name",
+  "address_complete",
+  "governorate_confirm",
+  "area_confirm",
+  "address_landmarks",
+  "primary_phone",
+  "payment_preference",
+] as const;
+
+const HOME_INPUT =
+  "w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold text-[#14213D]";
+
 export function HomeConfirmCallSheet({
   confirmationId,
   status,
   snapshot,
   failReason,
+  initialAnswers = [],
+  trackingNumber = null,
 }: {
   confirmationId: number;
   status: string;
   snapshot: Snapshot | null;
   failReason?: string | null;
+  initialAnswers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
+  trackingNumber?: string | null;
 }) {
   const [notes, setNotes] = useState(() =>
     initialHomeNotes(String(snapshot?.homeConfirmNote || failReason || "")),
   );
+  const [answers, setAnswers] = useState(() => {
+    const base = buildInitial(initialAnswers, snapshot);
+    if (!base.payment_preference?.value) {
+      if (snapshot?.paymentState === "paid") base.payment_preference.value = "already_paid";
+      else if (snapshot?.paymentState === "cod") base.payment_preference.value = "cod";
+    }
+    return base;
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const lastPhoneTap = useRef(0);
+  const lastNotesTap = useRef(0);
   const when = formatCairoOrderDateTime(snapshot?.dateCreated);
   const items = snapshot?.items || [];
   const itemCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  const phone = String(snapshot?.phone || "").trim();
+  const phone = String(answers.primary_phone?.value || snapshot?.phone || "").trim();
   const callHref = egyptianTelHref(phone);
+  const bostaTracking = String(trackingNumber || snapshot?.trackingNumber || "").trim();
+  const homeFields = CS_CHECKLIST_ITEMS.filter((item) =>
+    HOME_CUSTOMER_KEYS.includes(item.key as (typeof HOME_CUSTOMER_KEYS)[number]),
+  );
+
+  function updateHomeField(key: string, patch: Partial<AnswerState>) {
+    setAnswers((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  }
 
   function addNumberedNoteLine() {
     setNotes((prev) => appendHomeNoteLine(prev));
@@ -1915,26 +1949,40 @@ export function HomeConfirmCallSheet({
     });
   }
 
-  function onPhoneActivate(event: { preventDefault: () => void; type: string }) {
+  function onDoubleActivate(
+    event: { preventDefault: () => void; type: string },
+    lastTap: { current: number },
+  ) {
     const now = Date.now();
-    if (event.type === "dblclick" || (event.type === "touchend" && now - lastPhoneTap.current < 350)) {
+    if (event.type === "dblclick" || (event.type === "touchend" && now - lastTap.current < 350)) {
       event.preventDefault();
-      lastPhoneTap.current = 0;
+      lastTap.current = 0;
       addNumberedNoteLine();
       return;
     }
-    if (event.type === "touchend") lastPhoneTap.current = now;
+    if (event.type === "touchend") lastTap.current = now;
   }
 
   async function save(kind: "confirm" | "postpone" | "cancel") {
     if (saving) return;
     setSaving(true);
     setMessage("");
+    const payloadAnswers = HOME_CUSTOMER_KEYS.map((key) => {
+      const item = CS_CHECKLIST_ITEMS.find((row) => row.key === key);
+      const state = answers[key] || { confirmed: false, value: "", note: "", yesNo: "" as const };
+      return {
+        itemKey: key,
+        confirmed: Boolean(state.confirmed),
+        value: state.value || null,
+        note: state.note || null,
+        yesNo: item?.type === "yes_no_extra" ? state.yesNo || null : null,
+      };
+    });
     const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        answers: [],
+        answers: payloadAnswers,
         finalize: kind === "confirm",
         failContact: kind === "postpone",
         cancelOrder: kind === "cancel",
@@ -2002,8 +2050,8 @@ export function HomeConfirmCallSheet({
             dir="ltr"
             className="cursor-pointer select-none rounded bg-white/15 px-2 py-1 font-extrabold"
             title="دبل كليك يضيف سطر ملاحظة جديد"
-            onDoubleClick={(event) => onPhoneActivate(event)}
-            onTouchEnd={(event) => onPhoneActivate(event)}
+            onDoubleClick={(event) => onDoubleActivate(event, lastPhoneTap)}
+            onTouchEnd={(event) => onDoubleActivate(event, lastPhoneTap)}
           >
             {phone || "—"}
           </span>
@@ -2022,12 +2070,68 @@ export function HomeConfirmCallSheet({
           </span>
         </div>
         <p className="mt-2 text-[11px] font-bold text-white/80">
-          فعّلي السبيكر وارجعي للتطبيق عشان تكتبي. دبل كليك على الموبايل يضيف سطر ملاحظة جديد.
+          فعّلي السبيكر وارجعي للتطبيق عشان تكتبي. دبل كليك على الموبايل أو الملاحظات يضيف سطر جديد بالرقم التالي.
         </p>
         <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-2">
           <span className="truncate">العنوان: {snapshot?.address || "—"}</span>
           <span className="truncate">المحافظة: {snapshot?.governorate || "—"}</span>
         </div>
+      </section>
+
+      <section className="grid gap-2 sm:grid-cols-2">
+        {homeFields.map((item) => {
+          const state = answers[item.key] || { confirmed: false, value: "", note: "", yesNo: "" as const };
+          return (
+            <label
+              key={item.key}
+              className={`grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15 ${
+                item.key === "address_complete" ? "sm:col-span-2" : ""
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                {item.label}
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[#FCA311]"
+                  checked={Boolean(state.confirmed)}
+                  onChange={(event) => updateHomeField(item.key, { confirmed: event.target.checked })}
+                />
+              </span>
+              {item.type === "choice" ? (
+                <select
+                  value={state.value}
+                  onChange={(event) => updateHomeField(item.key, { value: event.target.value })}
+                  className={HOME_INPUT}
+                >
+                  <option value="">اختاري...</option>
+                  {(item.choices || []).map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+              ) : item.key === "address_complete" || item.key === "address_landmarks" ? (
+                <textarea
+                  rows={item.key === "address_complete" ? 3 : 2}
+                  value={state.value}
+                  onChange={(event) => updateHomeField(item.key, { value: event.target.value })}
+                  className={HOME_INPUT}
+                />
+              ) : (
+                <input
+                  dir={item.key === "primary_phone" ? "ltr" : undefined}
+                  value={state.value}
+                  onChange={(event) => updateHomeField(item.key, { value: event.target.value })}
+                  className={HOME_INPUT}
+                />
+              )}
+            </label>
+          );
+        })}
+        <label className="grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15">
+          رقم التراك في بوسطة
+          <input readOnly dir="ltr" value={bostaTracking || "—"} className={`${HOME_INPUT} bg-[#F5F5F0]`} />
+        </label>
       </section>
 
       <label className="grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15">
@@ -2036,6 +2140,8 @@ export function HomeConfirmCallSheet({
           ref={notesRef}
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
+          onDoubleClick={(event) => onDoubleActivate(event, lastNotesTap)}
+          onTouchEnd={(event) => onDoubleActivate(event, lastNotesTap)}
           rows={7}
           className="min-h-36 w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]"
           placeholder="1- "

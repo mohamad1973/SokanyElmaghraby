@@ -1441,6 +1441,25 @@ export async function saveCsConfirmation(input: {
     }
     const snap = ((row.customerSnapshot as Record<string, unknown> | null) || {}) as Record<string, unknown>;
     const note = input.failReason?.trim() || null;
+    if (input.answers?.length) await persistChecklistAnswers(input.id, input.answers);
+    const patched = waybillSnapshot(snap, input.answers || []);
+    const text = (key: string) =>
+      String(input.answers?.find((answer) => answer.itemKey === key)?.value || "").trim();
+    const name = text("customer_name");
+    const phone = text("primary_phone");
+    const address = text("address_complete");
+    const governorate = text("governorate_confirm");
+    const area = text("area_confirm");
+    if (name) patched.customerName = name;
+    if (phone) patched.phone = phone;
+    if (address) patched.address = address;
+    if (governorate) patched.governorate = governorate;
+    if (area) patched.area = area;
+    patched.addressFull = [address || patched.address, area || patched.area, governorate || patched.governorate]
+      .map((part) => String(part || "").trim())
+      .filter(Boolean)
+      .join(" · ");
+    const nextSnap = { ...patched, homeConfirmNote: note };
     if (input.failContact) {
       await prisma.csOrderConfirmation.update({
         where: { id: input.id },
@@ -1448,7 +1467,7 @@ export async function saveCsConfirmation(input: {
           status: CS_CONFIRMATION_STATUS.FAILED_CONTACT,
           failReason: note || "تأجيل",
           assignedAgentId: input.agentId,
-          customerSnapshot: { ...snap, homeConfirmNote: note },
+          customerSnapshot: nextSnap,
         } as never,
       });
       return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
@@ -1460,7 +1479,7 @@ export async function saveCsConfirmation(input: {
           status: CS_CONFIRMATION_STATUS.CANCELLED,
           failReason: note || "لاغى",
           assignedAgentId: input.agentId,
-          customerSnapshot: { ...snap, homeConfirmNote: note },
+          customerSnapshot: nextSnap,
         } as never,
       });
       return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
@@ -1471,7 +1490,7 @@ export async function saveCsConfirmation(input: {
         data: {
           status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
           assignedAgentId: input.agentId,
-          customerSnapshot: { ...snap, homeConfirmNote: note },
+          customerSnapshot: nextSnap,
         } as never,
       });
       return { ok: true as const, status: CS_CONFIRMATION_STATUS.IN_PROGRESS, missing: [] as string[] };
@@ -1485,7 +1504,7 @@ export async function saveCsConfirmation(input: {
         ...(alreadySaved ? { confirmationEditedAt: savedAt } : { confirmedAt: savedAt }),
         failReason: null,
         assignedAgentId: input.agentId,
-        customerSnapshot: { ...snap, homeConfirmNote: note },
+        customerSnapshot: nextSnap,
       } as never,
     });
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
