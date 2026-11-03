@@ -1085,13 +1085,20 @@ export function CsQueueClient({
     if (isCourierSupervisor) void loadTemimaLate();
   }
 
+  function canMarkOnClosedWeek(disposition: CsQueueItem["settlementDisposition"]) {
+    return !disposition || disposition === "postpone";
+  }
+
   function askStatusEdit(
     id: number,
     weekClosed: boolean,
     disposition: CsQueueItem["settlementDisposition"],
   ) {
     if (editingStatusId === id) return;
-    if (weekClosed && !canEditClosedWeek && disposition !== "postpone") return;
+    if (weekClosed && !canEditClosedWeek && !canMarkOnClosedWeek(disposition)) {
+      setMessage("الأسبوع مقفل.");
+      return;
+    }
     if (!window.confirm("هل تريد التعديل؟")) return;
     setEditingStatusId(id);
   }
@@ -1102,7 +1109,10 @@ export function CsQueueClient({
     disposition: CsQueueItem["settlementDisposition"],
     weekClosed: boolean,
   ) {
-    if (weekClosed && !canEditClosedWeek && disposition !== "postpone") return;
+    if (weekClosed && !canEditClosedWeek && !canMarkOnClosedWeek(disposition)) {
+      setMessage("الأسبوع مقفل.");
+      return;
+    }
     if (editingStatusId !== id && currentStatusAction(disposition) === action) return;
     void markSupervisorResult(id, action);
   }

@@ -997,8 +997,10 @@ export async function applySupervisorOrderResult(input: {
   ) {
     return { ok: false as const, message: "تم بنجاح والغاء يتعدلوا لبعض. مؤجل مش متاح من الواجهة." };
   }
+  // Empty (لم يسجل) and postpone both convert to success/cancel on the original sheet week,
+  // including when that settlement week is already closed.
   const convertingPostpone =
-    currentMark === "postpone" && (disposition === "collect" || disposition === "return");
+    (!currentMark || currentMark === "postpone") && (disposition === "collect" || disposition === "return");
 
   let openPostponeId: number | null = null;
   if (!convertingPostpone) {

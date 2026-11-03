@@ -346,13 +346,21 @@ export function CouriersClient({
                       key={action}
                       type="button"
                       onClick={() => {
-                        if (weekClosed && !canEditClosedWeek) return;
+                        const firstMark = !order.official || order.official === "postpone";
+                        if (weekClosed && !canEditClosedWeek && !firstMark) {
+                          setMessage("الأسبوع مقفل.");
+                          return;
+                        }
                         if (editingStatusId !== order.id && currentStatusAction(order.official) === action) return;
                         void post({ action: "result", confirmationId: order.id, outcome: action });
                       }}
                       onDoubleClick={() => {
                         if (!order.official || editingStatusId === order.id) return;
-                        if (weekClosed && !canEditClosedWeek) return;
+                        const firstMark = order.official === "postpone";
+                        if (weekClosed && !canEditClosedWeek && !firstMark) {
+                          setMessage("الأسبوع مقفل.");
+                          return;
+                        }
                         if (!window.confirm("هل تريد التعديل؟")) return;
                         setEditingStatusId(order.id);
                       }}
