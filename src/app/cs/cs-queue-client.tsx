@@ -823,6 +823,7 @@ export function CsQueueClient({
   const [savingHandId, setSavingHandId] = useState<number | null>(null);
   const [markingId, setMarkingId] = useState<number | null>(null);
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
+  const reopenArmed = useRef<{ id: number; at: number } | null>(null);
 
   async function lockCutoff(body: { now: true } | { minutes: number }) {
     setCutoffBusy(true);
@@ -1089,18 +1090,23 @@ export function CsQueueClient({
     return !disposition || disposition === "postpone";
   }
 
-  function askStatusEdit(
-    id: number,
-    weekClosed: boolean,
-    disposition: CsQueueItem["settlementDisposition"],
-  ) {
+  function canReopenStatusEdit(weekClosed: boolean) {
+    return !weekClosed || canEditClosedWeek;
+  }
+
+  function beginStatusReopen(id: number, weekClosed: boolean) {
     if (editingStatusId === id) return;
-    if (weekClosed && !canEditClosedWeek && !canMarkOnClosedWeek(disposition)) {
+    if (!canReopenStatusEdit(weekClosed)) {
       setMessage("الأسبوع مقفل.");
       return;
     }
-    if (!window.confirm("هل تريد التعديل؟")) return;
+    reopenArmed.current = null;
     setEditingStatusId(id);
+    setMessage("اختَر تم بنجاح أو الغاء.");
+  }
+
+  function askStatusEdit(id: number, weekClosed: boolean) {
+    beginStatusReopen(id, weekClosed);
   }
 
   function pressStatus(
@@ -1109,11 +1115,24 @@ export function CsQueueClient({
     disposition: CsQueueItem["settlementDisposition"],
     weekClosed: boolean,
   ) {
+    const selectedAction = currentStatusAction(disposition);
+    // Two taps on the current mark reopen both choices for re-selection.
+    if (editingStatusId !== id && selectedAction && selectedAction === action) {
+      const armed = reopenArmed.current;
+      const now = Date.now();
+      if (armed?.id === id && now - armed.at < 900) {
+        beginStatusReopen(id, weekClosed);
+        return;
+      }
+      reopenArmed.current = { id, at: now };
+      setMessage("دوس تاني على نفس الزر عشان تعدّل الاختيار.");
+      return;
+    }
     if (weekClosed && !canEditClosedWeek && !canMarkOnClosedWeek(disposition)) {
       setMessage("الأسبوع مقفل.");
       return;
     }
-    if (editingStatusId !== id && currentStatusAction(disposition) === action) return;
+    reopenArmed.current = null;
     void markSupervisorResult(id, action);
   }
 
@@ -2304,8 +2323,8 @@ export function CsQueueClient({
                               disabled={!canPressOfficial || markingId === item.id}
                               onClick={() => pressStatus(item.id, action, item.settlementDisposition, weekClosed)}
                               onDoubleClick={() => {
-                                if (!item.settlementDisposition) return;
-                                askStatusEdit(item.id, weekClosed, item.settlementDisposition);
+                                if (!item.settlementDisposition || item.settlementDisposition === "postpone") return;
+                                askStatusEdit(item.id, weekClosed);
                               }}
                               className={`rounded-lg px-2 py-1 text-[11px] font-extrabold disabled:opacity-60 ${tone}`}
                             >

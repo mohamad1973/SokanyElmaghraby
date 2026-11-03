@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cairoTodayYmd } from "@/lib/cs/order-window";
 
@@ -133,6 +133,7 @@ export function CouriersClient({
   const [collectedDraft, setCollectedDraft] = useState("");
   const [day, setDay] = useState(cairoTodayYmd());
   const [editingStatusId, setEditingStatusId] = useState<number | null>(null);
+  const reopenArmed = useRef<{ id: number; at: number } | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     if (mode === "admin") {
@@ -346,23 +347,42 @@ export function CouriersClient({
                       key={action}
                       type="button"
                       onClick={() => {
+                        const selectedAction = currentStatusAction(order.official);
+                        if (editingStatusId !== order.id && selectedAction && selectedAction === action) {
+                          const armed = reopenArmed.current;
+                          const now = Date.now();
+                          if (armed?.id === order.id && now - armed.at < 900) {
+                            if (weekClosed && !canEditClosedWeek) {
+                              setMessage("الأسبوع مقفل.");
+                              reopenArmed.current = null;
+                              return;
+                            }
+                            reopenArmed.current = null;
+                            setEditingStatusId(order.id);
+                            setMessage("اختَر تم بنجاح أو الغاء.");
+                            return;
+                          }
+                          reopenArmed.current = { id: order.id, at: now };
+                          setMessage("دوس تاني على نفس الزر عشان تعدّل الاختيار.");
+                          return;
+                        }
                         const firstMark = !order.official || order.official === "postpone";
                         if (weekClosed && !canEditClosedWeek && !firstMark) {
                           setMessage("الأسبوع مقفل.");
                           return;
                         }
-                        if (editingStatusId !== order.id && currentStatusAction(order.official) === action) return;
+                        reopenArmed.current = null;
                         void post({ action: "result", confirmationId: order.id, outcome: action });
                       }}
                       onDoubleClick={() => {
-                        if (!order.official || editingStatusId === order.id) return;
-                        const firstMark = order.official === "postpone";
-                        if (weekClosed && !canEditClosedWeek && !firstMark) {
+                        if (!order.official || order.official === "postpone" || editingStatusId === order.id) return;
+                        if (weekClosed && !canEditClosedWeek) {
                           setMessage("الأسبوع مقفل.");
                           return;
                         }
-                        if (!window.confirm("هل تريد التعديل؟")) return;
+                        reopenArmed.current = null;
                         setEditingStatusId(order.id);
+                        setMessage("اختَر تم بنجاح أو الغاء.");
                       }}
                       className={`rounded-xl px-3 py-2 text-xs font-extrabold ${tone}`}
                     >
