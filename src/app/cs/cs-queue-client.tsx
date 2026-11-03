@@ -1086,34 +1086,22 @@ export function CsQueueClient({
     if (isCourierSupervisor) void loadTemimaLate();
   }
 
-  function canMarkOnClosedWeek(disposition: CsQueueItem["settlementDisposition"]) {
-    return !disposition || disposition === "postpone";
-  }
-
-  function canReopenStatusEdit(weekClosed: boolean) {
-    return !weekClosed || canEditClosedWeek;
-  }
-
-  function beginStatusReopen(id: number, weekClosed: boolean) {
+  function beginStatusReopen(id: number) {
     if (editingStatusId === id) return;
-    if (!canReopenStatusEdit(weekClosed)) {
-      setMessage("الأسبوع مقفل.");
-      return;
-    }
     reopenArmed.current = null;
     setEditingStatusId(id);
     setMessage("اختَر تم بنجاح أو الغاء.");
   }
 
-  function askStatusEdit(id: number, weekClosed: boolean) {
-    beginStatusReopen(id, weekClosed);
+  function askStatusEdit(id: number) {
+    beginStatusReopen(id);
   }
 
   function pressStatus(
     id: number,
     action: "delivered" | "returned" | "postponed",
     disposition: CsQueueItem["settlementDisposition"],
-    weekClosed: boolean,
+    _weekClosed: boolean,
   ) {
     const selectedAction = currentStatusAction(disposition);
     // Two taps on the current mark reopen both choices for re-selection.
@@ -1121,15 +1109,11 @@ export function CsQueueClient({
       const armed = reopenArmed.current;
       const now = Date.now();
       if (armed?.id === id && now - armed.at < 900) {
-        beginStatusReopen(id, weekClosed);
+        beginStatusReopen(id);
         return;
       }
       reopenArmed.current = { id, at: now };
       setMessage("دوس تاني على نفس الزر عشان تعدّل الاختيار.");
-      return;
-    }
-    if (weekClosed && !canEditClosedWeek && !canMarkOnClosedWeek(disposition)) {
-      setMessage("الأسبوع مقفل.");
       return;
     }
     reopenArmed.current = null;
@@ -2324,7 +2308,7 @@ export function CsQueueClient({
                               onClick={() => pressStatus(item.id, action, item.settlementDisposition, weekClosed)}
                               onDoubleClick={() => {
                                 if (!item.settlementDisposition || item.settlementDisposition === "postpone") return;
-                                askStatusEdit(item.id, weekClosed);
+                                askStatusEdit(item.id);
                               }}
                               className={`rounded-lg px-2 py-1 text-[11px] font-extrabold disabled:opacity-60 ${tone}`}
                             >

@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       confirmationId,
       result,
       agentId: access.session.user.csAgentId!,
-      allowClosed: access.viewer.isAdmin,
+      allowClosed: access.viewer.isAdmin || access.viewer.isCourierSupervisor,
     });
     return NextResponse.json(marked.ok ? marked : { message: marked.message }, { status: marked.ok ? 200 : 400 });
   }

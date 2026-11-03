@@ -327,7 +327,6 @@ export function CouriersClient({
             {selected && order.courierId === selected.id ? (
               <div className="flex flex-wrap gap-2">
                 {officialActions(order.official, editingStatusId === order.id).map((action) => {
-                  const weekClosed = Boolean(order.weekClosed);
                   const editing = editingStatusId === order.id;
                   const label = action === "delivered" ? "تم بنجاح" : "الغاء";
                   const selectedStatus =
@@ -352,11 +351,6 @@ export function CouriersClient({
                           const armed = reopenArmed.current;
                           const now = Date.now();
                           if (armed?.id === order.id && now - armed.at < 900) {
-                            if (weekClosed && !canEditClosedWeek) {
-                              setMessage("الأسبوع مقفل.");
-                              reopenArmed.current = null;
-                              return;
-                            }
                             reopenArmed.current = null;
                             setEditingStatusId(order.id);
                             setMessage("اختَر تم بنجاح أو الغاء.");
@@ -366,20 +360,11 @@ export function CouriersClient({
                           setMessage("دوس تاني على نفس الزر عشان تعدّل الاختيار.");
                           return;
                         }
-                        const firstMark = !order.official || order.official === "postpone";
-                        if (weekClosed && !canEditClosedWeek && !firstMark) {
-                          setMessage("الأسبوع مقفل.");
-                          return;
-                        }
                         reopenArmed.current = null;
                         void post({ action: "result", confirmationId: order.id, outcome: action });
                       }}
                       onDoubleClick={() => {
                         if (!order.official || order.official === "postpone" || editingStatusId === order.id) return;
-                        if (weekClosed && !canEditClosedWeek) {
-                          setMessage("الأسبوع مقفل.");
-                          return;
-                        }
                         reopenArmed.current = null;
                         setEditingStatusId(order.id);
                         setMessage("اختَر تم بنجاح أو الغاء.");

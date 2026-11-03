@@ -948,7 +948,7 @@ export async function closedTemimaWeekIds(ids: number[]) {
     .filter((value): value is Date => Boolean(value));
   if (!starts.length) return closed;
   const weeks = await prisma.csCarrierWeek.findMany({
-    where: { carrierCompany: TEMIMA_COMPANY, status: "closed", weekStart: { in: starts } },
+    where: { carrierCompany: TEMIMA_COMPANY, status: "closed", carryKey: 0, weekStart: { in: starts } },
     select: { weekStart: true },
   });
   const closedSundays = new Set(weeks.map((week) => cairoYmdFromIso(week.weekStart.toISOString())));
@@ -1001,6 +1001,9 @@ export async function applySupervisorOrderResult(input: {
   // including when that settlement week is already closed.
   const convertingPostpone =
     (!currentMark || currentMark === "postpone") && (disposition === "collect" || disposition === "return");
+  const switchingFinal =
+    (currentMark === "collect" || currentMark === "return") &&
+    (disposition === "collect" || disposition === "return");
 
   let openPostponeId: number | null = null;
   if (!convertingPostpone) {
@@ -1034,7 +1037,8 @@ export async function applySupervisorOrderResult(input: {
   const week = await upsertOpenWeek(targetSunday, targetSaturday, input.agentId);
   if (!week) return { ok: false as const, message: "تعذر فتح الأسبوع." };
   const weekClosed = week.status === "closed";
-  if (weekClosed && !input.allowClosed && !convertingPostpone) {
+  // Sayed/admin may switch تم بنجاح↔الغاء even on a closed settlement week.
+  if (weekClosed && !input.allowClosed && !convertingPostpone && !switchingFinal) {
     return { ok: false as const, message: "الأسبوع مقفل." };
   }
 
