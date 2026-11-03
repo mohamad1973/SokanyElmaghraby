@@ -1086,15 +1086,30 @@ export function CsQueueClient({
     if (isCourierSupervisor) void loadTemimaLate();
   }
 
-  function beginStatusReopen(id: number) {
-    if (editingStatusId === id) return;
+  async function clearSupervisorResult(id: number) {
+    if (markingId) return;
+    setMarkingId(id);
+    setMessage("");
+    const res = await fetch("/api/cs/courier-dispatch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear", confirmationId: id }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setMarkingId(null);
     reopenArmed.current = null;
-    setEditingStatusId(id);
-    setMessage("اختَر تم بنجاح أو الغاء.");
+    if (!res.ok) {
+      setMessage(data.message || "تعذر مسح اختيار الأوردر.");
+      return;
+    }
+    setEditingStatusId(null);
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, settlementDisposition: "" } : item)));
+    setMessage("اتشال الاختيار. اختَر تم بنجاح أو الغاء.");
+    if (isCourierSupervisor) void loadTemimaLate();
   }
 
   function askStatusEdit(id: number) {
-    beginStatusReopen(id);
+    void clearSupervisorResult(id);
   }
 
   function pressStatus(
@@ -1104,16 +1119,16 @@ export function CsQueueClient({
     _weekClosed: boolean,
   ) {
     const selectedAction = currentStatusAction(disposition);
-    // Two taps on the current mark reopen both choices for re-selection.
-    if (editingStatusId !== id && selectedAction && selectedAction === action) {
+    // Two taps on the current mark clear it so both choices stay available after refresh.
+    if (selectedAction && selectedAction === action) {
       const armed = reopenArmed.current;
       const now = Date.now();
       if (armed?.id === id && now - armed.at < 900) {
-        beginStatusReopen(id);
+        void clearSupervisorResult(id);
         return;
       }
       reopenArmed.current = { id, at: now };
-      setMessage("دوس تاني على نفس الزر عشان تعدّل الاختيار.");
+      setMessage("دوس تاني على نفس الزر عشان تمسح الاختيار.");
       return;
     }
     reopenArmed.current = null;

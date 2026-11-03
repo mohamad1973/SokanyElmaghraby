@@ -1094,6 +1094,42 @@ export async function applySupervisorOrderResult(input: {
   return { ok: true as const, result: input.result, disposition };
 }
 
+/** Clear تم بنجاح/الغاء so the order looks unmarked until a new choice is saved. */
+export async function clearSupervisorOrderResult(confirmationId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  if (!Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { ok: false as const, message: "الأوردر غير موجود." };
+  }
+  await ensureCsTables();
+  const order = await prisma.csOrderConfirmation.findFirst({
+    where: { id: confirmationId, status: "CONFIRMED", shippingCompany: TEMIMA_COMPANY },
+    select: { id: true },
+  });
+  if (!order) return { ok: false as const, message: "الأوردر مش على شيت سيد تميمة." };
+
+  const lines = await prisma.csCarrierWeekLine.findMany({
+    where: {
+      confirmationId,
+      week: { carrierCompany: TEMIMA_COMPANY, carryKey: 0 },
+    },
+    select: { id: true, weekId: true },
+  });
+  const weekIds = [...new Set(lines.map((line) => line.weekId))];
+  if (lines.length) {
+    await prisma.csCarrierWeekLine.deleteMany({ where: { id: { in: lines.map((line) => line.id) } } });
+  }
+  for (const weekId of weekIds) {
+    await refreshWeekCashDue(weekId);
+  }
+  await prisma.$executeRaw`
+    UPDATE CsOrderConfirmation
+    SET temimaSupervisorResult = NULL
+    WHERE id = ${confirmationId}
+  `;
+  return { ok: true as const, disposition: "" as const };
+}
+
 export async function setFawrySettlementDeposit(input: { confirmationId: number; amount: number | null }) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };

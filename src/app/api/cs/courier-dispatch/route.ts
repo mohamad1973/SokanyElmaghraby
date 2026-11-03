@@ -8,7 +8,7 @@ import {
   saveCourierCashDay,
   unassignCourierOrder,
 } from "@/lib/cs/courier-dispatch";
-import { applySupervisorOrderResult } from "@/lib/cs/temima-settlement";
+import { applySupervisorOrderResult, clearSupervisorOrderResult } from "@/lib/cs/temima-settlement";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
@@ -82,6 +82,13 @@ export async function POST(request: Request) {
     if (!confirmationId) return NextResponse.json({ message: "الأوردر ناقص." }, { status: 400 });
     const result = await unassignCourierOrder(confirmationId);
     return NextResponse.json(result.ok ? result : { message: result.message }, { status: result.ok ? 200 : 400 });
+  }
+
+  if (body.action === "clear") {
+    const confirmationId = Number(body.confirmationId);
+    if (!confirmationId) return NextResponse.json({ message: "الأوردر ناقص." }, { status: 400 });
+    const cleared = await clearSupervisorOrderResult(confirmationId);
+    return NextResponse.json(cleared.ok ? cleared : { message: cleared.message }, { status: cleared.ok ? 200 : 400 });
   }
 
   if (body.action === "disposition" || body.action === "result") {

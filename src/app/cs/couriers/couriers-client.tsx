@@ -181,7 +181,8 @@ export function CouriersClient({
     const res = await fetch("/api/cs/courier-dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = (await res.json()) as { message?: string };
     if (!res.ok) { setMessage(data.message || "تعذر الحفظ."); return; }
-    if (body.action === "result") setEditingStatusId(null);
+    if (body.action === "result" || body.action === "clear") setEditingStatusId(null);
+    if (body.action === "clear") setMessage("اتشال الاختيار. اختَر تم بنجاح أو الغاء.");
     await load();
   }
   if (mode === "courier" || mode === "admin") {
@@ -347,27 +348,25 @@ export function CouriersClient({
                       type="button"
                       onClick={() => {
                         const selectedAction = currentStatusAction(order.official);
-                        if (editingStatusId !== order.id && selectedAction && selectedAction === action) {
+                        if (selectedAction && selectedAction === action) {
                           const armed = reopenArmed.current;
                           const now = Date.now();
                           if (armed?.id === order.id && now - armed.at < 900) {
                             reopenArmed.current = null;
-                            setEditingStatusId(order.id);
-                            setMessage("اختَر تم بنجاح أو الغاء.");
+                            void post({ action: "clear", confirmationId: order.id });
                             return;
                           }
                           reopenArmed.current = { id: order.id, at: now };
-                          setMessage("دوس تاني على نفس الزر عشان تعدّل الاختيار.");
+                          setMessage("دوس تاني على نفس الزر عشان تمسح الاختيار.");
                           return;
                         }
                         reopenArmed.current = null;
                         void post({ action: "result", confirmationId: order.id, outcome: action });
                       }}
                       onDoubleClick={() => {
-                        if (!order.official || order.official === "postpone" || editingStatusId === order.id) return;
+                        if (!order.official || order.official === "postpone") return;
                         reopenArmed.current = null;
-                        setEditingStatusId(order.id);
-                        setMessage("اختَر تم بنجاح أو الغاء.");
+                        void post({ action: "clear", confirmationId: order.id });
                       }}
                       className={`rounded-xl px-3 py-2 text-xs font-extrabold ${tone}`}
                     >
