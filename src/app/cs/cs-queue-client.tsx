@@ -1090,10 +1090,21 @@ export function CsQueueClient({
   }, [baseFiltered, dupMeta, draft.duplicates, isSupervisor, isCourierSupervisor, sheetTab]);
 
   const printRows = useMemo(() => {
-    if (sheetPrintRows) return sheetPrintRows;
-    if (printingCourierId) return filtered.filter((item) => item.courierAgentId === printingCourierId);
-    return filtered;
+    const source = sheetPrintRows
+      ? sheetPrintRows
+      : printingCourierId
+        ? filtered.filter((item) => item.courierAgentId === printingCourierId)
+        : filtered;
+    return sortWarehouseSheetRows(source);
   }, [filtered, printingCourierId, sheetPrintRows]);
+
+  const latePrintRows = useMemo(
+    () =>
+      [...visibleLateRows].sort(
+        (a, b) => parseWooOrderNumber(a.wooOrderNumber) - parseWooOrderNumber(b.wooOrderNumber),
+      ),
+    [visibleLateRows],
+  );
 
   useEffect(() => {
     if (printMode === "none") return;
@@ -1431,12 +1442,7 @@ export function CsQueueClient({
       if (printFrozen && singleDay) {
         setFrozenDays((prev) => (prev.includes(singleDay) ? prev : [...prev, singleDay]));
       }
-      let printed = [...(data.items || [])];
-      if (filters.dateFrom && filters.dateFrom === filters.dateTo && printed.some((item) => item.sheetSerial && item.sheetSerial > 0)) {
-        printed.sort((a, b) => (a.sheetSerial || 0) - (b.sheetSerial || 0));
-      } else {
-        printed = sortWarehouseSheetRows(printed);
-      }
+      const printed = sortWarehouseSheetRows(data.items || []);
       setSheetPrintRows(printed);
       if (isCourierSupervisor) setItems(printed);
       setPrintCopyCount(copies);
@@ -2731,7 +2737,7 @@ export function CsQueueClient({
           <section>
             <h1 className="mb-2 text-center text-lg font-bold">أوردرات متأخرة في التسليم</h1>
             <p className="mb-2 text-center text-xs">
-              {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {visibleLateRows.length}
+              {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {latePrintRows.length}
               {lateDateFilter ? ` · يوم القفل ${formatLateFreezeDay(lateDateFilter)}` : " · كل الأيام المقفولة"}
             </p>
             <table className="w-full border-collapse text-[10px]">
@@ -2745,7 +2751,7 @@ export function CsQueueClient({
                 </tr>
               </thead>
               <tbody>
-                {visibleLateRows.map((row) => (
+                {latePrintRows.map((row) => (
                   <tr key={row.confirmationId}>
                     <td className="border border-black px-1 py-1">#{row.wooOrderNumber}</td>
                     <td className="border border-black px-1 py-1">{row.customerName || "—"}</td>
