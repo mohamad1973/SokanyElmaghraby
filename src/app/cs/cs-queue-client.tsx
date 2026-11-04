@@ -225,14 +225,23 @@ type WarehouseSheetPrintBatch = {
   shippingCompany: string;
   batchNo: number;
   orderCount: number;
+  kind?: "new" | "reprint";
   createdAt: string;
+};
+
+type WarehouseSheetDaySummary = {
+  invoiced: number;
+  printed: number;
+  unprinted: number;
+  batches: WarehouseSheetPrintBatch[];
 };
 
 const BATCH_SEND_LABELS = ["أول مرة", "ثاني مرة", "ثالث مرة", "رابع مرة", "خامس مرة", "سادس مرة", "سابع مرة", "ثامن مرة", "تاسع مرة", "عاشر مرة"];
 const BATCH_PRINT_ORDINALS = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"];
 
-function warehouseBatchSendLabel(batchNo: number) {
-  return BATCH_SEND_LABELS[batchNo - 1] || `مرة ${batchNo}`;
+function warehouseBatchSendLabel(batch: WarehouseSheetPrintBatch) {
+  const base = BATCH_SEND_LABELS[batch.batchNo - 1] || `مرة ${batch.batchNo}`;
+  return batch.kind === "reprint" ? `إعادة ${base}` : base;
 }
 
 function warehouseBatchPrintOrdinal(batchNo: number) {
@@ -774,6 +783,7 @@ type Props = {
   canEditTemimaSheet?: boolean;
   canEditInvoice?: boolean;
   canPrintQueue?: boolean;
+  canReprintWarehouseSheet?: boolean;
   canHandToCarrier?: boolean;
   canReopenTemimaSheet?: boolean;
   frozenTemimaDays?: string[];
@@ -824,6 +834,7 @@ export function CsQueueClient({
   canEditTemimaSheet = false,
   canEditInvoice = false,
   canPrintQueue = false,
+  canReprintWarehouseSheet = false,
   canHandToCarrier = false,
   canReopenTemimaSheet = false,
   frozenTemimaDays = [],
@@ -918,6 +929,8 @@ export function CsQueueClient({
   const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
   const [bostaPrintBatches, setBostaPrintBatches] = useState<WarehouseSheetPrintBatch[]>([]);
   const [bostaCurrentBatchNo, setBostaCurrentBatchNo] = useState(0);
+  const [bostaIsReprint, setBostaIsReprint] = useState(false);
+  const [warehouseDaySummary, setWarehouseDaySummary] = useState<WarehouseSheetDaySummary | null>(null);
   const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked">("sheet");
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
@@ -1116,6 +1129,7 @@ export function CsQueueClient({
       setSheetPrintRows(null);
       setBostaPrintBatches([]);
       setBostaCurrentBatchNo(0);
+      setBostaIsReprint(false);
     }, 50);
     return () => window.clearTimeout(timer);
   }, [printMode]);
@@ -1282,6 +1296,31 @@ export function CsQueueClient({
     setDraft((prev) => ({ ...prev, ...patch }));
   }
 
+  async function loadWarehouseDaySummary(filters: DraftFilters) {
+    if (!canReprintWarehouseSheet) {
+      setWarehouseDaySummary(null);
+      return;
+    }
+    const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
+    if (filters.shipping !== "bosta" || filters.warehouseFilter !== "down" || !singleDay) {
+      setWarehouseDaySummary(null);
+      return;
+    }
+    const params = new URLSearchParams({ day: singleDay, shipping: "bosta" });
+    const res = await fetch(`/api/cs/warehouse-sheet-print?${params.toString()}`);
+    const data = (await res.json().catch(() => null)) as WarehouseSheetDaySummary | null;
+    if (!res.ok || !data) {
+      setWarehouseDaySummary(null);
+      return;
+    }
+    setWarehouseDaySummary({
+      invoiced: Number(data.invoiced || 0),
+      printed: Number(data.printed || 0),
+      unprinted: Number(data.unprinted || 0),
+      batches: Array.isArray(data.batches) ? data.batches : [],
+    });
+  }
+
   function runFilter(nextDraft?: DraftFilters) {
     const source = nextDraft ?? draft;
     const { filters, warning } = clampDateFilters({
@@ -1292,7 +1331,9 @@ export function CsQueueClient({
     setApplied(filters);
     if (warning) setMessage(warning);
     setFiltering(true);
-    const work = isCourierSupervisor ? loadSayedSheet(filters) : loadQueue(filters, 1);
+    const work = isCourierSupervisor
+      ? loadSayedSheet(filters)
+      : Promise.all([loadQueue(filters, 1), loadWarehouseDaySummary(filters)]);
     void Promise.resolve(work).finally(() => setFiltering(false));
   }
 
@@ -1413,9 +1454,10 @@ export function CsQueueClient({
     setPrintMode("late");
   }
 
-  async function printApplied() {
+  async function printApplied(opts?: { reprint?: boolean }) {
     if (printing) return;
     setPrinting(true);
+    const reprint = Boolean(opts?.reprint);
     const filters = { ...applied, query: draft.query };
     const copies = sheetCopyCount();
     const singleDay = filters.dateFrom && filters.dateFrom === filters.dateTo ? filters.dateFrom : "";
@@ -1451,6 +1493,11 @@ export function CsQueueClient({
     }
     setPrintCopyCount(1);
     const bostaSheet = filters.shipping === "bosta" && filters.warehouseFilter === "down";
+    if (reprint && (!canReprintWarehouseSheet || !bostaSheet)) {
+      setPrinting(false);
+      setMessage("غير مصرح بإعادة طباعة التقرير.");
+      return;
+    }
     const params = new URLSearchParams();
     const query = filters.query.trim();
     if (query) params.set("q", query);
@@ -1464,8 +1511,10 @@ export function CsQueueClient({
     if (filters.payment && filters.payment !== "all") params.set("payment", filters.payment);
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
-    // Bosta warehouse sheet always prints only unprinted report rows, even if UI filter is «كل البوالص».
-    if (bostaSheet || filters.waybillFilter === "report_not_printed") {
+    // Normal Bosta warehouse print: unprinted only. Admin/supervisor reprint: all invoiced for the day.
+    if (bostaSheet && !reprint) {
+      params.set("waybill", "report_not_printed");
+    } else if (!bostaSheet && filters.waybillFilter === "report_not_printed") {
       params.set("waybill", "report_not_printed");
     } else if (filters.waybillFilter === "not_printed" && filters.warehouseFilter !== "down") {
       params.set("waybill", "not_printed");
@@ -1484,13 +1533,17 @@ export function CsQueueClient({
       const meta = buildDuplicateMeta(rows);
       rows = rows.filter((item) => meta.has(item.id));
     }
+    if (bostaSheet && reprint) {
+      rows = rows.filter((row) => Boolean(row.warehouseSheetPrinted));
+    }
     rows = sortWarehouseSheetRows(rows);
     if (bostaSheet) {
       if (!rows.length) {
         setPrinting(false);
         setBostaPrintBatches([]);
         setBostaCurrentBatchNo(0);
-        setMessage("مفيش أوردرات لم تُطبع للتقرير.");
+        setBostaIsReprint(false);
+        setMessage(reprint ? "مفيش تقرير مطبوع لإعادة طباعته." : "مفيش أوردرات لم تُطبع للتقرير.");
         return;
       }
       const dayYmd =
@@ -1501,7 +1554,7 @@ export function CsQueueClient({
       const markRes = await fetch("/api/cs/warehouse-sheet-print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids, dayYmd, shippingCompany: "bosta" }),
+        body: JSON.stringify({ ids, dayYmd, shippingCompany: "bosta", reprint }),
       });
       const markData = (await markRes.json().catch(() => null)) as {
         message?: string;
@@ -1518,19 +1571,27 @@ export function CsQueueClient({
       const batchNo = Number(markData?.batchNo || 0);
       setBostaPrintBatches(batches);
       setBostaCurrentBatchNo(batchNo);
+      setBostaIsReprint(reprint);
       if (batchNo <= 0 || !Number(markData?.orderCount || 0)) {
         setPrinting(false);
-        setMessage(markData?.message || "مفيش أوردرات لم تُطبع للتقرير.");
+        setMessage(
+          markData?.message ||
+            (reprint ? "مفيش تقرير مطبوع لإعادة طباعته." : "مفيش أوردرات لم تُطبع للتقرير."),
+        );
         return;
       }
-      const marked = new Set(ids);
-      rows = rows.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row));
-      setItems((prev) =>
-        prev.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row)),
-      );
+      if (!reprint) {
+        const marked = new Set(ids);
+        rows = rows.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row));
+        setItems((prev) =>
+          prev.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row)),
+        );
+      }
+      void loadWarehouseDaySummary(filters);
     } else {
       setBostaPrintBatches([]);
       setBostaCurrentBatchNo(0);
+      setBostaIsReprint(false);
     }
     setSheetPrintRows(rows);
     setPrintMode(bostaSheet ? "bosta_sheet" : "queue");
@@ -1735,6 +1796,22 @@ export function CsQueueClient({
               </p>
             ) : null}
           </div>
+          {warehouseDaySummary &&
+          applied.shipping === "bosta" &&
+          applied.warehouseFilter === "down" &&
+          applied.dateFrom &&
+          applied.dateFrom === applied.dateTo ? (
+            <p className="mt-2 text-xs font-extrabold text-[#14213D]">
+              تقرير المخزن {applied.dateFrom}: نزل المخزن{" "}
+              <span className="rounded bg-[#14213D] px-1.5 py-0.5 text-[#FCA311]">{warehouseDaySummary.invoiced}</span>
+              {" · "}
+              طُبع التقرير{" "}
+              <span className="rounded bg-[#14213D] px-1.5 py-0.5 text-[#FCA311]">{warehouseDaySummary.printed}</span>
+              {" · "}
+              لم يطبع{" "}
+              <span className="rounded bg-[#14213D] px-1.5 py-0.5 text-[#FCA311]">{warehouseDaySummary.unprinted}</span>
+            </p>
+          ) : null}
           {isCourierSupervisor ? (
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -1823,6 +1900,21 @@ export function CsQueueClient({
           >
             {printing ? "جاري التحميل" : "طباعة"}
           </button>
+          {canReprintWarehouseSheet &&
+          applied.shipping === "bosta" &&
+          applied.warehouseFilter === "down" ? (
+            <button
+              type="button"
+              disabled={printing}
+              onClick={() => {
+                setPrintingCourierId(null);
+                void printApplied({ reprint: true });
+              }}
+              className="shrink-0 rounded-xl border border-[#14213D] bg-white px-3 py-2 text-xs font-extrabold text-[#14213D] disabled:opacity-60 sm:py-2.5 sm:text-sm"
+            >
+              {printing ? "جاري التحميل" : "إعادة طباعة التقرير"}
+            </button>
+          ) : null}
           </div>
           ) : null}
           {isCourierSupervisor ? null : (
@@ -2788,17 +2880,18 @@ export function CsQueueClient({
           </h1>
           {printMode === "bosta_sheet" ? (
             <div className="mb-2 text-center text-xs">
+              {bostaIsReprint ? <p className="font-bold">إعادة طباعة التقرير</p> : null}
               {bostaPrintBatches.length > 0 ? (
                 <p>
                   تم إرسال{" "}
                   {bostaPrintBatches
-                    .map((batch) => `${warehouseBatchSendLabel(batch.batchNo)} ${batch.orderCount}`)
+                    .map((batch) => `${warehouseBatchSendLabel(batch)} ${batch.orderCount}`)
                     .join(" · ")}
                 </p>
               ) : null}
               <p>
                 {bostaCurrentBatchNo > 0
-                  ? `هذه الطباعة (${warehouseBatchPrintOrdinal(bostaCurrentBatchNo)}): ${printRows.length}`
+                  ? `${bostaIsReprint ? "هذه الإعادة" : "هذه الطباعة"} (${warehouseBatchPrintOrdinal(bostaCurrentBatchNo)}): ${printRows.length}`
                   : new Date().toLocaleString("ar-EG")}
                 {" · "}
                 عدد الصفوف: {printRows.length}

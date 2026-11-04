@@ -108,6 +108,7 @@ export default async function CsHomePage() {
       canOpenOrders={!isCourierSupervisor || viewer.isAdmin}
       canSetTemimaCutoff={isSupervisor && !isCourierSupervisor}
       canPrintQueue={isSupervisor && !isCourierSupervisor}
+      canReprintWarehouseSheet={viewer.isAdmin || (isSupervisor && !isCourierSupervisor)}
       canEditInvoice={viewer.isAdmin || isSupervisor || isAccounting}
       canHandToCarrier={viewer.isAdmin || (isSupervisor && !isCourierSupervisor)}
       canReopenTemimaSheet={viewer.isAdmin}

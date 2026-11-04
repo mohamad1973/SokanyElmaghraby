@@ -2,10 +2,18 @@ import { NextResponse } from "next/server";
 
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import {
-  listWarehouseSheetPrintBatches,
   recordWarehouseSheetPrintBatch,
+  summarizeWarehouseSheetDay,
 } from "@/lib/cs/warehouse-sheet-print";
 import { requireCsSession } from "@/lib/session-guards";
+
+function canManageWarehouseSheet(viewer: {
+  isAdmin?: boolean;
+  isSupervisor?: boolean;
+  isCourierSupervisor?: boolean;
+}) {
+  return Boolean(viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor));
+}
 
 export async function GET(request: Request) {
   const session = await requireCsSession();
@@ -14,16 +22,15 @@ export async function GET(request: Request) {
   }
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  const allowed = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
-  if (!allowed) {
+  if (!canManageWarehouseSheet(viewer)) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   }
 
   const url = new URL(request.url);
   const dayYmd = url.searchParams.get("day") || "";
   const shippingCompany = url.searchParams.get("shipping") || "bosta";
-  const batches = await listWarehouseSheetPrintBatches(dayYmd, shippingCompany);
-  return NextResponse.json({ ok: true, batches });
+  const summary = await summarizeWarehouseSheetDay(dayYmd, shippingCompany);
+  return NextResponse.json({ ok: true, ...summary });
 }
 
 export async function POST(request: Request) {
@@ -33,8 +40,7 @@ export async function POST(request: Request) {
   }
 
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  const allowed = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
-  if (!allowed) {
+  if (!canManageWarehouseSheet(viewer)) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
   }
 
@@ -42,6 +48,7 @@ export async function POST(request: Request) {
     ids?: unknown;
     dayYmd?: string;
     shippingCompany?: string;
+    reprint?: boolean;
   } | null;
   const ids = Array.isArray(body?.ids) ? body.ids.map((id) => Number(id)) : [];
   const result = await recordWarehouseSheetPrintBatch({
@@ -49,6 +56,7 @@ export async function POST(request: Request) {
     dayYmd: String(body?.dayYmd || ""),
     shippingCompany: String(body?.shippingCompany || "bosta"),
     agentId: session.user.csAgentId,
+    reprint: Boolean(body?.reprint),
   });
   if (!result.ok) {
     return NextResponse.json({ message: result.message }, { status: 400 });
@@ -57,6 +65,7 @@ export async function POST(request: Request) {
     ok: true,
     batchNo: result.batchNo,
     orderCount: result.orderCount,
+    kind: result.kind,
     batches: result.batches,
     message: "message" in result ? result.message : undefined,
   });
