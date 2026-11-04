@@ -220,6 +220,31 @@ const DUP_COLOR_CLASSES = [
   "bg-orange-100",
 ] as const;
 
+type WarehouseSheetPrintBatch = {
+  dayYmd: string;
+  shippingCompany: string;
+  batchNo: number;
+  orderCount: number;
+  createdAt: string;
+};
+
+const BATCH_SEND_LABELS = ["أول مرة", "ثاني مرة", "ثالث مرة", "رابع مرة", "خامس مرة", "سادس مرة", "سابع مرة", "ثامن مرة", "تاسع مرة", "عاشر مرة"];
+const BATCH_PRINT_ORDINALS = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"];
+
+function warehouseBatchSendLabel(batchNo: number) {
+  return BATCH_SEND_LABELS[batchNo - 1] || `مرة ${batchNo}`;
+}
+
+function warehouseBatchPrintOrdinal(batchNo: number) {
+  return BATCH_PRINT_ORDINALS[batchNo - 1] || `رقم ${batchNo}`;
+}
+
+function sortWarehouseSheetRows(rows: CsQueueItem[]) {
+  return [...rows].sort(
+    (a, b) => parseWooOrderNumber(a.wooOrderNumber) - parseWooOrderNumber(b.wooOrderNumber),
+  );
+}
+
 type DraftFilters = {
   query: string;
   status: string;
@@ -891,6 +916,8 @@ export function CsQueueClient({
   const [queueTotal, setQueueTotal] = useState(initialTotal);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sheetPrintRows, setSheetPrintRows] = useState<CsQueueItem[] | null>(null);
+  const [bostaPrintBatches, setBostaPrintBatches] = useState<WarehouseSheetPrintBatch[]>([]);
+  const [bostaCurrentBatchNo, setBostaCurrentBatchNo] = useState(0);
   const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked">("sheet");
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
@@ -1076,6 +1103,8 @@ export function CsQueueClient({
       setPrintMode("none");
       setPrintingCourierId(null);
       setSheetPrintRows(null);
+      setBostaPrintBatches([]);
+      setBostaCurrentBatchNo(0);
     }, 50);
     return () => window.clearTimeout(timer);
   }, [printMode]);
@@ -1402,11 +1431,11 @@ export function CsQueueClient({
       if (printFrozen && singleDay) {
         setFrozenDays((prev) => (prev.includes(singleDay) ? prev : [...prev, singleDay]));
       }
-      const printed = [...(data.items || [])];
+      let printed = [...(data.items || [])];
       if (filters.dateFrom && filters.dateFrom === filters.dateTo && printed.some((item) => item.sheetSerial && item.sheetSerial > 0)) {
         printed.sort((a, b) => (a.sheetSerial || 0) - (b.sheetSerial || 0));
-      } else if (filters.dateFrom && filters.dateFrom === filters.dateTo) {
-        printed.sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
+      } else {
+        printed = sortWarehouseSheetRows(printed);
       }
       setSheetPrintRows(printed);
       if (isCourierSupervisor) setItems(printed);
@@ -1415,6 +1444,7 @@ export function CsQueueClient({
       return;
     }
     setPrintCopyCount(1);
+    const bostaSheet = filters.shipping === "bosta" && filters.warehouseFilter === "down";
     const params = new URLSearchParams();
     const query = filters.query.trim();
     if (query) params.set("q", query);
@@ -1428,8 +1458,10 @@ export function CsQueueClient({
     if (filters.payment && filters.payment !== "all") params.set("payment", filters.payment);
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
-    if (filters.waybillFilter === "report_not_printed") params.set("waybill", "report_not_printed");
-    else if (filters.waybillFilter === "not_printed" && filters.warehouseFilter !== "down") {
+    // Bosta warehouse sheet always prints only unprinted report rows, even if UI filter is «كل البوالص».
+    if (bostaSheet || filters.waybillFilter === "report_not_printed") {
+      params.set("waybill", "report_not_printed");
+    } else if (filters.waybillFilter === "not_printed" && filters.warehouseFilter !== "down") {
       params.set("waybill", "not_printed");
     }
     if (filters.warehouseFilter === "down") params.set("warehouse", "down");
@@ -1446,21 +1478,53 @@ export function CsQueueClient({
       const meta = buildDuplicateMeta(rows);
       rows = rows.filter((item) => meta.has(item.id));
     }
-    const bostaSheet = filters.shipping === "bosta" && filters.warehouseFilter === "down";
-    if (bostaSheet && rows.length) {
+    rows = sortWarehouseSheetRows(rows);
+    if (bostaSheet) {
+      if (!rows.length) {
+        setPrinting(false);
+        setBostaPrintBatches([]);
+        setBostaCurrentBatchNo(0);
+        setMessage("مفيش أوردرات لم تُطبع للتقرير.");
+        return;
+      }
+      const dayYmd =
+        filters.dateFrom && filters.dateFrom === filters.dateTo
+          ? filters.dateFrom
+          : cairoTodayYmd();
       const ids = rows.map((row) => row.id);
       const markRes = await fetch("/api/cs/warehouse-sheet-print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, dayYmd, shippingCompany: "bosta" }),
       });
-      if (markRes.ok) {
-        const marked = new Set(ids);
-        rows = rows.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row));
-        setItems((prev) =>
-          prev.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row)),
-        );
+      const markData = (await markRes.json().catch(() => null)) as {
+        message?: string;
+        batchNo?: number;
+        orderCount?: number;
+        batches?: WarehouseSheetPrintBatch[];
+      } | null;
+      if (!markRes.ok) {
+        setPrinting(false);
+        setMessage(markData?.message || "تعذر تسجيل دفعة طباعة التقرير.");
+        return;
       }
+      const batches = markData?.batches || [];
+      const batchNo = Number(markData?.batchNo || 0);
+      setBostaPrintBatches(batches);
+      setBostaCurrentBatchNo(batchNo);
+      if (batchNo <= 0 || !Number(markData?.orderCount || 0)) {
+        setPrinting(false);
+        setMessage(markData?.message || "مفيش أوردرات لم تُطبع للتقرير.");
+        return;
+      }
+      const marked = new Set(ids);
+      rows = rows.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row));
+      setItems((prev) =>
+        prev.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row)),
+      );
+    } else {
+      setBostaPrintBatches([]);
+      setBostaCurrentBatchNo(0);
     }
     setSheetPrintRows(rows);
     setPrintMode(bostaSheet ? "bosta_sheet" : "queue");
@@ -2716,10 +2780,31 @@ export function CsQueueClient({
                     : ""
                 }`}
           </h1>
-          <p className="mb-2 text-center text-xs">
-            {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
-            {printCopyCount > 1 && !printingCourierId ? ` · نسخة ${copy + 1}` : ""}
-          </p>
+          {printMode === "bosta_sheet" ? (
+            <div className="mb-2 text-center text-xs">
+              {bostaPrintBatches.length > 0 ? (
+                <p>
+                  تم إرسال{" "}
+                  {bostaPrintBatches
+                    .map((batch) => `${warehouseBatchSendLabel(batch.batchNo)} ${batch.orderCount}`)
+                    .join(" · ")}
+                </p>
+              ) : null}
+              <p>
+                {bostaCurrentBatchNo > 0
+                  ? `هذه الطباعة (${warehouseBatchPrintOrdinal(bostaCurrentBatchNo)}): ${printRows.length}`
+                  : new Date().toLocaleString("ar-EG")}
+                {" · "}
+                عدد الصفوف: {printRows.length}
+                {printCopyCount > 1 && !printingCourierId ? ` · نسخة ${copy + 1}` : ""}
+              </p>
+            </div>
+          ) : (
+            <p className="mb-2 text-center text-xs">
+              {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}
+              {printCopyCount > 1 && !printingCourierId ? ` · نسخة ${copy + 1}` : ""}
+            </p>
+          )}
           <table className="w-full border-collapse text-[10px]">
             <thead>
               <tr>

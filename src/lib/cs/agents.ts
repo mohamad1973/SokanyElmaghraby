@@ -717,6 +717,8 @@ async function runEnsureCsTables() {
 
   await ensureCsSpeedIndexes(prisma);
   await ensureSokanyAwbTables();
+  const { ensureWarehouseSheetPrintBatchTable } = await import("@/lib/cs/warehouse-sheet-print");
+  await ensureWarehouseSheetPrintBatchTable();
   const { ensureScCenterTables } = await import("@/lib/cs/sc-centers");
   await ensureScCenterTables();
   const { ensureHomeConfirmTables } = await import("@/lib/cs/home-confirm");
