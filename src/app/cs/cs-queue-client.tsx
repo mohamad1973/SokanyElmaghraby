@@ -536,7 +536,9 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
       if (f.agentId !== "all" && String(item.assignedAgent?.id || "") !== f.agentId) return false;
       if (!distributedOnly && !itemMatchesDateFilter(item, f, forAgentWorkDate)) return false;
       if (f.trackingFilter === "missing" && itemTrackingNumber(item)) return false;
-      if (f.waybillFilter === "not_printed" && item.waybillPrinted) return false;
+      if (f.waybillFilter === "not_printed" && f.warehouseFilter !== "down" && item.waybillPrinted) {
+        return false;
+      }
       if (f.waybillFilter === "report_not_printed" && item.warehouseSheetPrinted) return false;
       if (f.warehouseFilter === "down" && !String(item.invoiceNumber || "").trim()) return false;
       return true;
@@ -923,8 +925,10 @@ export function CsQueueClient({
     if (filters.payment && filters.payment !== "all") params.set("payment", filters.payment);
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
-    if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
     if (filters.waybillFilter === "report_not_printed") params.set("waybill", "report_not_printed");
+    else if (filters.waybillFilter === "not_printed" && filters.warehouseFilter !== "down") {
+      params.set("waybill", "not_printed");
+    }
     if (filters.warehouseFilter === "down") params.set("warehouse", "down");
     params.set("page", String(pageNo));
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
@@ -1412,8 +1416,10 @@ export function CsQueueClient({
     if (filters.payment && filters.payment !== "all") params.set("payment", filters.payment);
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
-    if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
     if (filters.waybillFilter === "report_not_printed") params.set("waybill", "report_not_printed");
+    else if (filters.waybillFilter === "not_printed" && filters.warehouseFilter !== "down") {
+      params.set("waybill", "not_printed");
+    }
     if (filters.warehouseFilter === "down") params.set("warehouse", "down");
     params.set("all", "1");
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
@@ -1914,31 +1920,43 @@ export function CsQueueClient({
           )}
           {isCourierSupervisor ? null : (
           <select
-            value={draft.waybillFilter}
+            value={
+              draft.warehouseFilter === "down" && draft.waybillFilter === "not_printed"
+                ? "all"
+                : draft.waybillFilter
+            }
             onChange={(e) => {
               const value = e.target.value;
               patchDraft({
                 waybillFilter:
-                  value === "not_printed"
-                    ? "not_printed"
-                    : value === "report_not_printed"
-                      ? "report_not_printed"
+                  value === "report_not_printed"
+                    ? "report_not_printed"
+                    : value === "not_printed" && draft.warehouseFilter !== "down"
+                      ? "not_printed"
                       : "all",
               });
             }}
             className={FILTER_CONTROL}
           >
             <option value="all">كل البوالص</option>
-            <option value="not_printed">لم تُطبع البوليصة</option>
+            {draft.warehouseFilter === "down" ? null : (
+              <option value="not_printed">لم تُطبع البوليصة</option>
+            )}
             <option value="report_not_printed">لم يطبع التقرير</option>
           </select>
           )}
           {isCourierSupervisor ? null : (
           <select
             value={draft.warehouseFilter}
-            onChange={(e) =>
-              patchDraft({ warehouseFilter: e.target.value === "down" ? "down" : "all" })
-            }
+            onChange={(e) => {
+              const next = e.target.value === "down" ? "down" : "all";
+              patchDraft({
+                warehouseFilter: next,
+                ...(next === "down" && draft.waybillFilter === "not_printed"
+                  ? { waybillFilter: "all" as const }
+                  : {}),
+              });
+            }}
             className={FILTER_CONTROL}
           >
             <option value="all">كل المخزن</option>

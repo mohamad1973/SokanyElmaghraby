@@ -462,6 +462,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فلتر مخزن كل البوالص | مع نزل للمخزن: كل البوالص = كل فاتورة في التاريخ (طُبع ولم يطبع)؛ لم يطبع التقرير فقط؛ إخفاء لم تُطبع البوليصة | `cs-queue-client.tsx` |
 | إصلاح سقوط /cs أعمدة ناقصة | ALTER أخف لـ `warehouseSheetPrinted`/`invoiceNumberAt` مع تحقق من information_schema وصفّر كاش الميجريشن؛ retry عند P2022 | `agents.ts`, `confirmations.ts` |
 | تاريخ فاتورة + لم يطبع التقرير | فلتر نزل للمخزن يعتمد `invoiceNumberAt`؛ خيار «لم يطبع التقرير»؛ طباعة شيت بوسطة تعلّم `warehouseSheetPrinted` | `confirmations.ts`, `cs-queue-client.tsx`, `warehouse-sheet-print/route.ts`, `schema.prisma`, `agents.ts` |
 | شيت مخزن بوسطة من الفاتورة | فلتر «نزل إلى المخزن» = فيه رقم فاتورة؛ مع شحن بوسطة الطباعة تطلع شيت مخزن بوسطة؛ كتابة الفاتورة من `/cs` للمشرف/أدمن/حسابات؛ من غير لمس تسليم الشحن | `cs-queue-client.tsx`, `confirmations.ts`, `orders/route.ts`, `cs/page.tsx` |
