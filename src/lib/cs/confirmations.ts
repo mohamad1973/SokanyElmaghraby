@@ -607,6 +607,7 @@ function sheetQueueItemMatches(
     agentFilterId?: number | null;
     tracking?: string;
     waybill?: string;
+    warehouse?: string;
   },
   seeAll: boolean,
 ) {
@@ -654,6 +655,7 @@ function sheetQueueItemMatches(
     if (tracking && tracking !== "null") return false;
   }
   if (opts.waybill === "not_printed" && item.waybillPrinted) return false;
+  if (opts.warehouse === "down" && !String(item.invoiceNumber || "").trim()) return false;
   return true;
 }
 
@@ -674,6 +676,7 @@ export async function listCsQueuePage(opts: {
   followUp?: string;
   tracking?: string;
   waybill?: string;
+  warehouse?: string;
   page?: number;
   limit?: number;
   all?: boolean;
@@ -840,6 +843,9 @@ export async function listCsQueuePage(opts: {
   }
   if (opts.waybill === "not_printed") {
     where.push("(waybillPrinted = 0 OR waybillPrinted IS NULL)");
+  }
+  if (opts.warehouse === "down") {
+    where.push("(invoiceNumber IS NOT NULL AND TRIM(invoiceNumber) <> '')");
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";

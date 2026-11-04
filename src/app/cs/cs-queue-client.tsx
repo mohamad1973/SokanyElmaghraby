@@ -231,6 +231,7 @@ type DraftFilters = {
   duplicates: "all" | "only";
   trackingFilter: "all" | "missing";
   waybillFilter: "all" | "not_printed";
+  warehouseFilter: "all" | "down";
 };
 
 type DupMeta = { key: string; count: number; colorClass: string };
@@ -263,6 +264,7 @@ function defaultDraft(): DraftFilters {
     duplicates: "all",
     trackingFilter: "all",
     waybillFilter: "all",
+    warehouseFilter: "all",
   };
 }
 
@@ -530,6 +532,7 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
       if (!distributedOnly && !itemMatchesDateFilter(item, f, forAgentWorkDate)) return false;
       if (f.trackingFilter === "missing" && itemTrackingNumber(item)) return false;
       if (f.waybillFilter === "not_printed" && item.waybillPrinted) return false;
+      if (f.warehouseFilter === "down" && !String(item.invoiceNumber || "").trim()) return false;
       return true;
     })
     .sort((a, b) => parseWooOrderNumber(b.wooOrderNumber) - parseWooOrderNumber(a.wooOrderNumber));
@@ -753,7 +756,7 @@ type TemimaAddMatch = {
   status: string;
 };
 
-type PrintMode = "none" | "sheet" | "queue" | "late";
+type PrintMode = "none" | "sheet" | "bosta_sheet" | "queue" | "late";
 
 function officialActions(disposition: "" | "collect" | "return" | "postpone" | undefined, editing: boolean) {
   const all = ["delivered", "returned"] as const;
@@ -911,6 +914,7 @@ export function CsQueueClient({
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
     if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
+    if (filters.warehouseFilter === "down") params.set("warehouse", "down");
     params.set("page", String(pageNo));
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
     const data = (await res.json()) as {
@@ -1398,6 +1402,7 @@ export function CsQueueClient({
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
     if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
+    if (filters.warehouseFilter === "down") params.set("warehouse", "down");
     params.set("all", "1");
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
     const data = (await res.json()) as { message?: string; items?: CsQueueItem[] };
@@ -1412,7 +1417,7 @@ export function CsQueueClient({
       rows = rows.filter((item) => meta.has(item.id));
     }
     setSheetPrintRows(rows);
-    setPrintMode("queue");
+    setPrintMode(filters.shipping === "bosta" && filters.warehouseFilter === "down" ? "bosta_sheet" : "queue");
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
@@ -1889,6 +1894,18 @@ export function CsQueueClient({
           >
             <option value="all">كل البوالص</option>
             <option value="not_printed">لم تُطبع البوليصة</option>
+          </select>
+          )}
+          {isCourierSupervisor ? null : (
+          <select
+            value={draft.warehouseFilter}
+            onChange={(e) =>
+              patchDraft({ warehouseFilter: e.target.value === "down" ? "down" : "all" })
+            }
+            className={FILTER_CONTROL}
+          >
+            <option value="all">كل المخزن</option>
+            <option value="down">نزل إلى المخزن</option>
           </select>
           )}
           {isSupervisor ? (
@@ -2608,19 +2625,23 @@ export function CsQueueClient({
               </tbody>
             </table>
           </section>
-        ) : printMode === "sheet" || applied.shipping === "sayed_temima" ? (
+        ) : printMode === "sheet" || printMode === "bosta_sheet" || applied.shipping === "sayed_temima" ? (
           Array.from({ length: Math.max(1, printingCourierId ? 1 : printCopyCount) }, (_, copy) => (
           <section key={copy} className={copy + 1 < Math.max(1, printingCourierId ? 1 : printCopyCount) ? "print-copy" : undefined}>
           <h1 className="mb-2 text-center text-lg font-bold">
-            {`${
-              applied.dateFrom === applied.dateTo
-                ? formatSayedSheetHeading(applied.dateFrom)
-                : `شيت مخزن سيد تميمة — ${applied.dateFrom} → ${applied.dateTo}`
-            }${
-              printingCourierId
-                ? ` — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
-                : ""
-            }`}
+            {printMode === "bosta_sheet"
+              ? applied.dateFrom === applied.dateTo
+                ? `شيت مخزن بوسطة — ${applied.dateFrom}`
+                : `شيت مخزن بوسطة — ${applied.dateFrom} → ${applied.dateTo}`
+              : `${
+                  applied.dateFrom === applied.dateTo
+                    ? formatSayedSheetHeading(applied.dateFrom)
+                    : `شيت مخزن سيد تميمة — ${applied.dateFrom} → ${applied.dateTo}`
+                }${
+                  printingCourierId
+                    ? ` — ${couriers.find((courier) => courier.id === printingCourierId)?.name || "المندوب"}`
+                    : ""
+                }`}
           </h1>
           <p className="mb-2 text-center text-xs">
             {new Date().toLocaleString("ar-EG")} · عدد الصفوف: {printRows.length}

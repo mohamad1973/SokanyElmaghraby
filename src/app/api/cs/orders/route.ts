@@ -57,6 +57,7 @@ export async function GET(request: Request) {
     followUp: url.searchParams.get("follow") || "",
     tracking: url.searchParams.get("tracking") || "",
     waybill: url.searchParams.get("waybill") || "",
+    warehouse: url.searchParams.get("warehouse") || "",
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
     limit: CS_QUEUE_PAGE_SIZE,
     all: canPrintAll && url.searchParams.get("all") === "1",
