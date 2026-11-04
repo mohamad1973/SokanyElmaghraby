@@ -343,6 +343,7 @@ export async function closeTemimaSheetFromPrint(dayYmd: string) {
   if (!cutoff.ok) return cutoff;
   const frozen = await freezePreparedTemimaDay(dayYmd);
   if (!frozen.ok) return frozen;
+  await markTemimaWarehouseSheetPrinted(dayYmd);
   return { ...frozen, minutes: cutoff.minutes };
 }
 
@@ -350,10 +351,23 @@ export async function closeTemimaSheetFromPrint(dayYmd: string) {
  * Record one sheet print for a day. Freezes when app copies are >= 4 in one job,
  * or when the day has been printed 4+ times (even 1 copy each).
  */
+async function markTemimaWarehouseSheetPrinted(dayYmd: string) {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  const items = await listUnifiedSayedSheet(dayYmd, dayYmd);
+  const ids = [...new Set(items.map((item) => Number(item.id)).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return;
+  await prisma.csOrderConfirmation.updateMany({
+    where: { id: { in: ids } },
+    data: { warehouseSheetPrinted: true } as never,
+  });
+}
+
 export async function recordTemimaSheetPrint(dayYmd: string, copies: number) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) return { ok: false as const, message: "اليوم غير صحيح." };
   const copyCount = Number.isInteger(copies) && copies > 0 ? Math.min(copies, 20) : 1;
   const count = await incrementTemimaSheetPrintCount(dayYmd);
+  await markTemimaWarehouseSheetPrinted(dayYmd);
   if (await hasTemimaFreezeDay(dayYmd)) {
     return {
       ok: true as const,
