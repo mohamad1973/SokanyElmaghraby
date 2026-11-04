@@ -774,6 +774,18 @@ async function ensureCriticalCsOrderConfirmationColumns(
     // Do not cache a successful ensure when required columns are absent.
     throw new Error(`أعمدة CsOrderConfirmation ناقصة: ${missing.join(", ")}`);
   }
+
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE \`CsOrderConfirmation\`
+      SET \`invoiceNumberAt\` = COALESCE(\`updatedAt\`, \`confirmedAt\`, \`createdAt\`)
+      WHERE \`invoiceNumber\` IS NOT NULL AND TRIM(\`invoiceNumber\`) <> ''
+        AND \`invoiceNumberAt\` IS NULL
+    `);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[cs] invoiceNumberAt backfill failed:", message.slice(0, 300));
+  }
 }
 
 /** Idempotent schema migration for CS tables — safe to call before every CS query. */

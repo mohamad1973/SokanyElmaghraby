@@ -1242,10 +1242,11 @@ export function CsQueueClient({
     setDraft((prev) => ({ ...prev, ...patch }));
   }
 
-  function runFilter() {
+  function runFilter(nextDraft?: DraftFilters) {
+    const source = nextDraft ?? draft;
     const { filters, warning } = clampDateFilters({
-      ...draft,
-      status: normalizeFilterStatus(draft.status),
+      ...source,
+      status: normalizeFilterStatus(source.status),
     });
     setDraft(filters);
     setApplied(filters);
@@ -1253,6 +1254,17 @@ export function CsQueueClient({
     setFiltering(true);
     const work = isCourierSupervisor ? loadSayedSheet(filters) : loadQueue(filters, 1);
     void Promise.resolve(work).finally(() => setFiltering(false));
+  }
+
+  function patchWarehouseRelatedFilters(patch: Partial<DraftFilters>) {
+    const next: DraftFilters = { ...draft, ...patch };
+    if (next.warehouseFilter === "down" && next.waybillFilter === "not_printed") {
+      next.waybillFilter = "all";
+    }
+    setDraft(next);
+    if (next.warehouseFilter === "down" || draft.warehouseFilter === "down") {
+      runFilter(next);
+    }
   }
 
   async function loadSayedSheet(filters: DraftFilters) {
@@ -1927,14 +1939,17 @@ export function CsQueueClient({
             }
             onChange={(e) => {
               const value = e.target.value;
-              patchDraft({
-                waybillFilter:
-                  value === "report_not_printed"
-                    ? "report_not_printed"
-                    : value === "not_printed" && draft.warehouseFilter !== "down"
-                      ? "not_printed"
-                      : "all",
-              });
+              const waybillFilter: DraftFilters["waybillFilter"] =
+                value === "report_not_printed"
+                  ? "report_not_printed"
+                  : value === "not_printed" && draft.warehouseFilter !== "down"
+                    ? "not_printed"
+                    : "all";
+              if (draft.warehouseFilter === "down") {
+                patchWarehouseRelatedFilters({ waybillFilter });
+              } else {
+                patchDraft({ waybillFilter });
+              }
             }}
             className={FILTER_CONTROL}
           >
@@ -1949,13 +1964,8 @@ export function CsQueueClient({
           <select
             value={draft.warehouseFilter}
             onChange={(e) => {
-              const next = e.target.value === "down" ? "down" : "all";
-              patchDraft({
-                warehouseFilter: next,
-                ...(next === "down" && draft.waybillFilter === "not_printed"
-                  ? { waybillFilter: "all" as const }
-                  : {}),
-              });
+              const warehouseFilter = e.target.value === "down" ? "down" : "all";
+              patchWarehouseRelatedFilters({ warehouseFilter });
             }}
             className={FILTER_CONTROL}
           >
@@ -1991,7 +2001,7 @@ export function CsQueueClient({
             <button
               type="button"
               disabled={filtering}
-              onClick={runFilter}
+              onClick={() => runFilter()}
               className="h-9 flex-1 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-black disabled:opacity-60"
             >
               {filtering ? "جاري التحميل" : "فلتر"}
