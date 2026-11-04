@@ -262,6 +262,7 @@ async function runEnsureCsTables() {
      LIMIT 1`,
   );
   if (ready.length) {
+    await ensureCriticalCsOrderConfirmationColumns(prisma);
     await ensureCarrierWeekExtraColumns(prisma);
     await ensureCsSpeedIndexes(prisma);
     await ensureSokanyAwbTables();
@@ -737,23 +738,30 @@ async function ensureCriticalCsOrderConfirmationColumns(
   ] as const;
 
   async function presentColumns() {
-    const rows = await prisma.$queryRawUnsafe<Array<{ COLUMN_NAME: string }>>(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+    const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `SELECT COLUMN_NAME AS colName FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsOrderConfirmation'
          AND COLUMN_NAME IN (${required.map(() => "?").join(", ")})`,
       ...required.map((col) => col.name),
     );
-    return new Set(rows.map((row) => row.COLUMN_NAME));
+    return new Set(
+      rows.map((row) => String(row.colName ?? row.COLNAME ?? row.COLUMN_NAME ?? Object.values(row)[0] ?? "")),
+    );
   }
 
   let have = await presentColumns();
   for (const col of required) {
     if (have.has(col.name)) continue;
     try {
+      console.error("[cs] adding critical column:", col.name);
       await prisma.$executeRawUnsafe(col.sql);
+      have.add(col.name);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/Duplicate column|already exists|1060/i.test(message)) continue;
+      if (/Duplicate column|already exists|1060/i.test(message)) {
+        have.add(col.name);
+        continue;
+      }
       console.error("[cs] critical column ALTER failed:", col.name, message.slice(0, 300));
       throw new Error(`فشل إضافة عمود ${col.name} على CsOrderConfirmation.`);
     }
@@ -763,6 +771,7 @@ async function ensureCriticalCsOrderConfirmationColumns(
   const missing = required.filter((col) => !have.has(col.name)).map((col) => col.name);
   if (missing.length) {
     console.error("[cs] critical columns still missing after ALTER:", missing.join(", "));
+    // Do not cache a successful ensure when required columns are absent.
     throw new Error(`أعمدة CsOrderConfirmation ناقصة: ${missing.join(", ")}`);
   }
 }
