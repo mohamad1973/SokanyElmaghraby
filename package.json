@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/prepare-db.mjs && next build",
+    "build": "node scripts/prepare-db.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
