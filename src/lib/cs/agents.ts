@@ -184,6 +184,14 @@ async function ensureCsSpeedIndexes(prisma: NonNullable<ReturnType<typeof getPri
       sql: "CREATE INDEX `CsOrderConfirmation_handedToCarrierAt_idx` ON `CsOrderConfirmation` (`handedToCarrierAt`)",
     },
     {
+      name: "CsOrderConfirmation_invoiceNumberAt_idx",
+      sql: "CREATE INDEX `CsOrderConfirmation_invoiceNumberAt_idx` ON `CsOrderConfirmation` (`invoiceNumberAt`)",
+    },
+    {
+      name: "CsOrderConfirmation_warehouseSheetPrinted_idx",
+      sql: "CREATE INDEX `CsOrderConfirmation_warehouseSheetPrinted_idx` ON `CsOrderConfirmation` (`warehouseSheetPrinted`)",
+    },
+    {
       name: "CsOrderConfirmation_ship_status_confirmed_idx",
       sql: "CREATE INDEX `CsOrderConfirmation_ship_status_confirmed_idx` ON `CsOrderConfirmation` (`shippingCompany`, `status`, `confirmedAt`)",
     },
@@ -610,6 +618,8 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelRefundPaid` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumber` VARCHAR(64) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumberAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `warehouseSheetPrinted` BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaStatus` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaShippingFee` DECIMAL(12,2) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaSyncedAt` DATETIME(3) NULL",

@@ -142,7 +142,11 @@ export async function PUT(request: Request, context: Context) {
     if (!result.ok) {
       return NextResponse.json({ message: result.message }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, invoiceNumber: result.invoiceNumber });
+    return NextResponse.json({
+      ok: true,
+      invoiceNumber: result.invoiceNumber,
+      invoiceNumberAt: result.invoiceNumberAt,
+    });
   }
 
   // Supervisor-only quick update for shipping company from the queue

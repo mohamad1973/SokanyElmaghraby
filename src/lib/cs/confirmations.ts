@@ -655,6 +655,7 @@ function sheetQueueItemMatches(
     if (tracking && tracking !== "null") return false;
   }
   if (opts.waybill === "not_printed" && item.waybillPrinted) return false;
+  if (opts.waybill === "report_not_printed" && item.warehouseSheetPrinted) return false;
   if (opts.warehouse === "down" && !String(item.invoiceNumber || "").trim()) return false;
   return true;
 }
@@ -754,7 +755,10 @@ export async function listCsQueuePage(opts: {
       params.push(fromBounds.start, toBounds.endExclusive);
     }
   } else if (!query && isQueueYmd(dateFrom) && isQueueYmd(dateTo)) {
-    if (opts.dateBasis === "saved" && fromBounds && toBounds) {
+    if (opts.warehouse === "down" && fromBounds && toBounds) {
+      where.push("invoiceNumberAt >= ? AND invoiceNumberAt < ?");
+      params.push(fromBounds.start, toBounds.endExclusive);
+    } else if (opts.dateBasis === "saved" && fromBounds && toBounds) {
       where.push("confirmedAt >= ? AND confirmedAt < ?");
       params.push(fromBounds.start, toBounds.endExclusive);
     } else if (seeAll) {
@@ -844,6 +848,9 @@ export async function listCsQueuePage(opts: {
   if (opts.waybill === "not_printed") {
     where.push("(waybillPrinted = 0 OR waybillPrinted IS NULL)");
   }
+  if (opts.waybill === "report_not_printed") {
+    where.push("(warehouseSheetPrinted = 0 OR warehouseSheetPrinted IS NULL)");
+  }
   if (opts.warehouse === "down") {
     where.push("(invoiceNumber IS NOT NULL AND TRIM(invoiceNumber) <> '')");
   }
@@ -911,6 +918,7 @@ export function serializeCsQueueItem(row: {
   monaCourierName?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean | null;
+  warehouseSheetPrinted?: boolean | null;
   fulfillmentKind?: string | null;
   parentConfirmationId?: number | null;
   depositAmount?: unknown;
@@ -931,7 +939,8 @@ export function serializeCsQueueItem(row: {
   courierOutcome?: string | null;
   courierRefusalReason?: string | null;
   salesOrderNumber?: string | null;
-    invoiceNumber?: string | null;
+  invoiceNumber?: string | null;
+  invoiceNumberAt?: Date | string | null;
   bostaStatus?: string | null;
   bostaShippingFee?: unknown;
   customerSnapshot?: unknown;
@@ -1002,6 +1011,7 @@ export function serializeCsQueueItem(row: {
     monaCourierName: row.monaCourierName ? String(row.monaCourierName) : null,
     trackingNumber,
     waybillPrinted: Boolean(row.waybillPrinted),
+    warehouseSheetPrinted: Boolean(row.warehouseSheetPrinted),
     fulfillmentKind,
     parentConfirmationId: parentConfirmationId || null,
     parentWooOrderNumber,
@@ -1040,6 +1050,11 @@ export function serializeCsQueueItem(row: {
     courierRefusalReason: row.courierRefusalReason ? String(row.courierRefusalReason) : null,
     salesOrderNumber: row.salesOrderNumber ? String(row.salesOrderNumber) : null,
     invoiceNumber: row.invoiceNumber ? String(row.invoiceNumber) : null,
+    invoiceNumberAt: row.invoiceNumberAt
+      ? typeof row.invoiceNumberAt === "string"
+        ? row.invoiceNumberAt
+        : row.invoiceNumberAt.toISOString()
+      : null,
     bostaStatus: row.bostaStatus ? String(row.bostaStatus) : null,
     bostaShippingFee: row.bostaShippingFee == null ? null : Number(row.bostaShippingFee),
     assignedAgent: row.assignedAgent
@@ -2053,11 +2068,50 @@ export async function setCsInvoiceNumber(input: { id: number; invoiceNumber: str
   if (!row) return { ok: false as const, message: "الطلب غير موجود." };
 
   const invoiceNumber = String(input.invoiceNumber || "").replace(/\D/g, "").slice(0, 10) || null;
+  const prevInvoice = String((row as { invoiceNumber?: string | null }).invoiceNumber || "").trim() || null;
+  const prevAt = (row as { invoiceNumberAt?: Date | string | null }).invoiceNumberAt || null;
+  let invoiceNumberAt: Date | null = null;
+  if (invoiceNumber) {
+    invoiceNumberAt =
+      invoiceNumber === prevInvoice && prevAt
+        ? prevAt instanceof Date
+          ? prevAt
+          : new Date(prevAt)
+        : new Date();
+  }
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
-    data: { invoiceNumber } as never,
+    data: { invoiceNumber, invoiceNumberAt } as never,
   });
-  return { ok: true as const, invoiceNumber };
+  return {
+    ok: true as const,
+    invoiceNumber,
+    invoiceNumberAt: invoiceNumberAt ? invoiceNumberAt.toISOString() : null,
+  };
+}
+
+export async function markWarehouseSheetPrinted(input: {
+  ids: number[];
+  agentId: number;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const viewer = await resolveCsViewer(input.agentId);
+  const allowed = viewer.isAdmin || (viewer.isSupervisor && !viewer.isCourierSupervisor);
+  if (!allowed) {
+    return { ok: false as const, message: "غير مصرح." };
+  }
+
+  const ids = [...new Set(input.ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return { ok: true as const, count: 0 };
+
+  const result = await prisma.csOrderConfirmation.updateMany({
+    where: { id: { in: ids } },
+    data: { warehouseSheetPrinted: true } as never,
+  });
+  return { ok: true as const, count: result.count };
 }
 
 export async function setCsHandedToCarrier(input: {

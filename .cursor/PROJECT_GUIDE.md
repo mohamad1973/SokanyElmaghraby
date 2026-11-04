@@ -462,6 +462,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تاريخ فاتورة + لم يطبع التقرير | فلتر نزل للمخزن يعتمد `invoiceNumberAt`؛ خيار «لم يطبع التقرير»؛ طباعة شيت بوسطة تعلّم `warehouseSheetPrinted` | `confirmations.ts`, `cs-queue-client.tsx`, `warehouse-sheet-print/route.ts`, `schema.prisma`, `agents.ts` |
 | شيت مخزن بوسطة من الفاتورة | فلتر «نزل إلى المخزن» = فيه رقم فاتورة؛ مع شحن بوسطة الطباعة تطلع شيت مخزن بوسطة؛ كتابة الفاتورة من `/cs` للمشرف/أدمن/حسابات؛ من غير لمس تسليم الشحن | `cs-queue-client.tsx`, `confirmations.ts`, `orders/route.ts`, `cs/page.tsx` |
 | تكتين تمسح اختيار تميمة | تكتين على تم بنجاح أو الغاء بتمسح العلامة من السيرفر (لم يسجل) لحد اختيار جديد؛ الريفرش بيفضل فاضية | `temima-settlement.ts`, `courier-dispatch/route.ts`, `cs-queue-client.tsx`, `couriers-client.tsx` |
 | تكتين تعديل بدون قفل | سيد والأدمن يعدلوا تم بنجاح↔الغاء بتكتين حتى لو الأسبوع مقفول؛ قفل الشيت من أسابيع التصفية العادية فقط مش أيام الترحيل | `cs-queue-client.tsx`, `couriers-client.tsx`, `temima-settlement.ts`, `courier-dispatch/route.ts` |

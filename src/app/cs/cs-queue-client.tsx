@@ -38,6 +38,7 @@ export type CsQueueItem = {
   monaCourierName?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
+  warehouseSheetPrinted?: boolean;
   fulfillmentKind?: "return" | "exchange" | null;
   parentConfirmationId?: number | null;
   parentWooOrderNumber?: string | null;
@@ -45,6 +46,7 @@ export type CsQueueItem = {
   depositPaid?: boolean;
   depositApprovalStatus?: string | null;
   invoiceNumber?: string | null;
+  invoiceNumberAt?: string | null;
   bostaStatus?: string | null;
   bostaShippingFee?: number | null;
   handedToCarrier?: boolean;
@@ -230,7 +232,7 @@ type DraftFilters = {
   dateBasis: "created" | "saved" | "legacy";
   duplicates: "all" | "only";
   trackingFilter: "all" | "missing";
-  waybillFilter: "all" | "not_printed";
+  waybillFilter: "all" | "not_printed" | "report_not_printed";
   warehouseFilter: "all" | "down";
 };
 
@@ -482,6 +484,9 @@ function itemWorkDateIsos(item: CsQueueItem): string[] {
 
 function itemMatchesDateFilter(item: CsQueueItem, f: DraftFilters, forAgentWorkDate: boolean) {
   if (!f.dateFrom || !f.dateTo) return true;
+  if (f.warehouseFilter === "down") {
+    return isWithinCairoDateRange(item.invoiceNumberAt, f.dateFrom, f.dateTo);
+  }
   if (temimaDateMode(f) && f.dateBasis !== "legacy") {
     const iso = f.dateBasis === "saved" ? item.confirmedAt : item.customerSnapshot?.dateCreated;
     return isWithinCairoDateRange(iso, f.dateFrom, f.dateTo);
@@ -532,6 +537,7 @@ function applyFilters(items: CsQueueItem[], f: DraftFilters, opts?: { isSupervis
       if (!distributedOnly && !itemMatchesDateFilter(item, f, forAgentWorkDate)) return false;
       if (f.trackingFilter === "missing" && itemTrackingNumber(item)) return false;
       if (f.waybillFilter === "not_printed" && item.waybillPrinted) return false;
+      if (f.waybillFilter === "report_not_printed" && item.warehouseSheetPrinted) return false;
       if (f.warehouseFilter === "down" && !String(item.invoiceNumber || "").trim()) return false;
       return true;
     })
@@ -547,7 +553,7 @@ function InvoiceBox({
   confirmationId: number;
   value: string;
   disabled?: boolean;
-  onSaved: (next: string) => void;
+  onSaved: (next: string, invoiceNumberAt?: string | null) => void;
 }) {
   const [text, setText] = useState(value);
   const [hint, setHint] = useState("");
@@ -569,14 +575,18 @@ function InvoiceBox({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ invoiceNumber: trimmed }),
     });
-    const data = (await res.json()) as { message?: string; invoiceNumber?: string | null };
+    const data = (await res.json()) as {
+      message?: string;
+      invoiceNumber?: string | null;
+      invoiceNumberAt?: string | null;
+    };
     if (!res.ok) {
       setHint(data.message || "تعذر الحفظ");
       return;
     }
     const stored = data.invoiceNumber || "";
     saved.current = stored;
-    onSaved(stored);
+    onSaved(stored, data.invoiceNumberAt ?? null);
     setHint("تم");
   }
 
@@ -914,6 +924,7 @@ export function CsQueueClient({
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
     if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
+    if (filters.waybillFilter === "report_not_printed") params.set("waybill", "report_not_printed");
     if (filters.warehouseFilter === "down") params.set("warehouse", "down");
     params.set("page", String(pageNo));
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
@@ -1402,6 +1413,7 @@ export function CsQueueClient({
     if (filters.followUp && filters.followUp !== "all") params.set("follow", filters.followUp);
     if (filters.trackingFilter === "missing") params.set("tracking", "missing");
     if (filters.waybillFilter === "not_printed") params.set("waybill", "not_printed");
+    if (filters.waybillFilter === "report_not_printed") params.set("waybill", "report_not_printed");
     if (filters.warehouseFilter === "down") params.set("warehouse", "down");
     params.set("all", "1");
     const res = await fetch(`/api/cs/orders?${params.toString()}`);
@@ -1416,8 +1428,24 @@ export function CsQueueClient({
       const meta = buildDuplicateMeta(rows);
       rows = rows.filter((item) => meta.has(item.id));
     }
+    const bostaSheet = filters.shipping === "bosta" && filters.warehouseFilter === "down";
+    if (bostaSheet && rows.length) {
+      const ids = rows.map((row) => row.id);
+      const markRes = await fetch("/api/cs/warehouse-sheet-print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (markRes.ok) {
+        const marked = new Set(ids);
+        rows = rows.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row));
+        setItems((prev) =>
+          prev.map((row) => (marked.has(row.id) ? { ...row, warehouseSheetPrinted: true } : row)),
+        );
+      }
+    }
     setSheetPrintRows(rows);
-    setPrintMode(filters.shipping === "bosta" && filters.warehouseFilter === "down" ? "bosta_sheet" : "queue");
+    setPrintMode(bostaSheet ? "bosta_sheet" : "queue");
   }
 
   const sheetDay = applied.dateFrom && applied.dateFrom === applied.dateTo ? applied.dateFrom : "";
@@ -1887,13 +1915,22 @@ export function CsQueueClient({
           {isCourierSupervisor ? null : (
           <select
             value={draft.waybillFilter}
-            onChange={(e) =>
-              patchDraft({ waybillFilter: e.target.value === "not_printed" ? "not_printed" : "all" })
-            }
+            onChange={(e) => {
+              const value = e.target.value;
+              patchDraft({
+                waybillFilter:
+                  value === "not_printed"
+                    ? "not_printed"
+                    : value === "report_not_printed"
+                      ? "report_not_printed"
+                      : "all",
+              });
+            }}
             className={FILTER_CONTROL}
           >
             <option value="all">كل البوالص</option>
             <option value="not_printed">لم تُطبع البوليصة</option>
+            <option value="report_not_printed">لم يطبع التقرير</option>
           </select>
           )}
           {isCourierSupervisor ? null : (
@@ -2537,9 +2574,17 @@ export function CsQueueClient({
                         confirmationId={item.id}
                         value={item.invoiceNumber || ""}
                         disabled={sheetEditsLocked}
-                        onSaved={(next) =>
+                        onSaved={(next, invoiceNumberAt) =>
                           setItems((prev) =>
-                            prev.map((row) => (row.id === item.id ? { ...row, invoiceNumber: next || null } : row)),
+                            prev.map((row) =>
+                              row.id === item.id
+                                ? {
+                                    ...row,
+                                    invoiceNumber: next || null,
+                                    invoiceNumberAt: next ? invoiceNumberAt ?? row.invoiceNumberAt ?? null : null,
+                                  }
+                                : row,
+                            ),
                           )
                         }
                       />
