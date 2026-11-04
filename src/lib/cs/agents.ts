@@ -619,7 +619,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `postCancelAt` DATETIME(3) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumber` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumberAt` DATETIME(3) NULL",
-    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `warehouseSheetPrinted` BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `warehouseSheetPrinted` TINYINT(1) NOT NULL DEFAULT 0",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaStatus` VARCHAR(64) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaShippingFee` DECIMAL(12,2) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `bostaSyncedAt` DATETIME(3) NULL",
@@ -647,6 +647,8 @@ async function runEnsureCsTables() {
       }
     }
   }
+
+  await ensureCriticalCsOrderConfirmationColumns(prisma);
 
   try {
     await prisma.$executeRawUnsafe(
@@ -720,8 +722,54 @@ async function runEnsureCsTables() {
   await ensureHomeConfirmTables();
 }
 
+async function ensureCriticalCsOrderConfirmationColumns(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+) {
+  const required = [
+    {
+      name: "invoiceNumberAt",
+      sql: "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `invoiceNumberAt` DATETIME(3) NULL",
+    },
+    {
+      name: "warehouseSheetPrinted",
+      sql: "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `warehouseSheetPrinted` TINYINT(1) NOT NULL DEFAULT 0",
+    },
+  ] as const;
+
+  async function presentColumns() {
+    const rows = await prisma.$queryRawUnsafe<Array<{ COLUMN_NAME: string }>>(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'CsOrderConfirmation'
+         AND COLUMN_NAME IN (${required.map(() => "?").join(", ")})`,
+      ...required.map((col) => col.name),
+    );
+    return new Set(rows.map((row) => row.COLUMN_NAME));
+  }
+
+  let have = await presentColumns();
+  for (const col of required) {
+    if (have.has(col.name)) continue;
+    try {
+      await prisma.$executeRawUnsafe(col.sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/Duplicate column|already exists|1060/i.test(message)) continue;
+      console.error("[cs] critical column ALTER failed:", col.name, message.slice(0, 300));
+      throw new Error(`فشل إضافة عمود ${col.name} على CsOrderConfirmation.`);
+    }
+  }
+
+  have = await presentColumns();
+  const missing = required.filter((col) => !have.has(col.name)).map((col) => col.name);
+  if (missing.length) {
+    console.error("[cs] critical columns still missing after ALTER:", missing.join(", "));
+    throw new Error(`أعمدة CsOrderConfirmation ناقصة: ${missing.join(", ")}`);
+  }
+}
+
 /** Idempotent schema migration for CS tables — safe to call before every CS query. */
-export async function ensureCsTables() {
+export async function ensureCsTables(opts?: { force?: boolean }) {
+  if (opts?.force) ensureCsTablesPromise = null;
   if (!ensureCsTablesPromise) {
     ensureCsTablesPromise = runEnsureCsTables().catch((error) => {
       ensureCsTablesPromise = null;

@@ -468,18 +468,37 @@ async function confirmationIdsForViewer(
   return rows.map((row) => Number(row.id));
 }
 
+function isCsMissingColumnError(error: unknown) {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: string }).code || "")
+      : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return code === "P2022" || /P2022|does not exist in the current database|Unknown column/i.test(message);
+}
+
 async function loadConfirmationsByIds(prisma: NonNullable<ReturnType<typeof getPrismaClient>>, ids: number[]) {
-  const rows = [];
-  for (let i = 0; i < ids.length; i += 400) {
-    const chunk = ids.slice(i, i + 400);
-    if (!chunk.length) continue;
-    const part = await prisma.csOrderConfirmation.findMany({
-      where: { id: { in: chunk } },
-      include: { assignedAgent: true },
-    });
-    rows.push(...part);
+  const load = async () => {
+    const rows = [];
+    for (let i = 0; i < ids.length; i += 400) {
+      const chunk = ids.slice(i, i + 400);
+      if (!chunk.length) continue;
+      const part = await prisma.csOrderConfirmation.findMany({
+        where: { id: { in: chunk } },
+        include: { assignedAgent: true },
+      });
+      rows.push(...part);
+    }
+    return rows;
+  };
+  try {
+    return await load();
+  } catch (error) {
+    if (!isCsMissingColumnError(error)) throw error;
+    console.error("[cs] loadConfirmationsByIds missing column, retry after migrate:", error);
+    await ensureCsTables({ force: true });
+    return await load();
   }
-  return rows;
 }
 
 function isQueueYmd(value: string) {
@@ -514,7 +533,7 @@ export async function listCsConfirmationsForViewer(opts: {
     rows = (await loadConfirmationsByIds(prisma, ids)) as Row[];
   } catch (error) {
     console.error("[cs] listCsConfirmationsForViewer failed, retry after migrate:", error);
-    await ensureCsTables();
+    await ensureCsTables({ force: true });
     try {
       const ids = await confirmationIdsForViewer(prisma, opts);
       rows = (await loadConfirmationsByIds(prisma, ids)) as Row[];
@@ -684,7 +703,8 @@ export async function listCsQueuePage(opts: {
 }) {
   const prisma = getPrismaClient();
   if (!prisma) return { items: [], total: 0, page: 1, pageSize: CS_QUEUE_PAGE_SIZE, hasMore: false };
-  await ensureCsTables();
+
+  const run = async () => {
   await ensureSokanyAwbTables();
 
   const seeAll = Boolean(opts.isSupervisor || opts.seeAll);
@@ -887,6 +907,17 @@ export async function listCsQueuePage(opts: {
     pageSize,
     hasMore: offset + ordered.length < total,
   };
+  };
+
+  await ensureCsTables();
+  try {
+    return await run();
+  } catch (error) {
+    if (!isCsMissingColumnError(error)) throw error;
+    console.error("[cs] listCsQueuePage missing column, retry after migrate:", error);
+    await ensureCsTables({ force: true });
+    return await run();
+  }
 }
 
 /** @deprecated use listCsConfirmationsForViewer */
