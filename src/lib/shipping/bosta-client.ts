@@ -1594,6 +1594,95 @@ function headingReason(row: Record<string, unknown>) {
   return text.slice(0, 180);
 }
 
+/**
+ * «تم استلام الأوردر» من بوسطة = حصل pickup من المحل.
+ * State 21 (Picked up) قصير العمر؛ الشحنات تتحوّل بسرعة لـ 24/30/41/45.
+ * نجيب الحالات اللي بعد الاستلام ونفلتر بـ state.pickedUpTime على فترة القاهرة.
+ */
+export const BOSTA_POST_PICKUP_STATE_CODES = ["21", "24", "30", "41", "45", "46", "47", "48", "49"] as const;
+
+export type BostaPickedUpDelivery = {
+  trackingNumber: string;
+  status: string;
+  statusLabel: string;
+  customerName: string;
+  phone: string;
+  businessReference: string;
+  pickedUpAt: string;
+  updatedAt: string;
+};
+
+function rowPickedUpAt(row: Record<string, unknown>) {
+  const state = asRecord(row.state) || {};
+  const received = asRecord(state.receivedAtWarehouse) || {};
+  for (const value of [
+    state.pickedUpTime,
+    row.pickedUpTime,
+    row.pickedUpAt,
+    received.time,
+    state.receivedAt,
+  ]) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+/** Shipments Bosta actually picked up (pickedUpTime) inside the given Cairo YMD range. */
+export async function listBostaPickedUpDeliveries(range: { from: string; to: string }): Promise<
+  { ok: true; rows: BostaPickedUpDelivery[] } | { ok: false; message: string }
+> {
+  const from = String(range.from || "").trim();
+  const to = String(range.to || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return { ok: false, message: "فترة التاريخ غير صحيحة." };
+  }
+
+  const { isWithinCairoDateRange } = await import("@/lib/cs/order-window");
+  const seen = new Set<string>();
+  const rows: BostaPickedUpDelivery[] = [];
+  let failure = "";
+
+  for (let page = 0; page < 20; page += 1) {
+    const searched = await bostaFetch("/deliveries/search", {
+      method: "POST",
+      body: JSON.stringify({
+        stateCodes: [...BOSTA_POST_PICKUP_STATE_CODES],
+        pageNumber: page,
+        pageLimit: 50,
+      }),
+    });
+    if (!searched.ok) {
+      failure = searched.message;
+      break;
+    }
+    const batch = deliveryRecords(searched.data);
+    for (const row of batch) {
+      const trackingNumber = rowTracking(row) || "";
+      if (!trackingNumber || seen.has(trackingNumber)) continue;
+      const status = readBostaStatus(row) || "";
+      const pickedUpAt = rowPickedUpAt(row);
+      if (!pickedUpAt || !isWithinCairoDateRange(pickedUpAt, from, to)) continue;
+      seen.add(trackingNumber);
+      rows.push({
+        trackingNumber,
+        status,
+        statusLabel: getBostaStatusLabelAr(status),
+        customerName: rowName(row).trim(),
+        phone: rowPhone(row),
+        businessReference: rowBusinessReference(row),
+        pickedUpAt,
+        updatedAt: String(row.updatedAt || "").trim(),
+      });
+    }
+    if (batch.length < 50) break;
+  }
+
+  if (!rows.length && failure) return { ok: false, message: failure };
+  rows.sort((a, b) => Date.parse(b.pickedUpAt || "0") - Date.parse(a.pickedUpAt || "0"));
+  return { ok: true, rows };
+}
+
 /** Bosta dashboard card «متجه إليك»: out for return to the business, not the wider returns-on-way list. */
 export async function listBostaHeadingReturns(): Promise<
   { ok: true; rows: BostaHeadingReturn[] } | { ok: false; message: string }
