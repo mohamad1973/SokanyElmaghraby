@@ -16,6 +16,9 @@ export async function listTemimaCutoffs(): Promise<TemimaCutoff[]> {
   return rows.map((row) => ({ dayYmd: row.dayYmd, minutes: row.minutes }));
 }
 
+/** End of Cairo day (23:59) — used when locking/freezing a past sheet day. */
+export const TEMIMA_END_OF_DAY_MINUTES = 23 * 60 + 59;
+
 export async function ensureTemimaDayCutoff(dayYmd: string) {
   const prisma = getPrismaClient();
   if (!prisma || !/^\d{4}-\d{2}-\d{2}$/.test(dayYmd)) {
@@ -28,8 +31,11 @@ export async function ensureTemimaDayCutoff(dayYmd: string) {
   if (existing) return { ok: true as const, dayYmd, minutes: existing.minutes };
   const clock = cairoClock(new Date().toISOString());
   if (!clock) return { ok: false as const, message: "الساعة غير صحيحة." };
-  await prisma.csTemimaSheetCutoff.create({ data: { dayYmd, minutes: clock.minutes } });
-  return { ok: true as const, dayYmd, minutes: clock.minutes };
+  // Past days must close at end-of-day. Using "now" minutes (e.g. freezing Thu on Sat)
+  // would snapshot only orders before Saturday's clock on Thursday and shrink the sheet.
+  const minutes = dayYmd < clock.ymd ? TEMIMA_END_OF_DAY_MINUTES : clock.minutes;
+  await prisma.csTemimaSheetCutoff.create({ data: { dayYmd, minutes } });
+  return { ok: true as const, dayYmd, minutes };
 }
 
 export async function lockTemimaCutoff(chosenMinutes?: number, allowFrozen = false) {
