@@ -4,9 +4,13 @@ import { ensureCsTables, isShippingRole } from "@/lib/cs/agents";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
-import { TemimaSettlementClient } from "./temima-settlement-client";
+import { SettlementTabs } from "./settlement-tabs";
 
-export default async function CsSettlementPage() {
+export default async function CsSettlementPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
   await ensureCsTables();
@@ -14,8 +18,11 @@ export default async function CsSettlementPage() {
   const shipping = viewer.isAdmin || viewer.isShipping || isShippingRole(viewer.role) || isShippingRole(session.user.csRole);
   const follow = viewer.isSupervisor || viewer.isAdmin || Boolean(session.user.csIsSupervisor);
   if (!shipping && !follow) redirect("/cs");
+  const params = (await searchParams) || {};
+  const tab = params.tab === "returns" ? "returns" : "settlement";
   return (
-    <TemimaSettlementClient
+    <SettlementTabs
+      tab={tab}
       canEdit={shipping}
       canEditDeposit={viewer.isAdmin || Boolean(session.user.csIsAdmin)}
     />

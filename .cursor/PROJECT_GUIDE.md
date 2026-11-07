@@ -102,6 +102,7 @@
 | دخول CS | `/cs/login` |
 | قائمة الانتظار | `/cs` |
 | شيت سيد تميمة (متأخرة فور القفل: مؤجل / لم يسجل) | `/cs/temima` |
+| تصفية سيد تميمة + تقرير المرتجعات | `/cs/settlement` · `/cs/settlement?tab=returns` |
 | التحويلات (مخزون + حد طلب) | `/cs/transfers` |
 | الصيانة / مرتجعات اليوم | `/cs/maintenance` |
 | مراكز الصيانة (مدير المراكز / أدمن) | `/cs/centers` |
@@ -462,6 +463,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تصفية بدون مؤجل + تقرير المرتجعات | شيل عمود/اختيار مؤجل من التصفية (postpone = لم يسجل)؛ تقرير قراءة فقط: الغاء تميمة + لم يسجل خميس/سبت سابق + لم يسجل أحد–أربعاء حالي + استرجاع/استبدال؛ عمود لكل حالة | `temima-settlement.ts`, `temima-returns-report.ts`, `temima-settlement-client.tsx`, `temima-returns-client.tsx`, `settlement-tabs.tsx` |
 | إصلاح تجميد يوم تميمة ماضي | `ensureTemimaDayCutoff` ليوم ماضي يستخدم 23:59 مش ساعة الآن؛ استرجاع شيت 2026-11-05 من 5 إلى 37 | `temima-cutoff.ts`, `recover-temima-nov5.cjs` |
 | مقارنة نزل المخزن واستلام بوسطة | جلب شحنات بوسطة بـ `pickedUpTime`؛ تقرير مطابق / عندنا فقط / بوسطة فقط على `/cs/bosta` | `bosta-client.ts`, `bosta-reconcile.ts`, `bosta-board-client.tsx` |
 | إعادة طباعة شيت مخزن بوسطة | أدمن/مشرفة يعيدوا طباعة التقرير المطبوع؛ دفعات `reprint`؛ شريط أعداد نزل/طُبع/لم يطبع لليوم | `warehouse-sheet-print.ts`, `cs-queue-client.tsx`, `page.tsx` |

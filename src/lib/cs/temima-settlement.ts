@@ -541,7 +541,9 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
     const override = overrides.get(id) ?? null;
     const split = order ? settlementSplit(order, override, true, true) : { net: Number(saved?.cashAmount || 0), deposit: 0 };
-    const disposition = storedDisposition(saved?.disposition);
+    const rawDisposition = storedDisposition(saved?.disposition);
+    // UI: postpone = لم يسجل (no separate مؤجل column/option).
+    const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
     const sheetDay =
       days.get(id) ||
       (order ? fallbackSheetDay(order, cutoffs, edits, range.start, range.end) : "") ||
@@ -573,7 +575,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       const order = orderById.get(carried.confirmationId);
       const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
       const override = overrides.get(carried.confirmationId) ?? null;
-      const disposition = (saved?.disposition as TemimaDisposition) || "postpone";
+      const rawDisposition = storedDisposition(saved?.disposition) || "postpone";
+      const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
       rows.push({
         confirmationId: carried.confirmationId,
         wooOrderNumber: carried.wooOrderNumber,
