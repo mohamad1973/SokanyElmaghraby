@@ -493,7 +493,7 @@ function ReviewCards({
     setDefects((current) => (current.includes(defect) ? current.filter((item) => item !== defect) : [...current, defect]));
   }
 
-  async function finish() {
+  async function finish(destinationOverride?: "shelf" | "maintenance") {
     if (!condition) return;
     if (usage !== "new" && usage !== "used") {
       setError("حدّد المنتج جديد أو مستخدم.");
@@ -506,7 +506,13 @@ function ReviewCards({
       const response = await fetch("/api/cs/maintenance/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackingNumber: row.trackingNumber, condition, defects, usage }),
+        body: JSON.stringify({
+          trackingNumber: row.trackingNumber,
+          condition,
+          defects,
+          usage,
+          ...(destinationOverride ? { destination: destinationOverride } : {}),
+        }),
       });
       const body = (await response.json()) as { message?: string; review?: Review; detail?: string };
       if (!response.ok || !body.review) {
@@ -524,6 +530,7 @@ function ReviewCards({
     }
   }
 
+  const soundChoice = condition === "sound" && !refused;
   const handText =
     condition === "sound" && refused
       ? "الرجوع إلى مخزن أونلاين"
@@ -632,20 +639,46 @@ function ReviewCards({
         ) : null}
         {phase === "hand" ? (
           <div className="space-y-3">
-            <p className="rounded-2xl bg-[#F5F5F0] px-4 py-8 text-center text-xl font-extrabold text-[#14213D]">{handText}</p>
-            {condition === "broken" && !deskReturn ? (
-              <button type="button" onClick={() => setPhase("claim")} className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
-                التالي
-              </button>
+            {soundChoice ? (
+              <>
+                <p className="text-center text-sm font-extrabold text-[#14213D]/70">اختَر الوجهة بعد المعاينة</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void finish("shelf")}
+                    className="rounded-2xl bg-[#14213D] px-4 py-8 text-xl font-extrabold text-white disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "يعود إلى الرف"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void finish("maintenance")}
+                    className="rounded-2xl bg-[#E6B325] px-4 py-8 text-xl font-extrabold text-black disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "إلى الصيانة"}
+                  </button>
+                </div>
+              </>
             ) : (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void finish()}
-                className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
-              >
-                {saving ? "جارٍ الحفظ…" : "تم"}
-              </button>
+              <>
+                <p className="rounded-2xl bg-[#F5F5F0] px-4 py-8 text-center text-xl font-extrabold text-[#14213D]">{handText}</p>
+                {condition === "broken" && !deskReturn ? (
+                  <button type="button" onClick={() => setPhase("claim")} className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white">
+                    التالي
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void finish()}
+                    className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "تم"}
+                  </button>
+                )}
+              </>
             )}
           </div>
         ) : null}

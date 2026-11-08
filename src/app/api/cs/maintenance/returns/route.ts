@@ -137,6 +137,7 @@ export async function POST(request: Request) {
     condition?: string;
     defects?: unknown;
     usage?: string;
+    destination?: string;
     note?: string;
     grade?: string;
     techNote?: string;
@@ -205,11 +206,15 @@ export async function POST(request: Request) {
     const defects = Array.isArray(body?.defects)
       ? body.defects.filter((item): item is string => typeof item === "string")
       : [];
+    const destinationRaw = String(body?.destination || "").trim();
+    const destinationOverride =
+      destinationRaw === "shelf" || destinationRaw === "maintenance" ? destinationRaw : null;
     const result = await saveBostaReturnReview({
       trackingNumber: String(body?.trackingNumber || ""),
       condition: String(body?.condition || ""),
       defects,
       usage: String(body?.usage || ""),
+      destinationOverride,
     });
     if (!result.ok) {
       return NextResponse.json(

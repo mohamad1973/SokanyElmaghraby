@@ -256,6 +256,7 @@ export async function saveBostaReturnReview(input: {
   condition: string;
   defects: string[];
   usage: string;
+  destinationOverride?: "shelf" | "maintenance" | null;
 }) {
   const prisma = getPrismaClient();
   const trackingNumber = input.trackingNumber.trim();
@@ -279,8 +280,16 @@ export async function saveBostaReturnReview(input: {
         : "";
     if (!kind) return { ok: false as const, message: "الأوردر مش في مرتجعات الصيانة المحفوظة." };
     const defects = [...new Set(parseDefects(input.defects.join(",")))];
-    const decided = decidedReview(kind, condition, defects);
-    if (!decided) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
+    const base = decidedReview(kind, condition, defects);
+    if (!base) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
+    const override =
+      input.destinationOverride === "shelf" || input.destinationOverride === "maintenance"
+        ? input.destinationOverride
+        : null;
+    const decided =
+      override && condition === "sound" && kind !== "refused"
+        ? { ...base, destination: override }
+        : base;
     const source = String(stored[0]?.source || "").trim();
     const deskReturn = source === "temima" || source === "eid" || source === "momen";
     const bostaClaim = deskReturn ? false : decided.bostaClaim;
