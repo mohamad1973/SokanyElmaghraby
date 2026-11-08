@@ -57,6 +57,10 @@ export async function ensureMaintenanceLifecycleColumns() {
     "ALTER TABLE `CsBostaReturnReview` ADD COLUMN `receivedFromMaintenanceAt` DATETIME(3) NULL",
   );
   await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `shelfAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `inspectedAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `gradedAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `outletAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `scrapAt` DATETIME(3) NULL");
 }
 
 export async function markReturnOpened(trackingNumber: string) {
@@ -64,6 +68,10 @@ export async function markReturnOpened(trackingNumber: string) {
   const tracking = trackingNumber.trim();
   if (!prisma || !tracking) return { ok: false as const, message: "البوليصة ناقصة.", openedAt: null as string | null };
   await ensureMaintenanceLifecycleColumns();
+  const before = await prisma.$queryRawUnsafe<Array<{ openedAt: Date | string | null }>>(
+    `SELECT openedAt FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
+    tracking,
+  );
   await prisma.$executeRawUnsafe(
     `UPDATE \`CsBostaReturnCapture\`
      SET \`openedAt\` = COALESCE(\`openedAt\`, CURRENT_TIMESTAMP(3))
@@ -74,6 +82,14 @@ export async function markReturnOpened(trackingNumber: string) {
     `SELECT openedAt FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
     tracking,
   );
+  if (!before[0]?.openedAt && rows[0]?.openedAt) {
+    try {
+      const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+      await recordReturnTrackEvent({ trackingNumber: tracking, stage: "inspect_opened" });
+    } catch (error) {
+      console.warn("[return-track] open event", error instanceof Error ? error.message : error);
+    }
+  }
   return { ok: true as const, openedAt: isoOrNull(rows[0]?.openedAt), message: "" };
 }
 
@@ -153,12 +169,29 @@ export async function saveTechGrade(input: {
   const techNote = String(input.techNote || "").trim().slice(0, 2000);
   await prisma.$executeRawUnsafe(
     `UPDATE \`CsBostaReturnReview\`
-     SET \`grade\` = ?, \`techNote\` = ?, \`updatedAt\` = CURRENT_TIMESTAMP(3)
+     SET \`grade\` = ?, \`techNote\` = ?,
+         \`gradedAt\` = COALESCE(\`gradedAt\`, CURRENT_TIMESTAMP(3)),
+         \`updatedAt\` = CURRENT_TIMESTAMP(3)
      WHERE \`trackingNumber\` = ?`,
     grade,
     techNote || null,
     tracking,
   );
+  try {
+    const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+    await recordReturnTrackEvent({
+      trackingNumber: tracking,
+      stage: "graded",
+      meta: { grade, techNote: techNote || null },
+    });
+    await recordReturnTrackEvent({
+      trackingNumber: tracking,
+      stage: "returned_from_maintenance",
+      meta: { grade },
+    });
+  } catch (error) {
+    console.warn("[return-track] grade event", error instanceof Error ? error.message : error);
+  }
   return { ok: true as const, grade, techNote };
 }
 
@@ -169,9 +202,19 @@ export async function receiveFromMaintenance(trackingNumbers: string[]) {
   if (!trackings.length) return { ok: false as const, message: "اختَر بوالص للاستلام.", count: 0 };
   await ensureMaintenanceLifecycleColumns();
   const marks = trackings.map(() => "?").join(", ");
+  const pending = await prisma.$queryRawUnsafe<Array<{ trackingNumber: string; grade: string | null }>>(
+    `SELECT trackingNumber, grade FROM CsBostaReturnReview
+     WHERE trackingNumber IN (${marks})
+       AND destination = 'maintenance'
+       AND grade IS NOT NULL AND grade <> ''
+       AND receivedFromMaintenanceAt IS NULL`,
+    ...trackings,
+  );
   const changed = await prisma.$executeRawUnsafe(
     `UPDATE \`CsBostaReturnReview\`
      SET \`receivedFromMaintenanceAt\` = COALESCE(\`receivedFromMaintenanceAt\`, CURRENT_TIMESTAMP(3)),
+         \`outletAt\` = CASE WHEN \`grade\` = 'second' THEN COALESCE(\`outletAt\`, CURRENT_TIMESTAMP(3)) ELSE \`outletAt\` END,
+         \`scrapAt\` = CASE WHEN \`grade\` = 'scrap' THEN COALESCE(\`scrapAt\`, CURRENT_TIMESTAMP(3)) ELSE \`scrapAt\` END,
          \`updatedAt\` = CURRENT_TIMESTAMP(3)
      WHERE \`trackingNumber\` IN (${marks})
        AND \`destination\` = 'maintenance'
@@ -180,6 +223,23 @@ export async function receiveFromMaintenance(trackingNumbers: string[]) {
        AND \`receivedFromMaintenanceAt\` IS NULL`,
     ...trackings,
   );
+  try {
+    const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+    for (const row of pending) {
+      await recordReturnTrackEvent({
+        trackingNumber: row.trackingNumber,
+        stage: "received_from_maintenance",
+        meta: { grade: row.grade },
+      });
+      if (row.grade === "second") {
+        await recordReturnTrackEvent({ trackingNumber: row.trackingNumber, stage: "to_outlet" });
+      } else if (row.grade === "scrap") {
+        await recordReturnTrackEvent({ trackingNumber: row.trackingNumber, stage: "to_scrap" });
+      }
+    }
+  } catch (error) {
+    console.warn("[return-track] receive events", error instanceof Error ? error.message : error);
+  }
   return { ok: true as const, count: Number(changed) || 0, message: "" };
 }
 
@@ -203,6 +263,12 @@ export async function markShelf(trackingNumber: string) {
      WHERE \`trackingNumber\` = ?`,
     tracking,
   );
+  try {
+    const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+    await recordReturnTrackEvent({ trackingNumber: tracking, stage: "on_shelf" });
+  } catch (error) {
+    console.warn("[return-track] shelf event", error instanceof Error ? error.message : error);
+  }
   return { ok: true as const };
 }
 

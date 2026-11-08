@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ReturnTrackDrawer } from "@/components/cs/return-track-line";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 export type Grade = "first" | "second" | "scrap";
@@ -145,10 +146,12 @@ export function TechPanel({
   rows: PanelRow[];
   onChanged: () => void;
 }) {
+  // Only waiting for grade — graded items move to «عائد من الصيانة».
   const pending = rows.filter(
     (row) =>
       row.review?.destination === "maintenance" &&
-      !row.review.receivedFromMaintenanceAt,
+      !row.review.receivedFromMaintenanceAt &&
+      !row.review.grade,
   );
   const [busy, setBusy] = useState<string>("");
   const [draft, setDraft] = useState<Record<string, { grade: Grade | ""; techNote: string }>>({});
@@ -193,6 +196,7 @@ export function TechPanel({
           <thead className="bg-[#F5F5F0] text-xs font-extrabold">
             <tr>
               <th className="px-2 py-2">البوليصة</th>
+              <th className="px-2 py-2">المسار</th>
               <th className="px-2 py-2">الأوردر</th>
               <th className="px-2 py-2">المنتج</th>
               <th className="px-2 py-2">التسليم</th>
@@ -207,7 +211,12 @@ export function TechPanel({
                 const state = stateFor(row);
                 return (
                   <tr key={row.trackingNumber} className="border-t border-black/5">
-                    <td className="px-2 py-2 font-bold">{row.trackingNumber}</td>
+                    <td className="px-2 py-2 font-bold" dir="ltr">
+                      {row.trackingNumber}
+                    </td>
+                    <td className="px-2 py-2">
+                      <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
+                    </td>
                     <td className="px-2 py-2">{row.wooOrderNumber || "—"}</td>
                     <td className="px-2 py-2">{row.product || "—"}</td>
                     <td className="px-2 py-2 text-xs">
@@ -264,7 +273,7 @@ export function TechPanel({
               })
             ) : (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center font-bold text-[#14213D]/50">
+                <td colSpan={8} className="px-3 py-6 text-center font-bold text-[#14213D]/50">
                   مفيش قطع مسلّمة للصيانة في المدى.
                 </td>
               </tr>
@@ -296,7 +305,20 @@ export function ReceiveAndShelfPanel({
       row.review.receivedFromMaintenanceAt &&
       !row.review.shelfAt,
   );
+  const recentlyReceived = rows
+    .filter(
+      (row) =>
+        row.review?.destination === "maintenance" &&
+        row.review.grade &&
+        row.review.receivedFromMaintenanceAt,
+    )
+    .sort((a, b) =>
+      String(b.review?.receivedFromMaintenanceAt || "").localeCompare(
+        String(a.review?.receivedFromMaintenanceAt || ""),
+      ),
+    );
   const [busy, setBusy] = useState(false);
+  const [busyTrack, setBusyTrack] = useState("");
 
   async function receiveAll() {
     if (!ready.length) return;
@@ -316,6 +338,20 @@ export function ReceiveAndShelfPanel({
     }
   }
 
+  async function receiveOne(trackingNumber: string) {
+    setBusyTrack(trackingNumber);
+    try {
+      await fetch("/api/cs/maintenance/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "receive", trackingNumbers: [trackingNumber] }),
+      });
+      onChanged();
+    } finally {
+      setBusyTrack("");
+    }
+  }
+
   async function shelfOne(trackingNumber: string) {
     setBusy(true);
     try {
@@ -331,25 +367,83 @@ export function ReceiveAndShelfPanel({
   }
 
   return (
-    <div className="space-y-4 border-t border-black/10 p-4" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-extrabold text-[#14213D]">
-          جاهز للاستلام من الصيانة: {ready.length}
-        </p>
-        <button
-          type="button"
-          disabled={!ready.length || busy}
-          onClick={() => void receiveAll()}
-          className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-40"
-        >
-          استلام الكل من الصيانة
-        </button>
+    <div className="space-y-6 border-t border-black/10 p-4" dir="rtl">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-base font-extrabold text-[#14213D]">عائد من الصيانة — بانتظار الاستلام</p>
+            <p className="text-xs font-bold text-[#14213D]/60">
+              مصنَّف فرز أول / أوتليت / هالك ولسه ما استلمتوش من الفني: {ready.length}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!ready.length || busy}
+            onClick={() => void receiveAll()}
+            className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-40"
+          >
+            استلام الكل
+          </button>
+        </div>
+        {ready.length ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-right text-sm">
+              <thead className="bg-[#F5F5F0] text-xs font-extrabold">
+                <tr>
+                  <th className="px-2 py-2">البوليصة</th>
+                  <th className="px-2 py-2">المسار</th>
+                  <th className="px-2 py-2">الأوردر</th>
+                  <th className="px-2 py-2">المنتج</th>
+                  <th className="px-2 py-2">التصنيف</th>
+                  <th className="px-2 py-2">ملاحظة فني</th>
+                  <th className="px-2 py-2">استلام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ready.map((row) => (
+                  <tr key={row.trackingNumber} className="border-t border-black/5">
+                    <td className="px-2 py-2 font-bold" dir="ltr">
+                      {row.trackingNumber}
+                    </td>
+                    <td className="px-2 py-2">
+                      <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
+                    </td>
+                    <td className="px-2 py-2">{row.wooOrderNumber || "—"}</td>
+                    <td className="px-2 py-2">{row.product || "—"}</td>
+                    <td className="px-2 py-2 font-extrabold">
+                      {row.review?.grade ? GRADE_LABEL[row.review.grade] : "—"}
+                    </td>
+                    <td className="px-2 py-2 text-xs">{row.review?.techNote || "—"}</td>
+                    <td className="px-2 py-2">
+                      <button
+                        type="button"
+                        disabled={busy || busyTrack === row.trackingNumber}
+                        onClick={() => void receiveOne(row.trackingNumber)}
+                        className="rounded-full bg-[#E6B325] px-3 py-1 text-xs font-extrabold text-black disabled:opacity-40"
+                      >
+                        {busyTrack === row.trackingNumber ? "…" : "استلام"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="rounded-xl bg-[#F5F5F0] px-3 py-4 text-center text-sm font-bold text-[#14213D]/50">
+            مفيش مرتجعات مصنَّفة بانتظار الاستلام.
+          </p>
+        )}
       </div>
-      {firstReturned.length ? (
-        <div className="space-y-2">
-          <p className="text-sm font-extrabold">فرز أول — ضع على الرف</p>
-          {firstReturned.map((row) => (
-            <div key={row.trackingNumber} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#F5F5F0] px-3 py-2">
+
+      <div className="space-y-2">
+        <p className="text-sm font-extrabold text-[#14213D]">فرز أول — ضع على الرف ({firstReturned.length})</p>
+        {firstReturned.length ? (
+          firstReturned.map((row) => (
+            <div
+              key={row.trackingNumber}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#F5F5F0] px-3 py-2"
+            >
               <span className="text-sm font-bold">
                 {row.trackingNumber} · {row.product || row.wooOrderNumber}
               </span>
@@ -362,9 +456,64 @@ export function ReceiveAndShelfPanel({
                 على الرف
               </button>
             </div>
-          ))}
+          ))
+        ) : (
+          <p className="text-xs font-bold text-[#14213D]/50">مفيش فرز أول جاهز للرف.</p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-extrabold text-[#14213D]">تم الاستلام من الصيانة ({recentlyReceived.length})</p>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-right text-sm">
+            <thead className="bg-[#F5F5F0] text-xs font-extrabold">
+              <tr>
+                <th className="px-2 py-2">البوليصة</th>
+                <th className="px-2 py-2">التصنيف</th>
+                <th className="px-2 py-2">وقت الاستلام</th>
+                <th className="px-2 py-2">الوجهة التالية</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentlyReceived.length ? (
+                recentlyReceived.map((row) => {
+                  const grade = row.review?.grade;
+                  const next =
+                    grade === "first"
+                      ? row.review?.shelfAt
+                        ? "على الرف"
+                        : "بانتظار الرف"
+                      : grade === "second"
+                        ? "أوتليت / حسابات"
+                        : grade === "scrap"
+                          ? "هالك / حسابات"
+                          : "—";
+                  return (
+                    <tr key={`recv-${row.trackingNumber}`} className="border-t border-black/5">
+                      <td className="px-2 py-2 font-bold" dir="ltr">
+                        {row.trackingNumber}
+                      </td>
+                      <td className="px-2 py-2">{grade ? GRADE_LABEL[grade] : "—"}</td>
+                      <td className="px-2 py-2 text-xs">
+                        {row.review?.receivedFromMaintenanceAt
+                          ? formatCairoOrderDateTime(row.review.receivedFromMaintenanceAt).absolute
+                          : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-xs font-bold">{next}</td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-3 py-4 text-center font-bold text-[#14213D]/50">
+                    لسه مفيش استلامات في المدى.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }

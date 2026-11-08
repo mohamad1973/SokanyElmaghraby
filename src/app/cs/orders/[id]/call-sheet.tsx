@@ -12,6 +12,7 @@ import {
 } from "@/lib/cs/checklist";
 import { CsFulfillmentPanel } from "../fulfillment-panel";
 import { effectivePaymentState, formatCairoOrderDateTime, paymentStateBadge } from "@/lib/cs/order-window";
+import { ReturnTrackLine } from "@/components/cs/return-track-line";
 import {
   BOSTA_TRACK_STAGES,
   bostaTrackMarker,
@@ -1412,6 +1413,10 @@ export function CsCallSheet({
           {maintenanceTechNote}
         </div>
       ) : null}
+      <ReturnTrackLine
+        confirmationId={confirmationId}
+        trackingNumber={trackingNumber || snapshot?.trackingNumber || null}
+      />
       {sheetDayPrompt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-4 text-[#14213D] shadow-lg">

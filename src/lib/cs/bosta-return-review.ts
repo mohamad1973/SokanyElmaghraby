@@ -102,6 +102,10 @@ async function createBostaReturnReviewTable() {
     "ALTER TABLE `CsBostaReturnReview` ADD COLUMN `receivedFromMaintenanceAt` DATETIME(3) NULL",
   );
   await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `shelfAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `inspectedAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `gradedAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `outletAt` DATETIME(3) NULL");
+  await addColumn("ALTER TABLE `CsBostaReturnReview` ADD COLUMN `scrapAt` DATETIME(3) NULL");
 }
 
 function isoOrNull(value: unknown): string | null {
@@ -300,23 +304,30 @@ export async function saveBostaReturnReview(input: {
         deliveredToMaintenanceAt: Date | string | null;
         receivedFromMaintenanceAt: Date | string | null;
         shelfAt: Date | string | null;
+        inspectedAt: Date | string | null;
       }>
     >(
-      `SELECT grade, techNote, deliveredToMaintenanceAt, receivedFromMaintenanceAt, shelfAt
+      `SELECT grade, techNote, deliveredToMaintenanceAt, receivedFromMaintenanceAt, shelfAt, inspectedAt
        FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
       trackingNumber,
     );
     const prevRow = prev[0];
+    const wasNewDelivery =
+      decided.destination === "maintenance" && !prevRow?.deliveredToMaintenanceAt;
     const deliveredAt =
       decided.destination === "maintenance"
         ? sqlDateTime(prevRow?.deliveredToMaintenanceAt || new Date())
         : sqlDateTime(prevRow?.deliveredToMaintenanceAt);
+    const shelfAt =
+      decided.destination === "shelf"
+        ? sqlDateTime(prevRow?.shelfAt || new Date())
+        : sqlDateTime(prevRow?.shelfAt);
     try {
       await prisma.$executeRawUnsafe(
         `INSERT INTO \`CsBostaReturnReview\`
           (\`trackingNumber\`, \`condition\`, \`defects\`, \`destination\`, \`bostaClaim\`, \`usage\`,
-           \`deliveredToMaintenanceAt\`, \`updatedAt\`)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))`,
+           \`deliveredToMaintenanceAt\`, \`shelfAt\`, \`inspectedAt\`, \`updatedAt\`)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
         trackingNumber,
         decided.condition,
         decided.defects.join(","),
@@ -324,6 +335,7 @@ export async function saveBostaReturnReview(input: {
         bostaClaim ? 1 : 0,
         usage,
         deliveredAt,
+        shelfAt,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -331,7 +343,9 @@ export async function saveBostaReturnReview(input: {
       await prisma.$executeRawUnsafe(
         `UPDATE \`CsBostaReturnReview\`
          SET \`condition\` = ?, \`defects\` = ?, \`destination\` = ?, \`bostaClaim\` = ?, \`usage\` = ?,
-             \`deliveredToMaintenanceAt\` = ?, \`updatedAt\` = CURRENT_TIMESTAMP(3)
+             \`deliveredToMaintenanceAt\` = ?, \`shelfAt\` = ?,
+             \`inspectedAt\` = COALESCE(\`inspectedAt\`, CURRENT_TIMESTAMP(3)),
+             \`updatedAt\` = CURRENT_TIMESTAMP(3)
          WHERE \`trackingNumber\` = ?`,
         decided.condition,
         decided.defects.join(","),
@@ -339,8 +353,50 @@ export async function saveBostaReturnReview(input: {
         bostaClaim ? 1 : 0,
         usage,
         deliveredAt,
+        shelfAt,
         trackingNumber,
       );
+    }
+    try {
+      const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+      const capture = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | null }>>(
+        `SELECT confirmationId FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
+        trackingNumber,
+      );
+      const confirmationId = capture[0]?.confirmationId ?? null;
+      await recordReturnTrackEvent({
+        trackingNumber,
+        confirmationId,
+        stage: "inspected",
+        meta: {
+          condition: decided.condition,
+          usage,
+          defects: decided.defects,
+          destination: decided.destination,
+          bostaClaim,
+        },
+      });
+      if (decided.destination === "online_warehouse") {
+        await recordReturnTrackEvent({
+          trackingNumber,
+          confirmationId,
+          stage: "online_warehouse",
+        });
+      } else if (decided.destination === "shelf") {
+        await recordReturnTrackEvent({
+          trackingNumber,
+          confirmationId,
+          stage: "shelf_direct",
+        });
+      } else if (decided.destination === "maintenance" && wasNewDelivery) {
+        await recordReturnTrackEvent({
+          trackingNumber,
+          confirmationId,
+          stage: "delivered_to_maintenance",
+        });
+      }
+    } catch (error) {
+      console.warn("[return-track] review events", error instanceof Error ? error.message : error);
     }
     const packed = packReview({
       condition: decided.condition,
@@ -352,7 +408,7 @@ export async function saveBostaReturnReview(input: {
       techNote: prevRow?.techNote,
       deliveredToMaintenanceAt: deliveredAt,
       receivedFromMaintenanceAt: prevRow?.receivedFromMaintenanceAt,
-      shelfAt: prevRow?.shelfAt,
+      shelfAt,
     });
     return { ok: true as const, review: packed! };
   } catch (error) {

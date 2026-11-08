@@ -575,6 +575,22 @@ export async function requestScRefund(
     input.ticketId,
   );
   await addEvent(input.ticketId, input.kind === "exchange" ? "exchange_request" : "return_request", input.reason.trim() || "طلب العميل", agentId);
+  try {
+    const confId = Number(loaded.ticket.confirmationId || 0);
+    const tracking =
+      String(loaded.ticket.waybillTracking || "").trim() ||
+      (confId > 0 ? `CS-${confId}` : `SC-T${input.ticketId}`);
+    const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+    await recordReturnTrackEvent({
+      trackingNumber: tracking,
+      confirmationId: confId > 0 ? confId : null,
+      stage: "ticket_created",
+      actorAgentId: agentId,
+      meta: { ticketId: input.ticketId, kind: input.kind },
+    });
+  } catch (error) {
+    console.warn("[return-track] ticket_created", error instanceof Error ? error.message : error);
+  }
   return { ok: true as const };
 }
 
@@ -603,6 +619,24 @@ export async function decideScRefund(
     input.ticketId,
   );
   await addEvent(input.ticketId, "hq_decision", approved ? "موافقة مدير المراكز" : "رفض مدير المراكز", agentId);
+  if (approved) {
+    try {
+      const confId = Number(loaded.ticket.confirmationId || 0);
+      const tracking =
+        String(loaded.ticket.waybillTracking || "").trim() ||
+        (confId > 0 ? `CS-${confId}` : `SC-T${input.ticketId}`);
+      const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+      await recordReturnTrackEvent({
+        trackingNumber: tracking,
+        confirmationId: confId > 0 ? confId : null,
+        stage: "ticket_approved",
+        actorAgentId: agentId,
+        meta: { ticketId: input.ticketId, decision: input.decision },
+      });
+    } catch (error) {
+      console.warn("[return-track] ticket_approved", error instanceof Error ? error.message : error);
+    }
+  }
   return { ok: true as const };
 }
 

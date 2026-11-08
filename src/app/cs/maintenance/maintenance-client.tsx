@@ -975,7 +975,7 @@ export function MaintenanceClient({
   const hubTabs: Array<{ id: HubTab; label: string; show: boolean }> = [
     { id: "inspect", label: "فحص المرتجع", show: canInspect },
     { id: "tech", label: "فني الصيانة", show: canTech },
-    { id: "receive", label: "استلام من الصيانة", show: canInspect },
+    { id: "receive", label: "عائد من الصيانة", show: canInspect },
     { id: "accounting", label: "حسابات الصيانة", show: canAccounting },
     { id: "variance", label: "فروقات", show: canInspect || canTech },
   ];

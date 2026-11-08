@@ -620,7 +620,25 @@ model CsBostaReturnReview {
   techNote                    String?   @db.Text
   receivedFromMaintenanceAt   DateTime?
   shelfAt                     DateTime?
+  inspectedAt                 DateTime?
+  gradedAt                    DateTime?
+  outletAt                    DateTime?
+  scrapAt                     DateTime?
   updatedAt                   DateTime  @updatedAt
+}
+
+model CsReturnTrackEvent {
+  id              Int      @id @default(autoincrement())
+  trackingNumber  String   @db.VarChar(64)
+  confirmationId  Int?
+  stage           String   @db.VarChar(48)
+  at              DateTime @default(now())
+  actorAgentId    Int?
+  meta            String?  @db.Text
+
+  @@index([trackingNumber])
+  @@index([confirmationId])
+  @@index([stage, at])
 }
 
 model CsBostaReturnProduct {

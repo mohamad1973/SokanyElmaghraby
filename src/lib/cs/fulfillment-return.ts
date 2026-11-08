@@ -448,6 +448,26 @@ export async function createFulfillmentFromOrder(input: {
     };
   }
 
+  try {
+    const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+    await recordReturnTrackEvent({
+      trackingNumber,
+      confirmationId: created.id,
+      stage: "return_waybill_created",
+      actorAgentId: input.agentId,
+      meta: { kind: input.kind, desk: input.desk, parentId: parent.id },
+    });
+    await recordReturnTrackEvent({
+      trackingNumber,
+      confirmationId: created.id,
+      stage: "at_carrier",
+      actorAgentId: input.agentId,
+      meta: { desk: input.desk },
+    });
+  } catch (error) {
+    console.warn("[return-track] fulfillment waybill", error instanceof Error ? error.message : error);
+  }
+
   return {
     ok: true as const,
     confirmationId: created.id,

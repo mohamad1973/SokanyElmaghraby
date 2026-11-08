@@ -139,7 +139,20 @@ export async function captureBostaHeadingReturns() {
       local?.wooOrderNumber || orderDigits(row.businessReference),
       local?.id ?? null,
     );
-    if (Number(changed) > 0) saved += 1;
+    if (Number(changed) > 0) {
+      saved += 1;
+      try {
+        const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+        await recordReturnTrackEvent({
+          trackingNumber: row.trackingNumber,
+          confirmationId: local?.id ?? null,
+          stage: "warehouse_captured",
+          meta: { source: "bosta", kind: row.kind },
+        });
+      } catch (error) {
+        console.warn("[return-track] capture event", error instanceof Error ? error.message : error);
+      }
+    }
   }
   return { ok: true as const, message: "", found: fresh.length, saved };
 }
@@ -222,7 +235,7 @@ export async function captureDeskReturnFromConfirmation(confirmationId: number) 
     const tracking = deskTrackingOf(Number(row.id), row.trackingNumber);
     const reason =
       kind === "exchange" ? "استبدال تم بنجاح" : kind === "return" ? "استرجاع تم بنجاح" : "الغاء / رفض استلام";
-    await prisma.$executeRawUnsafe(
+    const changed = await prisma.$executeRawUnsafe(
       `INSERT INTO \`CsBostaReturnCapture\`
         (\`trackingNumber\`, \`seenDay\`, \`kind\`, \`reasonText\`, \`customerName\`, \`phone\`, \`businessReference\`, \`wooOrderNumber\`, \`confirmationId\`, \`source\`)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -238,6 +251,19 @@ export async function captureDeskReturnFromConfirmation(confirmationId: number) 
       Number(row.id),
       deskSourceOf(row.shippingCompany),
     );
+    if (Number(changed) > 0) {
+      try {
+        const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+        await recordReturnTrackEvent({
+          trackingNumber: tracking,
+          confirmationId: Number(row.id),
+          stage: "warehouse_captured",
+          meta: { source: deskSourceOf(row.shippingCompany), kind },
+        });
+      } catch (error) {
+        console.warn("[return-track] desk capture event", error instanceof Error ? error.message : error);
+      }
+    }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error("[cs] captureDeskReturnFromConfirmation", confirmationId, detail);
