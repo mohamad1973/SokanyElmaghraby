@@ -136,6 +136,16 @@ function isUnmarked(disposition: string | null | undefined) {
   return !isMarkedFinal(disposition);
 }
 
+function isTemimaSheetCompany(shippingCompany: string | null | undefined) {
+  return String(shippingCompany || "").trim() === TEMIMA_COMPANY;
+}
+
+/** Desk return/exchange parents allowed on Temima returns report (not Aramex/Bosta-only). */
+function isTemimaFamilyCompany(shippingCompany: string | null | undefined) {
+  const company = String(shippingCompany || "").trim();
+  return company === "sayed_temima" || company === "eid" || company === "momen";
+}
+
 async function dispositionsFor(ids: number[]) {
   const map = new Map<number, string>();
   const prisma = getPrismaClient();
@@ -187,6 +197,7 @@ async function loadOrders(ids: number[]) {
       parentConfirmationId: number | null;
       fulfillmentKind: string | null;
       settlementDepositOverride: unknown;
+      shippingCompany: string | null;
     }
   >();
   if (!prisma || !ids.length) return empty;
@@ -206,6 +217,7 @@ async function loadOrders(ids: number[]) {
       parentConfirmationId: true,
       fulfillmentKind: true,
       settlementDepositOverride: true,
+      shippingCompany: true,
     },
   });
   return new Map(rows.map((row) => [row.id, row]));
@@ -289,21 +301,21 @@ export async function getTemimaReturnsReport(weekStartInput?: string) {
     const disposition = dispositions.get(id);
     if (disposition !== "return") continue;
     const order = orders.get(id);
-    if (!order) continue;
+    if (!order || !isTemimaSheetCompany(order.shippingCompany)) continue;
     pushRow(rows, seen, order, day, "temima_cancel");
   }
 
   for (const [id, day] of unmarkedPrev) {
     if (!isUnmarked(dispositions.get(id))) continue;
     const order = orders.get(id);
-    if (!order) continue;
+    if (!order || !isTemimaSheetCompany(order.shippingCompany)) continue;
     pushRow(rows, seen, order, day, "unmarked_prev_thu_sat");
   }
 
   for (const [id, day] of unmarkedCurr) {
     if (!isUnmarked(dispositions.get(id))) continue;
     const order = orders.get(id);
-    if (!order) continue;
+    if (!order || !isTemimaSheetCompany(order.shippingCompany)) continue;
     pushRow(rows, seen, order, day, "unmarked_curr_sun_wed");
   }
 
@@ -328,6 +340,7 @@ export async function getTemimaReturnsReport(weekStartInput?: string) {
         parentConfirmationId: true,
         fulfillmentKind: true,
         settlementDepositOverride: true,
+        shippingCompany: true,
         createdAt: true,
       },
       take: 2000,
@@ -342,10 +355,10 @@ export async function getTemimaReturnsReport(weekStartInput?: string) {
     const parents = parentIds.length
       ? await prisma.csOrderConfirmation.findMany({
           where: { id: { in: parentIds } },
-          select: { id: true, wooOrderNumber: true },
+          select: { id: true, wooOrderNumber: true, shippingCompany: true },
         })
       : [];
-    const parentNumber = new Map(parents.map((row) => [row.id, row.wooOrderNumber]));
+    const parentById = new Map(parents.map((row) => [row.id, row]));
     for (const child of children) {
       const kind =
         child.fulfillmentKind === "exchange" ||
@@ -356,7 +369,10 @@ export async function getTemimaReturnsReport(weekStartInput?: string) {
       const day = cairoYmdFromIso(child.createdAt.toISOString()) || sunday;
       if (day < sunday || day > saturday) continue;
       const parentId = child.parentConfirmationId == null ? 0 : Number(child.parentConfirmationId);
-      pushRow(rows, seen, child, day, "customer_return_exchange", parentNumber.get(parentId) || "");
+      const parent = parentById.get(parentId);
+      const companyForFilter = parent?.shippingCompany || child.shippingCompany;
+      if (!isTemimaFamilyCompany(companyForFilter)) continue;
+      pushRow(rows, seen, child, day, "customer_return_exchange", parent?.wooOrderNumber || "");
     }
   }
 

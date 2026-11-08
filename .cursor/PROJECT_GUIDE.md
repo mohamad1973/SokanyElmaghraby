@@ -463,6 +463,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فلتر أرامكس من تقرير المرتجعات | الغاء/لم يسجل بس لو `shippingCompany=sayed_temima`؛ استرجاع/استبدال بس لو الأب تميمة/عيد/مؤمن — أوردر اتنقل لأرامكس مش يظهر من لقطة التجميد القديمة | `temima-returns-report.ts` |
 | تصفية بدون مؤجل + تقرير المرتجعات | شيل عمود/اختيار مؤجل من التصفية (postpone = لم يسجل)؛ تقرير قراءة فقط: الغاء تميمة + لم يسجل خميس/سبت سابق + لم يسجل أحد–أربعاء حالي + استرجاع/استبدال؛ عمود لكل حالة | `temima-settlement.ts`, `temima-returns-report.ts`, `temima-settlement-client.tsx`, `temima-returns-client.tsx`, `settlement-tabs.tsx` |
 | إصلاح تجميد يوم تميمة ماضي | `ensureTemimaDayCutoff` ليوم ماضي يستخدم 23:59 مش ساعة الآن؛ استرجاع شيت 2026-11-05 من 5 إلى 37 | `temima-cutoff.ts`, `recover-temima-nov5.cjs` |
 | مقارنة نزل المخزن واستلام بوسطة | جلب شحنات بوسطة بـ `pickedUpTime`؛ تقرير مطابق / عندنا فقط / بوسطة فقط على `/cs/bosta` | `bosta-client.ts`, `bosta-reconcile.ts`, `bosta-board-client.tsx` |
