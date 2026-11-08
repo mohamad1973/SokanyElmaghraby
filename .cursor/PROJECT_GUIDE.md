@@ -103,6 +103,7 @@
 | قائمة الانتظار | `/cs` |
 | شيت سيد تميمة (متأخرة فور القفل: مؤجل / لم يسجل) | `/cs/temima` |
 | تصفية سيد تميمة + تقرير المرتجعات | `/cs/settlement` · `/cs/settlement?tab=returns` |
+| تقارير (رقابة عامة + تأكيدات منزل) | `/cs/reports` · `/cs/reports?tab=home-confirm` |
 | التحويلات (مخزون + حد طلب) | `/cs/transfers` |
 | الصيانة / مرتجعات اليوم | `/cs/maintenance` |
 | مراكز الصيانة (مدير المراكز / أدمن) | `/cs/centers` |
@@ -463,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تقرير تأكيدات منزل | تبويب تقارير → تأكيدات منزل (أدمن/مشرفة): لكل موظفة تاريخ التحويل + محوّل/مكلَّم + أعمدة محفوظ/ملغى/مؤجل/ملاحظات/ساعة الاتصال؛ ضغط اتصال يسجّل `startedAt` وتعيين home-confirm يكتب `assignedAt` | `home-confirm-report.ts`, `reports/*`, `call-sheet.tsx`, `home-confirm.ts` |
 | فلتر أرامكس من تقرير المرتجعات | الغاء/لم يسجل بس لو `shippingCompany=sayed_temima`؛ استرجاع/استبدال بس لو الأب تميمة/عيد/مؤمن — أوردر اتنقل لأرامكس مش يظهر من لقطة التجميد القديمة | `temima-returns-report.ts` |
 | تصفية بدون مؤجل + تقرير المرتجعات | شيل عمود/اختيار مؤجل من التصفية (postpone = لم يسجل)؛ تقرير قراءة فقط: الغاء تميمة + لم يسجل خميس/سبت سابق + لم يسجل أحد–أربعاء حالي + استرجاع/استبدال؛ عمود لكل حالة | `temima-settlement.ts`, `temima-returns-report.ts`, `temima-settlement-client.tsx`, `temima-returns-client.tsx`, `settlement-tabs.tsx` |
 | إصلاح تجميد يوم تميمة ماضي | `ensureTemimaDayCutoff` ليوم ماضي يستخدم 23:59 مش ساعة الآن؛ استرجاع شيت 2026-11-05 من 5 إلى 37 | `temima-cutoff.ts`, `recover-temima-nov5.cjs` |

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import {
   CS_CHECKLIST_ITEMS,
@@ -1944,6 +1944,17 @@ export function HomeConfirmCallSheet({
     HOME_CUSTOMER_KEYS.includes(item.key as (typeof HOME_CUSTOMER_KEYS)[number]),
   );
 
+  async function dialFromApp(event: MouseEvent<HTMLAnchorElement>) {
+    if (!callHref) return;
+    event.preventDefault();
+    try {
+      await fetch(`/api/cs/confirmations/${confirmationId}/start`, { method: "POST" });
+    } catch {
+      // Still open the dialer even if logging the call hour fails.
+    }
+    window.location.href = callHref;
+  }
+
   function updateHomeField(key: string, patch: Partial<AnswerState>) {
     setAnswers((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
@@ -2069,6 +2080,7 @@ export function HomeConfirmCallSheet({
           {callHref ? (
             <a
               href={callHref}
+              onClick={(event) => void dialFromApp(event)}
               className="rounded-xl bg-[#FCA311] px-4 py-2 text-sm font-extrabold text-black"
             >
               اتصال

@@ -182,6 +182,18 @@ export async function stampHomeConfirmRange(input: { agentId: number; from: numb
   const to = Math.max(Number(input.from), Number(input.to));
   if (!from || !to) return { ok: false as const, message: "أرقام الأوردر غير صالحة." };
   const stamped = await stampAssignedAgentInOrderRange(input.agentId, from, to);
+  const prisma = getPrismaClient();
+  if (prisma && stamped > 0) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE \`CsOrderConfirmation\`
+       SET \`assignedAt\` = COALESCE(\`assignedAt\`, NOW(3))
+       WHERE \`assignedAgentId\` = ?
+         AND CAST(REPLACE(REPLACE(\`wooOrderNumber\`, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ? AND ?`,
+      input.agentId,
+      from,
+      to,
+    );
+  }
   return { ok: true as const, stamped };
 }
 
@@ -222,7 +234,9 @@ async function stampHomeConfirmAgent(
   agentId: number,
 ) {
   const updated = await prisma.$executeRawUnsafe(
-    `UPDATE \`CsOrderConfirmation\` SET \`assignedAgentId\` = ? WHERE \`id\` = ? AND \`assignedAgentId\` IS NULL`,
+    `UPDATE \`CsOrderConfirmation\`
+     SET \`assignedAgentId\` = ?, \`assignedAt\` = COALESCE(\`assignedAt\`, NOW(3))
+     WHERE \`id\` = ? AND \`assignedAgentId\` IS NULL`,
     agentId,
     confirmationId,
   );

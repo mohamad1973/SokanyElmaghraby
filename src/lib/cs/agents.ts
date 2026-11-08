@@ -634,6 +634,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `settlementDepositOverride` DECIMAL(12,2) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `parentConfirmationId` INT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `fulfillmentKind` VARCHAR(16) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `assignedAt` DATETIME(3) NULL",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `carryKey` INT NOT NULL DEFAULT 0",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `sourceWeekId` INT NULL",
   ];
@@ -736,6 +737,10 @@ async function ensureCriticalCsOrderConfirmationColumns(
     {
       name: "warehouseSheetPrinted",
       sql: "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `warehouseSheetPrinted` TINYINT(1) NOT NULL DEFAULT 0",
+    },
+    {
+      name: "assignedAt",
+      sql: "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `assignedAt` DATETIME(3) NULL",
     },
   ] as const;
 

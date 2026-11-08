@@ -265,6 +265,7 @@ model CsOrderConfirmation {
   wooOrderNumber       String
   status               String              @default("PENDING")
   assignedAgentId      Int?
+  assignedAt           DateTime?
   assignedAgent        CsAgent?            @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
   courierAgentId       Int?
   courierAssignedAt    DateTime?
