@@ -14,6 +14,7 @@ export type ReturnTrackPointClient = {
 
 type TrackPayload = {
   ok: boolean;
+  applicable?: boolean;
   message?: string;
   trackingNumber?: string;
   currentLabel?: string;
@@ -25,11 +26,14 @@ export function ReturnTrackLine({
   confirmationId,
   compact = false,
   className = "",
+  /** When false, skip fetch (normal sale orders). When true/undefined, let API decide. */
+  forceShow,
 }: {
   trackingNumber?: string | null;
   confirmationId?: number | null;
   compact?: boolean;
   className?: string;
+  forceShow?: boolean;
 }) {
   const tracking = String(trackingNumber || "").trim();
   const confId = confirmationId && confirmationId > 0 ? confirmationId : 0;
@@ -37,6 +41,10 @@ export function ReturnTrackLine({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (forceShow === false) {
+      setPayload({ ok: false, applicable: false });
+      return;
+    }
     if (!tracking && !confId) {
       setPayload(null);
       return;
@@ -52,7 +60,7 @@ export function ReturnTrackLine({
         if (!cancelled) setPayload(body);
       })
       .catch(() => {
-        if (!cancelled) setPayload({ ok: false, message: "تعذر تحميل مسار المرتجع." });
+        if (!cancelled) setPayload({ ok: false, applicable: true, message: "تعذر تحميل مسار المرتجع." });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -60,9 +68,11 @@ export function ReturnTrackLine({
     return () => {
       cancelled = true;
     };
-  }, [tracking, confId]);
+  }, [tracking, confId, forceShow]);
 
+  if (forceShow === false) return null;
   if (!tracking && !confId) return null;
+  if (!loading && payload && payload.applicable === false) return null;
 
   const points = payload?.points || [];
 
@@ -90,7 +100,7 @@ export function ReturnTrackLine({
           {payload.currentLabel ? (
             <p className="mt-1 text-xs font-bold text-[#14213D]/70">الآن: {payload.currentLabel}</p>
           ) : null}
-          <div className={`relative mt-3 overflow-x-auto pb-1 ${compact ? "" : ""}`}>
+          <div className="relative mt-3 overflow-x-auto pb-1">
             <div className="pointer-events-none absolute inset-x-6 top-3.5 h-0.5 bg-[#14213D]/15" />
             <ol className="relative flex gap-1">
               {points.map((point, index) => {
@@ -149,7 +159,7 @@ export function ReturnTrackDrawer({ trackingNumber }: { trackingNumber: string }
       >
         {open ? "إخفاء المسار" : "مسار"}
       </button>
-      {open ? <ReturnTrackLine trackingNumber={trackingNumber} compact /> : null}
+      {open ? <ReturnTrackLine trackingNumber={trackingNumber} compact forceShow /> : null}
     </div>
   );
 }

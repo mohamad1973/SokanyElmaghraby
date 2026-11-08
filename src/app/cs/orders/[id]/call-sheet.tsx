@@ -103,6 +103,9 @@ type Props = {
   canApproveItems?: boolean;
   canEditSavedInfo?: boolean;
   maintenanceTechNote?: string | null;
+  fulfillmentKind?: string | null;
+  parentConfirmationId?: number | null;
+  hasReturnChildren?: boolean;
 };
 
 function makeDepositToKey(phone: string, method: string) {
@@ -362,6 +365,9 @@ export function CsCallSheet({
   canApproveItems = false,
   canEditSavedInfo = false,
   maintenanceTechNote = null,
+  fulfillmentKind = null,
+  parentConfirmationId: _parentConfirmationId = null,
+  hasReturnChildren = false,
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
@@ -1413,10 +1419,20 @@ export function CsCallSheet({
           {maintenanceTechNote}
         </div>
       ) : null}
-      <ReturnTrackLine
-        confirmationId={confirmationId}
-        trackingNumber={trackingNumber || snapshot?.trackingNumber || null}
-      />
+      {(() => {
+        const snapKind = String(snapshot?.fulfillmentKind || "").trim();
+        const kind = String(fulfillmentKind || snapKind || "").trim();
+        const isReturnLike = kind === "return" || kind === "exchange" || hasReturnChildren;
+        // Always ask the API for return-like orders and parents with return children;
+        // for other cards let API hide via applicable:false (covers Bosta warehouse captures).
+        return (
+          <ReturnTrackLine
+            confirmationId={confirmationId}
+            trackingNumber={trackingNumber || snapshot?.trackingNumber || null}
+            forceShow={isReturnLike ? true : undefined}
+          />
+        );
+      })()}
       {sheetDayPrompt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-4 text-[#14213D] shadow-lg">

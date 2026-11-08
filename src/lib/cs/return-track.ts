@@ -69,6 +69,10 @@ function isoOrNull(value: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+function isFulfillmentKind(value: unknown): value is "return" | "exchange" {
+  return value === "return" || value === "exchange";
+}
+
 async function addColumn(sql: string) {
   const prisma = getPrismaClient();
   if (!prisma) return;
@@ -154,61 +158,263 @@ type RawBundle = {
   scrapAt: Date | string | null;
   bostaClaim: number | boolean | null;
   updatedAt: Date | string | null;
+  /** Synthetic confirmation fields when no warehouse capture yet. */
+  waybillCreatedAt?: Date | string | null;
+  shippingCompany?: string | null;
+  fulfillmentKind?: string | null;
+  hasCapture?: boolean;
 };
 
-async function loadBundle(opts: { trackingNumber?: string; confirmationId?: number }) {
+type ConfirmationLite = {
+  id: number;
+  trackingNumber: string | null;
+  fulfillmentKind: string | null;
+  parentConfirmationId: number | null;
+  shippingCompany: string | null;
+  createdAt: Date | string | null;
+  customerSnapshot: unknown;
+};
+
+function snapFulfillmentKind(snapshot: unknown): string {
+  if (!snapshot) return "";
+  let raw: unknown = snapshot;
+  if (typeof snapshot === "string") {
+    try {
+      raw = JSON.parse(snapshot);
+    } catch {
+      return "";
+    }
+  }
+  return String((raw as { fulfillmentKind?: string } | null)?.fulfillmentKind || "").trim();
+}
+
+function effectiveKind(row: ConfirmationLite): "return" | "exchange" | "" {
+  if (isFulfillmentKind(row.fulfillmentKind)) return row.fulfillmentKind;
+  const snap = snapFulfillmentKind(row.customerSnapshot);
+  return isFulfillmentKind(snap) ? snap : "";
+}
+
+async function loadCaptureBundle(trackingNumber: string): Promise<RawBundle | null> {
+  const prisma = getPrismaClient();
+  if (!prisma || !trackingNumber) return null;
+  const rows = await prisma.$queryRawUnsafe<RawBundle[]>(
+    `SELECT c.trackingNumber, c.confirmationId, c.capturedAt, c.openedAt, c.kind, c.source,
+            r.\`condition\`, r.destination, r.\`usage\`, r.grade, r.inspectedAt, r.gradedAt,
+            r.deliveredToMaintenanceAt, r.receivedFromMaintenanceAt, r.shelfAt, r.outletAt, r.scrapAt,
+            r.bostaClaim, r.updatedAt
+     FROM CsBostaReturnCapture c
+     LEFT JOIN CsBostaReturnReview r ON r.trackingNumber = c.trackingNumber
+     WHERE c.trackingNumber = ?
+     LIMIT 1`,
+    trackingNumber,
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { ...row, hasCapture: true };
+}
+
+async function loadCaptureByConfirmation(confirmationId: number): Promise<RawBundle | null> {
+  const prisma = getPrismaClient();
+  if (!prisma || confirmationId <= 0) return null;
+  const rows = await prisma.$queryRawUnsafe<RawBundle[]>(
+    `SELECT c.trackingNumber, c.confirmationId, c.capturedAt, c.openedAt, c.kind, c.source,
+            r.\`condition\`, r.destination, r.\`usage\`, r.grade, r.inspectedAt, r.gradedAt,
+            r.deliveredToMaintenanceAt, r.receivedFromMaintenanceAt, r.shelfAt, r.outletAt, r.scrapAt,
+            r.bostaClaim, r.updatedAt
+     FROM CsBostaReturnCapture c
+     LEFT JOIN CsBostaReturnReview r ON r.trackingNumber = c.trackingNumber
+     WHERE c.confirmationId = ?
+     ORDER BY c.capturedAt DESC
+     LIMIT 1`,
+    confirmationId,
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { ...row, hasCapture: true };
+}
+
+function syntheticFromConfirmation(row: ConfirmationLite, kind: "return" | "exchange"): RawBundle {
+  const tracking =
+    String(row.trackingNumber || "").trim() || `CS-${row.id}`;
+  return {
+    trackingNumber: tracking,
+    confirmationId: row.id,
+    capturedAt: null,
+    openedAt: null,
+    kind,
+    source: String(row.shippingCompany || "").trim() || null,
+    condition: null,
+    destination: null,
+    usage: null,
+    grade: null,
+    inspectedAt: null,
+    gradedAt: null,
+    deliveredToMaintenanceAt: null,
+    receivedFromMaintenanceAt: null,
+    shelfAt: null,
+    outletAt: null,
+    scrapAt: null,
+    bostaClaim: null,
+    updatedAt: null,
+    waybillCreatedAt: row.createdAt,
+    shippingCompany: row.shippingCompany,
+    fulfillmentKind: kind,
+    hasCapture: false,
+  };
+}
+
+async function loadConfirmation(id: number): Promise<ConfirmationLite | null> {
+  const prisma = getPrismaClient();
+  if (!prisma || id <= 0) return null;
+  const rows = await prisma.$queryRawUnsafe<ConfirmationLite[]>(
+    `SELECT id, trackingNumber, fulfillmentKind, parentConfirmationId, shippingCompany, createdAt, customerSnapshot
+     FROM CsOrderConfirmation WHERE id = ? LIMIT 1`,
+    id,
+  );
+  return rows[0] || null;
+}
+
+async function loadLatestChildReturn(parentId: number): Promise<ConfirmationLite | null> {
+  const prisma = getPrismaClient();
+  if (!prisma || parentId <= 0) return null;
+  const rows = await prisma.$queryRawUnsafe<ConfirmationLite[]>(
+    `SELECT id, trackingNumber, fulfillmentKind, parentConfirmationId, shippingCompany, createdAt, customerSnapshot
+     FROM CsOrderConfirmation
+     WHERE parentConfirmationId = ?
+       AND (fulfillmentKind IN ('return', 'exchange')
+            OR customerSnapshot LIKE '%"fulfillmentKind":"return"%'
+            OR customerSnapshot LIKE '%"fulfillmentKind":"exchange"%')
+     ORDER BY id DESC
+     LIMIT 1`,
+    parentId,
+  );
+  return rows[0] || null;
+}
+
+async function loadConfirmationByTracking(tracking: string): Promise<ConfirmationLite | null> {
+  const prisma = getPrismaClient();
+  if (!prisma || !tracking) return null;
+  const rows = await prisma.$queryRawUnsafe<ConfirmationLite[]>(
+    `SELECT id, trackingNumber, fulfillmentKind, parentConfirmationId, shippingCompany, createdAt, customerSnapshot
+     FROM CsOrderConfirmation
+     WHERE trackingNumber = ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    tracking,
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Resolve a return/exchange bundle from capture and/or confirmation.
+ * Returns null when the order is not a return-related record at all.
+ */
+async function loadBundle(opts: { trackingNumber?: string; confirmationId?: number }): Promise<RawBundle | null> {
   const prisma = getPrismaClient();
   if (!prisma) return null;
   await ensureReturnTrackTables();
   const tracking = String(opts.trackingNumber || "").trim();
   const confirmationId = opts.confirmationId && opts.confirmationId > 0 ? opts.confirmationId : 0;
 
-  let rows: RawBundle[] = [];
   if (tracking) {
-    rows = await prisma.$queryRawUnsafe<RawBundle[]>(
-      `SELECT c.trackingNumber, c.confirmationId, c.capturedAt, c.openedAt, c.kind, c.source,
-              r.\`condition\`, r.destination, r.\`usage\`, r.grade, r.inspectedAt, r.gradedAt,
-              r.deliveredToMaintenanceAt, r.receivedFromMaintenanceAt, r.shelfAt, r.outletAt, r.scrapAt,
-              r.bostaClaim, r.updatedAt
-       FROM CsBostaReturnCapture c
-       LEFT JOIN CsBostaReturnReview r ON r.trackingNumber = c.trackingNumber
-       WHERE c.trackingNumber = ?
-       LIMIT 1`,
-      tracking,
-    );
-  } else if (confirmationId) {
-    rows = await prisma.$queryRawUnsafe<RawBundle[]>(
-      `SELECT c.trackingNumber, c.confirmationId, c.capturedAt, c.openedAt, c.kind, c.source,
-              r.\`condition\`, r.destination, r.\`usage\`, r.grade, r.inspectedAt, r.gradedAt,
-              r.deliveredToMaintenanceAt, r.receivedFromMaintenanceAt, r.shelfAt, r.outletAt, r.scrapAt,
-              r.bostaClaim, r.updatedAt
-       FROM CsBostaReturnCapture c
-       LEFT JOIN CsBostaReturnReview r ON r.trackingNumber = c.trackingNumber
-       WHERE c.confirmationId = ?
-       ORDER BY c.capturedAt DESC
-       LIMIT 1`,
-      confirmationId,
-    );
-    if (!rows.length) {
-      const byOrderTrack = await prisma.$queryRawUnsafe<Array<{ trackingNumber: string | null }>>(
-        `SELECT trackingNumber FROM CsOrderConfirmation WHERE id = ? LIMIT 1`,
-        confirmationId,
-      );
-      const tn = String(byOrderTrack[0]?.trackingNumber || "").trim();
-      if (tn) return loadBundle({ trackingNumber: tn });
+    const byTrack = await loadCaptureBundle(tracking);
+    if (byTrack) return byTrack;
+  }
+
+  if (confirmationId) {
+    const byConf = await loadCaptureByConfirmation(confirmationId);
+    if (byConf) return byConf;
+
+    const conf = await loadConfirmation(confirmationId);
+    if (conf) {
+      const kind = effectiveKind(conf);
+      if (kind) {
+        const childTrack = String(conf.trackingNumber || "").trim();
+        if (childTrack) {
+          const capture = await loadCaptureBundle(childTrack);
+          if (capture) {
+            return {
+              ...capture,
+              confirmationId: capture.confirmationId || conf.id,
+              waybillCreatedAt: conf.createdAt,
+              shippingCompany: conf.shippingCompany,
+              fulfillmentKind: kind,
+            };
+          }
+        }
+        return syntheticFromConfirmation(conf, kind);
+      }
+
+      // Parent order: use latest return/exchange child (or its capture).
+      const child = await loadLatestChildReturn(confirmationId);
+      if (child) {
+        const childKind = effectiveKind(child);
+        if (childKind) {
+          const childCapture =
+            (await loadCaptureByConfirmation(child.id)) ||
+            (String(child.trackingNumber || "").trim()
+              ? await loadCaptureBundle(String(child.trackingNumber).trim())
+              : null);
+          if (childCapture) {
+            return {
+              ...childCapture,
+              confirmationId: childCapture.confirmationId || child.id,
+              waybillCreatedAt: child.createdAt,
+              shippingCompany: child.shippingCompany,
+              fulfillmentKind: childKind,
+            };
+          }
+          return syntheticFromConfirmation(child, childKind);
+        }
+      }
     }
   }
-  return rows[0] || null;
+
+  if (tracking) {
+    const conf = await loadConfirmationByTracking(tracking);
+    if (conf) {
+      const kind = effectiveKind(conf);
+      if (kind) return syntheticFromConfirmation(conf, kind);
+      if (!conf.parentConfirmationId) {
+        const child = await loadLatestChildReturn(conf.id);
+        const childKind = child ? effectiveKind(child) : "";
+        if (child && childKind) return syntheticFromConfirmation(child, childKind);
+      }
+    }
+  }
+
+  return null;
 }
 
-async function loadStoredEvents(trackingNumber: string) {
+async function loadStoredEvents(opts: { trackingNumber?: string | null; confirmationId?: number | null }) {
   const prisma = getPrismaClient();
-  if (!prisma || !trackingNumber) return [] as Array<{ stage: string; at: Date | string; meta: string | null }>;
+  const tracking = String(opts.trackingNumber || "").trim();
+  const confirmationId = opts.confirmationId && opts.confirmationId > 0 ? opts.confirmationId : 0;
+  if (!prisma || (!tracking && !confirmationId)) {
+    return [] as Array<{ stage: string; at: Date | string; meta: string | null }>;
+  }
+  if (tracking && confirmationId) {
+    return prisma.$queryRawUnsafe<Array<{ stage: string; at: Date | string; meta: string | null }>>(
+      `SELECT stage, \`at\`, meta FROM CsReturnTrackEvent
+       WHERE trackingNumber = ? OR confirmationId = ?
+       ORDER BY \`at\` ASC, id ASC`,
+      tracking,
+      confirmationId,
+    );
+  }
+  if (tracking) {
+    return prisma.$queryRawUnsafe<Array<{ stage: string; at: Date | string; meta: string | null }>>(
+      `SELECT stage, \`at\`, meta FROM CsReturnTrackEvent
+       WHERE trackingNumber = ?
+       ORDER BY \`at\` ASC, id ASC`,
+      tracking,
+    );
+  }
   return prisma.$queryRawUnsafe<Array<{ stage: string; at: Date | string; meta: string | null }>>(
     `SELECT stage, \`at\`, meta FROM CsReturnTrackEvent
-     WHERE trackingNumber = ?
+     WHERE confirmationId = ?
      ORDER BY \`at\` ASC, id ASC`,
-    trackingNumber,
+    confirmationId,
   );
 }
 
@@ -219,14 +425,38 @@ function gradeLabel(grade: string | null) {
   return "";
 }
 
+function carrierLabel(source: string | null | undefined) {
+  const code = String(source || "").trim();
+  if (code === "bosta") return "بوسطة";
+  if (code === "sayed_temima" || code === "temima") return "سيد تميمة";
+  if (code === "eid") return "عيد";
+  if (code === "momen") return "مؤمن";
+  return code || "";
+}
+
 /** Build a derived + event-backed timeline for one return. */
 export async function getReturnTrackLine(opts: { trackingNumber?: string; confirmationId?: number }) {
-  const bundle = await loadBundle(opts);
+  const trackingHint = String(opts.trackingNumber || "").trim();
+  const confirmationHint = opts.confirmationId && opts.confirmationId > 0 ? opts.confirmationId : 0;
+
+  const bundle = await loadBundle({
+    trackingNumber: trackingHint || undefined,
+    confirmationId: confirmationHint || undefined,
+  });
+
   if (!bundle) {
-    return { ok: false as const, message: "مفيش مسار مرتجع لهذا الأوردر.", points: [] as ReturnTrackPoint[] };
+    return {
+      ok: false as const,
+      applicable: false as const,
+      message: "مفيش مسار مرتجع لهذا الأوردر.",
+      points: [] as ReturnTrackPoint[],
+    };
   }
 
-  const events = await loadStoredEvents(bundle.trackingNumber);
+  const events = await loadStoredEvents({
+    trackingNumber: bundle.trackingNumber,
+    confirmationId: bundle.confirmationId,
+  });
   const eventAt = new Map<string, string>();
   for (const row of events) {
     const at = isoOrNull(row.at);
@@ -234,6 +464,13 @@ export async function getReturnTrackLine(opts: { trackingNumber?: string; confir
     if (!eventAt.has(row.stage)) eventAt.set(row.stage, at);
   }
 
+  const waybillAt =
+    eventAt.get("return_waybill_created") || isoOrNull(bundle.waybillCreatedAt);
+  const atCarrier =
+    eventAt.get("at_carrier") ||
+    (String(bundle.trackingNumber || "").trim() && !bundle.trackingNumber.startsWith("CS-")
+      ? waybillAt
+      : null);
   const capturedAt = eventAt.get("warehouse_captured") || isoOrNull(bundle.capturedAt);
   const openedAt = eventAt.get("inspect_opened") || isoOrNull(bundle.openedAt);
   const inspectedAt =
@@ -250,75 +487,117 @@ export async function getReturnTrackLine(opts: { trackingNumber?: string; confir
   const condition = String(bundle.condition || "");
   const usage =
     bundle.usage === "new" ? "جديد" : bundle.usage === "used" ? "مستخدم" : "";
+  const hasCapture = Boolean(bundle.hasCapture || capturedAt);
+  const kindDetail = bundle.fulfillmentKind === "exchange" || bundle.kind === "exchange"
+    ? "استبدال"
+    : bundle.fulfillmentKind === "return" || bundle.kind === "return"
+      ? "استرجاع"
+      : bundle.kind || "";
 
   type Draft = { stage: ReturnStage; at: string | null; detail?: string; relevant: boolean };
-  const drafts: Draft[] = [
-    {
+  const drafts: Draft[] = [];
+
+  // Pre-warehouse: ticket / waybill / carrier (events + confirmation synthesis).
+  for (const stage of ["ticket_created", "ticket_approved"] as ReturnStage[]) {
+    if (eventAt.has(stage)) {
+      drafts.push({ stage, at: eventAt.get(stage) || null, relevant: true });
+    }
+  }
+
+  const showWaybill =
+    Boolean(waybillAt) ||
+    Boolean(eventAt.has("return_waybill_created")) ||
+    Boolean(bundle.fulfillmentKind) ||
+    Boolean(bundle.waybillCreatedAt);
+  if (showWaybill) {
+    drafts.push({
+      stage: "return_waybill_created",
+      at: waybillAt,
+      detail: [kindDetail, carrierLabel(bundle.shippingCompany || bundle.source)].filter(Boolean).join(" · "),
+      relevant: true,
+    });
+  }
+
+  const showCarrier =
+    Boolean(atCarrier) ||
+    eventAt.has("at_carrier") ||
+    (showWaybill && Boolean(String(bundle.trackingNumber || "").trim()));
+  if (showCarrier) {
+    drafts.push({
+      stage: "at_carrier",
+      at: atCarrier || (String(bundle.trackingNumber || "").startsWith("CS-") ? null : waybillAt),
+      detail: carrierLabel(bundle.shippingCompany || bundle.source) || undefined,
+      relevant: true,
+    });
+  }
+
+  // Warehouse + maintenance only when capture/review exists or stage events fired.
+  const showWarehouse =
+    hasCapture ||
+    eventAt.has("warehouse_captured") ||
+    eventAt.has("inspect_opened") ||
+    eventAt.has("inspected") ||
+    Boolean(condition);
+
+  if (showWarehouse) {
+    drafts.push({
       stage: "warehouse_captured",
       at: capturedAt,
-      detail: [bundle.source, bundle.kind].filter(Boolean).join(" · "),
+      detail: [carrierLabel(bundle.source), bundle.kind].filter(Boolean).join(" · "),
       relevant: true,
-    },
-    { stage: "inspect_opened", at: openedAt, relevant: Boolean(openedAt || condition) },
-    {
+    });
+    drafts.push({ stage: "inspect_opened", at: openedAt, relevant: Boolean(openedAt || condition) });
+    drafts.push({
       stage: "inspected",
       at: inspectedAt,
       detail: [condition, usage].filter(Boolean).join(" · "),
       relevant: Boolean(condition),
-    },
-  ];
+    });
 
-  if (destination === "online_warehouse") {
-    drafts.push({ stage: "online_warehouse", at: inspectedAt, relevant: true });
-  } else if (destination === "shelf") {
-    drafts.push({
-      stage: "shelf_direct",
-      at: shelfAt || inspectedAt,
-      relevant: true,
-    });
-  } else if (destination === "maintenance") {
-    drafts.push({ stage: "delivered_to_maintenance", at: deliveredAt, relevant: true });
-    drafts.push({
-      stage: "awaiting_grade",
-      at: deliveredAt && !grade ? deliveredAt : null,
-      relevant: Boolean(deliveredAt) && !grade,
-    });
-    drafts.push({
-      stage: "graded",
-      at: gradedAt || (grade ? deliveredAt : null),
-      detail: gradeLabel(grade),
-      relevant: Boolean(grade),
-    });
-    drafts.push({
-      stage: "returned_from_maintenance",
-      at: grade && !receivedAt ? gradedAt || deliveredAt : null,
-      relevant: Boolean(grade) && !receivedAt,
-    });
-    drafts.push({
-      stage: "received_from_maintenance",
-      at: receivedAt,
-      relevant: Boolean(receivedAt),
-    });
-    if (grade === "first") {
-      drafts.push({ stage: "on_shelf", at: shelfAt, relevant: Boolean(receivedAt) });
-    } else if (grade === "second") {
-      drafts.push({ stage: "to_outlet", at: outletAt || receivedAt, relevant: Boolean(receivedAt) });
-    } else if (grade === "scrap") {
-      drafts.push({ stage: "to_scrap", at: scrapAt || receivedAt, relevant: Boolean(receivedAt) });
+    if (destination === "online_warehouse") {
+      drafts.push({ stage: "online_warehouse", at: inspectedAt, relevant: true });
+    } else if (destination === "shelf") {
+      drafts.push({
+        stage: "shelf_direct",
+        at: shelfAt || inspectedAt,
+        relevant: true,
+      });
+    } else if (destination === "maintenance") {
+      drafts.push({ stage: "delivered_to_maintenance", at: deliveredAt, relevant: true });
+      drafts.push({
+        stage: "awaiting_grade",
+        at: deliveredAt && !grade ? deliveredAt : null,
+        relevant: Boolean(deliveredAt) && !grade,
+      });
+      drafts.push({
+        stage: "graded",
+        at: gradedAt || (grade ? deliveredAt : null),
+        detail: gradeLabel(grade),
+        relevant: Boolean(grade),
+      });
+      drafts.push({
+        stage: "returned_from_maintenance",
+        at: grade && !receivedAt ? gradedAt || deliveredAt : null,
+        relevant: Boolean(grade) && !receivedAt,
+      });
+      drafts.push({
+        stage: "received_from_maintenance",
+        at: receivedAt,
+        relevant: Boolean(receivedAt),
+      });
+      if (grade === "first") {
+        drafts.push({ stage: "on_shelf", at: shelfAt, relevant: Boolean(receivedAt) });
+      } else if (grade === "second") {
+        drafts.push({ stage: "to_outlet", at: outletAt || receivedAt, relevant: Boolean(receivedAt) });
+      } else if (grade === "scrap") {
+        drafts.push({ stage: "to_scrap", at: scrapAt || receivedAt, relevant: Boolean(receivedAt) });
+      }
     }
   }
 
-  // Optional ticket / waybill stages from stored events only.
-  for (const stage of [
-    "ticket_created",
-    "ticket_approved",
-    "return_waybill_created",
-    "at_carrier",
-    "out_to_customer",
-    "with_customer",
-  ] as ReturnStage[]) {
+  for (const stage of ["out_to_customer", "with_customer"] as ReturnStage[]) {
     if (eventAt.has(stage)) {
-      drafts.unshift({ stage, at: eventAt.get(stage) || null, relevant: true });
+      drafts.push({ stage, at: eventAt.get(stage) || null, relevant: true });
     }
   }
 
@@ -327,7 +606,6 @@ export async function getReturnTrackLine(opts: { trackingNumber?: string; confir
   for (let i = 0; i < relevant.length; i++) {
     if (relevant[i].at) currentIndex = i;
   }
-  // If last done is not terminal, mark next without at as current.
   if (currentIndex >= 0 && currentIndex < relevant.length - 1 && relevant[currentIndex].at) {
     const next = relevant[currentIndex + 1];
     if (!next.at) currentIndex = currentIndex + 1;
@@ -343,7 +621,6 @@ export async function getReturnTrackLine(opts: { trackingNumber?: string; confir
     state: index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming",
   }));
 
-  // Last done with at and no unfinished next → mark last as current/done.
   if (points.length && points.every((p) => p.state !== "current")) {
     const lastDone = [...points].reverse().find((p) => p.at);
     if (lastDone) lastDone.state = "current";
@@ -351,6 +628,7 @@ export async function getReturnTrackLine(opts: { trackingNumber?: string; confir
 
   return {
     ok: true as const,
+    applicable: true as const,
     trackingNumber: bundle.trackingNumber,
     confirmationId: bundle.confirmationId,
     currentLabel: points.find((p) => p.state === "current")?.label || "—",

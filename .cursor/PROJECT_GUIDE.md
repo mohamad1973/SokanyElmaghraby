@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مسار المرتجع لكل استرجاع/استبدال | المسار يظهر لأبناء return/exchange (بوسطة/تميمة/مندوب) حتى قبل Capture، وعلى الأب لو له أبناء مرتجعة؛ البيع العادي يخفي البلوك | `return-track.ts`, `return-track-line.tsx`, `call-sheet.tsx`, `orders/[id]/page.tsx` |
 | عائد من الصيانة + تراك لاين المرتجعات | تبويب «عائد من الصيانة» (بانتظار استلام / رف فرز أول / تم الاستلام)؛ خط زمني مشتق + جدول `CsReturnTrackEvent`؛ عرض على كارت الأوردر والصيانة؛ timestamps `inspectedAt`/`gradedAt`/`outletAt`/`scrapAt` | `return-track.ts`, `return-track-line.tsx`, `maintenance-panels.tsx`, `bosta-return-lifecycle.ts`, `bosta-return-review.ts` |
 | سليم → رف أو صيانة | بعد سليم (جديد/مستخدم) في مرتجعات الشحن: اختيار «يعود إلى الرف» أو «إلى الصيانة»؛ الصيانة تدخل طابور فني الصيانة | `bosta-return-review.ts`, `maintenance-client.tsx`, `returns/route.ts` |
 | تقرير تأكيدات منزل | تبويب تقارير → تأكيدات منزل (أدمن/مشرفة): لكل موظفة تاريخ التحويل + محوّل/مكلَّم + أعمدة محفوظ/ملغى/مؤجل/ملاحظات/ساعة الاتصال؛ ضغط اتصال يسجّل `startedAt` وتعيين home-confirm يكتب `assignedAt` | `home-confirm-report.ts`, `reports/*`, `call-sheet.tsx`, `home-confirm.ts` |

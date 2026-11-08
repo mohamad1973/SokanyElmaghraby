@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ensureCsTables } from "@/lib/cs/agents";
 import { techNoteForConfirmation } from "@/lib/cs/bosta-return-lifecycle";
 import { getCsConfirmation, parseOrderTotalDelta, resolveCsViewer, serializeDepositAmount } from "@/lib/cs/confirmations";
+import { getPrismaClient } from "@/lib/db";
 import { getCsCarrierByCode } from "@/lib/cs/sokany-waybill";
 import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
 import { requireCsSession } from "@/lib/session-guards";
@@ -10,6 +11,21 @@ import { requireCsSession } from "@/lib/session-guards";
 import { CsCallSheet, HomeConfirmCallSheet } from "./call-sheet";
 
 type Props = { params: Promise<{ id: string }> };
+
+async function hasReturnChildrenOf(parentId: number) {
+  const prisma = getPrismaClient();
+  if (!prisma || parentId <= 0) return false;
+  const rows = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT 1 AS n FROM CsOrderConfirmation
+     WHERE parentConfirmationId = ?
+       AND (fulfillmentKind IN ('return', 'exchange')
+            OR customerSnapshot LIKE '%"fulfillmentKind":"return"%'
+            OR customerSnapshot LIKE '%"fulfillmentKind":"exchange"%')
+     LIMIT 1`,
+    parentId,
+  );
+  return rows.length > 0;
+}
 
 export default async function CsOrderPage({ params }: Props) {
   const session = await requireCsSession();
@@ -54,6 +70,8 @@ export default async function CsOrderPage({ params }: Props) {
     confirmedAt?: Date | null;
     confirmationEditedAt?: Date | null;
     orderTotalDelta?: unknown;
+    fulfillmentKind?: string | null;
+    parentConfirmationId?: number | null;
   };
   const bostaFee = row.bostaShippingFee == null ? null : Number(row.bostaShippingFee);
   const maintenanceTechNote = await techNoteForConfirmation(confirmation.id);
@@ -62,6 +80,16 @@ export default async function CsOrderPage({ params }: Props) {
     confirmation.shippingCompany,
     carrier?.waybillProvider === "sokany",
   );
+  const fulfillmentKind =
+    row.fulfillmentKind === "return" || row.fulfillmentKind === "exchange"
+      ? row.fulfillmentKind
+      : String(snapshot?.fulfillmentKind || "").trim() === "return" ||
+          String(snapshot?.fulfillmentKind || "").trim() === "exchange"
+        ? (String(snapshot?.fulfillmentKind).trim() as "return" | "exchange")
+        : null;
+  const parentConfirmationId =
+    row.parentConfirmationId && row.parentConfirmationId > 0 ? row.parentConfirmationId : null;
+  const hasReturnChildren = !fulfillmentKind && !parentConfirmationId ? await hasReturnChildrenOf(confirmation.id) : false;
 
   if (viewer.isHomeConfirmOnly) {
     return (
@@ -122,6 +150,9 @@ export default async function CsOrderPage({ params }: Props) {
       orderTotalDelta={parseOrderTotalDelta(row.orderTotalDelta)}
       canApproveItems={viewer.isAdmin}
       canEditSavedInfo={viewer.isAdmin}
+      fulfillmentKind={fulfillmentKind}
+      parentConfirmationId={parentConfirmationId}
+      hasReturnChildren={hasReturnChildren}
       initialAnswers={confirmation.answers.map((a) => ({
         itemKey: a.itemKey,
         confirmed: a.confirmed,
