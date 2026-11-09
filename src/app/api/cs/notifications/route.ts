@@ -4,6 +4,10 @@ import { isTransfersRole } from "@/lib/cs/agents";
 import { listPendingDepositApprovals } from "@/lib/cs/deposit-approvals";
 import { listPendingDiscountApprovals } from "@/lib/cs/discount-approvals";
 import { listPendingOrderItemAdds } from "@/lib/cs/order-item-adds";
+import {
+  listCustomerReturnWaybillNotices,
+  listPendingMaintenanceForTech,
+} from "@/lib/cs/maintenance-notices";
 import { getCsNotificationsForAgent } from "@/lib/cs/notifications";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import { listScManagerInbox } from "@/lib/cs/sc-intake";
@@ -95,17 +99,29 @@ export async function GET() {
     isSupervisor,
   });
 
+  const customerReturnWaybills =
+    viewer.isShipping || viewer.isAdmin ? await listCustomerReturnWaybillNotices() : [];
+  const pendingMaintenance =
+    viewer.isMaintenanceTech || viewer.isAdmin ? await listPendingMaintenanceForTech() : [];
+
+  const extra =
+    customerReturnWaybills.length + pendingMaintenance.length + scInbox.length;
+
   return NextResponse.json({
     ...data,
     pendingDeposits: [],
+    customerReturnWaybills,
+    pendingMaintenance,
     scInbox,
     stockAlerts: emptyStock,
     totals: {
       ...data.totals,
       pendingDeposits: 0,
+      customerReturnWaybills: customerReturnWaybills.length,
+      pendingMaintenance: pendingMaintenance.length,
       scInbox: scInbox.length,
       stockAlerts: 0,
-      all: data.totals.all + scInbox.length,
+      all: data.totals.all + extra,
     },
   });
 }

@@ -6,7 +6,17 @@ import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 export type ReviewCondition = "sound" | "broken" | "defective";
 export type ReviewDefect = "break" | "power" | "disassembled" | "dented" | "manufacturing";
-export type ReviewDestination = "online_warehouse" | "shelf" | "maintenance";
+export type ReviewDestination = "online_warehouse" | "shelf" | "maintenance" | "to_customer";
+
+export function asReviewDestination(value: unknown): ReviewDestination | "" {
+  const text = String(value || "").trim();
+  return text === "online_warehouse" ||
+    text === "shelf" ||
+    text === "maintenance" ||
+    text === "to_customer"
+    ? text
+    : "";
+}
 export type ReviewUsage = "new" | "used";
 export type ReviewGrade = "first" | "second" | "scrap";
 
@@ -145,6 +155,7 @@ export function reviewLabel(review: Omit<BostaReturnReview, "label">) {
   let base = "";
   if (review.destination === "online_warehouse") base = "مخزن أونلاين";
   else if (review.destination === "shelf") base = "الرف";
+  else if (review.destination === "to_customer") base = "يعود إلى العميل";
   else {
     const defects = review.defects.map((defect) => DEFECT_LABEL[defect]).join("، ");
     const extra = [defects, review.bostaClaim ? "تعويض بوسطة" : ""].filter(Boolean).join(" · ");
@@ -181,10 +192,7 @@ function packReview(row: {
 }): BostaReturnReview | null {
   const condition: ReviewCondition | "" =
     row.condition === "sound" || row.condition === "broken" || row.condition === "defective" ? row.condition : "";
-  const destination: ReviewDestination | "" =
-    row.destination === "online_warehouse" || row.destination === "shelf" || row.destination === "maintenance"
-      ? row.destination
-      : "";
+  const destination = asReviewDestination(row.destination);
   if (!condition || !destination) return null;
   const usage: ReviewUsage | null = row.usage === "new" || row.usage === "used" ? row.usage : null;
   const grade: ReviewGrade | null =
@@ -331,7 +339,7 @@ export async function saveBostaReturnReview(input: {
   condition: string;
   defects: string[];
   usage: string;
-  destinationOverride?: "shelf" | "maintenance" | null;
+  destinationOverride?: "shelf" | "maintenance" | "to_customer" | null;
   productId?: number | null;
 }) {
   const prisma = getPrismaClient();
@@ -359,7 +367,9 @@ export async function saveBostaReturnReview(input: {
     const base = decidedReview(kind, condition, defects);
     if (!base) return { ok: false as const, message: "الاختيار مش مناسب للتصنيف." };
     const override =
-      input.destinationOverride === "shelf" || input.destinationOverride === "maintenance"
+      input.destinationOverride === "shelf" ||
+      input.destinationOverride === "maintenance" ||
+      input.destinationOverride === "to_customer"
         ? input.destinationOverride
         : null;
     const decided =
@@ -426,6 +436,13 @@ export async function saveBostaReturnReview(input: {
             trackingNumber,
             confirmationId,
             stage: "shelf_direct",
+            meta: { productId },
+          });
+        } else if (decided.destination === "to_customer") {
+          await recordReturnTrackEvent({
+            trackingNumber,
+            confirmationId,
+            stage: "out_to_customer",
             meta: { productId },
           });
         } else if (decided.destination === "maintenance" && wasNewDelivery) {
@@ -532,6 +549,12 @@ export async function saveBostaReturnReview(input: {
           trackingNumber,
           confirmationId,
           stage: "shelf_direct",
+        });
+      } else if (decided.destination === "to_customer") {
+        await recordReturnTrackEvent({
+          trackingNumber,
+          confirmationId,
+          stage: "out_to_customer",
         });
       } else if (decided.destination === "maintenance" && wasNewDelivery) {
         await recordReturnTrackEvent({

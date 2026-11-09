@@ -90,6 +90,19 @@ type NotifPayload = {
     centerName: string;
     statusLabel: string;
   }>;
+  customerReturnWaybills?: Array<{
+    trackingNumber: string;
+    confirmationId: number | null;
+    wooOrderNumber: string;
+    productName: string;
+  }>;
+  pendingMaintenance?: Array<{
+    trackingNumber: string;
+    confirmationId: number | null;
+    wooOrderNumber: string;
+    productName: string;
+    productId: number | null;
+  }>;
   totals: {
     handedToCarrier: number;
     confirmDelivery: number;
@@ -100,6 +113,8 @@ type NotifPayload = {
     pendingItemAdds?: number;
     scInbox?: number;
     stockAlerts?: number;
+    customerReturnWaybills?: number;
+    pendingMaintenance?: number;
     all: number;
   };
 };
@@ -739,6 +754,52 @@ function CsNotificationsBell() {
                           >
                             {o.productName}
                             {o.model ? ` · ${o.model}` : ""} ({o.stockQuantity}/{o.threshold})
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.customerReturnWaybills && data.customerReturnWaybills.length ? (
+                  <div>
+                    <p className="font-bold text-[#B45309]">
+                      بوليصة عودة للعميل ({data.totals.customerReturnWaybills || 0})
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {data.customerReturnWaybills.slice(0, 8).map((o) => (
+                        <li key={`crw-${o.trackingNumber}`}>
+                          <Link
+                            href={
+                              o.confirmationId
+                                ? `/cs/orders/${o.confirmationId}`
+                                : "/cs/maintenance?hub=inspect"
+                            }
+                            className="block rounded-lg bg-amber-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            مطلوب بوليصة ليعود للعميل · #{o.wooOrderNumber}
+                            {o.productName ? ` · ${o.productName}` : ""}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.pendingMaintenance && data.pendingMaintenance.length ? (
+                  <div>
+                    <p className="font-bold text-[#E6B325]">
+                      بانتظار فني الصيانة ({data.totals.pendingMaintenance || 0})
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {data.pendingMaintenance.slice(0, 8).map((o) => (
+                        <li key={`pm-${o.trackingNumber}-${o.productId ?? "r"}`}>
+                          <Link
+                            href="/cs/maintenance?hub=tech"
+                            className="block rounded-lg bg-yellow-50 px-2 py-1.5 underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            #{o.wooOrderNumber}
+                            {o.productName ? ` · ${o.productName}` : ""}
                           </Link>
                         </li>
                       ))}

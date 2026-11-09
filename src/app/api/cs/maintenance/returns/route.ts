@@ -228,7 +228,11 @@ export async function POST(request: Request) {
       : [];
     const destinationRaw = String(body?.destination || "").trim();
     const destinationOverride =
-      destinationRaw === "shelf" || destinationRaw === "maintenance" ? destinationRaw : null;
+      destinationRaw === "shelf" ||
+      destinationRaw === "maintenance" ||
+      destinationRaw === "to_customer"
+        ? (destinationRaw as "shelf" | "maintenance" | "to_customer")
+        : null;
     const result = await saveBostaReturnReview({
       trackingNumber: String(body?.trackingNumber || ""),
       condition: String(body?.condition || ""),

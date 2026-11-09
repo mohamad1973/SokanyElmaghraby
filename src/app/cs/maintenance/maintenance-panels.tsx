@@ -699,3 +699,164 @@ export function VariancePanel({ variance }: { variance: VariancePayload | null }
     </div>
   );
 }
+
+type TechReportApiRow = {
+  trackingNumber: string;
+  wooOrderNumber: string;
+  productName: string;
+  receivedAt: string | null;
+  gradedAt: string | null;
+  first: boolean;
+  second: boolean;
+  scrap: boolean;
+};
+
+export function TechReportPanel({ from, to }: { from: string; to: string }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [reportFrom, setReportFrom] = useState(from);
+  const [reportTo, setReportTo] = useState(to);
+  const [summary, setSummary] = useState({
+    receivedCount: 0,
+    repairedCount: 0,
+    firstCount: 0,
+    secondCount: 0,
+    scrapCount: 0,
+  });
+  const [rows, setRows] = useState<TechReportApiRow[]>([]);
+
+  async function loadReport(event?: { preventDefault(): void }) {
+    event?.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const qs = new URLSearchParams({ from: reportFrom, to: reportTo });
+      const res = await fetch(`/api/cs/maintenance/tech-report?${qs}`);
+      const data = (await res.json()) as {
+        message?: string;
+        summary?: typeof summary;
+        rows?: TechReportApiRow[];
+        from?: string;
+        to?: string;
+      };
+      if (!res.ok) {
+        setError(data.message || "تعذر تحميل التقرير.");
+        return;
+      }
+      if (data.from) setReportFrom(data.from);
+      if (data.to) setReportTo(data.to);
+      setSummary(
+        data.summary || {
+          receivedCount: 0,
+          repairedCount: 0,
+          firstCount: 0,
+          secondCount: 0,
+          scrapCount: 0,
+        },
+      );
+      setRows(data.rows || []);
+    } catch {
+      setError("تعذر تحميل التقرير.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 p-4" dir="rtl">
+      <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
+        <form onSubmit={(e) => void loadReport(e)} className="flex flex-wrap items-end gap-2">
+          <label className="text-xs font-extrabold text-[#14213D]">
+            من
+            <input
+              type="date"
+              value={reportFrom}
+              onChange={(e) => setReportFrom(e.target.value)}
+              className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+            />
+          </label>
+          <label className="text-xs font-extrabold text-[#14213D]">
+            إلى
+            <input
+              type="date"
+              value={reportTo}
+              onChange={(e) => setReportTo(e.target.value)}
+              className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-full bg-[#E6B325] px-4 py-2 text-sm font-extrabold text-black disabled:opacity-60"
+          >
+            {loading ? "جاري التحميل…" : "عرض التقرير"}
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="rounded-full bg-[#14213D] px-4 py-2 text-sm font-extrabold text-white"
+        >
+          طباعة التقرير
+        </button>
+      </div>
+      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
+      <div className="space-y-2">
+        <h2 className="text-lg font-extrabold text-[#14213D]">تقرير فني الصيانة</h2>
+        <p className="text-sm font-bold text-[#14213D]/70" dir="ltr">
+          {reportFrom} → {reportTo}
+        </p>
+        <div className="flex flex-wrap gap-2 text-sm font-extrabold">
+          <span className="rounded-full bg-[#F5F5F0] px-3 py-1">استلم: {summary.receivedCount}</span>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-900">
+            تم إصلاح/فرز: {summary.repairedCount}
+          </span>
+          <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز أول: {summary.firstCount}</span>
+          <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز ثاني: {summary.secondCount}</span>
+          <span className="rounded-full bg-red-50 px-3 py-1 text-red-800">هالك: {summary.scrapCount}</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-right text-sm">
+          <thead className="bg-[#F5F5F0] text-xs font-extrabold">
+            <tr>
+              <th className="px-2 py-2">الأوردر</th>
+              <th className="px-2 py-2">البوليصة / الصنف</th>
+              <th className="px-2 py-2">تاريخ الاستلام</th>
+              <th className="px-2 py-2">فرز أول</th>
+              <th className="px-2 py-2">فرز ثاني</th>
+              <th className="px-2 py-2">هالك</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((row) => (
+                <tr key={`${row.trackingNumber}-${row.productName}`} className="border-t border-black/5">
+                  <td className="px-2 py-2 font-extrabold">#{row.wooOrderNumber}</td>
+                  <td className="px-2 py-2">
+                    <div className="font-bold" dir="ltr">
+                      {row.trackingNumber}
+                    </div>
+                    {row.productName ? <div className="text-xs text-[#14213D]/70">{row.productName}</div> : null}
+                  </td>
+                  <td className="px-2 py-2 text-xs">
+                    {row.receivedAt ? formatCairoOrderDateTime(row.receivedAt).absolute : "—"}
+                  </td>
+                  <td className="px-2 py-2 text-center font-extrabold">{row.first ? "✓" : ""}</td>
+                  <td className="px-2 py-2 text-center font-extrabold">{row.second ? "✓" : ""}</td>
+                  <td className="px-2 py-2 text-center font-extrabold">{row.scrap ? "✓" : ""}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                  {loading ? "جاري التحميل…" : "اضغط «عرض التقرير» أو مفيش أوردرات في الفترة."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

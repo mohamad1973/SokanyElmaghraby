@@ -562,6 +562,12 @@ export async function getReturnTrackLine(opts: { trackingNumber?: string; confir
         at: shelfAt || inspectedAt,
         relevant: true,
       });
+    } else if (destination === "to_customer") {
+      drafts.push({
+        stage: "out_to_customer",
+        at: eventAt.get("out_to_customer") || inspectedAt,
+        relevant: true,
+      });
     } else if (destination === "maintenance") {
       drafts.push({ stage: "delivered_to_maintenance", at: deliveredAt, relevant: true });
       drafts.push({

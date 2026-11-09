@@ -13,6 +13,7 @@ import {
   NoteModal,
   ReceiveAndShelfPanel,
   TechPanel,
+  TechReportPanel,
   VariancePanel,
   defectsAr,
   type PanelRow,
@@ -21,12 +22,12 @@ import {
 
 type Kind = "refused" | "return" | "exchange";
 type TabId = "bosta" | "temima" | "eid" | "momen";
-type HubTab = "inspect" | "tech" | "receive" | "accounting" | "variance";
+type HubTab = "inspect" | "tech" | "receive" | "accounting" | "variance" | "tech_report";
 type Condition = "sound" | "broken" | "defective";
 type Defect = "break" | "power" | "disassembled" | "dented" | "manufacturing";
 type Usage = "new" | "used";
 type Grade = "first" | "second" | "scrap";
-type Destination = "online_warehouse" | "shelf" | "maintenance";
+type Destination = "online_warehouse" | "shelf" | "maintenance" | "to_customer";
 type Phase = "choose" | "defects" | "usage" | "hand" | "claim" | "saved";
 type UsageFilter = "all" | "new" | "used" | "unset";
 type DestinationFilter = "all" | Destination | "unreviewed";
@@ -70,6 +71,7 @@ const DEST_BADGE: Record<Destination, string> = {
   online_warehouse: "أونلاين",
   shelf: "رف",
   maintenance: "صيانة",
+  to_customer: "عميل",
 };
 
 function productReviewOf(product: LinkedProduct): Review | null {
@@ -255,6 +257,7 @@ const DEST_FILTERS: Array<{ id: DestinationFilter; label: string }> = [
   { id: "online_warehouse", label: "مخزن أونلاين" },
   { id: "shelf", label: "الرف" },
   { id: "maintenance", label: "صيانة" },
+  { id: "to_customer", label: "يعود إلى العميل" },
   { id: "unreviewed", label: "لسه متفحصش" },
 ];
 
@@ -269,6 +272,7 @@ const DEST_PRINT_ORDER: Array<{ id: Destination | "unreviewed"; label: string }>
   { id: "online_warehouse", label: "مخزن أونلاين" },
   { id: "shelf", label: "الرف" },
   { id: "maintenance", label: "صيانة" },
+  { id: "to_customer", label: "يعود إلى العميل" },
   { id: "unreviewed", label: "لسه متفحصش" },
 ];
 
@@ -668,7 +672,7 @@ function ReviewCards({
     return body.product;
   }
 
-  async function finish(destinationOverride?: "shelf" | "maintenance") {
+  async function finish(destinationOverride?: "shelf" | "maintenance" | "to_customer") {
     if (!condition) return;
     if (usage !== "new" && usage !== "used") {
       setError("حدّد المنتج جديد أو مستخدم.");
@@ -856,7 +860,7 @@ function ReviewCards({
             {soundChoice ? (
               <>
                 <p className="text-center text-sm font-extrabold text-[#14213D]/70">اختَر الوجهة بعد المعاينة</p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <button
                     type="button"
                     disabled={saving}
@@ -872,6 +876,14 @@ function ReviewCards({
                     className="rounded-2xl bg-[#E6B325] px-4 py-8 text-xl font-extrabold text-black disabled:opacity-60"
                   >
                     {saving ? "جارٍ الحفظ…" : "إلى الصيانة"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void finish("to_customer")}
+                    className="rounded-2xl bg-[#FFF200] px-4 py-8 text-xl font-extrabold text-[#14213D] disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "يعود إلى العميل"}
                   </button>
                 </div>
               </>
@@ -930,6 +942,7 @@ export function MaintenanceClient({
   const startHub: HubTab =
     initialHub === "variance" ||
     initialHub === "tech" ||
+    initialHub === "tech_report" ||
     initialHub === "receive" ||
     initialHub === "accounting" ||
     initialHub === "inspect"
@@ -1257,6 +1270,7 @@ export function MaintenanceClient({
   const hubTabs: Array<{ id: HubTab; label: string; show: boolean }> = [
     { id: "inspect", label: "فحص المرتجع", show: canInspect },
     { id: "tech", label: "فني الصيانة", show: canTech },
+    { id: "tech_report", label: "تقرير فني", show: canTech },
     { id: "receive", label: "عائد من الصيانة", show: canInspect },
     { id: "accounting", label: "حسابات الصيانة", show: canAccounting },
     { id: "variance", label: "فروقات", show: canInspect || canTech },
@@ -1363,6 +1377,7 @@ export function MaintenanceClient({
         {hubTab === "tech" && canTech ? (
           <TechPanel rows={panelRows} onChanged={() => void load({ from, to })} />
         ) : null}
+        {hubTab === "tech_report" && canTech ? <TechReportPanel from={from} to={to} /> : null}
         {hubTab === "receive" && canInspect ? (
           <ReceiveAndShelfPanel rows={panelRows} onChanged={() => void load({ from, to })} />
         ) : null}

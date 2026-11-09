@@ -6,6 +6,7 @@ import {
   type BostaReturnReview,
   type ReviewCondition,
   type ReviewDefect,
+  asReviewDestination,
   type ReviewDestination,
   type ReviewGrade,
   type ReviewUsage,
@@ -180,10 +181,7 @@ function packLinked(row: {
 }): LinkedReturnProduct {
   const condition: ReviewCondition | null =
     row.condition === "sound" || row.condition === "broken" || row.condition === "defective" ? row.condition : null;
-  const destination: ReviewDestination | null =
-    row.destination === "online_warehouse" || row.destination === "shelf" || row.destination === "maintenance"
-      ? row.destination
-      : null;
+  const destination = asReviewDestination(row.destination) || null;
   const usage: ReviewUsage | null = row.usage === "new" || row.usage === "used" ? row.usage : null;
   const grade: ReviewGrade | null =
     row.grade === "first" || row.grade === "second" || row.grade === "scrap" ? row.grade : null;
@@ -435,15 +433,17 @@ export function aggregateReviewFromProducts(products: LinkedReturnProduct[]): Om
   const reviewed = products.filter((p) => p.condition && p.destination);
   if (!reviewed.length) return null;
   const maintenance = reviewed.filter((p) => p.destination === "maintenance");
+  const toCustomer = reviewed.filter((p) => p.destination === "to_customer");
   const online = reviewed.filter((p) => p.destination === "online_warehouse");
   const shelf = reviewed.filter((p) => p.destination === "shelf");
   let destination: ReviewDestination = "shelf";
   if (maintenance.length) destination = "maintenance";
+  else if (toCustomer.length) destination = "to_customer";
   else if (online.length && !shelf.length) destination = "online_warehouse";
   else if (shelf.length) destination = "shelf";
   else if (online.length) destination = "online_warehouse";
 
-  const focus = maintenance[0] || shelf[0] || online[0] || reviewed[0];
+  const focus = maintenance[0] || toCustomer[0] || shelf[0] || online[0] || reviewed[0];
   const earliest = (values: Array<string | null>) =>
     values.filter(Boolean).sort()[0] || null;
   const latest = (values: Array<string | null>) =>

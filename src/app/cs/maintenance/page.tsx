@@ -17,7 +17,12 @@ export default async function CsMaintenancePage({
   const params = (await searchParams) || {};
   const hub = params.hub;
   const initialHub =
-    hub === "variance" || hub === "tech" || hub === "receive" || hub === "accounting" || hub === "inspect"
+    hub === "variance" ||
+    hub === "tech" ||
+    hub === "tech_report" ||
+    hub === "receive" ||
+    hub === "accounting" ||
+    hub === "inspect"
       ? hub
       : undefined;
   return (
