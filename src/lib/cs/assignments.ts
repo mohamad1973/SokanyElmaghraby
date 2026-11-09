@@ -143,15 +143,18 @@ export async function stampAssignedAgentInOrderRange(agentId: number, from: numb
 }
 
 async function stampOrdersInRange(prisma: CsDb, agentId: number, from: number, to: number) {
+  // Never overwrite assignment on terminal statuses (saved / cancelled / failed).
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
     SET assignedAgentId = ${agentId}
     WHERE CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
+      AND status IN ('PENDING', 'IN_PROGRESS')
   `;
   const counted = await prisma.$queryRaw<Array<{ n: bigint | number }>>`
     SELECT COUNT(*) AS n
     FROM CsOrderConfirmation
     WHERE assignedAgentId = ${agentId}
+      AND status IN ('PENDING', 'IN_PROGRESS')
       AND CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
   `;
   return Number(counted[0]?.n ?? 0);
@@ -162,6 +165,7 @@ async function unstampOrdersInRange(prisma: CsDb, agentId: number, from: number,
     UPDATE CsOrderConfirmation
     SET assignedAgentId = NULL
     WHERE assignedAgentId = ${agentId}
+      AND status IN ('PENDING', 'IN_PROGRESS')
       AND CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
   `;
 }
@@ -274,13 +278,16 @@ export async function fairSplitAssign(input: {
   let rows: Awaited<ReturnType<typeof prisma.csOrderConfirmation.findMany>>;
 
   if (input.confirmationIds?.length) {
-    // Visible-queue mode: distribute exactly these IDs
+    // Visible-queue mode: only open statuses (never reassign saved/cancelled).
     rows = await prisma.csOrderConfirmation.findMany({
-      where: { id: { in: input.confirmationIds } },
+      where: {
+        id: { in: input.confirmationIds },
+        status: { in: ["PENDING", "IN_PROGRESS"] },
+      },
       orderBy: { createdAt: "desc" },
     });
     if (rows.length === 0) {
-      return { ok: false as const, message: "لا توجد أوردرات ظاهرة للتوزيع. زامني القائمة أولاً." };
+      return { ok: false as const, message: "لا توجد أوردرات ظاهرة (غير محفوظة) للتوزيع. زامني القائمة أولاً." };
     }
   } else {
     rows = await prisma.csOrderConfirmation.findMany({
@@ -381,7 +388,7 @@ export async function ruleBasedAssign(input: {
   await ensureCsTables();
 
   let rows = await prisma.csOrderConfirmation.findMany({
-    where: { status: { in: ["PENDING", "IN_PROGRESS", "CONFIRMED"] } },
+    where: { status: { in: ["PENDING", "IN_PROGRESS"] } },
     orderBy: { createdAt: "desc" },
     take: 500,
   });

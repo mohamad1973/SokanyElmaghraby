@@ -635,6 +635,7 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `parentConfirmationId` INT NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `fulfillmentKind` VARCHAR(16) NULL",
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `assignedAt` DATETIME(3) NULL",
+    "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `confirmedByAgentId` INT NULL",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `carryKey` INT NOT NULL DEFAULT 0",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `sourceWeekId` INT NULL",
   ];
@@ -660,6 +661,17 @@ async function runEnsureCsTables() {
     const message = error instanceof Error ? error.message : String(error);
     if (!/Duplicate|already exists|1061/i.test(message)) {
       console.warn("[cs] username index:", message.slice(0, 200));
+    }
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      "CREATE INDEX `CsOrderConfirmation_confirmedByAgentId_idx` ON `CsOrderConfirmation` (`confirmedByAgentId`)",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate|already exists|1061/i.test(message)) {
+      console.warn("[cs] confirmedByAgentId index:", message.slice(0, 200));
     }
   }
 
@@ -741,6 +753,10 @@ async function ensureCriticalCsOrderConfirmationColumns(
     {
       name: "assignedAt",
       sql: "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `assignedAt` DATETIME(3) NULL",
+    },
+    {
+      name: "confirmedByAgentId",
+      sql: "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `confirmedByAgentId` INT NULL",
     },
   ] as const;
 

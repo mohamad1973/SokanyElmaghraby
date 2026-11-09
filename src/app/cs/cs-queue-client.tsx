@@ -54,6 +54,7 @@ export type CsQueueItem = {
   deliveredToCustomer?: boolean;
   customerFollowUp?: boolean;
   assignedAgent?: { id?: number; name: string } | null;
+  confirmedByAgent?: { id?: number; name: string } | null;
   customerSnapshot?: {
     customerName?: string;
     phone?: string;
@@ -2614,9 +2615,12 @@ export function CsQueueClient({
                         })}
                       </div>
                     ) : null}
-                    {item.shippingCompany === "sayed_temima" && item.status === "CONFIRMED" && item.confirmedAt ? (
+                    {item.status === "CONFIRMED" && item.confirmedAt ? (
                       <span className="text-[11px] font-bold text-[#14213D]/70">
                         حُفظ {formatCairoOrderDateTime(item.confirmedAt).absolute}
+                        {item.confirmedByAgent?.name
+                          ? ` · حفظه ${item.confirmedByAgent.name}`
+                          : ""}
                         {item.confirmationEditedAt
                           ? ` · عُدّل ${formatCairoOrderDateTime(item.confirmationEditedAt).absolute}`
                           : ""}
@@ -2777,10 +2781,15 @@ export function CsQueueClient({
                     </div>
                   ) : null}
                   {isSupervisor || isAccounting ? (
-                    <div className="flex w-1/2 min-w-0 items-center justify-center self-center justify-self-center rounded-lg bg-[#F5F5F0] px-2 py-1 text-center">
+                    <div className="flex w-1/2 min-w-0 flex-col items-center justify-center gap-0.5 self-center justify-self-center rounded-lg bg-[#F5F5F0] px-2 py-1 text-center">
                       <span className="truncate text-sm font-extrabold leading-tight text-[#14213D]">
                         {item.assignedAgent?.name || "—"}
                       </span>
+                      {item.status === "CONFIRMED" ? (
+                        <span className="truncate text-[10px] font-bold leading-tight text-[#14213D]/65">
+                          حفظه: {item.confirmedByAgent?.name || "—"}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                   {canHandToCarrier ? (

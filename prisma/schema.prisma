@@ -253,6 +253,7 @@ model CsAgent {
   updatedAt     DateTime               @updatedAt
   courierAreas  String?                @db.Text
   confirmations CsOrderConfirmation[]  @relation("AssignedAgent")
+  confirmedOrders CsOrderConfirmation[] @relation("ConfirmedByAgent")
   courierOrders CsOrderConfirmation[]  @relation("TemimaCourier")
   monaCourierOrders CsOrderConfirmation[] @relation("MonaCourier")
   assignments   CsOrderAssignment[]    @relation("AssignmentAgent")
@@ -267,6 +268,8 @@ model CsOrderConfirmation {
   assignedAgentId      Int?
   assignedAt           DateTime?
   assignedAgent        CsAgent?            @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  confirmedByAgentId   Int?
+  confirmedByAgent     CsAgent?            @relation("ConfirmedByAgent", fields: [confirmedByAgentId], references: [id], onDelete: SetNull)
   courierAgentId       Int?
   courierAssignedAt    DateTime?
   courierOutcome       String?             @db.VarChar(16)
@@ -336,6 +339,7 @@ model CsOrderConfirmation {
 
   @@index([status])
   @@index([assignedAgentId])
+  @@index([confirmedByAgentId])
   @@index([courierAgentId])
   @@index([monaCourierId])
   @@index([createdAt])

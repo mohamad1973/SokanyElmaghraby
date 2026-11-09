@@ -331,12 +331,14 @@ export async function createFulfillmentFromOrder(input: {
     note: `${kindLabel} لأوردر #${parent.wooOrderNumber} — ${settlementNote}`,
   };
 
+  const saverId = parent.assignedAgentId || input.agentId;
   const created = await prisma.csOrderConfirmation.create({
     data: {
       wooOrderId,
       wooOrderNumber,
       status: CS_CONFIRMATION_STATUS.CONFIRMED,
-      assignedAgentId: parent.assignedAgentId || input.agentId,
+      assignedAgentId: saverId,
+      confirmedByAgentId: input.agentId,
       customerSnapshot: snapshot,
       shippingCompany: input.desk,
       confirmedAt: now,

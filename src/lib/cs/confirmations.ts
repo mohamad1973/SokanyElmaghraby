@@ -485,7 +485,7 @@ async function loadConfirmationsByIds(prisma: NonNullable<ReturnType<typeof getP
       if (!chunk.length) continue;
       const part = await prisma.csOrderConfirmation.findMany({
         where: { id: { in: chunk } },
-        include: { assignedAgent: true },
+        include: { assignedAgent: true, confirmedByAgent: true },
       });
       rows.push(...part);
     }
@@ -927,7 +927,7 @@ export async function listCsConfirmations(status?: string) {
   await ensureCsTables();
   const rows = await prisma.csOrderConfirmation.findMany({
     where: status && status !== "all" ? { status } : undefined,
-    include: { assignedAgent: true },
+    include: { assignedAgent: true, confirmedByAgent: true },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
@@ -982,6 +982,7 @@ export function serializeCsQueueItem(row: {
   distributedAt?: Date | string | null;
   createdAt: Date;
   assignedAgent?: { id: number; name: string } | null;
+  confirmedByAgent?: { id: number; name: string } | null;
   answers?: Array<{ itemKey: string; confirmed: boolean; value: string | null; note: string | null }>;
 }) {
   const raw = (row.customerSnapshot as CsQueueSnapshot | null) || null;
@@ -1090,6 +1091,9 @@ export function serializeCsQueueItem(row: {
     bostaShippingFee: row.bostaShippingFee == null ? null : Number(row.bostaShippingFee),
     assignedAgent: row.assignedAgent
       ? { id: row.assignedAgent.id, name: row.assignedAgent.name }
+      : null,
+    confirmedByAgent: row.confirmedByAgent
+      ? { id: row.confirmedByAgent.id, name: row.confirmedByAgent.name }
       : null,
     customerSnapshot: raw
       ? {
@@ -1200,7 +1204,7 @@ export async function getCsConfirmation(id: number) {
 
   return prisma.csOrderConfirmation.findUnique({
     where: { id },
-    include: { assignedAgent: true, answers: true },
+    include: { assignedAgent: true, confirmedByAgent: true, answers: true },
   });
 }
 
@@ -1242,7 +1246,7 @@ export async function startCsConfirmation(id: number, agentId: number) {
       startedAt: row.startedAt || new Date(),
       customerSnapshot: snapshot ?? undefined,
     },
-    include: { answers: true, assignedAgent: true },
+    include: { answers: true, assignedAgent: true, confirmedByAgent: true },
   });
 
   return { ok: true as const, confirmation: updated };
@@ -1565,7 +1569,9 @@ export async function saveCsConfirmation(input: {
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.CONFIRMED,
-        ...(alreadySaved ? { confirmationEditedAt: savedAt } : { confirmedAt: savedAt }),
+        ...(alreadySaved
+          ? { confirmationEditedAt: savedAt }
+          : { confirmedAt: savedAt, confirmedByAgentId: input.agentId }),
         failReason: null,
         assignedAgentId: input.agentId,
         customerSnapshot: nextSnap,
@@ -2047,7 +2053,9 @@ export async function saveCsConfirmation(input: {
     where: { id: input.id },
     data: {
       status: CS_CONFIRMATION_STATUS.CONFIRMED,
-      ...(alreadySaved ? { confirmationEditedAt: savedAt } : { confirmedAt: savedAt }),
+      ...(alreadySaved
+        ? { confirmationEditedAt: savedAt }
+        : { confirmedAt: savedAt, confirmedByAgentId: input.agentId }),
       assignedAgentId: input.agentId,
       shippingCompany,
       ...(shippingChanged ? { shippingAssignedAt: savedAt } : {}),
