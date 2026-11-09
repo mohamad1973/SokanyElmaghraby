@@ -21,6 +21,7 @@ export type PanelReview = {
 
 export type PanelRow = {
   trackingNumber: string;
+  productId?: number | null;
   wooOrderNumber: string;
   customerName: string;
   phone: string;
@@ -31,6 +32,10 @@ export type PanelRow = {
   statusLabel: string;
   review: PanelReview | null;
 };
+
+function panelKey(row: PanelRow) {
+  return row.productId != null ? `${row.trackingNumber}:${row.productId}` : row.trackingNumber;
+}
 
 export type VariancePayload = {
   delivered: number;
@@ -157,8 +162,9 @@ export function TechPanel({
   const [draft, setDraft] = useState<Record<string, { grade: Grade | ""; techNote: string }>>({});
 
   function stateFor(row: PanelRow) {
+    const key = panelKey(row);
     return (
-      draft[row.trackingNumber] || {
+      draft[key] || {
         grade: (row.review?.grade || "") as Grade | "",
         techNote: row.review?.techNote || "",
       }
@@ -168,7 +174,8 @@ export function TechPanel({
   async function saveGrade(row: PanelRow) {
     const state = stateFor(row);
     if (!state.grade) return;
-    setBusy(row.trackingNumber);
+    const key = panelKey(row);
+    setBusy(key);
     try {
       const response = await fetch("/api/cs/maintenance/returns", {
         method: "POST",
@@ -178,6 +185,7 @@ export function TechPanel({
           trackingNumber: row.trackingNumber,
           grade: state.grade,
           techNote: state.techNote,
+          ...(row.productId != null ? { productId: row.productId } : {}),
         }),
       });
       if (response.ok) onChanged();
@@ -209,8 +217,9 @@ export function TechPanel({
             {pending.length ? (
               pending.map((row) => {
                 const state = stateFor(row);
+                const key = panelKey(row);
                 return (
-                  <tr key={row.trackingNumber} className="border-t border-black/5">
+                  <tr key={key} className="border-t border-black/5">
                     <td className="px-2 py-2 font-bold" dir="ltr">
                       {row.trackingNumber}
                     </td>
@@ -232,7 +241,7 @@ export function TechPanel({
                             onClick={() =>
                               setDraft((cur) => ({
                                 ...cur,
-                                [row.trackingNumber]: { ...state, grade: item.id },
+                                [key]: { ...state, grade: item.id },
                               }))
                             }
                             className={`rounded-full px-2 py-1 text-xs font-extrabold ${
@@ -251,7 +260,7 @@ export function TechPanel({
                         onChange={(e) =>
                           setDraft((cur) => ({
                             ...cur,
-                            [row.trackingNumber]: { ...state, techNote: e.target.value },
+                            [key]: { ...state, techNote: e.target.value },
                           }))
                         }
                         className="w-40 rounded-lg border border-black/10 px-2 py-1 text-xs font-bold"
@@ -261,11 +270,11 @@ export function TechPanel({
                     <td className="px-2 py-2">
                       <button
                         type="button"
-                        disabled={!state.grade || busy === row.trackingNumber || Boolean(row.review?.receivedFromMaintenanceAt)}
+                        disabled={!state.grade || busy === key || Boolean(row.review?.receivedFromMaintenanceAt)}
                         onClick={() => void saveGrade(row)}
                         className="rounded-full bg-[#14213D] px-3 py-1 text-xs font-extrabold text-white disabled:opacity-40"
                       >
-                        {busy === row.trackingNumber ? "…" : "حفظ"}
+                        {busy === key ? "…" : "حفظ"}
                       </button>
                     </td>
                   </tr>
@@ -329,7 +338,10 @@ export function ReceiveAndShelfPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "receive",
-          trackingNumbers: ready.map((r) => r.trackingNumber),
+          items: ready.map((r) => ({
+            trackingNumber: r.trackingNumber,
+            productId: r.productId ?? null,
+          })),
         }),
       });
       onChanged();
@@ -338,13 +350,17 @@ export function ReceiveAndShelfPanel({
     }
   }
 
-  async function receiveOne(trackingNumber: string) {
-    setBusyTrack(trackingNumber);
+  async function receiveOne(row: PanelRow) {
+    const key = panelKey(row);
+    setBusyTrack(key);
     try {
       await fetch("/api/cs/maintenance/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "receive", trackingNumbers: [trackingNumber] }),
+        body: JSON.stringify({
+          action: "receive",
+          items: [{ trackingNumber: row.trackingNumber, productId: row.productId ?? null }],
+        }),
       });
       onChanged();
     } finally {
@@ -352,13 +368,17 @@ export function ReceiveAndShelfPanel({
     }
   }
 
-  async function shelfOne(trackingNumber: string) {
+  async function shelfOne(row: PanelRow) {
     setBusy(true);
     try {
       await fetch("/api/cs/maintenance/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "shelf", trackingNumber }),
+        body: JSON.stringify({
+          action: "shelf",
+          trackingNumber: row.trackingNumber,
+          ...(row.productId != null ? { productId: row.productId } : {}),
+        }),
       });
       onChanged();
     } finally {
@@ -400,32 +420,35 @@ export function ReceiveAndShelfPanel({
                 </tr>
               </thead>
               <tbody>
-                {ready.map((row) => (
-                  <tr key={row.trackingNumber} className="border-t border-black/5">
-                    <td className="px-2 py-2 font-bold" dir="ltr">
-                      {row.trackingNumber}
-                    </td>
-                    <td className="px-2 py-2">
-                      <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
-                    </td>
-                    <td className="px-2 py-2">{row.wooOrderNumber || "—"}</td>
-                    <td className="px-2 py-2">{row.product || "—"}</td>
-                    <td className="px-2 py-2 font-extrabold">
-                      {row.review?.grade ? GRADE_LABEL[row.review.grade] : "—"}
-                    </td>
-                    <td className="px-2 py-2 text-xs">{row.review?.techNote || "—"}</td>
-                    <td className="px-2 py-2">
-                      <button
-                        type="button"
-                        disabled={busy || busyTrack === row.trackingNumber}
-                        onClick={() => void receiveOne(row.trackingNumber)}
-                        className="rounded-full bg-[#E6B325] px-3 py-1 text-xs font-extrabold text-black disabled:opacity-40"
-                      >
-                        {busyTrack === row.trackingNumber ? "…" : "استلام"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {ready.map((row) => {
+                  const key = panelKey(row);
+                  return (
+                    <tr key={key} className="border-t border-black/5">
+                      <td className="px-2 py-2 font-bold" dir="ltr">
+                        {row.trackingNumber}
+                      </td>
+                      <td className="px-2 py-2">
+                        <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
+                      </td>
+                      <td className="px-2 py-2">{row.wooOrderNumber || "—"}</td>
+                      <td className="px-2 py-2">{row.product || "—"}</td>
+                      <td className="px-2 py-2 font-extrabold">
+                        {row.review?.grade ? GRADE_LABEL[row.review.grade] : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-xs">{row.review?.techNote || "—"}</td>
+                      <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          disabled={busy || busyTrack === key}
+                          onClick={() => void receiveOne(row)}
+                          className="rounded-full bg-[#E6B325] px-3 py-1 text-xs font-extrabold text-black disabled:opacity-40"
+                        >
+                          {busyTrack === key ? "…" : "استلام"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -441,7 +464,7 @@ export function ReceiveAndShelfPanel({
         {firstReturned.length ? (
           firstReturned.map((row) => (
             <div
-              key={row.trackingNumber}
+              key={panelKey(row)}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#F5F5F0] px-3 py-2"
             >
               <span className="text-sm font-bold">
@@ -450,7 +473,7 @@ export function ReceiveAndShelfPanel({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void shelfOne(row.trackingNumber)}
+                onClick={() => void shelfOne(row)}
                 className="rounded-full bg-emerald-700 px-3 py-1 text-xs font-extrabold text-white"
               >
                 على الرف
@@ -489,9 +512,12 @@ export function ReceiveAndShelfPanel({
                           ? "هالك / حسابات"
                           : "—";
                   return (
-                    <tr key={`recv-${row.trackingNumber}`} className="border-t border-black/5">
+                    <tr key={`recv-${panelKey(row)}`} className="border-t border-black/5">
                       <td className="px-2 py-2 font-bold" dir="ltr">
                         {row.trackingNumber}
+                        {row.product ? (
+                          <span className="mt-0.5 block text-[11px] font-bold text-[#14213D]/60">{row.product}</span>
+                        ) : null}
                       </td>
                       <td className="px-2 py-2">{grade ? GRADE_LABEL[grade] : "—"}</td>
                       <td className="px-2 py-2 text-xs">

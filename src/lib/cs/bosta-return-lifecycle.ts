@@ -45,6 +45,8 @@ async function addColumn(sql: string) {
 export async function ensureMaintenanceLifecycleColumns() {
   await ensureBostaReturnCaptureTable();
   await ensureBostaReturnReviewTable();
+  const { ensureBostaReturnProductTable } = await import("@/lib/cs/bosta-return-product");
+  await ensureBostaReturnProductTable();
   await addColumn("ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `note` TEXT NULL");
   await addColumn("ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `openedAt` DATETIME(3) NULL");
   await addColumn("ALTER TABLE `CsBostaReturnCapture` ADD COLUMN `source` VARCHAR(16) NOT NULL DEFAULT 'bosta'");
@@ -147,6 +149,7 @@ export async function saveTechGrade(input: {
   trackingNumber: string;
   grade: string;
   techNote?: string;
+  productId?: number | null;
 }) {
   const prisma = getPrismaClient();
   const tracking = input.trackingNumber.trim();
@@ -156,6 +159,58 @@ export async function saveTechGrade(input: {
   if (!tracking) return { ok: false as const, message: "البوليصة ناقصة." };
   if (!grade) return { ok: false as const, message: "اختَر فرز أول أو فرز ثاني أو هالك." };
   await ensureMaintenanceLifecycleColumns();
+  const productId =
+    Number.isInteger(input.productId) && Number(input.productId) !== 0 ? Number(input.productId) : null;
+  const techNote = String(input.techNote || "").trim().slice(0, 2000);
+
+  if (productId != null) {
+    const { ensureBostaReturnProductTable } = await import("@/lib/cs/bosta-return-product");
+    await ensureBostaReturnProductTable();
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ destination: string | null; receivedFromMaintenanceAt: Date | null }>
+    >(
+      `SELECT destination, receivedFromMaintenanceAt FROM CsBostaReturnProduct
+       WHERE trackingNumber = ? AND productId = ? LIMIT 1`,
+      tracking,
+      productId,
+    );
+    if (!rows.length || rows[0].destination !== "maintenance") {
+      return { ok: false as const, message: "الصنف مش مسلّم للصيانة." };
+    }
+    if (rows[0].receivedFromMaintenanceAt) {
+      return { ok: false as const, message: "اترجعت لمسؤول الصيانة؛ مينفعش تعدّل التصنيف." };
+    }
+    await prisma.$executeRawUnsafe(
+      `UPDATE \`CsBostaReturnProduct\`
+       SET \`grade\` = ?, \`techNote\` = ?,
+           \`gradedAt\` = COALESCE(\`gradedAt\`, CURRENT_TIMESTAMP(3)),
+           \`updatedAt\` = CURRENT_TIMESTAMP(3)
+       WHERE \`trackingNumber\` = ? AND \`productId\` = ?`,
+      grade,
+      techNote || null,
+      tracking,
+      productId,
+    );
+    const { syncAggregateReviewFromProducts } = await import("@/lib/cs/bosta-return-review");
+    await syncAggregateReviewFromProducts(tracking);
+    try {
+      const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+      await recordReturnTrackEvent({
+        trackingNumber: tracking,
+        stage: "graded",
+        meta: { grade, techNote: techNote || null, productId },
+      });
+      await recordReturnTrackEvent({
+        trackingNumber: tracking,
+        stage: "returned_from_maintenance",
+        meta: { grade, productId },
+      });
+    } catch (error) {
+      console.warn("[return-track] grade event", error instanceof Error ? error.message : error);
+    }
+    return { ok: true as const, grade, techNote };
+  }
+
   const rows = await prisma.$queryRawUnsafe<Array<{ destination: string; receivedFromMaintenanceAt: Date | null }>>(
     `SELECT destination, receivedFromMaintenanceAt FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
     tracking,
@@ -166,7 +221,6 @@ export async function saveTechGrade(input: {
   if (rows[0].receivedFromMaintenanceAt) {
     return { ok: false as const, message: "اترجعت لمسؤول الصيانة؛ مينفعش تعدّل التصنيف." };
   }
-  const techNote = String(input.techNote || "").trim().slice(0, 2000);
   await prisma.$executeRawUnsafe(
     `UPDATE \`CsBostaReturnReview\`
      SET \`grade\` = ?, \`techNote\` = ?,
@@ -195,59 +249,179 @@ export async function saveTechGrade(input: {
   return { ok: true as const, grade, techNote };
 }
 
-export async function receiveFromMaintenance(trackingNumbers: string[]) {
+export type ReceiveItem = { trackingNumber: string; productId?: number | null };
+
+export async function receiveFromMaintenance(items: Array<string | ReceiveItem>) {
   const prisma = getPrismaClient();
-  const trackings = [...new Set(trackingNumbers.map((v) => v.trim()).filter(Boolean))];
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة.", count: 0 };
-  if (!trackings.length) return { ok: false as const, message: "اختَر بوالص للاستلام.", count: 0 };
+  const normalized: ReceiveItem[] = items
+    .map((item) =>
+      typeof item === "string"
+        ? { trackingNumber: item.trim(), productId: null }
+        : {
+            trackingNumber: String(item.trackingNumber || "").trim(),
+            productId:
+              Number.isInteger(item.productId) && Number(item.productId) !== 0
+                ? Number(item.productId)
+                : null,
+          },
+    )
+    .filter((item) => item.trackingNumber);
+  if (!normalized.length) return { ok: false as const, message: "اختَر بوالص للاستلام.", count: 0 };
   await ensureMaintenanceLifecycleColumns();
-  const marks = trackings.map(() => "?").join(", ");
-  const pending = await prisma.$queryRawUnsafe<Array<{ trackingNumber: string; grade: string | null }>>(
-    `SELECT trackingNumber, grade FROM CsBostaReturnReview
-     WHERE trackingNumber IN (${marks})
-       AND destination = 'maintenance'
-       AND grade IS NOT NULL AND grade <> ''
-       AND receivedFromMaintenanceAt IS NULL`,
-    ...trackings,
-  );
-  const changed = await prisma.$executeRawUnsafe(
-    `UPDATE \`CsBostaReturnReview\`
-     SET \`receivedFromMaintenanceAt\` = COALESCE(\`receivedFromMaintenanceAt\`, CURRENT_TIMESTAMP(3)),
-         \`outletAt\` = CASE WHEN \`grade\` = 'second' THEN COALESCE(\`outletAt\`, CURRENT_TIMESTAMP(3)) ELSE \`outletAt\` END,
-         \`scrapAt\` = CASE WHEN \`grade\` = 'scrap' THEN COALESCE(\`scrapAt\`, CURRENT_TIMESTAMP(3)) ELSE \`scrapAt\` END,
-         \`updatedAt\` = CURRENT_TIMESTAMP(3)
-     WHERE \`trackingNumber\` IN (${marks})
-       AND \`destination\` = 'maintenance'
-       AND \`grade\` IS NOT NULL
-       AND \`grade\` <> ''
-       AND \`receivedFromMaintenanceAt\` IS NULL`,
-    ...trackings,
-  );
+  const { ensureBostaReturnProductTable } = await import("@/lib/cs/bosta-return-product");
+  const { syncAggregateReviewFromProducts } = await import("@/lib/cs/bosta-return-review");
+  await ensureBostaReturnProductTable();
+
+  let changed = 0;
+  const trackEvents: Array<{ trackingNumber: string; grade: string | null; productId: number | null }> = [];
+  const trackingsToSync = new Set<string>();
+
+  for (const item of normalized) {
+    if (item.productId != null) {
+      const pending = await prisma.$queryRawUnsafe<Array<{ grade: string | null }>>(
+        `SELECT grade FROM CsBostaReturnProduct
+         WHERE trackingNumber = ? AND productId = ?
+           AND destination = 'maintenance'
+           AND grade IS NOT NULL AND grade <> ''
+           AND receivedFromMaintenanceAt IS NULL
+         LIMIT 1`,
+        item.trackingNumber,
+        item.productId,
+      );
+      if (!pending.length) continue;
+      const n = await prisma.$executeRawUnsafe(
+        `UPDATE \`CsBostaReturnProduct\`
+         SET \`receivedFromMaintenanceAt\` = COALESCE(\`receivedFromMaintenanceAt\`, CURRENT_TIMESTAMP(3)),
+             \`outletAt\` = CASE WHEN \`grade\` = 'second' THEN COALESCE(\`outletAt\`, CURRENT_TIMESTAMP(3)) ELSE \`outletAt\` END,
+             \`scrapAt\` = CASE WHEN \`grade\` = 'scrap' THEN COALESCE(\`scrapAt\`, CURRENT_TIMESTAMP(3)) ELSE \`scrapAt\` END,
+             \`updatedAt\` = CURRENT_TIMESTAMP(3)
+         WHERE \`trackingNumber\` = ? AND \`productId\` = ?
+           AND \`destination\` = 'maintenance'
+           AND \`grade\` IS NOT NULL AND \`grade\` <> ''
+           AND \`receivedFromMaintenanceAt\` IS NULL`,
+        item.trackingNumber,
+        item.productId,
+      );
+      if (Number(n)) {
+        changed += Number(n);
+        trackEvents.push({
+          trackingNumber: item.trackingNumber,
+          grade: pending[0].grade,
+          productId: item.productId,
+        });
+        trackingsToSync.add(item.trackingNumber);
+      }
+    } else {
+      const pending = await prisma.$queryRawUnsafe<Array<{ grade: string | null }>>(
+        `SELECT grade FROM CsBostaReturnReview
+         WHERE trackingNumber = ?
+           AND destination = 'maintenance'
+           AND grade IS NOT NULL AND grade <> ''
+           AND receivedFromMaintenanceAt IS NULL
+         LIMIT 1`,
+        item.trackingNumber,
+      );
+      if (!pending.length) continue;
+      const n = await prisma.$executeRawUnsafe(
+        `UPDATE \`CsBostaReturnReview\`
+         SET \`receivedFromMaintenanceAt\` = COALESCE(\`receivedFromMaintenanceAt\`, CURRENT_TIMESTAMP(3)),
+             \`outletAt\` = CASE WHEN \`grade\` = 'second' THEN COALESCE(\`outletAt\`, CURRENT_TIMESTAMP(3)) ELSE \`outletAt\` END,
+             \`scrapAt\` = CASE WHEN \`grade\` = 'scrap' THEN COALESCE(\`scrapAt\`, CURRENT_TIMESTAMP(3)) ELSE \`scrapAt\` END,
+             \`updatedAt\` = CURRENT_TIMESTAMP(3)
+         WHERE \`trackingNumber\` = ?
+           AND \`destination\` = 'maintenance'
+           AND \`grade\` IS NOT NULL AND \`grade\` <> ''
+           AND \`receivedFromMaintenanceAt\` IS NULL`,
+        item.trackingNumber,
+      );
+      if (Number(n)) {
+        changed += Number(n);
+        trackEvents.push({
+          trackingNumber: item.trackingNumber,
+          grade: pending[0].grade,
+          productId: null,
+        });
+      }
+    }
+  }
+
+  for (const tracking of trackingsToSync) {
+    await syncAggregateReviewFromProducts(tracking);
+  }
+
   try {
     const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
-    for (const row of pending) {
+    for (const row of trackEvents) {
       await recordReturnTrackEvent({
         trackingNumber: row.trackingNumber,
         stage: "received_from_maintenance",
-        meta: { grade: row.grade },
+        meta: { grade: row.grade, productId: row.productId },
       });
       if (row.grade === "second") {
-        await recordReturnTrackEvent({ trackingNumber: row.trackingNumber, stage: "to_outlet" });
+        await recordReturnTrackEvent({
+          trackingNumber: row.trackingNumber,
+          stage: "to_outlet",
+          meta: { productId: row.productId },
+        });
       } else if (row.grade === "scrap") {
-        await recordReturnTrackEvent({ trackingNumber: row.trackingNumber, stage: "to_scrap" });
+        await recordReturnTrackEvent({
+          trackingNumber: row.trackingNumber,
+          stage: "to_scrap",
+          meta: { productId: row.productId },
+        });
       }
     }
   } catch (error) {
     console.warn("[return-track] receive events", error instanceof Error ? error.message : error);
   }
-  return { ok: true as const, count: Number(changed) || 0, message: "" };
+  return { ok: true as const, count: changed, message: "" };
 }
 
-export async function markShelf(trackingNumber: string) {
+export async function markShelf(trackingNumber: string, productId?: number | null) {
   const prisma = getPrismaClient();
   const tracking = trackingNumber.trim();
   if (!prisma || !tracking) return { ok: false as const, message: "البوليصة ناقصة." };
   await ensureMaintenanceLifecycleColumns();
+  const pid =
+    Number.isInteger(productId) && Number(productId) !== 0 ? Number(productId) : null;
+
+  if (pid != null) {
+    const { ensureBostaReturnProductTable } = await import("@/lib/cs/bosta-return-product");
+    const { syncAggregateReviewFromProducts } = await import("@/lib/cs/bosta-return-review");
+    await ensureBostaReturnProductTable();
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ grade: string | null; receivedFromMaintenanceAt: Date | null }>
+    >(
+      `SELECT grade, receivedFromMaintenanceAt FROM CsBostaReturnProduct
+       WHERE trackingNumber = ? AND productId = ? LIMIT 1`,
+      tracking,
+      pid,
+    );
+    if (!rows.length) return { ok: false as const, message: "مفيش فحص للصنف." };
+    if (rows[0].grade !== "first") return { ok: false as const, message: "الرف لفرز أول فقط." };
+    if (!rows[0].receivedFromMaintenanceAt) return { ok: false as const, message: "استلم من الصيانة أولًا." };
+    await prisma.$executeRawUnsafe(
+      `UPDATE \`CsBostaReturnProduct\`
+       SET \`shelfAt\` = COALESCE(\`shelfAt\`, CURRENT_TIMESTAMP(3)), \`updatedAt\` = CURRENT_TIMESTAMP(3)
+       WHERE \`trackingNumber\` = ? AND \`productId\` = ?`,
+      tracking,
+      pid,
+    );
+    await syncAggregateReviewFromProducts(tracking);
+    try {
+      const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+      await recordReturnTrackEvent({
+        trackingNumber: tracking,
+        stage: "on_shelf",
+        meta: { productId: pid },
+      });
+    } catch (error) {
+      console.warn("[return-track] shelf event", error instanceof Error ? error.message : error);
+    }
+    return { ok: true as const };
+  }
+
   const rows = await prisma.$queryRawUnsafe<
     Array<{ grade: string | null; receivedFromMaintenanceAt: Date | null }>
   >(

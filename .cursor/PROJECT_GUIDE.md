@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فحص وتصنيف لكل صنف | عند ربط أصناف: اختيار صنف ثم فحصه مستقلًا (سليم/معيب، جديد/مستخدم، رف/صيانة)؛ فني/استلام/رف يعملون على أصناف الصيانة فقط؛ `CsBostaReturnReview` ملخص مجمع | `bosta-return-product.ts`, `bosta-return-review.ts`, `bosta-return-lifecycle.ts`, `maintenance-client.tsx`, `maintenance-panels.tsx` |
 | منتج حر في فحص المرتجع | لو المنتج مش على الموقع: الموظف يكتب الاسم/الموديل ويحفظه في `CsBostaReturnProduct` بمعرّف سالب | `bosta-return-product.ts`, `maintenance-client.tsx`, `returns/product/route.ts` |
 | دروب داون تقارير CS | زر تقارير يفتح قائمة بكل التقارير كروابط لأماكنها الحالية + فهرس في `/cs/reports`؛ بدون نقل التقارير | `reports-catalog.ts`, `cs-shell.tsx`, `reports-hub.tsx` |
 | مسار داخل فحص المرتجع | عمود «مسار» في جدول فحص المرتجع + خط زمني داخل نافذة الفحص لكل رفض/استبدال/استرجاع | `maintenance-client.tsx`, `return-track-line.tsx` |

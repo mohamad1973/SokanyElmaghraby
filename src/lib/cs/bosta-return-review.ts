@@ -255,12 +255,84 @@ function decidedReview(kind: BostaHeadingKind, condition: ReviewCondition, defec
   return null;
 }
 
+/** Write / refresh tracking-level CsBostaReturnReview from product rows (aggregate). */
+export async function syncAggregateReviewFromProducts(trackingNumberRaw: string) {
+  const prisma = getPrismaClient();
+  const trackingNumber = trackingNumberRaw.trim();
+  if (!prisma || !trackingNumber) return null as BostaReturnReview | null;
+  const { listBostaReturnProducts, aggregateReviewFromProducts } = await import(
+    "@/lib/cs/bosta-return-product"
+  );
+  await ensureBostaReturnReviewTable();
+  const products = (await listBostaReturnProducts([trackingNumber])).get(trackingNumber) || [];
+  const agg = aggregateReviewFromProducts(products);
+  if (!agg) return null;
+  const packed = packReview({
+    condition: agg.condition,
+    defects: agg.defects.join(","),
+    destination: agg.destination,
+    bostaClaim: agg.bostaClaim ? 1 : 0,
+    usage: agg.usage,
+    grade: agg.grade,
+    techNote: agg.techNote,
+    deliveredToMaintenanceAt: agg.deliveredToMaintenanceAt,
+    receivedFromMaintenanceAt: agg.receivedFromMaintenanceAt,
+    shelfAt: agg.shelfAt,
+  });
+  if (!packed) return null;
+  try {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO \`CsBostaReturnReview\`
+        (\`trackingNumber\`, \`condition\`, \`defects\`, \`destination\`, \`bostaClaim\`, \`usage\`,
+         \`grade\`, \`techNote\`, \`deliveredToMaintenanceAt\`, \`receivedFromMaintenanceAt\`, \`shelfAt\`,
+         \`inspectedAt\`, \`updatedAt\`)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
+      trackingNumber,
+      packed.condition,
+      packed.defects.join(","),
+      packed.destination,
+      packed.bostaClaim ? 1 : 0,
+      packed.usage,
+      packed.grade,
+      packed.techNote || null,
+      sqlDateTime(packed.deliveredToMaintenanceAt),
+      sqlDateTime(packed.receivedFromMaintenanceAt),
+      sqlDateTime(packed.shelfAt),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Duplicate|1062/i.test(message)) throw error;
+    await prisma.$executeRawUnsafe(
+      `UPDATE \`CsBostaReturnReview\`
+       SET \`condition\` = ?, \`defects\` = ?, \`destination\` = ?, \`bostaClaim\` = ?, \`usage\` = ?,
+           \`grade\` = ?, \`techNote\` = ?, \`deliveredToMaintenanceAt\` = ?, \`receivedFromMaintenanceAt\` = ?,
+           \`shelfAt\` = ?,
+           \`inspectedAt\` = COALESCE(\`inspectedAt\`, CURRENT_TIMESTAMP(3)),
+           \`updatedAt\` = CURRENT_TIMESTAMP(3)
+       WHERE \`trackingNumber\` = ?`,
+      packed.condition,
+      packed.defects.join(","),
+      packed.destination,
+      packed.bostaClaim ? 1 : 0,
+      packed.usage,
+      packed.grade,
+      packed.techNote || null,
+      sqlDateTime(packed.deliveredToMaintenanceAt),
+      sqlDateTime(packed.receivedFromMaintenanceAt),
+      sqlDateTime(packed.shelfAt),
+      trackingNumber,
+    );
+  }
+  return packed;
+}
+
 export async function saveBostaReturnReview(input: {
   trackingNumber: string;
   condition: string;
   defects: string[];
   usage: string;
   destinationOverride?: "shelf" | "maintenance" | null;
+  productId?: number | null;
 }) {
   const prisma = getPrismaClient();
   const trackingNumber = input.trackingNumber.trim();
@@ -297,6 +369,79 @@ export async function saveBostaReturnReview(input: {
     const source = String(stored[0]?.source || "").trim();
     const deskReturn = source === "temima" || source === "eid" || source === "momen";
     const bostaClaim = deskReturn ? false : decided.bostaClaim;
+
+    const productId =
+      Number.isInteger(input.productId) && Number(input.productId) !== 0 ? Number(input.productId) : null;
+
+    if (productId != null) {
+      const { listBostaReturnProducts, saveProductReturnReview } = await import(
+        "@/lib/cs/bosta-return-product"
+      );
+      const beforeList = (await listBostaReturnProducts([trackingNumber])).get(trackingNumber) || [];
+      const beforeProduct = beforeList.find((item) => item.productId === productId);
+      const wasNewDelivery =
+        decided.destination === "maintenance" && !beforeProduct?.deliveredToMaintenanceAt;
+      const productSaved = await saveProductReturnReview({
+        trackingNumber,
+        productId,
+        condition: decided.condition,
+        defects: decided.defects,
+        usage,
+        destination: decided.destination,
+        bostaClaim,
+      });
+      if (!productSaved.ok) return { ok: false as const, message: productSaved.message };
+      const packed = await syncAggregateReviewFromProducts(trackingNumber);
+      if (!packed) return { ok: false as const, message: "تعذر تحديث ملخص الفحص." };
+      try {
+        const { recordReturnTrackEvent } = await import("@/lib/cs/return-track");
+        const capture = await prisma.$queryRawUnsafe<Array<{ confirmationId: number | null }>>(
+          `SELECT confirmationId FROM CsBostaReturnCapture WHERE trackingNumber = ? LIMIT 1`,
+          trackingNumber,
+        );
+        const confirmationId = capture[0]?.confirmationId ?? null;
+        await recordReturnTrackEvent({
+          trackingNumber,
+          confirmationId,
+          stage: "inspected",
+          meta: {
+            productId,
+            productName: productSaved.product.productName,
+            condition: decided.condition,
+            usage,
+            defects: decided.defects,
+            destination: decided.destination,
+            bostaClaim,
+          },
+        });
+        if (decided.destination === "online_warehouse") {
+          await recordReturnTrackEvent({
+            trackingNumber,
+            confirmationId,
+            stage: "online_warehouse",
+            meta: { productId },
+          });
+        } else if (decided.destination === "shelf") {
+          await recordReturnTrackEvent({
+            trackingNumber,
+            confirmationId,
+            stage: "shelf_direct",
+            meta: { productId },
+          });
+        } else if (decided.destination === "maintenance" && wasNewDelivery) {
+          await recordReturnTrackEvent({
+            trackingNumber,
+            confirmationId,
+            stage: "delivered_to_maintenance",
+            meta: { productId },
+          });
+        }
+      } catch (error) {
+        console.warn("[return-track] product review events", error instanceof Error ? error.message : error);
+      }
+      return { ok: true as const, review: packed, product: productSaved.product };
+    }
+
     const prev = await prisma.$queryRawUnsafe<
       Array<{
         grade: string | null;

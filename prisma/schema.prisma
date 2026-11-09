@@ -642,11 +642,25 @@ model CsReturnTrackEvent {
 }
 
 model CsBostaReturnProduct {
-  trackingNumber String   @db.VarChar(64)
-  productId      Int
-  productName    String   @db.VarChar(191)
-  productCode    String   @default("") @db.VarChar(64)
-  updatedAt      DateTime @updatedAt
+  trackingNumber             String    @db.VarChar(64)
+  productId                  Int
+  productName                String    @db.VarChar(191)
+  productCode                String    @default("") @db.VarChar(64)
+  condition                  String?   @db.VarChar(16)
+  defects                    String    @default("") @db.VarChar(64)
+  destination                String?   @db.VarChar(32)
+  bostaClaim                 Boolean   @default(false)
+  usage                      String?   @db.VarChar(16)
+  grade                      String?   @db.VarChar(16)
+  techNote                   String?   @db.Text
+  inspectedAt                DateTime?
+  gradedAt                   DateTime?
+  deliveredToMaintenanceAt   DateTime?
+  receivedFromMaintenanceAt  DateTime?
+  shelfAt                    DateTime?
+  outletAt                   DateTime?
+  scrapAt                    DateTime?
+  updatedAt                  DateTime  @updatedAt
 
   @@id([trackingNumber, productId])
 }

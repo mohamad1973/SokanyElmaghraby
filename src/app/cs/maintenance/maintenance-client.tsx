@@ -47,7 +47,59 @@ type LinkedProduct = {
   productId: number;
   productName: string;
   productCode: string;
+  condition?: Condition | null;
+  defects?: Defect[];
+  destination?: Destination | null;
+  usage?: Usage | null;
+  bostaClaim?: boolean;
+  grade?: Grade | null;
+  techNote?: string;
+  inspectedAt?: string | null;
+  gradedAt?: string | null;
+  deliveredToMaintenanceAt?: string | null;
+  receivedFromMaintenanceAt?: string | null;
+  shelfAt?: string | null;
+  outletAt?: string | null;
+  scrapAt?: string | null;
+  label?: string;
 };
+
+const DEST_BADGE: Record<Destination, string> = {
+  online_warehouse: "أونلاين",
+  shelf: "رف",
+  maintenance: "صيانة",
+};
+
+function productReviewOf(product: LinkedProduct): Review | null {
+  if (!product.condition || !product.destination) return null;
+  return {
+    condition: product.condition,
+    defects: product.defects || [],
+    destination: product.destination,
+    bostaClaim: Boolean(product.bostaClaim),
+    usage: product.usage || null,
+    label: product.label || DEST_BADGE[product.destination],
+    grade: product.grade || null,
+    techNote: product.techNote || "",
+    deliveredToMaintenanceAt: product.deliveredToMaintenanceAt || null,
+    receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
+    shelfAt: product.shelfAt || null,
+  };
+}
+
+function rowNeedsReview(row: BostaRow) {
+  if (row.linkedProducts.length) {
+    return row.linkedProducts.some((product) => !product.condition || !product.destination);
+  }
+  return !row.review;
+}
+
+function rowMatchesDestination(row: BostaRow, destination: Destination) {
+  if (row.linkedProducts.length) {
+    return row.linkedProducts.some((product) => product.destination === destination);
+  }
+  return row.review?.destination === destination;
+}
 
 type Source = "bosta" | "temima" | "eid" | "momen";
 
@@ -353,7 +405,15 @@ function DeskTicketModal({
 }
 
 function productsLabel(products: LinkedProduct[], orderProduct: string) {
-  if (products.length) return products.map(productText).join("، ");
+  if (products.length) {
+    return products
+      .map((product) => {
+        const base = productText(product);
+        const badge = product.destination ? DEST_BADGE[product.destination] : "";
+        return badge ? `${base} (${badge})` : base;
+      })
+      .join("، ");
+  }
   return orderProduct || "";
 }
 
@@ -516,22 +576,28 @@ function ProductSearch({
 function ReviewCards({
   row,
   deskReturn,
+  product,
   onClose,
+  onBack,
   onSaved,
 }: {
   row: BostaRow;
   deskReturn?: boolean;
+  product?: LinkedProduct | null;
   onClose: () => void;
-  onSaved: (review: Review) => void;
+  onBack?: () => void;
+  onSaved: (review: Review, product?: LinkedProduct | null) => void;
 }) {
-  const [phase, setPhase] = useState<Phase>(row.review ? "saved" : "choose");
-  const [condition, setCondition] = useState<Condition | "">(row.review?.condition || "");
-  const [defects, setDefects] = useState<Defect[]>(row.review?.defects || []);
-  const [usage, setUsage] = useState<Usage | "">(row.review?.usage || "");
-  const [savedReview, setSavedReview] = useState<Review | null>(row.review);
+  const initialReview = product ? productReviewOf(product) : row.review;
+  const [phase, setPhase] = useState<Phase>(initialReview ? "saved" : "choose");
+  const [condition, setCondition] = useState<Condition | "">(initialReview?.condition || "");
+  const [defects, setDefects] = useState<Defect[]>(initialReview?.defects || []);
+  const [usage, setUsage] = useState<Usage | "">(initialReview?.usage || "");
+  const [savedReview, setSavedReview] = useState<Review | null>(initialReview);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const refused = row.kind === "refused";
+  const productTitle = product ? productText(product) : row.product || "—";
 
   function choose(next: Condition) {
     setError("");
@@ -563,16 +629,22 @@ function ReviewCards({
           defects,
           usage,
           ...(destinationOverride ? { destination: destinationOverride } : {}),
+          ...(product ? { productId: product.productId } : {}),
         }),
       });
-      const body = (await response.json()) as { message?: string; review?: Review; detail?: string };
+      const body = (await response.json()) as {
+        message?: string;
+        review?: Review;
+        product?: LinkedProduct;
+        detail?: string;
+      };
       if (!response.ok || !body.review) {
         const base = body.message || "تعذر حفظ الفحص.";
         setError(body.detail ? `${base} (${body.detail})` : base);
         return;
       }
-      onSaved(body.review);
-      setSavedReview(body.review);
+      onSaved(body.review, body.product || null);
+      setSavedReview(product && body.product ? productReviewOf(body.product) || body.review : body.review);
       setPhase("saved");
     } catch {
       setError("تعذر حفظ الفحص.");
@@ -597,12 +669,19 @@ function ReviewCards({
             <p className="text-xs font-extrabold text-[#14213D]/60">{row.statusLabel}</p>
             <h2 className="text-lg font-extrabold text-[#14213D]">{row.wooOrderNumber || row.trackingNumber}</h2>
             <p className="text-sm font-bold text-[#14213D]/70">
-              {row.customerName || "—"} · {row.product || "—"}
+              {row.customerName || "—"} · {productTitle}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold">
-            إغلاق
-          </button>
+          <div className="flex shrink-0 gap-2">
+            {onBack ? (
+              <button type="button" onClick={onBack} className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold">
+                الأصناف
+              </button>
+            ) : null}
+            <button type="button" onClick={onClose} className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold">
+              إغلاق
+            </button>
+          </div>
         </div>
         {row.confirmationId ? (
           <Link href={`/cs/orders/${row.confirmationId}`} className="inline-block text-sm font-extrabold text-[#14213D] underline">
@@ -624,6 +703,15 @@ function ReviewCards({
             >
               تعديل
             </button>
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="w-full rounded-2xl bg-[#14213D] px-4 py-3 text-sm font-extrabold text-white"
+              >
+                صنف تالي
+              </button>
+            ) : null}
           </div>
         ) : null}
         {phase === "choose" ? (
@@ -788,6 +876,7 @@ export function MaintenanceClient({
   const [destinationFilter, setDestinationFilter] = useState<DestinationFilter>("all");
   const [grouped, setGrouped] = useState(false);
   const [active, setActive] = useState<BostaRow | null>(null);
+  const [activeProductId, setActiveProductId] = useState<number | null>(null);
   const [linking, setLinking] = useState<BostaRow | null>(null);
   const [noteRow, setNoteRow] = useState<BostaRow | null>(null);
   const [ticketRow, setTicketRow] = useState<BostaRow | null>(null);
@@ -883,6 +972,7 @@ export function MaintenanceClient({
 
   async function openReview(row: BostaRow) {
     setActive(row);
+    setActiveProductId(null);
     if (!canInspect) return;
     try {
       const response = await fetch("/api/cs/maintenance/returns", {
@@ -970,12 +1060,22 @@ export function MaintenanceClient({
     }
   }
 
-  function rememberReview(trackingNumber: string, review: Review) {
-    patchCapturedRow(trackingNumber, (row) => ({
-      ...row,
-      review,
-      searchText: `${row.searchText} ${review.label}`,
-    }));
+  function rememberReview(trackingNumber: string, review: Review, product?: LinkedProduct | null) {
+    patchCapturedRow(trackingNumber, (row) => {
+      const linkedProducts = product
+        ? (row.linkedProducts || []).map((item) =>
+            item.productId === product.productId ? { ...item, ...product } : item,
+          )
+        : row.linkedProducts;
+      const productLabel = productsLabel(linkedProducts, row.orderProduct);
+      return {
+        ...row,
+        review,
+        linkedProducts,
+        product: productLabel || row.product,
+        searchText: `${row.searchText} ${review.label} ${productLabel}`,
+      };
+    });
   }
 
   function visible<T extends { searchText: string }>(rows: T[]) {
@@ -986,14 +1086,24 @@ export function MaintenanceClient({
   const bostaFiltered = bostaSearched.filter((row) => {
     if (!kinds.includes(row.kind)) return false;
     if (usageFilter === "new" || usageFilter === "used") {
-      if (row.review?.usage !== usageFilter) return false;
+      if (row.linkedProducts.length) {
+        if (!row.linkedProducts.some((product) => product.usage === usageFilter)) return false;
+      } else if (row.review?.usage !== usageFilter) {
+        return false;
+      }
     } else if (usageFilter === "unset") {
-      if (row.review?.usage === "new" || row.review?.usage === "used") return false;
+      if (row.linkedProducts.length) {
+        if (row.linkedProducts.every((product) => product.usage === "new" || product.usage === "used")) {
+          return false;
+        }
+      } else if (row.review?.usage === "new" || row.review?.usage === "used") {
+        return false;
+      }
     }
     if (destinationFilter === "unreviewed") {
-      if (row.review) return false;
+      if (!rowNeedsReview(row)) return false;
     } else if (destinationFilter !== "all") {
-      if (row.review?.destination !== destinationFilter) return false;
+      if (!rowMatchesDestination(row, destinationFilter)) return false;
     }
     return true;
   });
@@ -1008,22 +1118,51 @@ export function MaintenanceClient({
   const printByDestination = DEST_PRINT_ORDER.map((dest) => ({
     ...dest,
     rows: bostaFiltered.filter((row) =>
-      dest.id === "unreviewed" ? !row.review : row.review?.destination === dest.id,
+      dest.id === "unreviewed" ? rowNeedsReview(row) : rowMatchesDestination(row, dest.id),
     ),
   })).filter((group) => group.rows.length > 0);
-  const maintenancePrintRows = bostaSearched.filter((row) => row.review?.destination === "maintenance");
-  const panelRows: PanelRow[] = bostaSearched.map((row) => ({
-    trackingNumber: row.trackingNumber,
-    wooOrderNumber: row.wooOrderNumber,
-    customerName: row.customerName,
-    phone: row.phone,
-    product: row.product,
-    day: row.day,
-    note: row.note || "",
-    openedAt: row.openedAt,
-    statusLabel: row.statusLabel,
-    review: row.review
-      ? {
+  const maintenancePrintRows = bostaSearched.filter((row) => rowMatchesDestination(row, "maintenance"));
+  const panelRows: PanelRow[] = bostaSearched.flatMap((row): PanelRow[] => {
+    const maintenanceProducts = row.linkedProducts.filter((product) => product.destination === "maintenance");
+    if (maintenanceProducts.length) {
+      return maintenanceProducts.map((product): PanelRow => ({
+        trackingNumber: row.trackingNumber,
+        productId: product.productId,
+        wooOrderNumber: row.wooOrderNumber,
+        customerName: row.customerName,
+        phone: row.phone,
+        product: productText(product),
+        day: row.day,
+        note: row.note || "",
+        openedAt: row.openedAt,
+        statusLabel: row.statusLabel,
+        review: {
+          destination: "maintenance",
+          grade: product.grade || null,
+          techNote: product.techNote || "",
+          deliveredToMaintenanceAt: product.deliveredToMaintenanceAt || null,
+          receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
+          shelfAt: product.shelfAt || null,
+          defects: product.defects || [],
+          label: product.label || "صيانة",
+          usage: product.usage || null,
+        },
+      }));
+    }
+    if (row.review?.destination !== "maintenance") return [];
+    return [
+      {
+        trackingNumber: row.trackingNumber,
+        productId: null,
+        wooOrderNumber: row.wooOrderNumber,
+        customerName: row.customerName,
+        phone: row.phone,
+        product: row.product,
+        day: row.day,
+        note: row.note || "",
+        openedAt: row.openedAt,
+        statusLabel: row.statusLabel,
+        review: {
           destination: row.review.destination,
           grade: row.review.grade,
           techNote: row.review.techNote || "",
@@ -1033,9 +1172,10 @@ export function MaintenanceClient({
           defects: row.review.defects,
           label: row.review.label,
           usage: row.review.usage,
-        }
-      : null,
-  }));
+        },
+      },
+    ];
+  });
   const usageFilterLabel = USAGE_FILTERS.find((item) => item.id === usageFilter)?.label || "";
   const destFilterLabel = DEST_FILTERS.find((item) => item.id === destinationFilter)?.label || "";
   const hubTabs: Array<{ id: HubTab; label: string; show: boolean }> = [
@@ -1305,6 +1445,15 @@ export function MaintenanceClient({
                                     className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-bold text-[#14213D]"
                                   >
                                     <span className="truncate">{productText(item)}</span>
+                                    {item.destination ? (
+                                      <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-extrabold ring-1 ring-black/10">
+                                        {DEST_BADGE[item.destination]}
+                                      </span>
+                                    ) : (
+                                      <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-900 ring-1 ring-amber-200">
+                                        —
+                                      </span>
+                                    )}
                                     <button
                                       type="button"
                                       aria-label="شيل المنتج"
@@ -1385,13 +1534,81 @@ export function MaintenanceClient({
           onClose={() => setTicketRow(null)}
         />
       ) : null}
-      {active && canInspect ? (
+      {active && canInspect && active.linkedProducts.length >= 1 && activeProductId == null ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" dir="rtl">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-extrabold text-[#14213D]/60">{active.statusLabel}</p>
+                <h2 className="text-lg font-extrabold text-[#14213D]">
+                  {active.wooOrderNumber || active.trackingNumber}
+                </h2>
+                <p className="text-sm font-bold text-[#14213D]/70">اختَر الصنف للفحص</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActive(null);
+                  setActiveProductId(null);
+                }}
+                className="rounded-full bg-[#F5F5F0] px-3 py-1 text-sm font-extrabold"
+              >
+                إغلاق
+              </button>
+            </div>
+            <div className="space-y-2">
+              {active.linkedProducts.map((product) => {
+                const reviewed = Boolean(product.condition && product.destination);
+                return (
+                  <button
+                    key={product.productId}
+                    type="button"
+                    onClick={() => setActiveProductId(product.productId)}
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl bg-[#F5F5F0] px-4 py-3 text-right"
+                  >
+                    <span>
+                      <span className="block text-sm font-extrabold text-[#14213D]">{productText(product)}</span>
+                      <span className="block text-xs font-bold text-[#14213D]/60">
+                        {reviewed
+                          ? product.label ||
+                            (product.destination ? DEST_BADGE[product.destination] : "اتفحص")
+                          : "لسه متفحصش"}
+                      </span>
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] font-extrabold ${
+                        reviewed ? "bg-emerald-100 text-emerald-900" : "bg-white text-[#14213D]"
+                      }`}
+                    >
+                      {reviewed ? "✓" : "فحص"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {active && canInspect && (active.linkedProducts.length < 1 || activeProductId != null) ? (
         <ReviewCards
-          key={active.trackingNumber}
+          key={`${active.trackingNumber}-${activeProductId ?? "order"}`}
           row={active}
+          product={
+            activeProductId != null
+              ? active.linkedProducts.find((item) => item.productId === activeProductId) || null
+              : null
+          }
           deskReturn={active.source ? active.source !== "bosta" : deskReturn}
-          onClose={() => setActive(null)}
-          onSaved={(review) => rememberReview(active.trackingNumber, review)}
+          onClose={() => {
+            setActive(null);
+            setActiveProductId(null);
+          }}
+          onBack={
+            active.linkedProducts.length >= 1
+              ? () => setActiveProductId(null)
+              : undefined
+          }
+          onSaved={(review, product) => rememberReview(active.trackingNumber, review, product)}
         />
       ) : null}
       {hubTab === "inspect" && canInspect && printMode === "all" ? (

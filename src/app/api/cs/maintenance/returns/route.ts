@@ -134,6 +134,8 @@ export async function POST(request: Request) {
     action?: string;
     trackingNumber?: string;
     trackingNumbers?: string[];
+    items?: Array<{ trackingNumber?: string; productId?: number | null }>;
+    productId?: number | null;
     condition?: string;
     defects?: unknown;
     usage?: string;
@@ -144,6 +146,9 @@ export async function POST(request: Request) {
   } | null;
 
   const action = String(body?.action || "review");
+  const productIdRaw = body?.productId;
+  const productId =
+    Number.isInteger(productIdRaw) && Number(productIdRaw) !== 0 ? Number(productIdRaw) : null;
 
   try {
     if (action === "open") {
@@ -172,6 +177,7 @@ export async function POST(request: Request) {
         trackingNumber: String(body?.trackingNumber || ""),
         grade: String(body?.grade || ""),
         techNote: String(body?.techNote || ""),
+        productId,
       });
       if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
       return NextResponse.json(result);
@@ -181,11 +187,25 @@ export async function POST(request: Request) {
       if (!(viewer.isMaintenance || viewer.isAdmin)) {
         return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
       }
-      const list = Array.isArray(body?.trackingNumbers)
-        ? body!.trackingNumbers.filter((item): item is string => typeof item === "string")
+      const fromItems = Array.isArray(body?.items)
+        ? body!.items
+            .filter((item) => item && typeof item.trackingNumber === "string")
+            .map((item) => ({
+              trackingNumber: String(item.trackingNumber),
+              productId:
+                Number.isInteger(item.productId) && Number(item.productId) !== 0
+                  ? Number(item.productId)
+                  : null,
+            }))
+        : [];
+      const fromTrackings = Array.isArray(body?.trackingNumbers)
+        ? body!.trackingNumbers
+            .filter((item): item is string => typeof item === "string")
+            .map((trackingNumber) => ({ trackingNumber, productId: null as number | null }))
         : body?.trackingNumber
-          ? [String(body.trackingNumber)]
+          ? [{ trackingNumber: String(body.trackingNumber), productId }]
           : [];
+      const list = fromItems.length ? fromItems : fromTrackings;
       const result = await receiveFromMaintenance(list);
       if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
       return NextResponse.json(result);
@@ -195,7 +215,7 @@ export async function POST(request: Request) {
       if (!(viewer.isMaintenance || viewer.isAdmin)) {
         return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
       }
-      const result = await markShelf(String(body?.trackingNumber || ""));
+      const result = await markShelf(String(body?.trackingNumber || ""), productId);
       if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -215,6 +235,7 @@ export async function POST(request: Request) {
       defects,
       usage: String(body?.usage || ""),
       destinationOverride,
+      productId,
     });
     if (!result.ok) {
       return NextResponse.json(
@@ -222,7 +243,10 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    return NextResponse.json({ review: result.review });
+    return NextResponse.json({
+      review: result.review,
+      ...("product" in result && result.product ? { product: result.product } : {}),
+    });
   } catch (error) {
     const mapped = maintenanceDbErrorMessage(error);
     console.error("[cs/maintenance/returns] POST", mapped.detail);
