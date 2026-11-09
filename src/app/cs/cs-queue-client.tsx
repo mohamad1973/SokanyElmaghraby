@@ -2486,6 +2486,7 @@ export function CsQueueClient({
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
             const ship = item.shippingCompany || "bosta";
             const dup = dupMeta.get(item.id);
+            const saverName = item.confirmedByAgent?.name || item.assignedAgent?.name || "";
             const returnedPostponed =
               isCourierSupervisor && !item.courierAgentId && item.courierOutcome === "postponed";
 
@@ -2618,9 +2619,7 @@ export function CsQueueClient({
                     {item.status === "CONFIRMED" && item.confirmedAt ? (
                       <span className="text-[11px] font-bold text-[#14213D]/70">
                         حُفظ {formatCairoOrderDateTime(item.confirmedAt).absolute}
-                        {item.confirmedByAgent?.name
-                          ? ` · حفظه ${item.confirmedByAgent.name}`
-                          : ""}
+                        {saverName ? ` · حفظه ${saverName}` : ""}
                         {item.confirmationEditedAt
                           ? ` · عُدّل ${formatCairoOrderDateTime(item.confirmationEditedAt).absolute}`
                           : ""}
@@ -2785,9 +2784,9 @@ export function CsQueueClient({
                       <span className="truncate text-sm font-extrabold leading-tight text-[#14213D]">
                         {item.assignedAgent?.name || "—"}
                       </span>
-                      {item.status === "CONFIRMED" && item.confirmedByAgent?.name ? (
+                      {item.status === "CONFIRMED" && saverName ? (
                         <span className="truncate text-[10px] font-bold leading-tight text-[#14213D]/65">
-                          حفظه: {item.confirmedByAgent.name}
+                          حفظه: {saverName}
                         </span>
                       ) : null}
                     </div>

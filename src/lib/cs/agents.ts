@@ -675,23 +675,18 @@ async function runEnsureCsTables() {
     }
   }
 
-  // Backfill saver for old home-confirm saves still assigned to a home_confirm agent.
+  // Backfill saver for old CONFIRMED rows that predate confirmedByAgentId.
   try {
     await prisma.$executeRawUnsafe(`
-      UPDATE \`CsOrderConfirmation\` c
-      INNER JOIN \`CsAgent\` a ON a.\`id\` = c.\`assignedAgentId\`
-      SET c.\`confirmedByAgentId\` = c.\`assignedAgentId\`
-      WHERE c.\`status\` = 'CONFIRMED'
-        AND c.\`confirmedByAgentId\` IS NULL
-        AND c.\`assignedAgentId\` IS NOT NULL
-        AND (
-          a.\`role\` = 'home_confirm'
-          OR CONCAT(',', REPLACE(COALESCE(a.\`roles\`, ''), ' ', ''), ',') LIKE '%,home_confirm,%'
-        )
+      UPDATE \`CsOrderConfirmation\`
+      SET \`confirmedByAgentId\` = \`assignedAgentId\`
+      WHERE \`status\` = 'CONFIRMED'
+        AND \`confirmedByAgentId\` IS NULL
+        AND \`assignedAgentId\` IS NOT NULL
     `);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn("[cs] confirmedByAgentId home_confirm backfill:", message.slice(0, 200));
+    console.warn("[cs] confirmedByAgentId backfill:", message.slice(0, 200));
   }
 
   try {
