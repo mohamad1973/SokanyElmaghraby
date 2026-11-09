@@ -119,32 +119,18 @@ export async function recordOrderActivityMany(
   }
 }
 
-export async function listOrderActivity(confirmationId: number): Promise<OrderActivityRow[]> {
-  const prisma = getPrismaClient();
-  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) return [];
-  await ensureOrderActivityTables();
+type ActivityRawRow = {
+  id: number | bigint;
+  confirmationId: number | bigint;
+  trackingNumber: string | null;
+  actorAgentId: number | bigint | null;
+  action: string;
+  detail: string | null;
+  at: Date | string;
+  actorName: string | null;
+};
 
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{
-      id: number | bigint;
-      confirmationId: number | bigint;
-      trackingNumber: string | null;
-      actorAgentId: number | bigint | null;
-      action: string;
-      detail: string | null;
-      at: Date | string;
-      actorName: string | null;
-    }>
-  >(
-    `SELECT e.\`id\`, e.\`confirmationId\`, e.\`trackingNumber\`, e.\`actorAgentId\`, e.\`action\`, e.\`detail\`, e.\`at\`,
-            a.\`name\` AS actorName
-     FROM \`CsOrderActivityEvent\` e
-     LEFT JOIN \`CsAgent\` a ON a.\`id\` = e.\`actorAgentId\`
-     WHERE e.\`confirmationId\` = ?
-     ORDER BY e.\`at\` ASC, e.\`id\` ASC`,
-    confirmationId,
-  );
-
+function mapActivityRows(rows: ActivityRawRow[]): OrderActivityRow[] {
   return rows.map((row) => {
     const action = asAction(row.action);
     const at =
@@ -163,4 +149,116 @@ export async function listOrderActivity(confirmationId: number): Promise<OrderAc
       at,
     };
   });
+}
+
+async function fetchActivityRows(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  confirmationId: number,
+) {
+  return prisma.$queryRawUnsafe<ActivityRawRow[]>(
+    `SELECT e.\`id\`, e.\`confirmationId\`, e.\`trackingNumber\`, e.\`actorAgentId\`, e.\`action\`, e.\`detail\`, e.\`at\`,
+            a.\`name\` AS actorName
+     FROM \`CsOrderActivityEvent\` e
+     LEFT JOIN \`CsAgent\` a ON a.\`id\` = e.\`actorAgentId\`
+     WHERE e.\`confirmationId\` = ?
+     ORDER BY e.\`at\` ASC, e.\`id\` ASC`,
+    confirmationId,
+  );
+}
+
+function asDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const d = new Date(String(value));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Seed activity from confirmation fields when the log table has no rows yet. */
+async function backfillActivityFromConfirmation(
+  prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
+  confirmationId: number,
+) {
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      assignedAgentId: number | bigint | null;
+      assignedAt: Date | string | null;
+      confirmedByAgentId: number | bigint | null;
+      confirmedAt: Date | string | null;
+      confirmationEditedAt: Date | string | null;
+      trackingNumber: string | null;
+    }>
+  >(
+    `SELECT \`assignedAgentId\`, \`assignedAt\`, \`confirmedByAgentId\`, \`confirmedAt\`,
+            \`confirmationEditedAt\`, \`trackingNumber\`
+     FROM \`CsOrderConfirmation\` WHERE \`id\` = ? LIMIT 1`,
+    confirmationId,
+  );
+  const row = rows[0];
+  if (!row) return;
+
+  const tracking = String(row.trackingNumber || "").trim() || null;
+  const assignedAgentId = row.assignedAgentId == null ? null : Number(row.assignedAgentId);
+  const confirmedByAgentId = row.confirmedByAgentId == null ? null : Number(row.confirmedByAgentId);
+  const assignedAt = asDate(row.assignedAt);
+  const confirmedAt = asDate(row.confirmedAt);
+  const editedAt = asDate(row.confirmationEditedAt);
+
+  const seeds: Array<{
+    actorAgentId: number | null;
+    action: OrderActivityAction;
+    detail: string;
+    at: Date;
+  }> = [];
+
+  if (assignedAgentId != null && assignedAt) {
+    seeds.push({
+      actorAgentId: assignedAgentId,
+      action: "assign",
+      detail: "توزيع (من سجل الأوردر)",
+      at: assignedAt,
+    });
+  }
+  const saverId = confirmedByAgentId ?? assignedAgentId;
+  if (saverId != null && confirmedAt) {
+    seeds.push({
+      actorAgentId: saverId,
+      action: "save",
+      detail: "حفظ (من سجل الأوردر)",
+      at: confirmedAt,
+    });
+  }
+  if (editedAt && saverId != null) {
+    seeds.push({
+      actorAgentId: saverId,
+      action: "edit",
+      detail: "تعديل (من سجل الأوردر)",
+      at: editedAt,
+    });
+  }
+
+  seeds.sort((a, b) => a.at.getTime() - b.at.getTime());
+  for (const seed of seeds) {
+    await recordOrderActivity({
+      confirmationId,
+      actorAgentId: seed.actorAgentId,
+      action: seed.action,
+      detail: seed.detail,
+      trackingNumber: tracking,
+      at: seed.at,
+    });
+  }
+}
+
+export async function listOrderActivity(confirmationId: number): Promise<OrderActivityRow[]> {
+  const prisma = getPrismaClient();
+  if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) return [];
+  await ensureOrderActivityTables();
+
+  let rows = await fetchActivityRows(prisma, confirmationId);
+  if (!rows.length) {
+    await backfillActivityFromConfirmation(prisma, confirmationId);
+    rows = await fetchActivityRows(prisma, confirmationId);
+  }
+
+  return mapActivityRows(rows);
 }

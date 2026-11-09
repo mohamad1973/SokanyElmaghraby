@@ -55,7 +55,7 @@ export function OrderSalahiaChip({ confirmationId }: { confirmationId: number })
         }}
         className="rounded px-1.5 py-0.5 text-[10px] font-extrabold text-[#14213D]"
         style={{ backgroundColor: "#FFF200" }}
-        title="قصة حياة الأوردر"
+        title="صلاحية"
       >
         صلاحية
       </button>
@@ -72,7 +72,7 @@ export function OrderSalahiaChip({ confirmationId }: { confirmationId: number })
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[#E5E5E5] px-4 py-3">
-              <h2 className="text-base font-extrabold text-[#14213D]">صلاحية · قصة حياة الأوردر</h2>
+              <h2 className="text-base font-extrabold text-[#14213D]">صلاحية</h2>
               <button
                 type="button"
                 className="rounded-lg bg-[#E5E5E5] px-2 py-1 text-xs font-extrabold text-[#14213D]"
