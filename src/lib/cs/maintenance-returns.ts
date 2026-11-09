@@ -19,6 +19,12 @@ import { attachDeskTicketsToReturns, type DeskTicketBadge } from "@/lib/cs/sc-re
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
+export type MaintenanceOrderItem = {
+  name: string;
+  sku: string;
+  quantity: number;
+};
+
 export type MaintenanceBostaRow = {
   trackingNumber: string;
   confirmationId: number | null;
@@ -29,6 +35,7 @@ export type MaintenanceBostaRow = {
   phone: string;
   product: string;
   orderProduct: string;
+  orderItems: MaintenanceOrderItem[];
   linkedProducts: LinkedReturnProduct[];
   kind: BostaHeadingKind;
   statusLabel: string;
@@ -57,8 +64,22 @@ type Snap = {
   area?: string;
   governorate?: string;
   trackingNumber?: string;
-  items?: Array<{ name?: string; quantity?: number }>;
+  items?: Array<{ name?: string; sku?: string; quantity?: number }>;
 };
+
+function orderItemsFromSnap(items: Snap["items"]): MaintenanceOrderItem[] {
+  const out: MaintenanceOrderItem[] = [];
+  for (const line of items || []) {
+    const name = String(line.name || "").trim();
+    if (!name) continue;
+    out.push({
+      name,
+      sku: String(line.sku || "").trim(),
+      quantity: Number(line.quantity) > 0 ? Number(line.quantity) : 1,
+    });
+  }
+  return out;
+}
 
 /** Default window keeps recent days visible (yesterday no longer "disappears"). */
 export function maintenanceRange(fromInput: string, toInput: string) {
@@ -181,6 +202,7 @@ async function hydrateCapturedReturnRows(stored: StoredBostaReturn[]): Promise<M
     const local =
       matched.byTracking.get(row.trackingNumber) || matched.byNumber.get(orderDigits(row.businessReference));
     const snap = local?.snap || {};
+    const orderItems = orderItemsFromSnap(snap.items);
     const orderProduct = productLabel(snap.items);
     const linked = linkedProducts.get(row.trackingNumber) || [];
     const product = linked.length ? linkedProductLabel(linked) : orderProduct;
@@ -199,6 +221,7 @@ async function hydrateCapturedReturnRows(stored: StoredBostaReturn[]): Promise<M
       phone,
       product,
       orderProduct,
+      orderItems,
       linkedProducts: linked,
       kind: row.kind,
       statusLabel: KIND_LABEL[row.kind],

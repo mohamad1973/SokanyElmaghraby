@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { ReturnTrackDrawer, ReturnTrackLine } from "@/components/cs/return-track-line";
+import { customReturnProductId } from "@/lib/cs/custom-return-product-id";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 import {
@@ -87,16 +88,45 @@ function productReviewOf(product: LinkedProduct): Review | null {
   };
 }
 
+function provisionalFromOrderItem(item: OrderItem): LinkedProduct {
+  const productName = item.name.trim();
+  return {
+    productId: customReturnProductId(productName),
+    productName,
+    productCode: String(item.sku || "").trim(),
+    condition: null,
+    defects: [],
+    destination: null,
+    usage: null,
+    bostaClaim: false,
+    grade: null,
+    techNote: "",
+    label: "",
+  };
+}
+
+/** Linked products plus unmatched order-snapshot lines (for picker without +). */
+function inspectCandidates(row: BostaRow): LinkedProduct[] {
+  const linked = row.linkedProducts || [];
+  const linkedNames = new Set(linked.map((product) => product.productName.trim().toLowerCase()));
+  const fromOrder = (row.orderItems || [])
+    .map((item) => provisionalFromOrderItem(item))
+    .filter((product) => product.productName && !linkedNames.has(product.productName.trim().toLowerCase()));
+  return [...linked, ...fromOrder];
+}
+
 function rowNeedsReview(row: BostaRow) {
-  if (row.linkedProducts.length) {
-    return row.linkedProducts.some((product) => !product.condition || !product.destination);
+  const candidates = inspectCandidates(row);
+  if (candidates.length) {
+    return candidates.some((product) => !product.condition || !product.destination);
   }
   return !row.review;
 }
 
 function rowMatchesDestination(row: BostaRow, destination: Destination) {
-  if (row.linkedProducts.length) {
-    return row.linkedProducts.some((product) => product.destination === destination);
+  const candidates = inspectCandidates(row);
+  if (candidates.length) {
+    return candidates.some((product) => product.destination === destination);
   }
   return row.review?.destination === destination;
 }
@@ -146,6 +176,12 @@ type DeskTicketDetail = {
   complaintPhotos?: Photo[];
 };
 
+type OrderItem = {
+  name: string;
+  sku?: string;
+  quantity?: number;
+};
+
 type BostaRow = {
   trackingNumber: string;
   confirmationId: number | null;
@@ -162,6 +198,7 @@ type BostaRow = {
   openedAt: string | null;
   review: Review | null;
   orderProduct: string;
+  orderItems?: OrderItem[];
   linkedProducts: LinkedProduct[];
   source?: Source;
   deskTicket?: DeskTicketBadge | null;
@@ -610,6 +647,26 @@ function ReviewCards({
     setDefects((current) => (current.includes(defect) ? current.filter((item) => item !== defect) : [...current, defect]));
   }
 
+  async function ensureLinkedProduct(target: LinkedProduct) {
+    const already = (row.linkedProducts || []).find((item) => item.productId === target.productId);
+    if (already) return already;
+    const response = await fetch("/api/cs/maintenance/returns/product", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trackingNumber: row.trackingNumber,
+        productName: target.productName,
+        productCode: target.productCode || "",
+        custom: true,
+      }),
+    });
+    const body = (await response.json()) as { message?: string; product?: LinkedProduct };
+    if (!response.ok || !body.product) {
+      throw new Error(body.message || "تعذر ربط الصنف بالمرتجع.");
+    }
+    return body.product;
+  }
+
   async function finish(destinationOverride?: "shelf" | "maintenance") {
     if (!condition) return;
     if (usage !== "new" && usage !== "used") {
@@ -620,6 +677,12 @@ function ReviewCards({
     setSaving(true);
     setError("");
     try {
+      let productId = product?.productId ?? null;
+      let linkedProduct: LinkedProduct | null = product || null;
+      if (product) {
+        linkedProduct = await ensureLinkedProduct(product);
+        productId = linkedProduct.productId;
+      }
       const response = await fetch("/api/cs/maintenance/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -629,7 +692,7 @@ function ReviewCards({
           defects,
           usage,
           ...(destinationOverride ? { destination: destinationOverride } : {}),
-          ...(product ? { productId: product.productId } : {}),
+          ...(productId != null ? { productId } : {}),
         }),
       });
       const body = (await response.json()) as {
@@ -643,11 +706,14 @@ function ReviewCards({
         setError(body.detail ? `${base} (${body.detail})` : base);
         return;
       }
-      onSaved(body.review, body.product || null);
-      setSavedReview(product && body.product ? productReviewOf(body.product) || body.review : body.review);
+      const savedProduct = body.product || linkedProduct;
+      onSaved(body.review, savedProduct);
+      setSavedReview(
+        savedProduct && product ? productReviewOf(savedProduct) || body.review : body.review,
+      );
       setPhase("saved");
-    } catch {
-      setError("تعذر حفظ الفحص.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر حفظ الفحص.");
     } finally {
       setSaving(false);
     }
@@ -1062,11 +1128,15 @@ export function MaintenanceClient({
 
   function rememberReview(trackingNumber: string, review: Review, product?: LinkedProduct | null) {
     patchCapturedRow(trackingNumber, (row) => {
-      const linkedProducts = product
-        ? (row.linkedProducts || []).map((item) =>
-            item.productId === product.productId ? { ...item, ...product } : item,
-          )
-        : row.linkedProducts;
+      let linkedProducts = row.linkedProducts || [];
+      if (product) {
+        const exists = linkedProducts.some((item) => item.productId === product.productId);
+        linkedProducts = exists
+          ? linkedProducts.map((item) =>
+              item.productId === product.productId ? { ...item, ...product } : item,
+            )
+          : [...linkedProducts, product];
+      }
       const productLabel = productsLabel(linkedProducts, row.orderProduct);
       return {
         ...row,
@@ -1086,14 +1156,16 @@ export function MaintenanceClient({
   const bostaFiltered = bostaSearched.filter((row) => {
     if (!kinds.includes(row.kind)) return false;
     if (usageFilter === "new" || usageFilter === "used") {
-      if (row.linkedProducts.length) {
-        if (!row.linkedProducts.some((product) => product.usage === usageFilter)) return false;
+      const candidates = inspectCandidates(row);
+      if (candidates.length) {
+        if (!candidates.some((product) => product.usage === usageFilter)) return false;
       } else if (row.review?.usage !== usageFilter) {
         return false;
       }
     } else if (usageFilter === "unset") {
-      if (row.linkedProducts.length) {
-        if (row.linkedProducts.every((product) => product.usage === "new" || product.usage === "used")) {
+      const candidates = inspectCandidates(row);
+      if (candidates.length) {
+        if (candidates.every((product) => product.usage === "new" || product.usage === "used")) {
           return false;
         }
       } else if (row.review?.usage === "new" || row.review?.usage === "used") {
@@ -1534,7 +1606,7 @@ export function MaintenanceClient({
           onClose={() => setTicketRow(null)}
         />
       ) : null}
-      {active && canInspect && active.linkedProducts.length >= 1 && activeProductId == null ? (
+      {active && canInspect && inspectCandidates(active).length >= 1 && activeProductId == null ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" dir="rtl">
           <div className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
@@ -1557,7 +1629,7 @@ export function MaintenanceClient({
               </button>
             </div>
             <div className="space-y-2">
-              {active.linkedProducts.map((product) => {
+              {inspectCandidates(active).map((product) => {
                 const reviewed = Boolean(product.condition && product.destination);
                 return (
                   <button
@@ -1589,13 +1661,13 @@ export function MaintenanceClient({
           </div>
         </div>
       ) : null}
-      {active && canInspect && (active.linkedProducts.length < 1 || activeProductId != null) ? (
+      {active && canInspect && (inspectCandidates(active).length < 1 || activeProductId != null) ? (
         <ReviewCards
           key={`${active.trackingNumber}-${activeProductId ?? "order"}`}
           row={active}
           product={
             activeProductId != null
-              ? active.linkedProducts.find((item) => item.productId === activeProductId) || null
+              ? inspectCandidates(active).find((item) => item.productId === activeProductId) || null
               : null
           }
           deskReturn={active.source ? active.source !== "bosta" : deskReturn}
@@ -1604,7 +1676,7 @@ export function MaintenanceClient({
             setActiveProductId(null);
           }}
           onBack={
-            active.linkedProducts.length >= 1
+            inspectCandidates(active).length >= 1
               ? () => setActiveProductId(null)
               : undefined
           }

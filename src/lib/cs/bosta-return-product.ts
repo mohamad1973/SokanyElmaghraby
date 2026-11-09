@@ -11,6 +11,9 @@ import {
   type ReviewUsage,
   reviewLabel,
 } from "@/lib/cs/bosta-return-review";
+import { customReturnProductId } from "@/lib/cs/custom-return-product-id";
+
+export { customReturnProductId };
 
 export type LinkedReturnProduct = {
   productId: number;
@@ -231,17 +234,6 @@ export function linkedProductLabel(products: LinkedReturnProduct[]) {
     })
     .filter(Boolean)
     .join("، ");
-}
-
-/** Stable negative id for free-text products (never collides with Woo product ids). */
-export function customReturnProductId(text: string) {
-  const normalized = text.trim().toLowerCase();
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i += 1) {
-    hash = (hash * 31 + normalized.charCodeAt(i)) | 0;
-  }
-  const positive = (Math.abs(hash) % 900_000_000) + 100_000_000;
-  return -positive;
 }
 
 export async function listBostaReturnProducts(trackingNumbers: string[]) {
