@@ -675,20 +675,6 @@ async function runEnsureCsTables() {
     }
   }
 
-  // Backfill saver for old CONFIRMED rows that predate confirmedByAgentId.
-  try {
-    await prisma.$executeRawUnsafe(`
-      UPDATE \`CsOrderConfirmation\`
-      SET \`confirmedByAgentId\` = \`assignedAgentId\`
-      WHERE \`status\` = 'CONFIRMED'
-        AND \`confirmedByAgentId\` IS NULL
-        AND \`assignedAgentId\` IS NOT NULL
-    `);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn("[cs] confirmedByAgentId backfill:", message.slice(0, 200));
-  }
-
   try {
     await prisma.$executeRawUnsafe("ALTER TABLE `CsCarrierWeek` DROP INDEX `CsCarrierWeek_company_week_key`");
   } catch (error) {
@@ -750,8 +736,11 @@ async function runEnsureCsTables() {
   await ensureScCenterTables();
   const { ensureHomeConfirmTables } = await import("@/lib/cs/home-confirm");
   await ensureHomeConfirmTables();
-  const { ensureOrderActivityTables } = await import("@/lib/cs/order-activity");
+  const { ensureOrderActivityTables, cleanupGuessedOrderActivityAttribution } = await import(
+    "@/lib/cs/order-activity"
+  );
   await ensureOrderActivityTables();
+  await cleanupGuessedOrderActivityAttribution();
 }
 
 async function ensureCriticalCsOrderConfirmationColumns(

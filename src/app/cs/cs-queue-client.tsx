@@ -2487,7 +2487,7 @@ export function CsQueueClient({
             const day = formatCairoOrderDate(item.customerSnapshot?.dateCreated);
             const ship = item.shippingCompany || "bosta";
             const dup = dupMeta.get(item.id);
-            const saverName = item.confirmedByAgent?.name || item.assignedAgent?.name || "";
+            const saverName = item.confirmedByAgent?.name || "";
             const returnedPostponed =
               isCourierSupervisor && !item.courierAgentId && item.courierOutcome === "postponed";
 

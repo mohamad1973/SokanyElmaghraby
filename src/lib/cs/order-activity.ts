@@ -173,23 +173,21 @@ function asDate(value: Date | string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Seed activity from confirmation fields when the log table has no rows yet. */
+/** Seed activity from confirmation fields when the log table has no rows yet.
+ * Never invent "assign" from the assignee, and never use assignee as saver. */
 async function backfillActivityFromConfirmation(
   prisma: NonNullable<ReturnType<typeof getPrismaClient>>,
   confirmationId: number,
 ) {
   const rows = await prisma.$queryRawUnsafe<
     Array<{
-      assignedAgentId: number | bigint | null;
-      assignedAt: Date | string | null;
       confirmedByAgentId: number | bigint | null;
       confirmedAt: Date | string | null;
       confirmationEditedAt: Date | string | null;
       trackingNumber: string | null;
     }>
   >(
-    `SELECT \`assignedAgentId\`, \`assignedAt\`, \`confirmedByAgentId\`, \`confirmedAt\`,
-            \`confirmationEditedAt\`, \`trackingNumber\`
+    `SELECT \`confirmedByAgentId\`, \`confirmedAt\`, \`confirmationEditedAt\`, \`trackingNumber\`
      FROM \`CsOrderConfirmation\` WHERE \`id\` = ? LIMIT 1`,
     confirmationId,
   );
@@ -197,9 +195,7 @@ async function backfillActivityFromConfirmation(
   if (!row) return;
 
   const tracking = String(row.trackingNumber || "").trim() || null;
-  const assignedAgentId = row.assignedAgentId == null ? null : Number(row.assignedAgentId);
   const confirmedByAgentId = row.confirmedByAgentId == null ? null : Number(row.confirmedByAgentId);
-  const assignedAt = asDate(row.assignedAt);
   const confirmedAt = asDate(row.confirmedAt);
   const editedAt = asDate(row.confirmationEditedAt);
 
@@ -210,28 +206,19 @@ async function backfillActivityFromConfirmation(
     at: Date;
   }> = [];
 
-  if (assignedAgentId != null && assignedAt) {
+  if (confirmedByAgentId != null && confirmedAt) {
     seeds.push({
-      actorAgentId: assignedAgentId,
-      action: "assign",
-      detail: "توزيع (من سجل الأوردر)",
-      at: assignedAt,
-    });
-  }
-  const saverId = confirmedByAgentId ?? assignedAgentId;
-  if (saverId != null && confirmedAt) {
-    seeds.push({
-      actorAgentId: saverId,
+      actorAgentId: confirmedByAgentId,
       action: "save",
-      detail: "حفظ (من سجل الأوردر)",
+      detail: "حفظ",
       at: confirmedAt,
     });
   }
-  if (editedAt && saverId != null) {
+  if (editedAt && confirmedByAgentId != null) {
     seeds.push({
-      actorAgentId: saverId,
+      actorAgentId: confirmedByAgentId,
       action: "edit",
-      detail: "تعديل (من سجل الأوردر)",
+      detail: "تعديل",
       at: editedAt,
     });
   }
@@ -249,10 +236,60 @@ async function backfillActivityFromConfirmation(
   }
 }
 
+let guessedCleanupPromise: Promise<void> | null = null;
+
+/** Drop misleading inferred events and clear guessed saver ids (once per process). */
+export async function cleanupGuessedOrderActivityAttribution() {
+  if (!guessedCleanupPromise) {
+    guessedCleanupPromise = runGuessedAttributionCleanup().catch((error) => {
+      guessedCleanupPromise = null;
+      throw error;
+    });
+  }
+  await guessedCleanupPromise;
+}
+
+async function runGuessedAttributionCleanup() {
+  const prisma = getPrismaClient();
+  if (!prisma) return;
+  await ensureOrderActivityTables();
+  try {
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM \`CsOrderActivityEvent\` WHERE \`detail\` LIKE '%من سجل الأوردر%'`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[cs] purge synthetic activity:", message.slice(0, 200));
+  }
+  try {
+    // MySQL: avoid "can't specify target table for update in FROM" via nested select.
+    await prisma.$executeRawUnsafe(`
+      UPDATE \`CsOrderConfirmation\`
+      SET \`confirmedByAgentId\` = NULL
+      WHERE \`status\` = 'CONFIRMED'
+        AND \`confirmedByAgentId\` IS NOT NULL
+        AND \`assignedAgentId\` IS NOT NULL
+        AND \`confirmedByAgentId\` = \`assignedAgentId\`
+        AND \`id\` NOT IN (
+          SELECT \`confirmationId\` FROM (
+            SELECT DISTINCT \`confirmationId\`
+            FROM \`CsOrderActivityEvent\`
+            WHERE \`action\` = 'save'
+              AND (\`detail\` IS NULL OR \`detail\` NOT LIKE '%من سجل الأوردر%')
+          ) AS real_saves
+        )
+    `);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[cs] clear guessed confirmedByAgentId:", message.slice(0, 200));
+  }
+}
+
 export async function listOrderActivity(confirmationId: number): Promise<OrderActivityRow[]> {
   const prisma = getPrismaClient();
   if (!prisma || !Number.isInteger(confirmationId) || confirmationId <= 0) return [];
   await ensureOrderActivityTables();
+  await cleanupGuessedOrderActivityAttribution();
 
   let rows = await fetchActivityRows(prisma, confirmationId);
   if (!rows.length) {
