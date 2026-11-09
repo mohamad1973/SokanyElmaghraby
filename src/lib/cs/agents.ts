@@ -675,6 +675,25 @@ async function runEnsureCsTables() {
     }
   }
 
+  // Backfill saver for old home-confirm saves still assigned to a home_confirm agent.
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE \`CsOrderConfirmation\` c
+      INNER JOIN \`CsAgent\` a ON a.\`id\` = c.\`assignedAgentId\`
+      SET c.\`confirmedByAgentId\` = c.\`assignedAgentId\`
+      WHERE c.\`status\` = 'CONFIRMED'
+        AND c.\`confirmedByAgentId\` IS NULL
+        AND c.\`assignedAgentId\` IS NOT NULL
+        AND (
+          a.\`role\` = 'home_confirm'
+          OR CONCAT(',', REPLACE(COALESCE(a.\`roles\`, ''), ' ', ''), ',') LIKE '%,home_confirm,%'
+        )
+    `);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[cs] confirmedByAgentId home_confirm backfill:", message.slice(0, 200));
+  }
+
   try {
     await prisma.$executeRawUnsafe("ALTER TABLE `CsCarrierWeek` DROP INDEX `CsCarrierWeek_company_week_key`");
   } catch (error) {

@@ -2618,7 +2618,9 @@ export function CsQueueClient({
                     {item.status === "CONFIRMED" && item.confirmedAt ? (
                       <span className="text-[11px] font-bold text-[#14213D]/70">
                         حُفظ {formatCairoOrderDateTime(item.confirmedAt).absolute}
-                        {` · حفظه ${item.confirmedByAgent?.name || "—"}`}
+                        {item.confirmedByAgent?.name
+                          ? ` · حفظه ${item.confirmedByAgent.name}`
+                          : ""}
                         {item.confirmationEditedAt
                           ? ` · عُدّل ${formatCairoOrderDateTime(item.confirmationEditedAt).absolute}`
                           : ""}
@@ -2783,9 +2785,9 @@ export function CsQueueClient({
                       <span className="truncate text-sm font-extrabold leading-tight text-[#14213D]">
                         {item.assignedAgent?.name || "—"}
                       </span>
-                      {item.status === "CONFIRMED" ? (
+                      {item.status === "CONFIRMED" && item.confirmedByAgent?.name ? (
                         <span className="truncate text-[10px] font-bold leading-tight text-[#14213D]/65">
-                          حفظه: {item.confirmedByAgent?.name || "—"}
+                          حفظه: {item.confirmedByAgent.name}
                         </span>
                       ) : null}
                     </div>

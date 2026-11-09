@@ -176,6 +176,7 @@ async function stampOrdersInRange(
   to: number,
 ): Promise<StampRangeResult> {
   const warning = await alreadyAssignedWarning(prisma, agentId, from, to);
+  // Stamp assignee only — never touch confirmedByAgentId (saver name must survive redistributes).
   // Never overwrite terminal statuses or another agent's open assignment.
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
@@ -383,6 +384,7 @@ export async function fairSplitAssign(input: {
     let chunkAssigned = 0;
     for (const row of chunk) {
       if (row.assignedAgentId != null && row.assignedAgentId !== agentId) continue;
+      // Assignee only — leave confirmedByAgentId untouched.
       await prisma.csOrderConfirmation.update({
         where: { id: row.id },
         data: { assignedAgentId: agentId },
