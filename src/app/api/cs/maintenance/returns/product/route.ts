@@ -20,12 +20,14 @@ export async function POST(request: Request) {
     productId?: number;
     productName?: string;
     productCode?: string;
+    custom?: boolean;
   } | null;
   const result = await saveBostaReturnProduct({
     trackingNumber: String(body?.trackingNumber || ""),
-    productId: Number(body?.productId),
+    productId: body?.productId == null ? null : Number(body.productId),
     productName: String(body?.productName || ""),
     productCode: String(body?.productCode || ""),
+    custom: Boolean(body?.custom),
   });
   if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
   return NextResponse.json({ product: result.product });

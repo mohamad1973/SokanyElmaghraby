@@ -77,6 +77,17 @@ export function linkedProductLabel(products: LinkedReturnProduct[]) {
     .join("، ");
 }
 
+/** Stable negative id for free-text products (never collides with Woo product ids). */
+export function customReturnProductId(text: string) {
+  const normalized = text.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i += 1) {
+    hash = (hash * 31 + normalized.charCodeAt(i)) | 0;
+  }
+  const positive = (Math.abs(hash) % 900_000_000) + 100_000_000;
+  return -positive;
+}
+
 export async function listBostaReturnProducts(trackingNumbers: string[]) {
   const found = new Map<string, LinkedReturnProduct[]>();
   const prisma = getPrismaClient();
@@ -110,18 +121,26 @@ export async function listBostaReturnProducts(trackingNumbers: string[]) {
 
 export async function saveBostaReturnProduct(input: {
   trackingNumber: string;
-  productId: number;
+  productId?: number | null;
   productName: string;
-  productCode: string;
+  productCode?: string | null;
+  custom?: boolean;
 }) {
   const prisma = getPrismaClient();
   const trackingNumber = input.trackingNumber.trim();
   const productName = input.productName.trim().slice(0, 191);
-  const productCode = input.productCode.trim().slice(0, 64);
+  const productCode = String(input.productCode || "").trim().slice(0, 64);
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   if (!trackingNumber) return { ok: false as const, message: "البوليصة ناقصة." };
-  if (!Number.isInteger(input.productId) || input.productId <= 0 || !productName) {
-    return { ok: false as const, message: "اختَر منتج من البحث." };
+  if (!productName || productName.length < 2) {
+    return { ok: false as const, message: "اكتب اسم المنتج أو الموديل." };
+  }
+  const custom = Boolean(input.custom) || !(Number.isInteger(input.productId) && Number(input.productId) > 0);
+  const productId = custom
+    ? customReturnProductId(productName)
+    : Number(input.productId);
+  if (!Number.isInteger(productId) || productId === 0) {
+    return { ok: false as const, message: "اختَر منتج من البحث أو احفظ النص المكتوب." };
   }
   await ensureBostaReturnProductTable();
   const stored = await prisma.$queryRawUnsafe<Array<{ trackingNumber: string }>>(
@@ -138,13 +157,13 @@ export async function saveBostaReturnProduct(input: {
       \`productCode\` = ?,
       \`updatedAt\` = CURRENT_TIMESTAMP(3)`,
     trackingNumber,
-    input.productId,
+    productId,
     productName,
     productCode,
     productName,
     productCode,
   );
-  const product: LinkedReturnProduct = { productId: input.productId, productName, productCode };
+  const product: LinkedReturnProduct = { productId, productName, productCode };
   return { ok: true as const, product };
 }
 
@@ -153,7 +172,7 @@ export async function removeBostaReturnProduct(trackingNumberRaw: string, produc
   const trackingNumber = trackingNumberRaw.trim();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   if (!trackingNumber) return { ok: false as const, message: "البوليصة ناقصة." };
-  if (!Number.isInteger(productId) || productId <= 0) return { ok: false as const, message: "المنتج ناقص." };
+  if (!Number.isInteger(productId) || productId === 0) return { ok: false as const, message: "المنتج ناقص." };
   await ensureBostaReturnProductTable();
   const changed = await prisma.$executeRawUnsafe(
     `DELETE FROM \`CsBostaReturnProduct\` WHERE trackingNumber = ? AND productId = ?`,

@@ -370,7 +370,10 @@ function ProductSearch({
   const [hits, setHits] = useState<Array<{ id: number; name: string; displayCode: string; sku: string }>>([]);
   const [searching, setSearching] = useState(false);
   const [savingId, setSavingId] = useState(0);
+  const [savingCustom, setSavingCustom] = useState(false);
   const [error, setError] = useState("");
+  const customText = query.trim();
+  const canSaveCustom = customText.length >= 2;
 
   useEffect(() => {
     const term = query.trim();
@@ -420,6 +423,35 @@ function ProductSearch({
     }
   }
 
+  async function saveCustom() {
+    if (!canSaveCustom) return;
+    setSavingCustom(true);
+    setError("");
+    try {
+      const response = await fetch("/api/cs/maintenance/returns/product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trackingNumber: row.trackingNumber,
+          productName: customText,
+          productCode: "",
+          custom: true,
+        }),
+      });
+      const body = (await response.json()) as { message?: string; product?: LinkedProduct };
+      if (!response.ok || !body.product) {
+        setError(body.message || "تعذر حفظ المنتج المكتوب.");
+        return;
+      }
+      onSaved(body.product);
+      onClose();
+    } catch {
+      setError("تعذر حفظ المنتج المكتوب.");
+    } finally {
+      setSavingCustom(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" dir="rtl">
       <div className="w-full max-w-lg space-y-3 rounded-3xl bg-white p-5 shadow-xl">
@@ -438,18 +470,36 @@ function ProductSearch({
           onChange={(event) => setQuery(event.target.value)}
           placeholder="اسم المنتج أو رقم الموديل"
           className="w-full rounded-2xl border border-black/10 px-3 py-3 text-sm font-bold"
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && canSaveCustom && !hits.length) {
+              event.preventDefault();
+              void saveCustom();
+            }
+          }}
         />
+        {canSaveCustom ? (
+          <button
+            type="button"
+            disabled={savingCustom || savingId > 0}
+            onClick={() => void saveCustom()}
+            className="w-full rounded-2xl bg-[#14213D] px-3 py-3 text-sm font-extrabold text-white disabled:opacity-60"
+          >
+            {savingCustom ? "جارٍ الحفظ…" : `حفظ «${customText.slice(0, 48)}${customText.length > 48 ? "…" : ""}» كمنتج مكتوب`}
+          </button>
+        ) : null}
         {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
         <div className="max-h-72 space-y-2 overflow-y-auto">
           {searching ? <p className="text-sm font-bold text-[#14213D]/60">جارٍ البحث…</p> : null}
           {!searching && query.trim().length >= 2 && !hits.length ? (
-            <p className="text-sm font-bold text-[#14213D]/60">مفيش منتج بالاسم ده.</p>
+            <p className="text-sm font-bold text-[#14213D]/60">
+              مفيش منتج بالموقع بالاسم ده — تقدر تحفظ النص المكتوب بالزر فوق.
+            </p>
           ) : null}
           {hits.map((hit) => (
             <button
               key={hit.id}
               type="button"
-              disabled={savingId === hit.id}
+              disabled={savingId === hit.id || savingCustom}
               onClick={() => void choose(hit)}
               className="block w-full rounded-2xl bg-[#F5F5F0] px-3 py-3 text-right disabled:opacity-60"
             >

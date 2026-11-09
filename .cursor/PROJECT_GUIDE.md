@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| منتج حر في فحص المرتجع | لو المنتج مش على الموقع: الموظف يكتب الاسم/الموديل ويحفظه في `CsBostaReturnProduct` بمعرّف سالب | `bosta-return-product.ts`, `maintenance-client.tsx`, `returns/product/route.ts` |
 | دروب داون تقارير CS | زر تقارير يفتح قائمة بكل التقارير كروابط لأماكنها الحالية + فهرس في `/cs/reports`؛ بدون نقل التقارير | `reports-catalog.ts`, `cs-shell.tsx`, `reports-hub.tsx` |
 | مسار داخل فحص المرتجع | عمود «مسار» في جدول فحص المرتجع + خط زمني داخل نافذة الفحص لكل رفض/استبدال/استرجاع | `maintenance-client.tsx`, `return-track-line.tsx` |
 | مسار المرتجع لكل استرجاع/استبدال | المسار يظهر لأبناء return/exchange (بوسطة/تميمة/مندوب) حتى قبل Capture، وعلى الأب لو له أبناء مرتجعة؛ البيع العادي يخفي البلوك | `return-track.ts`, `return-track-line.tsx`, `call-sheet.tsx`, `orders/[id]/page.tsx` |
