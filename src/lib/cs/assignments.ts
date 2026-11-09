@@ -132,23 +132,57 @@ export function orderNumberInRanges(orderNumber: string, ranges: Array<{ from: n
 
 type CsDb = NonNullable<ReturnType<typeof getPrismaClient>>;
 
+export type StampRangeResult = { stamped: number; warning: string };
+
+async function alreadyAssignedWarning(
+  prisma: CsDb,
+  agentId: number,
+  from: number,
+  to: number,
+): Promise<string> {
+  const rows = await prisma.$queryRaw<
+    Array<{ lo: number | bigint | null; hi: number | bigint | null; n: number | bigint }>
+  >`
+    SELECT
+      MIN(CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED)) AS lo,
+      MAX(CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED)) AS hi,
+      COUNT(*) AS n
+    FROM CsOrderConfirmation
+    WHERE CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
+      AND assignedAgentId IS NOT NULL
+      AND assignedAgentId <> ${agentId}
+  `;
+  const count = Number(rows[0]?.n ?? 0);
+  if (!count) return "";
+  const lo = Number(rows[0]?.lo ?? from);
+  const hi = Number(rows[0]?.hi ?? to);
+  return `الأوردر من ${lo} إلى ${hi} موزّع قبل كده (${count} أوردر) — ما اتعيّنوش تاني.`;
+}
+
 export async function stampAssignedAgentInOrderRange(agentId: number, from: number, to: number) {
   const prisma = getPrismaClient();
-  if (!prisma) return 0;
+  if (!prisma) return { stamped: 0, warning: "" } satisfies StampRangeResult;
   await ensureCsTables();
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
-  if (!lo || !hi) return 0;
+  if (!lo || !hi) return { stamped: 0, warning: "" };
   return stampOrdersInRange(prisma, agentId, lo, hi);
 }
 
-async function stampOrdersInRange(prisma: CsDb, agentId: number, from: number, to: number) {
-  // Never overwrite assignment on terminal statuses (saved / cancelled / failed).
+async function stampOrdersInRange(
+  prisma: CsDb,
+  agentId: number,
+  from: number,
+  to: number,
+): Promise<StampRangeResult> {
+  const warning = await alreadyAssignedWarning(prisma, agentId, from, to);
+  // Never overwrite terminal statuses or another agent's open assignment.
   await prisma.$executeRaw`
     UPDATE CsOrderConfirmation
     SET assignedAgentId = ${agentId}
     WHERE CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
       AND status IN ('PENDING', 'IN_PROGRESS')
+      AND (assignedAgentId IS NULL OR assignedAgentId = ${agentId})
   `;
   const counted = await prisma.$queryRaw<Array<{ n: bigint | number }>>`
     SELECT COUNT(*) AS n
@@ -157,7 +191,7 @@ async function stampOrdersInRange(prisma: CsDb, agentId: number, from: number, t
       AND status IN ('PENDING', 'IN_PROGRESS')
       AND CAST(REPLACE(REPLACE(wooOrderNumber, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ${from} AND ${to}
   `;
-  return Number(counted[0]?.n ?? 0);
+  return { stamped: Number(counted[0]?.n ?? 0), warning };
 }
 
 async function unstampOrdersInRange(prisma: CsDb, agentId: number, from: number, to: number) {
@@ -198,7 +232,12 @@ export async function createAssignment(input: {
 
   const stamped = await stampOrdersInRange(prisma, input.agentId, from, to);
 
-  return { ok: true as const, assignment: row, stamped };
+  return {
+    ok: true as const,
+    assignment: row,
+    stamped: stamped.stamped,
+    warning: stamped.warning,
+  };
 }
 
 export async function deleteAssignment(id: number) {
@@ -235,7 +274,8 @@ export async function restampTodayAssignmentsOnce() {
   for (const row of rows) {
     const from = Math.min(row.wooOrderNumberFrom, row.wooOrderNumberTo);
     const to = Math.max(row.wooOrderNumberFrom, row.wooOrderNumberTo);
-    stamped += await stampOrdersInRange(prisma, row.agentId, from, to);
+    const result = await stampOrdersInRange(prisma, row.agentId, from, to);
+    stamped += result.stamped;
   }
   await prisma.$executeRaw`
     INSERT IGNORE INTO CsAssignmentRestamp (dayYmd) VALUES (${day})
@@ -340,12 +380,15 @@ export async function fairSplitAssign(input: {
     const nums = chunk.map((r) => parseWooOrderNumber(r.wooOrderNumber)).filter((x) => x > 0);
     if (!nums.length) continue;
 
+    let chunkAssigned = 0;
     for (const row of chunk) {
+      if (row.assignedAgentId != null && row.assignedAgentId !== agentId) continue;
       await prisma.csOrderConfirmation.update({
         where: { id: row.id },
         data: { assignedAgentId: agentId },
       });
       assigned += 1;
+      chunkAssigned += 1;
     }
 
     const from = Math.min(...nums);
@@ -358,7 +401,21 @@ export async function fairSplitAssign(input: {
         createdById: input.createdById,
       },
     });
-    ranges.push({ agentId, from, to, count: chunk.length });
+    ranges.push({ agentId, from, to, count: chunkAssigned });
+  }
+
+  // Warning for fair split: rows that stayed with another agent.
+  const skippedOthers = rows.filter(
+    (row) => row.assignedAgentId != null && !agentIds.includes(Number(row.assignedAgentId)),
+  );
+  let warning = "";
+  if (skippedOthers.length) {
+    const nums = skippedOthers
+      .map((row) => parseWooOrderNumber(row.wooOrderNumber))
+      .filter((value) => value > 0);
+    const lo = nums.length ? Math.min(...nums) : 0;
+    const hi = nums.length ? Math.max(...nums) : 0;
+    warning = `الأوردر من ${lo} إلى ${hi} موزّع قبل كده (${skippedOthers.length} أوردر) — ما اتعيّنوش تاني.`;
   }
 
   return {
@@ -366,6 +423,7 @@ export async function fairSplitAssign(input: {
     assigned,
     perAgent: Math.ceil(n / k),
     ranges,
+    warning,
   };
 }
 

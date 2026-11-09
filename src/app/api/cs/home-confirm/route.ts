@@ -48,7 +48,11 @@ export async function POST(request: Request) {
       to: Number(body.to),
     });
     if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
-    return NextResponse.json({ ok: true, stamped: result.stamped });
+    return NextResponse.json({
+      ok: true,
+      stamped: result.stamped,
+      warning: "warning" in result ? result.warning || "" : "",
+    });
   }
 
   const result = await saveHomeConfirmShifts(

@@ -208,18 +208,19 @@ export function CsAssignClient({
         to: Number(form.get("to")),
       }),
     });
-    const data = (await res.json()) as { message?: string; stamped?: number };
+    const data = (await res.json()) as { message?: string; stamped?: number; warning?: string };
     setLoading(false);
     if (!res.ok) {
       setMessage(data.message || "تعذر الحفظ.");
       return;
     }
     const stamped = Number(data.stamped ?? 0);
-    setMessage(
+    const warning = String(data.warning || "").trim();
+    const base =
       stamped > 0
         ? `تم حفظ التوزيع وارتبط ${stamped} أوردر.`
-        : "اتحفظ النطاق، والأرقام دي مش موجودة في قائمة الأوردرات.",
-    );
+        : "اتحفظ النطاق، والأرقام دي مش موجودة في قائمة الأوردرات.";
+    setMessage(warning ? `${base} ${warning}` : base);
     event.currentTarget.reset();
     await loadAssignments(appliedFrom, appliedTo);
     if (showPendingAfterLast) await loadPending();
@@ -249,6 +250,7 @@ export function CsAssignClient({
     const data = (await res.json()) as {
       message?: string;
       assigned?: number;
+      warning?: string;
       ranges?: Array<{ agentId: number; from: number; to: number; count: number }>;
     };
     setLoading(false);
@@ -260,9 +262,9 @@ export function CsAssignClient({
     const rangeText = (data.ranges || [])
       .map((r) => `${byId.get(r.agentId) || r.agentId}: ${r.from}→${r.to} (${r.count})`)
       .join(" · ");
-    setMessage(
-      `تم التوزيع بنطاقات متتالية على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر. ${rangeText}`,
-    );
+    const warning = String(data.warning || "").trim();
+    const base = `تم التوزيع بنطاقات متتالية على ${fairIds.length} مسؤولين — ${data.assigned ?? 0} أوردر. ${rangeText}`;
+    setMessage(warning ? `${base} ${warning}` : base);
     setAppliedFrom(today);
     setAppliedTo(today);
     setDraftFrom(today);
@@ -441,16 +443,17 @@ export function CsAssignClient({
         to: Number(homeRangeTo),
       }),
     });
-    const data = (await res.json()) as { message?: string; stamped?: number };
+    const data = (await res.json()) as { message?: string; stamped?: number; warning?: string };
     setLoading(false);
     if (!res.ok) {
       setMessage(data.message || "تعذر توزيع أوردرات المنزل.");
       return;
     }
     const stamped = Number(data.stamped ?? 0);
-    setMessage(
-      stamped > 0 ? `تم توزيع ${stamped} أوردر على تأكيدات المنزل.` : "الأرقام دي مش موجودة في قائمة الأوردرات.",
-    );
+    const warning = String(data.warning || "").trim();
+    const base =
+      stamped > 0 ? `تم توزيع ${stamped} أوردر على تأكيدات المنزل.` : "الأرقام دي مش موجودة في قائمة الأوردرات.";
+    setMessage(warning ? `${base} ${warning}` : base);
     setHomeRangeFrom("");
     setHomeRangeTo("");
   }

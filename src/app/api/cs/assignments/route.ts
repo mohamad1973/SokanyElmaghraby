@@ -94,6 +94,7 @@ export async function POST(request: Request) {
       assigned: result.assigned,
       perAgent: result.perAgent,
       ranges: result.ranges,
+      warning: "warning" in result ? result.warning || "" : "",
     });
   }
 
@@ -145,7 +146,12 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ message: result.message }, { status: 400 });
   }
-  return NextResponse.json({ ok: true, assignment: result.assignment, stamped: result.stamped });
+  return NextResponse.json({
+    ok: true,
+    assignment: result.assignment,
+    stamped: result.stamped,
+    warning: "warning" in result ? result.warning || "" : "",
+  });
 }
 
 export async function DELETE(request: Request) {

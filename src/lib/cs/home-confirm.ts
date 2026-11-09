@@ -183,7 +183,7 @@ export async function stampHomeConfirmRange(input: { agentId: number; from: numb
   if (!from || !to) return { ok: false as const, message: "أرقام الأوردر غير صالحة." };
   const stamped = await stampAssignedAgentInOrderRange(input.agentId, from, to);
   const prisma = getPrismaClient();
-  if (prisma && stamped > 0) {
+  if (prisma && stamped.stamped > 0) {
     await prisma.$executeRawUnsafe(
       `UPDATE \`CsOrderConfirmation\`
        SET \`assignedAt\` = COALESCE(\`assignedAt\`, NOW(3))
@@ -194,7 +194,7 @@ export async function stampHomeConfirmRange(input: { agentId: number; from: numb
       to,
     );
   }
-  return { ok: true as const, stamped };
+  return { ok: true as const, stamped: stamped.stamped, warning: stamped.warning };
 }
 
 async function onShiftHomeAgents() {

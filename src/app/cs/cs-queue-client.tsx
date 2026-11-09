@@ -2618,9 +2618,7 @@ export function CsQueueClient({
                     {item.status === "CONFIRMED" && item.confirmedAt ? (
                       <span className="text-[11px] font-bold text-[#14213D]/70">
                         حُفظ {formatCairoOrderDateTime(item.confirmedAt).absolute}
-                        {item.confirmedByAgent?.name
-                          ? ` · حفظه ${item.confirmedByAgent.name}`
-                          : ""}
+                        {` · حفظه ${item.confirmedByAgent?.name || "—"}`}
                         {item.confirmationEditedAt
                           ? ` · عُدّل ${formatCairoOrderDateTime(item.confirmationEditedAt).absolute}`
                           : ""}

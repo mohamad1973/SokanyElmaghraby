@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| اسم الحافظ + منع إعادة التوزيع | جنب وقت الحفظ يظهر «حفظه» دائمًا؛ التوزيع ما يكتبش فوق وكيل موجود ويرجع رسالة مدى موزّع قبل كده | `cs-queue-client.tsx`, `assignments.ts`, `assign-client.tsx`, `home-confirm.ts` |
 | اختيار أصناف الأوردر قبل الفحص | لو مفيش + وفيه بنود لقطة: شاشة اختَر الصنف؛ الربط يتعمل مع أول تصنيف | `maintenance-returns.ts`, `maintenance-client.tsx`, `custom-return-product-id.ts` |
 | إسناد محفوظ + من حفظ | توزيع المدى/القواعد لا يلمس CONFIRMED؛ عمود `confirmedByAgentId` وعرض «حفظه» على كارت القائمة | `assignments.ts`, `confirmations.ts`, `agents.ts`, `cs-queue-client.tsx`, schema |
 | ثبات صفحة قائمة الأوردرات | بعد «التالي» اختيار شركة الشحن لا يعيد الصفحة 1؛ إزالة `router.refresh` بعد الحفظ ومنع `initialItems` من مسح الصفحة الحالية | `cs-queue-client.tsx` |
