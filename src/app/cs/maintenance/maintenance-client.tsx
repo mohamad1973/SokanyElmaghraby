@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import { ReturnTrackDrawer, ReturnTrackLine } from "@/components/cs/return-track-line";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 import {
@@ -558,6 +559,11 @@ function ReviewCards({
             فتح صفحة الأوردر
           </Link>
         ) : null}
+        <ReturnTrackLine
+          trackingNumber={row.trackingNumber}
+          confirmationId={row.confirmationId}
+          forceShow
+        />
         {phase === "saved" && savedReview ? (
           <div className="space-y-3">
             <p className="rounded-2xl bg-emerald-50 px-4 py-6 text-center text-xl font-extrabold text-emerald-900">{savedReview.label}</p>
@@ -705,18 +711,28 @@ export function MaintenanceClient({
   canInspect = true,
   canTech = false,
   canAccounting = false,
+  initialHub,
 }: {
   canInspect?: boolean;
   canTech?: boolean;
   canAccounting?: boolean;
+  initialHub?: HubTab;
 }) {
   const defaultHub: HubTab = canInspect ? "inspect" : canTech ? "tech" : canAccounting ? "accounting" : "inspect";
+  const startHub: HubTab =
+    initialHub === "variance" ||
+    initialHub === "tech" ||
+    initialHub === "receive" ||
+    initialHub === "accounting" ||
+    initialHub === "inspect"
+      ? initialHub
+      : defaultHub;
   const [data, setData] = useState<Payload | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabId>("bosta");
-  const [hubTab, setHubTab] = useState<HubTab>(defaultHub);
+  const [hubTab, setHubTab] = useState<HubTab>(startHub);
   const [kinds, setKinds] = useState<Kind[]>(["refused", "exchange", "return"]);
   const [usageFilter, setUsageFilter] = useState<UsageFilter>("all");
   const [destinationFilter, setDestinationFilter] = useState<DestinationFilter>("all");
@@ -1178,6 +1194,7 @@ export function MaintenanceClient({
                   <tr>
                     <th className="px-3 py-2">اليوم</th>
                     <th className="px-3 py-2">البوليصة</th>
+                    <th className="px-3 py-2">المسار</th>
                     <th className="px-3 py-2">الأوردر</th>
                     <th className="px-3 py-2">العميل</th>
                     <th className="px-3 py-2">الموبايل</th>
@@ -1203,6 +1220,12 @@ export function MaintenanceClient({
                       >
                         <td className="px-3 py-2">{row.day || "—"}</td>
                         <td className="px-3 py-2 font-bold">{row.trackingNumber}</td>
+                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                          <ReturnTrackDrawer
+                            trackingNumber={row.trackingNumber}
+                            confirmationId={row.confirmationId}
+                          />
+                        </td>
                         <td className="px-3 py-2 font-extrabold">
                           <span className="inline-flex flex-wrap items-center gap-1">
                             {row.deskTicket ? (
@@ -1275,7 +1298,7 @@ export function MaintenanceClient({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={11} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
+                      <td colSpan={12} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
                         {loading ? "جارٍ التحميل…" : tabMissing || EMPTY_INSPECT[tab]}
                       </td>
                     </tr>

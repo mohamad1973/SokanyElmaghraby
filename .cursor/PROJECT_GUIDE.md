@@ -464,6 +464,8 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| دروب داون تقارير CS | زر تقارير يفتح قائمة بكل التقارير كروابط لأماكنها الحالية + فهرس في `/cs/reports`؛ بدون نقل التقارير | `reports-catalog.ts`, `cs-shell.tsx`, `reports-hub.tsx` |
+| مسار داخل فحص المرتجع | عمود «مسار» في جدول فحص المرتجع + خط زمني داخل نافذة الفحص لكل رفض/استبدال/استرجاع | `maintenance-client.tsx`, `return-track-line.tsx` |
 | مسار المرتجع لكل استرجاع/استبدال | المسار يظهر لأبناء return/exchange (بوسطة/تميمة/مندوب) حتى قبل Capture، وعلى الأب لو له أبناء مرتجعة؛ البيع العادي يخفي البلوك | `return-track.ts`, `return-track-line.tsx`, `call-sheet.tsx`, `orders/[id]/page.tsx` |
 | عائد من الصيانة + تراك لاين المرتجعات | تبويب «عائد من الصيانة» (بانتظار استلام / رف فرز أول / تم الاستلام)؛ خط زمني مشتق + جدول `CsReturnTrackEvent`؛ عرض على كارت الأوردر والصيانة؛ timestamps `inspectedAt`/`gradedAt`/`outletAt`/`scrapAt` | `return-track.ts`, `return-track-line.tsx`, `maintenance-panels.tsx`, `bosta-return-lifecycle.ts`, `bosta-return-review.ts` |
 | سليم → رف أو صيانة | بعد سليم (جديد/مستخدم) في مرتجعات الشحن: اختيار «يعود إلى الرف» أو «إلى الصيانة»؛ الصيانة تدخل طابور فني الصيانة | `bosta-return-review.ts`, `maintenance-client.tsx`, `returns/route.ts` |

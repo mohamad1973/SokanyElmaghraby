@@ -6,9 +6,12 @@ import { requireCsSession } from "@/lib/session-guards";
 
 import { MonaCourierPanel } from "../../mona/mona-client";
 
-type Props = { params: Promise<{ courierId: string }> };
+type Props = {
+  params: Promise<{ courierId: string }>;
+  searchParams?: Promise<{ tab?: string }>;
+};
 
-export default async function MonaCourierAccountPage({ params }: Props) {
+export default async function MonaCourierAccountPage({ params, searchParams }: Props) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
   await ensureCsTables();
@@ -18,5 +21,12 @@ export default async function MonaCourierAccountPage({ params }: Props) {
   const { courierId } = await params;
   const id = Number(courierId);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  return <MonaCourierPanel mode="supervisor" focusCourierId={id} />;
+  const query = (await searchParams) || {};
+  return (
+    <MonaCourierPanel
+      mode="supervisor"
+      focusCourierId={id}
+      initialTab={query.tab === "report" ? "report" : "sheet"}
+    />
+  );
 }

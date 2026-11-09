@@ -948,15 +948,17 @@ function reportRows(orders: OrderCard[], accounts: DayAccount[], from: string, t
 export function MonaCourierPanel({
   mode,
   focusCourierId,
+  initialTab = "sheet",
 }: {
   mode: "supervisor" | "courier";
   focusCourierId?: number;
+  initialTab?: "sheet" | "report";
 }) {
   const [desk, setDesk] = useState<Desk | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [orderNumber, setOrderNumber] = useState("");
-  const [tab, setTab] = useState<"sheet" | "report">("sheet");
+  const [tab, setTab] = useState<"sheet" | "report">(initialTab === "report" ? "report" : "sheet");
   const [fromDay, setFromDay] = useState("");
   const [toDay, setToDay] = useState("");
   const [sheetDay, setSheetDay] = useState(cairoToday);

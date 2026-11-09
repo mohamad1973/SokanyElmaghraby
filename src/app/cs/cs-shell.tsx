@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 
 import { CsPwaInstallPrompt } from "@/components/cs-pwa-install-prompt";
 import { ensureDepositAlertUnlockedOnGesture, playLoudDepositAlert } from "@/lib/deposit-alert-sound";
+import { csReportCatalog } from "@/lib/cs/reports-catalog";
 import { formatDepositPaidClock } from "@/lib/cs/order-window";
 
 function BellIcon({ className }: { className?: string }) {
@@ -864,8 +865,13 @@ function CsHeader() {
   const [shippingPos, setShippingPos] = useState<{ top: number; left: number } | null>(null);
   const shippingBtnRef = useRef<HTMLButtonElement>(null);
   const shippingMenuRef = useRef<HTMLDivElement>(null);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [reportsPos, setReportsPos] = useState<{ top: number; left: number } | null>(null);
+  const reportsBtnRef = useRef<HTMLButtonElement>(null);
+  const reportsMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setShippingOpen(false);
+    setReportsOpen(false);
   }, [pathname]);
   useEffect(() => {
     if (!shippingOpen) return;
@@ -900,6 +906,39 @@ function CsHeader() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [shippingOpen]);
+  useEffect(() => {
+    if (!reportsOpen) return;
+    const menuWidth = 220;
+    const margin = 8;
+    function place() {
+      const btn = reportsBtnRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const left = Math.max(margin, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - margin));
+      setReportsPos({ top: rect.bottom + 4, left });
+    }
+    reportsBtnRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    place();
+    const frame = window.requestAnimationFrame(place);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [reportsOpen]);
+  useEffect(() => {
+    if (!reportsOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (reportsBtnRef.current?.contains(target) || reportsMenuRef.current?.contains(target)) return;
+      setReportsOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [reportsOpen]);
   const agentName = session?.user?.name?.trim() || "مسؤول خدمة العملاء";
   const roles = session?.user?.csRoles?.length
     ? session.user.csRoles
@@ -938,6 +977,21 @@ function CsHeader() {
   const canSettlement = isShipping || isSupervisor || isAdmin;
   const canTransfers = isTransfers || isSupervisor || isAdmin || Boolean(session?.user?.csCanAccessTransfers);
   const showOrdersQueue = (roles.length ? canSeeOrders : !isTransfersOnly && !isShipping) || isCourierSupervisor;
+  const canBosta = isAdmin || (isSupervisor && !isCourierSupervisor);
+  const canMonaAccounts = (isSupervisor || isAdmin) && !isCourierSupervisor;
+  const canReportsMenu = isSupervisor || isAdmin || canSettlement || canTransfers || canMaintenanceHub || isMonaCourier;
+  const reportLinks = csReportCatalog({
+    isSupervisor,
+    isAdmin,
+    canSettlement,
+    canTransfers,
+    canMaintenanceHub,
+    canBosta,
+    canMonaAccounts,
+    isMonaCourier,
+    isCourierSupervisor,
+    canSeeOrders,
+  });
 
   const navClass = (active: boolean) =>
     `shrink-0 rounded-full px-3 py-1.5 whitespace-nowrap ${
@@ -993,7 +1047,10 @@ function CsHeader() {
             <button
               ref={shippingBtnRef}
               type="button"
-              onClick={() => setShippingOpen((open) => !open)}
+              onClick={() => {
+                setReportsOpen(false);
+                setShippingOpen((open) => !open);
+              }}
               className={navClass(
                 pathname.startsWith("/cs/temima") ||
                   pathname.startsWith("/cs/couriers") ||
@@ -1054,10 +1111,20 @@ function CsHeader() {
               مناديب المشرفة
             </Link>
           ) : null}
-          {isSupervisor ? (
-            <Link href="/cs/reports" className={navClass(pathname.startsWith("/cs/reports"))}>
+          {canReportsMenu ? (
+            <button
+              ref={reportsBtnRef}
+              type="button"
+              onClick={() => {
+                setShippingOpen(false);
+                setReportsOpen((open) => !open);
+              }}
+              className={navClass(pathname.startsWith("/cs/reports") || reportsOpen)}
+              aria-expanded={reportsOpen}
+              aria-haspopup="menu"
+            >
               تقارير
-            </Link>
+            </button>
           ) : null}
           {isAdmin ? (
             <Link href="/cs/users" className={navClass(pathname.startsWith("/cs/users"))}>
@@ -1145,6 +1212,35 @@ function CsHeader() {
               >
                 شركات الشحن
               </Link>
+            </div>,
+            document.body,
+          )
+        : null}
+      {reportsOpen && reportsPos
+        ? createPortal(
+            <div
+              ref={reportsMenuRef}
+              role="menu"
+              dir="rtl"
+              className="fixed z-[80] max-h-[70vh] w-56 overflow-y-auto rounded-xl bg-white p-1 text-sm font-bold text-[#14213D] shadow-lg ring-1 ring-black/10"
+              style={{ top: reportsPos.top, left: reportsPos.left }}
+            >
+              {reportLinks.length ? (
+                reportLinks.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    role="menuitem"
+                    title={item.description}
+                    onClick={() => setReportsOpen(false)}
+                    className="block rounded-lg px-3 py-2 hover:bg-[#F5F5F0]"
+                  >
+                    {item.label}
+                  </Link>
+                ))
+              ) : (
+                <p className="px-3 py-2 text-xs font-bold text-[#14213D]/60">مفيش تقارير متاحة لصلاحيتك.</p>
+              )}
             </div>,
             document.body,
           )

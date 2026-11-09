@@ -793,6 +793,7 @@ type Props = {
   couriers?: Array<{ id: number; name: string }>;
   initialHasMore?: boolean;
   initialTotal?: number;
+  initialSheetTab?: "sheet" | "late" | "unmarked";
 };
 
 type TemimaAddMatch = {
@@ -844,6 +845,7 @@ export function CsQueueClient({
   couriers = [],
   initialHasMore = false,
   initialTotal = 0,
+  initialSheetTab = "sheet",
 }: Props) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -931,7 +933,9 @@ export function CsQueueClient({
   const [bostaCurrentBatchNo, setBostaCurrentBatchNo] = useState(0);
   const [bostaIsReprint, setBostaIsReprint] = useState(false);
   const [warehouseDaySummary, setWarehouseDaySummary] = useState<WarehouseSheetDaySummary | null>(null);
-  const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked">("sheet");
+  const [sheetTab, setSheetTab] = useState<"sheet" | "late" | "unmarked">(
+    initialSheetTab === "late" || initialSheetTab === "unmarked" ? initialSheetTab : "sheet",
+  );
   const [lateRows, setLateRows] = useState<TemimaLateRow[]>([]);
   const [lateLoading, setLateLoading] = useState(false);
   const [lateDateFilter, setLateDateFilter] = useState("");
@@ -1379,6 +1383,12 @@ export function CsQueueClient({
       setLateLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (initialSheetTab !== "late" || !isCourierSupervisor) return;
+    void loadTemimaLate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open late once from deep link
+  }, [initialSheetTab, isCourierSupervisor]);
 
   function rememberFrozenDays(from: string, to: string, days: string[]) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return;

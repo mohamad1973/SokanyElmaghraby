@@ -13,7 +13,11 @@ import { requireCsSession } from "@/lib/session-guards";
 
 import { CsQueueClient } from "./cs-queue-client";
 
-export default async function CsHomePage() {
+export default async function CsHomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ late?: string }>;
+}) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
 
@@ -93,6 +97,9 @@ export default async function CsHomePage() {
     isCourierSupervisor || isSupervisor ? listTemimaFrozenDays("2024-01-01", today) : Promise.resolve(new Set<string>()),
   ]);
 
+  const query = (await searchParams) || {};
+  const initialSheetTab = query.late === "1" ? ("late" as const) : ("sheet" as const);
+
   return (
     <CsQueueClient
       initialItems={initialItems}
@@ -117,6 +124,7 @@ export default async function CsHomePage() {
       temimaSheetEdits={temimaSheetEdits}
       initialHasMore={initialHasMore}
       initialTotal={initialTotal}
+      initialSheetTab={initialSheetTab}
     />
   );
 }

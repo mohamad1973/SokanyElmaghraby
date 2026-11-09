@@ -148,7 +148,13 @@ export function ReturnTrackLine({
 }
 
 /** Compact toggle used in maintenance tables. */
-export function ReturnTrackDrawer({ trackingNumber }: { trackingNumber: string }) {
+export function ReturnTrackDrawer({
+  trackingNumber,
+  confirmationId,
+}: {
+  trackingNumber: string;
+  confirmationId?: number | null;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="space-y-2">
@@ -159,7 +165,14 @@ export function ReturnTrackDrawer({ trackingNumber }: { trackingNumber: string }
       >
         {open ? "إخفاء المسار" : "مسار"}
       </button>
-      {open ? <ReturnTrackLine trackingNumber={trackingNumber} compact forceShow /> : null}
+      {open ? (
+        <ReturnTrackLine
+          trackingNumber={trackingNumber}
+          confirmationId={confirmationId}
+          compact
+          forceShow
+        />
+      ) : null}
     </div>
   );
 }

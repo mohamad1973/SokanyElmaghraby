@@ -75,8 +75,8 @@ function formatWhen(iso: string | null | undefined) {
   return date.toLocaleString("ar-EG");
 }
 
-export function BostaBoardClient() {
-  const [tab, setTab] = useState<Tab>("board");
+export function BostaBoardClient({ initialTab = "board" }: { initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab === "reconcile" ? "reconcile" : "board");
   const [data, setData] = useState<Payload | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");

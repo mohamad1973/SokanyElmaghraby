@@ -5,10 +5,16 @@ import { requireCsSession } from "@/lib/session-guards";
 
 import { BostaBoardClient } from "./bosta-board-client";
 
-export default async function CsBostaBoardPage() {
+export default async function CsBostaBoardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
   const viewer = await resolveCsViewer(session.user.csAgentId);
   if (!viewer.isAdmin && !(viewer.isSupervisor && !viewer.isCourierSupervisor)) redirect("/cs");
-  return <BostaBoardClient />;
+  const params = (await searchParams) || {};
+  const initialTab = params.tab === "reconcile" ? "reconcile" : "board";
+  return <BostaBoardClient initialTab={initialTab} />;
 }

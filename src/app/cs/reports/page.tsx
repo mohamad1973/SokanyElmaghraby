@@ -4,7 +4,7 @@ import { ensureCsTables, ensureDefaultCsAgent, listActiveCsAgents } from "@/lib/
 import { listCsConfirmationsForViewer, resolveCsViewer, serializeCsQueueItem } from "@/lib/cs/confirmations";
 import { requireCsSession } from "@/lib/session-guards";
 
-import { ReportsTabs } from "./reports-tabs";
+import { ReportsHub } from "./reports-hub";
 
 export default async function CsReportsPage({
   searchParams,
@@ -54,13 +54,30 @@ export default async function CsReportsPage({
     }
   }
 
+  const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
+  const isAdmin = viewer.isAdmin || Boolean(session.user.csIsAdmin);
+
   return (
-    <ReportsTabs
+    <ReportsHub
       tab={tab}
       overview={{
         total: items.length,
         byStatus: Object.entries(byStatusMap).map(([status, count]) => ({ status, count })),
         byAgent: Object.values(byAgentMap),
+      }}
+      flags={{
+        isSupervisor,
+        isAdmin,
+        canSettlement: Boolean(viewer.isShipping || isSupervisor || isAdmin),
+        canTransfers: Boolean(viewer.canAccessTransfers || viewer.isTransfers || isSupervisor || isAdmin),
+        canMaintenanceHub: Boolean(
+          viewer.canAccessMaintenanceHub || viewer.isMaintenance || viewer.isMaintenanceTech || viewer.isAccounting,
+        ),
+        canBosta: Boolean(isAdmin || (isSupervisor && !viewer.isCourierSupervisor)),
+        canMonaAccounts: Boolean((isSupervisor || isAdmin) && !viewer.isCourierSupervisor),
+        isMonaCourier: Boolean(viewer.isMonaCourier),
+        isCourierSupervisor: Boolean(viewer.isCourierSupervisor),
+        canSeeOrders: Boolean(viewer.canSeeOrders),
       }}
     />
   );

@@ -6,11 +6,16 @@ import { requireCsSession } from "@/lib/session-guards";
 
 import { MonaCourierPanel } from "./mona-client";
 
-export default async function MonaCourierPage() {
+export default async function MonaCourierPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const session = await requireCsSession();
   if (!session?.user.csAgentId) redirect("/cs/login");
   await ensureCsTables();
   const viewer = await resolveCsViewer(session.user.csAgentId);
   if (!viewer.isMonaCourier) redirect("/cs");
-  return <MonaCourierPanel mode="courier" />;
+  const params = (await searchParams) || {};
+  return <MonaCourierPanel mode="courier" initialTab={params.tab === "report" ? "report" : "sheet"} />;
 }
