@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| ثبات صفحة قائمة الأوردرات | بعد «التالي» اختيار شركة الشحن لا يعيد الصفحة 1؛ إزالة `router.refresh` بعد الحفظ ومنع `initialItems` من مسح الصفحة الحالية | `cs-queue-client.tsx` |
 | فحص وتصنيف لكل صنف | عند ربط أصناف: اختيار صنف ثم فحصه مستقلًا (سليم/معيب، جديد/مستخدم، رف/صيانة)؛ فني/استلام/رف يعملون على أصناف الصيانة فقط؛ `CsBostaReturnReview` ملخص مجمع | `bosta-return-product.ts`, `bosta-return-review.ts`, `bosta-return-lifecycle.ts`, `maintenance-client.tsx`, `maintenance-panels.tsx` |
 | منتج حر في فحص المرتجع | لو المنتج مش على الموقع: الموظف يكتب الاسم/الموديل ويحفظه في `CsBostaReturnProduct` بمعرّف سالب | `bosta-return-product.ts`, `maintenance-client.tsx`, `returns/product/route.ts` |
 | دروب داون تقارير CS | زر تقارير يفتح قائمة بكل التقارير كروابط لأماكنها الحالية + فهرس في `/cs/reports`؛ بدون نقل التقارير | `reports-catalog.ts`, `cs-shell.tsx`, `reports-hub.tsx` |

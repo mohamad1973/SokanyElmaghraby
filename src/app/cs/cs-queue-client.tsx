@@ -940,7 +940,11 @@ export function CsQueueClient({
   const [lateLoading, setLateLoading] = useState(false);
   const [lateDateFilter, setLateDateFilter] = useState("");
 
+  const seededFromServer = useRef(false);
   useEffect(() => {
+    // Apply SSR seed once. Later router.refresh() must not wipe client page 2+.
+    if (seededFromServer.current) return;
+    seededFromServer.current = true;
     setItems(initialItems);
     setHasMore(initialHasMore);
     setQueuePage(1);
@@ -1226,9 +1230,13 @@ export function CsQueueClient({
 
   async function setShipping(id: number, shippingCompany: string) {
     if (savingShipId) return;
+    const previous = items.find((item) => item.id === id);
+    const prevShipping = previous?.shippingCompany ?? null;
+    const prevMonaId = previous?.monaCourierId ?? null;
+    const prevMonaName = previous?.monaCourierName ?? null;
     setSavingShipId(id);
     setMessage("");
-    // Optimistic UI
+    // Optimistic UI — keep current queue page (no router.refresh).
     setItems((prev) =>
       prev.map((item) =>
         item.id === id
@@ -1251,7 +1259,18 @@ export function CsQueueClient({
     setSavingShipId(null);
     if (!res.ok) {
       setMessage(data.message || "تعذر حفظ شركة الشحن.");
-      router.refresh();
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                shippingCompany: prevShipping,
+                monaCourierId: prevMonaId,
+                monaCourierName: prevMonaName,
+              }
+            : item,
+        ),
+      );
       return;
     }
     setItems((prev) =>
@@ -1259,11 +1278,13 @@ export function CsQueueClient({
         item.id === id ? { ...item, shippingCompany: data.shippingCompany || shippingCompany } : item,
       ),
     );
-    router.refresh();
   }
 
   async function setHanded(id: number, handedToCarrier: boolean) {
     if (savingHandId) return;
+    const previous = items.find((item) => item.id === id);
+    const prevHanded = Boolean(previous?.handedToCarrier);
+    const prevHandedAt = previous?.handedToCarrierAt ?? null;
     setSavingHandId(id);
     setMessage("");
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, handedToCarrier } : item)));
@@ -1280,7 +1301,13 @@ export function CsQueueClient({
     setSavingHandId(null);
     if (!res.ok) {
       setMessage(data.message || "تعذر تسجيل التسليم لشركة الشحن.");
-      router.refresh();
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? { ...item, handedToCarrier: prevHanded, handedToCarrierAt: prevHandedAt }
+            : item,
+        ),
+      );
       return;
     }
     setItems((prev) =>
