@@ -336,6 +336,7 @@ model CsOrderConfirmation {
   answers              CsChecklistAnswer[]
   sheetEdits           CsTemimaSheetEdit[]
   sokanyWaybills       CsSokanyWaybill[]
+  activityEvents       CsOrderActivityEvent[]
 
   @@index([status])
   @@index([assignedAgentId])
@@ -352,6 +353,21 @@ model CsOrderConfirmation {
   @@index([discountApprovalStatus])
   @@index([parentConfirmationId])
   @@index([fulfillmentKind])
+}
+
+model CsOrderActivityEvent {
+  id               Int                 @id @default(autoincrement())
+  confirmationId   Int
+  confirmation     CsOrderConfirmation @relation(fields: [confirmationId], references: [id], onDelete: Cascade)
+  trackingNumber   String?             @db.VarChar(64)
+  actorAgentId     Int?
+  action           String              @db.VarChar(32)
+  detail           String?             @db.VarChar(512)
+  at               DateTime            @default(now())
+
+  @@index([confirmationId])
+  @@index([trackingNumber])
+  @@index([at])
 }
 
 model CsChecklistAnswer {

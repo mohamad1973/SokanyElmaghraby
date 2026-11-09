@@ -750,6 +750,8 @@ async function runEnsureCsTables() {
   await ensureScCenterTables();
   const { ensureHomeConfirmTables } = await import("@/lib/cs/home-confirm");
   await ensureHomeConfirmTables();
+  const { ensureOrderActivityTables } = await import("@/lib/cs/order-activity");
+  await ensureOrderActivityTables();
 }
 
 async function ensureCriticalCsOrderConfirmationColumns(

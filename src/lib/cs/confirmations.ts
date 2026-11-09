@@ -1565,22 +1565,30 @@ export async function saveCsConfirmation(input: {
     }
     const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
     const savedAt = new Date();
-    const typedHome = row as { confirmedByAgentId?: number | null };
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.CONFIRMED,
         ...(alreadySaved
-          ? {
-              confirmationEditedAt: savedAt,
-              ...(typedHome.confirmedByAgentId == null ? { confirmedByAgentId: input.agentId } : {}),
-            }
+          ? { confirmationEditedAt: savedAt, confirmedByAgentId: input.agentId }
           : { confirmedAt: savedAt, confirmedByAgentId: input.agentId }),
         failReason: null,
         assignedAgentId: input.agentId,
         customerSnapshot: nextSnap,
       } as never,
     });
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      await recordOrderActivity({
+        confirmationId: input.id,
+        actorAgentId: input.agentId,
+        action: alreadySaved ? "edit" : "save",
+        detail: alreadySaved ? "تعديل حفظ تأكيدات منزل" : "حفظ تأكيدات منزل",
+        at: savedAt,
+      });
+    } catch (error) {
+      console.error("[cs] home-confirm activity record failed", error);
+    }
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.CONFIRMED, missing: [] as string[] };
   }
 
@@ -2053,16 +2061,12 @@ export async function saveCsConfirmation(input: {
   const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
   const savedAt = new Date();
   const shippingChanged = Boolean(shippingCompany) && row.shippingCompany !== shippingCompany;
-  const typedConfirm = row as { confirmedByAgentId?: number | null };
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {
       status: CS_CONFIRMATION_STATUS.CONFIRMED,
       ...(alreadySaved
-        ? {
-            confirmationEditedAt: savedAt,
-            ...(typedConfirm.confirmedByAgentId == null ? { confirmedByAgentId: input.agentId } : {}),
-          }
+        ? { confirmationEditedAt: savedAt, confirmedByAgentId: input.agentId }
         : { confirmedAt: savedAt, confirmedByAgentId: input.agentId }),
       assignedAgentId: input.agentId,
       shippingCompany,
@@ -2073,6 +2077,20 @@ export async function saveCsConfirmation(input: {
       customerSnapshot: nextSnapshot,
     } as never,
   });
+  try {
+    const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+    await recordOrderActivity({
+      confirmationId: input.id,
+      actorAgentId: input.agentId,
+      action: alreadySaved ? "edit" : "save",
+      detail: alreadySaved
+        ? `تعديل حفظ · ${shippingCompany || "—"}`
+        : `حفظ · ${shippingCompany || "—"}`,
+      at: savedAt,
+    });
+  } catch (error) {
+    console.error("[cs] confirmation activity record failed", error);
+  }
 
   const savedFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
   const bosta = await pushBostaIfNeeded({

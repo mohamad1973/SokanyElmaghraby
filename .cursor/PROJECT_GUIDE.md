@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| منزل→CS + صلاحية | تاب إعادة توزيع منزل لخدمة عملاء بفلاتر؛ جدول `CsOrderActivityEvent`؛ شارة صلاحية صفراء وبوباپ قصة حياة؛ التعديل يحدّث اسم الحافظ | `assignments.ts`, `order-activity.ts`, `order-salahia.tsx`, `assign-client.tsx`, `confirmations.ts` |
 | كل محفوظ يظهر اسم الحافظ | backfill `confirmedByAgentId` من الموزّع لكل CONFIRMED فاضي؛ الحفظ يملأ الفاضي؛ العرض يقع على الموزّع لو لزم بدون شرطه | `agents.ts`, `confirmations.ts`, `cs-queue-client.tsx` |
 | حفظه تأكيدات منزل يثبت | إخفاء «حفظه» لو مفيش اسم؛ التوزيع ما يلمسش `confirmedByAgentId`؛ backfill لأوردرات منزل قديمة لسه على وكيل home_confirm | `cs-queue-client.tsx`, `assignments.ts`, `agents.ts` |
 | اسم الحافظ + منع إعادة التوزيع | جنب وقت الحفظ يظهر «حفظه» دائمًا؛ التوزيع ما يكتبش فوق وكيل موجود ويرجع رسالة مدى موزّع قبل كده | `cs-queue-client.tsx`, `assignments.ts`, `assign-client.tsx`, `home-confirm.ts` |

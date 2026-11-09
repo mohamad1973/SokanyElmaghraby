@@ -704,3 +704,154 @@ export async function assignByShippingCompany(input: {
 
   return { ok: true as const, ...counts, unscoped, ranges };
 }
+
+const HOME_TO_CS_STATUSES = ["PENDING", "IN_PROGRESS", "CONFIRMED"] as const;
+
+/** Force-move home-confirm orders to an office CS agent (supervisor/admin path). */
+export async function redistributeHomeToCs(input: {
+  fromHomeAgentId: number;
+  toCsAgentId: number;
+  shippingCompany: string;
+  statuses?: string[];
+  fromYmd?: string;
+  toYmd?: string;
+  orderFrom?: number | null;
+  orderTo?: number | null;
+  createdById: number;
+}) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  await ensureCsTables();
+
+  const fromHomeAgentId = Number(input.fromHomeAgentId);
+  const toCsAgentId = Number(input.toCsAgentId);
+  const shippingCompany = String(input.shippingCompany || "").trim();
+  if (!fromHomeAgentId || !toCsAgentId) {
+    return { ok: false as const, message: "اختاري موظفة تأكيدات المنزل وموظفة خدمة العملاء." };
+  }
+  if (!shippingCompany) return { ok: false as const, message: "اختاري شركة الشحن." };
+  if (fromHomeAgentId === toCsAgentId) {
+    return { ok: false as const, message: "موظفة المصدر والهدف لازم يكونوا مختلفين." };
+  }
+
+  const { listHomeConfirmAgents } = await import("@/lib/cs/home-confirm");
+  const { getCsAgentById, csFlagsFromRoles, parseCsRoles } = await import("@/lib/cs/agents");
+  const homeAgents = await listHomeConfirmAgents();
+  if (!homeAgents.some((agent) => agent.id === fromHomeAgentId)) {
+    return { ok: false as const, message: "موظفة تأكيدات المنزل غير موجودة." };
+  }
+  const target = await getCsAgentById(toCsAgentId);
+  if (!target || !target.isActive) {
+    return { ok: false as const, message: "موظفة خدمة العملاء غير موجودة." };
+  }
+  const targetFlags = csFlagsFromRoles(
+    parseCsRoles(target as { role?: string; roles?: string | string[] | null; isSupervisor?: boolean; username?: string }),
+  );
+  if (targetFlags.isHomeConfirmOnly) {
+    return { ok: false as const, message: "الهدف لازم يكون حساب خدمة عملاء (مش تأكيدات منزل فقط)." };
+  }
+
+  const statuses = (input.statuses || [])
+    .map((status) => String(status || "").trim().toUpperCase())
+    .filter((status) => HOME_TO_CS_STATUSES.includes(status as (typeof HOME_TO_CS_STATUSES)[number]));
+  const statusList = statuses.length ? statuses : [...HOME_TO_CS_STATUSES];
+
+  const orderFrom = input.orderFrom && Number(input.orderFrom) > 0 ? Number(input.orderFrom) : null;
+  const orderTo = input.orderTo && Number(input.orderTo) > 0 ? Number(input.orderTo) : null;
+  const useOrderRange = orderFrom != null && orderTo != null;
+  const fromYmd = String(input.fromYmd || "").trim();
+  const toYmd = String(input.toYmd || "").trim();
+  const useDateRange = !useOrderRange && Boolean(fromYmd && toYmd);
+
+  if (!useOrderRange && !useDateRange) {
+    return { ok: false as const, message: "حددي يوم من/إلى أو رقم أوردر من/إلى." };
+  }
+
+  const statusPlaceholders = statusList.map(() => "?").join(", ");
+  const params: Array<string | number | Date> = [fromHomeAgentId, shippingCompany, ...statusList];
+  let extraSql = "";
+
+  if (useOrderRange) {
+    const lo = Math.min(orderFrom!, orderTo!);
+    const hi = Math.max(orderFrom!, orderTo!);
+    extraSql = ` AND CAST(REPLACE(REPLACE(\`wooOrderNumber\`, '#', ''), ' ', '') AS UNSIGNED) BETWEEN ? AND ?`;
+    params.push(lo, hi);
+  } else {
+    const fromBounds = cairoYmdBounds(fromYmd);
+    const toBounds = cairoYmdBounds(toYmd);
+    if (!fromBounds || !toBounds) {
+      return { ok: false as const, message: "تاريخ غير صالح." };
+    }
+    const start = fromBounds.start;
+    const end = toBounds.endExclusive;
+    extraSql = ` AND (
+      (\`assignedAt\` IS NOT NULL AND \`assignedAt\` >= ? AND \`assignedAt\` < ?)
+      OR (\`assignedAt\` IS NULL AND \`createdAt\` >= ? AND \`createdAt\` < ?)
+    )`;
+    params.push(start, end, start, end);
+  }
+
+  const matched = await prisma.$queryRawUnsafe<
+    Array<{ id: number | bigint; wooOrderNumber: string; orderNum: number | bigint }>
+  >(
+    `SELECT \`id\`, \`wooOrderNumber\`,
+      CAST(REPLACE(REPLACE(\`wooOrderNumber\`, '#', ''), ' ', '') AS UNSIGNED) AS orderNum
+     FROM \`CsOrderConfirmation\`
+     WHERE \`assignedAgentId\` = ?
+       AND \`shippingCompany\` = ?
+       AND \`status\` IN (${statusPlaceholders})
+       ${extraSql}
+     ORDER BY orderNum ASC`,
+    ...params,
+  );
+
+  if (!matched.length) {
+    return { ok: false as const, message: "مفيش أوردرات مطابقة للفلاتر دي." };
+  }
+
+  const ids = matched.map((row) => Number(row.id));
+  const nums = matched.map((row) => Number(row.orderNum) || 0).filter((n) => n > 0);
+  const lo = nums.length ? Math.min(...nums) : 0;
+  const hi = nums.length ? Math.max(...nums) : 0;
+
+  const idPlaceholders = ids.map(() => "?").join(", ");
+  await prisma.$executeRawUnsafe(
+    `UPDATE \`CsOrderConfirmation\`
+     SET \`assignedAgentId\` = ?
+     WHERE \`id\` IN (${idPlaceholders})`,
+    toCsAgentId,
+    ...ids,
+  );
+
+  if (lo && hi) {
+    await prisma.csOrderAssignment.create({
+      data: {
+        agentId: toCsAgentId,
+        wooOrderNumberFrom: lo,
+        wooOrderNumberTo: hi,
+        createdById: input.createdById,
+      },
+    });
+  }
+
+  const fromName = homeAgents.find((agent) => agent.id === fromHomeAgentId)?.name || `#${fromHomeAgentId}`;
+  const toName = target.name || `#${toCsAgentId}`;
+  const { recordOrderActivityMany } = await import("@/lib/cs/order-activity");
+  const detail = `من ${fromName} → ${toName} · ${shippingCompany} · ${matched.length} أوردر`;
+  await recordOrderActivityMany(
+    ids.map((confirmationId) => ({
+      confirmationId,
+      actorAgentId: input.createdById,
+      action: "home_to_cs" as const,
+      detail,
+    })),
+  );
+
+  return {
+    ok: true as const,
+    moved: matched.length,
+    from: lo,
+    to: hi,
+    warning: "",
+  };
+}

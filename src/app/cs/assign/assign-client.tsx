@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { SHIPPING_COMPANY_LABEL } from "@/lib/cs/checklist";
 import {
   cairoTodayYmd,
   cairoYmdFromIso,
@@ -24,7 +25,20 @@ type Assignment = {
 
 type PendingOrder = { id: number; wooOrderNumber: string; orderNum: number };
 
-type Tab = "range" | "fair" | "rules" | "home";
+type Tab = "range" | "fair" | "rules" | "home" | "home_to_cs";
+
+const HOME_TO_CS_STATUS_OPTIONS = [
+  { id: "PENDING", label: "معلّق" },
+  { id: "IN_PROGRESS", label: "جاري" },
+  { id: "CONFIRMED", label: "محفوظ" },
+] as const;
+
+const HOME_TO_CS_SHIPPING = [
+  { id: "bosta", label: SHIPPING_COMPANY_LABEL.bosta || "بوسطة" },
+  { id: "sayed_temima", label: SHIPPING_COMPANY_LABEL.sayed_temima || "سيد تميمة" },
+  { id: "eid", label: SHIPPING_COMPANY_LABEL.eid || "عيد" },
+  { id: "momen", label: SHIPPING_COMPANY_LABEL.momen || "مؤمن" },
+] as const;
 
 type HomeShift = {
   agentId: number;
@@ -80,6 +94,15 @@ export function CsAssignClient({
   const [homeRangeAgent, setHomeRangeAgent] = useState("");
   const [homeRangeFrom, setHomeRangeFrom] = useState("");
   const [homeRangeTo, setHomeRangeTo] = useState("");
+  const [htcFromHome, setHtcFromHome] = useState("");
+  const [htcToCs, setHtcToCs] = useState("");
+  const [htcShipping, setHtcShipping] = useState("bosta");
+  const [htcStatuses, setHtcStatuses] = useState<string[]>(["PENDING", "IN_PROGRESS", "CONFIRMED"]);
+  const [htcMode, setHtcMode] = useState<"date" | "order">("date");
+  const [htcFromYmd, setHtcFromYmd] = useState(today);
+  const [htcToYmd, setHtcToYmd] = useState(today);
+  const [htcOrderFrom, setHtcOrderFrom] = useState("");
+  const [htcOrderTo, setHtcOrderTo] = useState("");
   const [showPendingAfterLast, setShowPendingAfterLast] = useState(false);
   const [pendingLastTo, setPendingLastTo] = useState(0);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
@@ -105,6 +128,11 @@ export function CsAssignClient({
           !roles.includes("accounting");
         return !homeOnly;
       }),
+    [agents],
+  );
+
+  const homeAgents = useMemo(
+    () => agents.filter((agent) => (agent.roles || []).includes("home_confirm")),
     [agents],
   );
 
@@ -458,6 +486,59 @@ export function CsAssignClient({
     setHomeRangeTo("");
   }
 
+  function toggleHtcStatus(status: string) {
+    setHtcStatuses((current) =>
+      current.includes(status) ? current.filter((item) => item !== status) : [...current, status],
+    );
+  }
+
+  async function runHomeToCs(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setMessage("");
+    try {
+      const payload: Record<string, unknown> = {
+        mode: "home_to_cs",
+        fromHomeAgentId: Number(htcFromHome),
+        toCsAgentId: Number(htcToCs),
+        shippingCompany: htcShipping,
+        statuses: htcStatuses,
+      };
+      if (htcMode === "order") {
+        payload.orderFrom = Number(htcOrderFrom);
+        payload.orderTo = Number(htcOrderTo);
+      } else {
+        payload.fromYmd = htcFromYmd;
+        payload.toYmd = htcToYmd;
+      }
+      const res = await fetch("/api/cs/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json()) as {
+        message?: string;
+        moved?: number;
+        from?: number;
+        to?: number;
+        warning?: string;
+      };
+      if (!res.ok) {
+        setMessage(data.message || "تعذر إعادة التوزيع.");
+        return;
+      }
+      const moved = Number(data.moved || 0);
+      const warning = String(data.warning || "").trim();
+      const range =
+        data.from && data.to ? ` (أرقام ${data.from}→${data.to})` : "";
+      const base = `تم نقل ${moved} أوردر من تأكيدات منزل إلى خدمة العملاء${range}.`;
+      setMessage(warning ? `${base} ${warning}` : base);
+      await loadAssignments(appliedFrom, appliedTo);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const tabBtn = (id: Tab, label: string) => (
     <button
       type="button"
@@ -556,6 +637,7 @@ export function CsAssignClient({
         {tabBtn("fair", "تقسيم عادل")}
         {tabBtn("rules", "قواعد")}
         {tabBtn("home", "تأكيدات منزل")}
+        {tabBtn("home_to_cs", "من منزل → خدمة عملاء")}
       </div>
 
       {tab === "range" ? (
@@ -842,11 +924,171 @@ export function CsAssignClient({
         </div>
       ) : null}
 
+      {tab === "home_to_cs" ? (
+        <form
+          onSubmit={(event) => void runHomeToCs(event)}
+          className="space-y-3 rounded-2xl bg-white p-4 shadow ring-1 ring-[#14213D]/10"
+        >
+          <p className="text-sm font-bold text-[#14213D]">
+            انقلي أوردرات موظفة تأكيدات منزل إلى موظفة خدمة عملاء حسب الشحن والحالة واليوم أو أرقام الأوردر.
+            اسم الحافظ الأصلي يفضل لحد ما الموظف الجديد يعمل حفظ/تعديل.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm font-bold">
+              موظفة تأكيدات منزل (المصدر)
+              <select
+                required
+                value={htcFromHome}
+                onChange={(e) => setHtcFromHome(e.target.value)}
+                className={FILTER_CONTROL}
+              >
+                <option value="">اختاري...</option>
+                {(homeAgents.length ? homeAgents : homeShifts.map((row) => ({ id: row.agentId, name: row.name }))).map(
+                  (agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-bold">
+              موظفة خدمة عملاء (الهدف)
+              <select
+                required
+                value={htcToCs}
+                onChange={(e) => setHtcToCs(e.target.value)}
+                className={FILTER_CONTROL}
+              >
+                <option value="">اختاري...</option>
+                {officeAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-bold">
+              شركة الشحن
+              <select
+                required
+                value={htcShipping}
+                onChange={(e) => setHtcShipping(e.target.value)}
+                className={FILTER_CONTROL}
+              >
+                {HOME_TO_CS_SHIPPING.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid gap-1 text-sm font-bold">
+              حالة الأوردر
+              <div className="flex flex-wrap gap-2">
+                {HOME_TO_CS_STATUS_OPTIONS.map((item) => (
+                  <label
+                    key={item.id}
+                    className={`cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-extrabold ${
+                      htcStatuses.includes(item.id) ? "bg-[#FCA311] text-black" : "bg-[#E5E5E5] text-[#14213D]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={htcStatuses.includes(item.id)}
+                      onChange={() => toggleHtcStatus(item.id)}
+                    />
+                    {item.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setHtcMode("date")}
+              className={`rounded-xl px-3 py-2 text-sm font-extrabold ${
+                htcMode === "date" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              حسب اليوم
+            </button>
+            <button
+              type="button"
+              onClick={() => setHtcMode("order")}
+              className={`rounded-xl px-3 py-2 text-sm font-extrabold ${
+                htcMode === "order" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              حسب رقم الأوردر
+            </button>
+          </div>
+          {htcMode === "date" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-bold">
+                من يوم
+                <input
+                  type="date"
+                  required
+                  value={htcFromYmd}
+                  onChange={(e) => setHtcFromYmd(e.target.value)}
+                  className={FILTER_CONTROL}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-bold">
+                إلى يوم
+                <input
+                  type="date"
+                  required
+                  value={htcToYmd}
+                  onChange={(e) => setHtcToYmd(e.target.value)}
+                  className={FILTER_CONTROL}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-bold">
+                من رقم أوردر
+                <input
+                  required
+                  value={htcOrderFrom}
+                  onChange={(e) => setHtcOrderFrom(e.target.value.replace(/\D/g, ""))}
+                  inputMode="numeric"
+                  className={FILTER_CONTROL}
+                  dir="ltr"
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-bold">
+                إلى رقم أوردر
+                <input
+                  required
+                  value={htcOrderTo}
+                  onChange={(e) => setHtcOrderTo(e.target.value.replace(/\D/g, ""))}
+                  inputMode="numeric"
+                  className={FILTER_CONTROL}
+                  dir="ltr"
+                />
+              </label>
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={loading || htcStatuses.length === 0}
+            className="rounded-xl bg-[#FCA311] px-4 py-2.5 text-sm font-extrabold text-black disabled:opacity-60"
+          >
+            {loading ? "جاري النقل..." : "إعادة التوزيع"}
+          </button>
+        </form>
+      ) : null}
+
       {message ? (
         <p className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-bold text-white">{message}</p>
       ) : null}
 
-      {tab !== "home" ? (
+      {tab !== "home" && tab !== "home_to_cs" ? (
       <div className="space-y-3">
         <h2 className="text-lg font-extrabold text-[#14213D]">
           توزيعات حسب اليوم

@@ -12,6 +12,7 @@ import {
 } from "@/lib/cs/checklist";
 import { CsFulfillmentPanel } from "../fulfillment-panel";
 import { effectivePaymentState, formatCairoOrderDateTime, paymentStateBadge } from "@/lib/cs/order-window";
+import { OrderSalahiaChip } from "@/components/cs/order-salahia";
 import { ReturnTrackLine } from "@/components/cs/return-track-line";
 import {
   BOSTA_TRACK_STAGES,
@@ -1475,7 +1476,10 @@ export function CsCallSheet({
           <Link href="/cs" className="text-sm font-bold text-[#14213D] underline">
             رجوع
           </Link>
-          <h1 className="truncate text-xl font-extrabold text-[#14213D]">طلب #{snapshot?.number || confirmationId}</h1>
+          <h1 className="flex flex-wrap items-center gap-2 truncate text-xl font-extrabold text-[#14213D]">
+            <span className="truncate">طلب #{snapshot?.number || confirmationId}</span>
+            <OrderSalahiaChip confirmationId={confirmationId} />
+          </h1>
           <p className="text-xs font-bold text-[#14213D]/60">
             {when.absolute} · {when.relative}
           </p>

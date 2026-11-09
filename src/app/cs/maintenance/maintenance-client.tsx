@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import { OrderSalahiaChip } from "@/components/cs/order-salahia";
 import { ReturnTrackDrawer, ReturnTrackLine } from "@/components/cs/return-track-line";
 import { customReturnProductId } from "@/lib/cs/custom-return-product-id";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
@@ -750,9 +751,12 @@ function ReviewCards({
           </div>
         </div>
         {row.confirmationId ? (
-          <Link href={`/cs/orders/${row.confirmationId}`} className="inline-block text-sm font-extrabold text-[#14213D] underline">
-            فتح صفحة الأوردر
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={`/cs/orders/${row.confirmationId}`} className="inline-block text-sm font-extrabold text-[#14213D] underline">
+              فتح صفحة الأوردر
+            </Link>
+            <OrderSalahiaChip confirmationId={row.confirmationId} />
+          </div>
         ) : null}
         <ReturnTrackLine
           trackingNumber={row.trackingNumber}

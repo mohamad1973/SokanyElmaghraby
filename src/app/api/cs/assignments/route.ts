@@ -7,6 +7,7 @@ import {
   fairSplitAssign,
   listAssignmentsDetailed,
   listPendingAfterLastDistribution,
+  redistributeHomeToCs,
   ruleBasedAssign,
 } from "@/lib/cs/assignments";
 import { resolveCsViewer } from "@/lib/cs/confirmations";
@@ -18,8 +19,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
   }
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isSupervisor && !session.user.csIsSupervisor) {
-    return NextResponse.json({ message: "للمشرفة فقط." }, { status: 403 });
+  if (!viewer.isSupervisor && !viewer.isAdmin && !session.user.csIsSupervisor) {
+    return NextResponse.json({ message: "للمشرفة أو الأدمن فقط." }, { status: 403 });
   }
 
   const url = new URL(request.url);
@@ -45,12 +46,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
   }
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isSupervisor && !session.user.csIsSupervisor) {
-    return NextResponse.json({ message: "للمشرفة فقط." }, { status: 403 });
+  if (!viewer.isSupervisor && !viewer.isAdmin && !session.user.csIsSupervisor) {
+    return NextResponse.json({ message: "للمشرفة أو الأدمن فقط." }, { status: 403 });
   }
 
   let body: {
-    mode?: "range" | "fair" | "rules";
+    mode?: "range" | "fair" | "rules" | "home_to_cs";
     agentId?: number;
     from?: number;
     to?: number;
@@ -70,6 +71,12 @@ export async function POST(request: Request) {
     }>;
     fromYmd?: string;
     toYmd?: string;
+    fromHomeAgentId?: number;
+    toCsAgentId?: number;
+    shippingCompany?: string;
+    statuses?: string[];
+    orderFrom?: number | null;
+    orderTo?: number | null;
   } = {};
 
   try {
@@ -79,6 +86,28 @@ export async function POST(request: Request) {
   }
 
   const mode = body.mode || "range";
+
+  if (mode === "home_to_cs") {
+    const result = await redistributeHomeToCs({
+      fromHomeAgentId: Number(body.fromHomeAgentId),
+      toCsAgentId: Number(body.toCsAgentId),
+      shippingCompany: String(body.shippingCompany || ""),
+      statuses: body.statuses,
+      fromYmd: body.fromYmd,
+      toYmd: body.toYmd,
+      orderFrom: body.orderFrom != null ? Number(body.orderFrom) : null,
+      orderTo: body.orderTo != null ? Number(body.orderTo) : null,
+      createdById: session.user.csAgentId,
+    });
+    if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+    return NextResponse.json({
+      ok: true,
+      moved: result.moved,
+      from: result.from,
+      to: result.to,
+      warning: result.warning || "",
+    });
+  }
 
   if (mode === "fair") {
     const result = await fairSplitAssign({
@@ -160,8 +189,8 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ message: "غير مصرح." }, { status: 401 });
   }
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  if (!viewer.isSupervisor && !session.user.csIsSupervisor) {
-    return NextResponse.json({ message: "للمشرفة فقط." }, { status: 403 });
+  if (!viewer.isSupervisor && !viewer.isAdmin && !session.user.csIsSupervisor) {
+    return NextResponse.json({ message: "للمشرفة أو الأدمن فقط." }, { status: 403 });
   }
 
   const id = Number(new URL(request.url).searchParams.get("id"));

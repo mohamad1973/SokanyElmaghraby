@@ -16,7 +16,7 @@ export default async function CsAssignPage() {
   await ensureDefaultCsAgent();
   await restampTodayAssignmentsOnce();
   const viewer = await resolveCsViewer(session.user.csAgentId);
-  const isSupervisor = viewer.isSupervisor || Boolean(session.user.csIsSupervisor);
+  const isSupervisor = viewer.isSupervisor || viewer.isAdmin || Boolean(session.user.csIsSupervisor);
   if (!isSupervisor) redirect("/cs");
 
   const agents = (await listActiveCsAgents()).map((a) => ({

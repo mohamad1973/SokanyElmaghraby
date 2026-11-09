@@ -19,6 +19,7 @@ import {
   sheetCollectedSplit,
   type CsPaymentState,
 } from "@/lib/cs/order-window";
+import { OrderSalahiaChip } from "@/components/cs/order-salahia";
 import { parseWooOrderNumber } from "@/lib/cs/assignments-client";
 import {
   formatCutoffClock12,
@@ -2535,6 +2536,7 @@ export function CsQueueClient({
                     ) : null}
                     <span className="flex flex-wrap items-center gap-2 text-base font-extrabold">
                       #{item.wooOrderNumber}
+                      <OrderSalahiaChip confirmationId={item.id} />
                       {item.fulfillmentKind ? (
                         <span className="rounded-full bg-[#FCA311]/25 px-2 py-0.5 text-[10px] font-extrabold text-[#14213D]">
                           {item.fulfillmentKind === "exchange" ? "استبدال" : "استرجاع"}
