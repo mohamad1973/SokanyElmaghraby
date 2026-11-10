@@ -26,7 +26,9 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const from = url.searchParams.get("from") || undefined;
     const to = url.searchParams.get("to") || undefined;
-    const report = await getMissingInvoiceReport(from, to);
+    const shipping = url.searchParams.get("shipping") || undefined;
+    const status = url.searchParams.get("status") || undefined;
+    const report = await getMissingInvoiceReport(from, to, shipping, status);
     if (!report.ok) return NextResponse.json({ message: report.message }, { status: 503 });
     return NextResponse.json(report);
   } catch (error) {

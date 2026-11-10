@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فلاتر بدون فاتورة | فلتر شركة الشحن + حالة الأوردر (افتراضي تم الحفظ)؛ التاريخ على confirmedAt أو COALESCE مع createdAt | `missing-invoice-report.ts`, `missing-invoice-report/route.ts`, `missing-invoice-report-client.tsx` |
 | تقرير بدون فاتورة | أوردرات CONFIRMED بدون `invoiceNumber` بفلتر confirmedAt (من/إلى القاهرة)؛ تاب + كتالوج للمشرفة/أدمن/محاسبة | `missing-invoice-report.ts`, `missing-invoice-report/route.ts`, `missing-invoice-report-client.tsx`, `reports-hub.tsx`, `reports-catalog.ts` |
 | يعود للعميل + تقرير فني | وجهة ثالثة بعد فحص سليم؛ إشعار شحن لبوليصة عودة وإشعار فني بعدد بانتظار الصيانة؛ تاب تقرير فني قابل للطباعة | `bosta-return-review.ts`, `maintenance-notices.ts`, `maintenance-tech-report.ts`, `maintenance-client.tsx`, `cs-shell.tsx` |
 | تصحيح نسب الحافظ الغلط | وقف تخمين الحافظ من الموزّع؛ مسح أحداث «من سجل الأوردر»؛ تفريغ confirmedByAgentId المخمّن؛ صلاحية تعرض حفظ حقيقي فقط | `order-activity.ts`, `agents.ts`, `cs-queue-client.tsx` |

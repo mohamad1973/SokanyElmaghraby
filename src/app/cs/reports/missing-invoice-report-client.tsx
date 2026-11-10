@@ -11,6 +11,8 @@ type ReportRow = {
   customerName: string;
   phone: string;
   shippingLabel: string;
+  status: string;
+  statusLabel: string;
   confirmedAt: string | null;
   confirmedDay: string;
   distributorName: string;
@@ -18,6 +20,9 @@ type ReportRow = {
 
 const DATE_CONTROL =
   "h-9 min-w-[11rem] rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
+
+const SELECT_CONTROL =
+  "h-9 rounded-lg border border-[#E5E5E5] bg-[#F5F5F0] px-2.5 text-xs font-bold text-[#14213D] outline-none focus:border-[#FCA311]";
 
 function openDateField(event: MouseEvent<HTMLDivElement>) {
   const input = event.currentTarget.querySelector("input[type='date']");
@@ -39,21 +44,26 @@ function formatDayAr(ymd: string) {
 export function MissingInvoiceReportClient() {
   const [dateFrom, setDateFrom] = useState(cairoTodayYmd());
   const [dateTo, setDateTo] = useState(cairoTodayYmd());
+  const [shipping, setShipping] = useState("");
+  const [status, setStatus] = useState("CONFIRMED");
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
-  const load = useCallback(async (from: string, to: string) => {
+  const load = useCallback(async (from: string, to: string, ship: string, st: string) => {
     setLoading(true);
     setMessage("");
-    const qs = new URLSearchParams({ from, to });
+    const qs = new URLSearchParams({ from, to, status: st || "CONFIRMED" });
+    if (ship) qs.set("shipping", ship);
     try {
       const res = await fetch(`/api/cs/missing-invoice-report?${qs}`);
       const data = (await res.json()) as {
         message?: string;
         dateFrom?: string;
         dateTo?: string;
+        shipping?: string;
+        status?: string;
         count?: number;
         rows?: ReportRow[];
       };
@@ -66,6 +76,8 @@ export function MissingInvoiceReportClient() {
       }
       if (data.dateFrom) setDateFrom(data.dateFrom);
       if (data.dateTo) setDateTo(data.dateTo);
+      if (typeof data.shipping === "string") setShipping(data.shipping);
+      if (typeof data.status === "string") setStatus(data.status);
       setRows(data.rows || []);
       setCount(typeof data.count === "number" ? data.count : (data.rows || []).length);
     } catch {
@@ -77,7 +89,7 @@ export function MissingInvoiceReportClient() {
   }, []);
 
   useEffect(() => {
-    void load(cairoTodayYmd(), cairoTodayYmd());
+    void load(cairoTodayYmd(), cairoTodayYmd(), "", "CONFIRMED");
   }, [load]);
 
   return (
@@ -85,7 +97,7 @@ export function MissingInvoiceReportClient() {
       <div>
         <h1 className="text-2xl font-extrabold text-[#14213D]">بدون فاتورة</h1>
         <p className="text-sm font-bold text-[#14213D]/70">
-          الأوردرات المحفوظة اللي مفيش عليها رقم فاتورة، حسب يوم الحفظ (توقيت القاهرة).
+          أوردرات بدون رقم فاتورة، بفلتر تاريخ (توقيت القاهرة) وشركة الشحن وحالة الأوردر.
         </p>
       </div>
 
@@ -95,10 +107,7 @@ export function MissingInvoiceReportClient() {
           <input
             type="date"
             value={dateFrom}
-            onChange={(e) => {
-              const next = e.target.value;
-              setDateFrom(next);
-            }}
+            onChange={(e) => setDateFrom(e.target.value)}
             className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
           />
         </div>
@@ -107,16 +116,38 @@ export function MissingInvoiceReportClient() {
           <input
             type="date"
             value={dateTo}
-            onChange={(e) => {
-              const next = e.target.value;
-              setDateTo(next);
-            }}
+            onChange={(e) => setDateTo(e.target.value)}
             className="h-full min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-[#14213D] outline-none"
           />
         </div>
+        <select
+          value={shipping}
+          onChange={(e) => setShipping(e.target.value)}
+          className={SELECT_CONTROL}
+          aria-label="شركة الشحن"
+        >
+          <option value="">كل الشركات</option>
+          <option value="bosta">بوسطة</option>
+          <option value="sayed_temima">سيد تميمة</option>
+          <option value="eid">عيد</option>
+          <option value="momen">مؤمن</option>
+        </select>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className={SELECT_CONTROL}
+          aria-label="حالة الأوردر"
+        >
+          <option value="CONFIRMED">تم الحفظ</option>
+          <option value="all">كل الحالات</option>
+          <option value="PENDING">جديد</option>
+          <option value="IN_PROGRESS">جاري</option>
+          <option value="FAILED_CONTACT">لم يرد</option>
+          <option value="CANCELLED">لاغى</option>
+        </select>
         <button
           type="button"
-          onClick={() => void load(dateFrom, dateTo)}
+          onClick={() => void load(dateFrom, dateTo, shipping, status)}
           className="h-9 rounded-lg bg-[#FCA311] px-3 text-xs font-extrabold text-[#14213D]"
         >
           عرض
@@ -138,7 +169,7 @@ export function MissingInvoiceReportClient() {
 
       {!loading && !rows.length && !message ? (
         <p className="rounded-2xl bg-white p-4 text-sm font-bold text-[#14213D]/70 shadow ring-1 ring-[#14213D]/10">
-          مفيش أوردرات محفوظة بدون فاتورة في الفترة دي.
+          مفيش أوردرات بدون فاتورة مطابقة للفلاتر دي.
         </p>
       ) : null}
 
@@ -152,6 +183,7 @@ export function MissingInvoiceReportClient() {
                   <th className="border border-[#14213D]/15 px-2 py-2">العميل</th>
                   <th className="border border-[#14213D]/15 px-2 py-2">هاتف</th>
                   <th className="border border-[#14213D]/15 px-2 py-2">شحن</th>
+                  <th className="border border-[#14213D]/15 px-2 py-2">الحالة</th>
                   <th className="border border-[#14213D]/15 px-2 py-2">تاريخ الحفظ</th>
                   <th className="border border-[#14213D]/15 px-2 py-2">الموزّع</th>
                 </tr>
@@ -169,6 +201,7 @@ export function MissingInvoiceReportClient() {
                       {row.phone || "—"}
                     </td>
                     <td className="border border-[#14213D]/15 px-2 py-2">{row.shippingLabel}</td>
+                    <td className="border border-[#14213D]/15 px-2 py-2">{row.statusLabel}</td>
                     <td className="border border-[#14213D]/15 px-2 py-2 tabular-nums" dir="ltr">
                       {formatDayAr(row.confirmedDay)}
                     </td>
