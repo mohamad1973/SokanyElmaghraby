@@ -10,6 +10,7 @@ export type CsReportLink = {
 export type CsReportFlags = {
   isSupervisor: boolean;
   isAdmin: boolean;
+  isAccounting: boolean;
   canSettlement: boolean;
   canTransfers: boolean;
   canMaintenanceHub: boolean;
@@ -35,6 +36,13 @@ export function csReportCatalog(flags: CsReportFlags): CsReportLink[] {
       href: "/cs/reports?tab=home-confirm",
       description: "أداء موظفات تأكيد المنزل حسب الفترة",
       show: flags.isSupervisor || flags.isAdmin,
+    },
+    {
+      id: "missing-invoice",
+      label: "بدون فاتورة",
+      href: "/cs/reports?tab=missing-invoice",
+      description: "أوردرات محفوظة من غير رقم فاتورة",
+      show: flags.isSupervisor || flags.isAdmin || flags.isAccounting,
     },
     {
       id: "temima-returns",

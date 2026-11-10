@@ -1040,10 +1040,12 @@ function CsHeader() {
   const showOrdersQueue = (roles.length ? canSeeOrders : !isTransfersOnly && !isShipping) || isCourierSupervisor;
   const canBosta = isAdmin || (isSupervisor && !isCourierSupervisor);
   const canMonaAccounts = (isSupervisor || isAdmin) && !isCourierSupervisor;
-  const canReportsMenu = isSupervisor || isAdmin || canSettlement || canTransfers || canMaintenanceHub || isMonaCourier;
+  const canReportsMenu =
+    isSupervisor || isAdmin || isAccounting || canSettlement || canTransfers || canMaintenanceHub || isMonaCourier;
   const reportLinks = csReportCatalog({
     isSupervisor,
     isAdmin,
+    isAccounting,
     canSettlement,
     canTransfers,
     canMaintenanceHub,

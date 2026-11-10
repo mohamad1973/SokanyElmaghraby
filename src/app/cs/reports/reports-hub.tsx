@@ -5,6 +5,7 @@ import Link from "next/link";
 import { csReportCatalog, type CsReportFlags } from "@/lib/cs/reports-catalog";
 
 import { HomeConfirmReportClient } from "./home-confirm-report-client";
+import { MissingInvoiceReportClient } from "./missing-invoice-report-client";
 import { ReportsOverview } from "./reports-overview";
 
 export function ReportsHub({
@@ -12,7 +13,7 @@ export function ReportsHub({
   overview,
   flags,
 }: {
-  tab: "overview" | "home-confirm";
+  tab: "overview" | "home-confirm" | "missing-invoice";
   overview: {
     byStatus: Array<{ status: string; count: number }>;
     byAgent: Array<{ name: string; count: number; confirmed: number }>;
@@ -21,6 +22,8 @@ export function ReportsHub({
   flags: CsReportFlags;
 }) {
   const links = csReportCatalog(flags);
+  const canLeadTabs = flags.isSupervisor || flags.isAdmin;
+  const canMissingInvoice = flags.isSupervisor || flags.isAdmin || flags.isAccounting;
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -44,24 +47,46 @@ export function ReportsHub({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link
-          href="/cs/reports"
-          className={`h-9 rounded-lg px-3 text-xs font-extrabold leading-9 ${
-            tab === "overview" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-          }`}
-        >
-          رقابة عامة
-        </Link>
-        <Link
-          href="/cs/reports?tab=home-confirm"
-          className={`h-9 rounded-lg px-3 text-xs font-extrabold leading-9 ${
-            tab === "home-confirm" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
-          }`}
-        >
-          تأكيدات منزل
-        </Link>
+        {canLeadTabs ? (
+          <>
+            <Link
+              href="/cs/reports"
+              className={`h-9 rounded-lg px-3 text-xs font-extrabold leading-9 ${
+                tab === "overview" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              رقابة عامة
+            </Link>
+            <Link
+              href="/cs/reports?tab=home-confirm"
+              className={`h-9 rounded-lg px-3 text-xs font-extrabold leading-9 ${
+                tab === "home-confirm" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+              }`}
+            >
+              تأكيدات منزل
+            </Link>
+          </>
+        ) : null}
+        {canMissingInvoice ? (
+          <Link
+            href="/cs/reports?tab=missing-invoice"
+            className={`h-9 rounded-lg px-3 text-xs font-extrabold leading-9 ${
+              tab === "missing-invoice" ? "bg-[#14213D] text-white" : "bg-[#E5E5E5] text-[#14213D]"
+            }`}
+          >
+            بدون فاتورة
+          </Link>
+        ) : null}
       </div>
-      {tab === "home-confirm" ? <HomeConfirmReportClient /> : <ReportsOverview {...overview} />}
+      {tab === "home-confirm" && canLeadTabs ? (
+        <HomeConfirmReportClient />
+      ) : tab === "missing-invoice" && canMissingInvoice ? (
+        <MissingInvoiceReportClient />
+      ) : canLeadTabs ? (
+        <ReportsOverview {...overview} />
+      ) : canMissingInvoice ? (
+        <MissingInvoiceReportClient />
+      ) : null}
     </div>
   );
 }
