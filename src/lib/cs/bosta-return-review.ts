@@ -373,7 +373,9 @@ export async function saveBostaReturnReview(input: {
         ? input.destinationOverride
         : null;
     const decided =
-      override && condition === "sound" && kind !== "refused"
+      override &&
+      condition === "sound" &&
+      (kind !== "refused" || override === "maintenance")
         ? { ...base, destination: override }
         : base;
     const source = String(stored[0]?.source || "").trim();

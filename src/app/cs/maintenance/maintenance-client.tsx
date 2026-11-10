@@ -725,6 +725,7 @@ function ReviewCards({
   }
 
   const soundChoice = condition === "sound" && !refused;
+  const refusedSoundChoice = condition === "sound" && refused;
   const handText =
     condition === "sound" && refused
       ? "الرجوع إلى مخزن أونلاين"
@@ -884,6 +885,28 @@ function ReviewCards({
                     className="rounded-2xl bg-[#FFF200] px-4 py-8 text-xl font-extrabold text-[#14213D] disabled:opacity-60"
                   >
                     {saving ? "جارٍ الحفظ…" : "يعود إلى العميل"}
+                  </button>
+                </div>
+              </>
+            ) : refusedSoundChoice ? (
+              <>
+                <p className="text-center text-sm font-extrabold text-[#14213D]/70">اختَر الوجهة بعد المعاينة</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void finish()}
+                    className="rounded-2xl bg-[#14213D] px-4 py-8 text-xl font-extrabold text-white disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "الرجوع إلى مخزن أونلاين"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void finish("maintenance")}
+                    className="rounded-2xl bg-[#E6B325] px-4 py-8 text-xl font-extrabold text-black disabled:opacity-60"
+                  >
+                    {saving ? "جارٍ الحفظ…" : "إلى الصيانة"}
                   </button>
                 </div>
               </>
