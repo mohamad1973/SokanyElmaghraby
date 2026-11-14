@@ -127,9 +127,11 @@ function rowNeedsReview(row: BostaRow) {
 }
 
 function rowMatchesDestination(row: BostaRow, destination: Destination) {
-  const candidates = inspectCandidates(row);
-  if (candidates.length) {
-    return candidates.some((product) => product.destination === destination);
+  // Only linked products with a saved destination — provisional order-snapshot
+  // lines must not hide tracking-level review.destination (e.g. صيانة).
+  const linkedWithDestination = (row.linkedProducts || []).filter((product) => product.destination);
+  if (linkedWithDestination.length) {
+    return linkedWithDestination.some((product) => product.destination === destination);
   }
   return row.review?.destination === destination;
 }
