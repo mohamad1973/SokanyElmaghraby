@@ -1260,8 +1260,8 @@ export function MaintenanceClient({
     ),
   })).filter((group) => group.rows.length > 0);
   const maintenancePrintRows = bostaSearched.filter((row) => rowMatchesDestination(row, "maintenance"));
-  /** Handoff sheet matches the on-screen maintenance rows after filters. */
-  const handoffPrintRows = bostaFiltered.filter((row) => rowMatchesDestination(row, "maintenance"));
+  /** Handoff receipt: every return for the selected company/day (not destination-gated). */
+  const handoffPrintRows = bostaSearched;
   const panelRows: PanelRow[] = bostaSearched.flatMap((row): PanelRow[] => {
     const deskTicket = row.deskTicket || null;
     const deskTickets = row.deskTickets?.length ? row.deskTickets : deskTicket ? [deskTicket] : [];
