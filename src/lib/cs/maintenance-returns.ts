@@ -2,7 +2,7 @@ import "server-only";
 
 import { getPrismaClient } from "@/lib/db";
 import { listMonaCourierAgents } from "@/lib/cs/mona-courier";
-import { cairoDaysAgoYmd, cairoTodayYmd } from "@/lib/cs/order-window";
+import { cairoTodayYmd } from "@/lib/cs/order-window";
 import {
   listCapturedBostaReturns,
   listCapturedReturns,
@@ -80,11 +80,10 @@ function orderItemsFromSnap(items: Snap["items"]): MaintenanceOrderItem[] {
   return out;
 }
 
-/** Default window keeps recent days visible (yesterday no longer "disappears"). */
+/** Default window is Cairo today → today; employee widens the range manually. */
 export function maintenanceRange(fromInput: string, toInput: string) {
   const today = cairoTodayYmd();
-  const defaultFrom = cairoDaysAgoYmd(6);
-  let from = DAY.test(fromInput) ? fromInput : defaultFrom;
+  let from = DAY.test(fromInput) ? fromInput : today;
   let to = DAY.test(toInput) ? toInput : today;
   if (from > to) {
     const swap = from;

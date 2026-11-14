@@ -293,7 +293,7 @@ const EMPTY_INSPECT: Record<TabId, string> = {
 };
 
 const SELECT_CLASS =
-  "block w-full min-w-[11rem] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
+  "mt-1 block w-full min-w-[9.5rem] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
 
 type KindFilter = Kind | "all";
 
@@ -1260,6 +1260,8 @@ export function MaintenanceClient({
     ),
   })).filter((group) => group.rows.length > 0);
   const maintenancePrintRows = bostaSearched.filter((row) => rowMatchesDestination(row, "maintenance"));
+  /** Handoff sheet matches the on-screen maintenance rows after filters. */
+  const handoffPrintRows = bostaFiltered.filter((row) => rowMatchesDestination(row, "maintenance"));
   const panelRows: PanelRow[] = bostaSearched.flatMap((row): PanelRow[] => {
     const deskTicket = row.deskTicket || null;
     const deskTickets = row.deskTickets?.length ? row.deskTickets : deskTicket ? [deskTicket] : [];
@@ -1376,18 +1378,21 @@ export function MaintenanceClient({
         (hubTab === "receive" && canInspect) ||
         (hubTab === "accounting" && canAccounting) ||
         hubTab === "variance" ? (
-          <select
-            aria-label="شركة الشحن"
-            value={tab}
-            onChange={(event) => changeShippingCompany(event.target.value as TabId)}
-            className={SELECT_CLASS}
-          >
-            {TABS.map((item) => (
-              <option key={item.id} value={item.id}>
-                شركة الشحن · {item.label}
-              </option>
-            ))}
-          </select>
+          <label className="text-xs font-extrabold text-[#14213D]">
+            شركة الشحن
+            <select
+              aria-label="شركة الشحن"
+              value={tab}
+              onChange={(event) => changeShippingCompany(event.target.value as TabId)}
+              className={SELECT_CLASS}
+            >
+              {TABS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
         ) : null}
         <label className="text-xs font-extrabold text-[#14213D]">
           من
@@ -1446,43 +1451,52 @@ export function MaintenanceClient({
             <header className="space-y-3 border-b border-black/10 px-4 py-3">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div className="flex flex-wrap items-end gap-2">
-                  <select
-                    aria-label="طبيعة المرتجع"
-                    value={kindFilter}
-                    onChange={(event) => setKindFilter(event.target.value as KindFilter)}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="all">طبيعة المرتجع · الكل ({bostaSearched.length})</option>
-                    {KINDS.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        طبيعة المرتجع · {item.label} ({counts[item.id]})
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="الاستخدام"
-                    value={usageFilter}
-                    onChange={(event) => setUsageFilter(event.target.value as UsageFilter)}
-                    className={SELECT_CLASS}
-                  >
-                    {USAGE_FILTERS.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        الاستخدام · {item.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="الوجهة"
-                    value={destinationFilter}
-                    onChange={(event) => setDestinationFilter(event.target.value as DestinationFilter)}
-                    className={SELECT_CLASS}
-                  >
-                    {DEST_FILTERS.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        الوجهة · {item.label}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="text-xs font-extrabold text-[#14213D]">
+                    طبيعة المرتجع
+                    <select
+                      aria-label="طبيعة المرتجع"
+                      value={kindFilter}
+                      onChange={(event) => setKindFilter(event.target.value as KindFilter)}
+                      className={SELECT_CLASS}
+                    >
+                      <option value="all">الكل ({bostaSearched.length})</option>
+                      {KINDS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label} ({counts[item.id]})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-extrabold text-[#14213D]">
+                    الاستخدام
+                    <select
+                      aria-label="الاستخدام"
+                      value={usageFilter}
+                      onChange={(event) => setUsageFilter(event.target.value as UsageFilter)}
+                      className={SELECT_CLASS}
+                    >
+                      {USAGE_FILTERS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-extrabold text-[#14213D]">
+                    الوجهة
+                    <select
+                      aria-label="الوجهة"
+                      value={destinationFilter}
+                      onChange={(event) => setDestinationFilter(event.target.value as DestinationFilter)}
+                      className={SELECT_CLASS}
+                    >
+                      {DEST_FILTERS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1513,7 +1527,7 @@ export function MaintenanceClient({
                       setPrintMode("handoff");
                       window.setTimeout(() => window.print(), 50);
                     }}
-                    disabled={!maintenancePrintRows.length}
+                    disabled={!handoffPrintRows.length}
                     className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-40"
                   >
                     طباعة شيت الاستلام
@@ -1523,10 +1537,11 @@ export function MaintenanceClient({
             </header>
             {tabError ? <p className="px-4 py-3 text-sm font-bold text-red-700">{tabError}</p> : null}
             {tabMissing ? <p className="px-4 py-3 text-sm font-bold text-[#14213D]/60">{tabMissing}</p> : null}
-            <div className="overflow-x-auto">
-              <table className="min-w-[1100px] w-full border-collapse text-right text-sm">
+            <div className="w-full overflow-x-auto lg:overflow-x-visible">
+              <table className="w-full border-collapse text-right text-sm">
                 <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
                   <tr>
+                    <th className="border border-black/20 px-2 py-2">مسلسل</th>
                     <th className="border border-black/20 px-2 py-2">اليوم</th>
                     <th className="border border-black/20 px-2 py-2">البوليصة</th>
                     <th className="border border-black/20 px-2 py-2">المسار</th>
@@ -1547,12 +1562,13 @@ export function MaintenanceClient({
                 </thead>
                 <tbody>
                   {bostaRows.length ? (
-                    bostaRows.map((row) => (
+                    bostaRows.map((row, index) => (
                       <tr
                         key={row.trackingNumber}
                         onClick={() => void openReview(row)}
                         className="cursor-pointer hover:bg-[#F5F5F0]"
                       >
+                        <td className="border border-black/20 px-2 py-2 text-center font-extrabold">{index + 1}</td>
                         <td className="border border-black/20 px-2 py-2">{row.day || "—"}</td>
                         <td className="border border-black/20 px-2 py-2 font-bold" dir="ltr">
                           {row.trackingNumber}
@@ -1649,7 +1665,7 @@ export function MaintenanceClient({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={12} className="border border-black/20 px-3 py-6 text-center font-bold text-[#14213D]/60">
+                      <td colSpan={13} className="border border-black/20 px-3 py-6 text-center font-bold text-[#14213D]/60">
                         {loading ? "جارٍ التحميل…" : tabMissing || EMPTY_INSPECT[tab]}
                       </td>
                     </tr>
@@ -1884,7 +1900,7 @@ export function MaintenanceClient({
         <div className="print-only">
           <h1 className="text-center text-lg font-extrabold">شيت استلام مرتجعات · {TAB_PRINT[tab]}</h1>
           <p className="mb-2 text-center text-xs font-bold">
-            {from} — {to} · عدد الأوردرات: {maintenancePrintRows.length}
+            {from} — {to} · عدد الأوردرات: {handoffPrintRows.length}
           </p>
           <table className="w-full border-collapse text-right text-xs">
             <thead>
@@ -1897,7 +1913,7 @@ export function MaintenanceClient({
               </tr>
             </thead>
             <tbody>
-              {maintenancePrintRows.map((item, index) => (
+              {handoffPrintRows.map((item, index) => (
                 <tr key={item.trackingNumber}>
                   <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
                   <td className="border border-black px-1 py-1" dir="ltr">
