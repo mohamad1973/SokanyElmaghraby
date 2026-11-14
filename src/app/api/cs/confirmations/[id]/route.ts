@@ -21,6 +21,7 @@ type Body = {
   failContact?: boolean;
   cancelOrder?: boolean;
   failReason?: string;
+  customerNote?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
   depositAmount?: number | string | null;
@@ -249,6 +250,7 @@ export async function PUT(request: Request, context: Context) {
     failContact: Boolean(body.failContact),
     cancelOrder: Boolean(body.cancelOrder),
     failReason: body.failReason,
+    customerNote: homeConfirmMode ? undefined : body.customerNote,
     trackingNumber: homeConfirmMode ? undefined : body.trackingNumber,
     waybillPrinted: homeConfirmMode ? undefined : body.waybillPrinted,
     depositAmount: homeConfirmMode ? undefined : body.depositAmount,

@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import { useSearchParams } from "next/navigation";
 
 import { CsFulfillmentPanel, type FulfillmentSnapshot } from "@/app/cs/orders/fulfillment-panel";
+import {
+  NumberedNotesField,
+  initialNumberedNotes,
+} from "@/components/cs/numbered-notes-field";
 
 type Access = {
   isManager: boolean;
@@ -296,8 +300,8 @@ function emptyForm() {
     invoiceUrls: [] as string[],
     productUrls: [] as string[],
     complaintUrls: [] as string[],
-    complaintNote: "",
-    customerRequest: "",
+    complaintNote: initialNumberedNotes(""),
+    customerRequest: initialNumberedNotes(""),
     staffProposal: "",
     confirmationId: null as number | null,
     wooOrderNumber: "",
@@ -324,8 +328,8 @@ function formFromTicket(ticket: Ticket, centerId: number | "") {
     invoiceUrls: ticket.invoicePhotos.map((photo) => photo.url),
     productUrls: ticket.productPhotos.map((photo) => photo.url),
     complaintUrls: (ticket.complaintPhotos || []).map((photo) => photo.url),
-    complaintNote: ticket.complaintNote || "",
-    customerRequest: ticket.customerRequest || "",
+    complaintNote: initialNumberedNotes(ticket.complaintNote || ""),
+    customerRequest: initialNumberedNotes(ticket.customerRequest || ""),
     staffProposal: ticket.staffProposal || "",
     confirmationId: ticket.confirmationId,
     wooOrderNumber: ticket.wooOrderNumber || "",
@@ -1002,8 +1006,20 @@ export function ScDeskClient() {
                 ))}
               </div>
               <input className={FIELD} placeholder="عيب صناعة آخر" value={form.defectOther} onChange={(e) => setForm({ ...form, defectOther: e.target.value })} />
-              <textarea className={`${FIELD} h-20 py-2`} placeholder="شكوى العميل" value={form.complaintNote} onChange={(e) => setForm({ ...form, complaintNote: e.target.value })} />
-              <textarea className={`${FIELD} h-16 py-2`} placeholder="طلب العميل" value={form.customerRequest} onChange={(e) => setForm({ ...form, customerRequest: e.target.value })} />
+              <NumberedNotesField
+                value={form.complaintNote}
+                onChange={(complaintNote) => setForm({ ...form, complaintNote })}
+                label="شكوى العميل"
+                rows={4}
+                className={`${FIELD} min-h-20 py-2`}
+              />
+              <NumberedNotesField
+                value={form.customerRequest}
+                onChange={(customerRequest) => setForm({ ...form, customerRequest })}
+                label="طلب العميل"
+                rows={3}
+                className={`${FIELD} min-h-16 py-2`}
+              />
               <textarea className={`${FIELD} h-16 py-2`} placeholder="اقتراح موظف الاستقبال لحل المشكلة" value={form.staffProposal} onChange={(e) => setForm({ ...form, staffProposal: e.target.value })} />
               <DeskPhotoPicker
                 label="صورة الفاتورة"

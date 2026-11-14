@@ -1468,6 +1468,8 @@ export async function saveCsConfirmation(input: {
   failContact?: boolean;
   cancelOrder?: boolean;
   failReason?: string;
+  /** Freeform numbered customer notes → customerSnapshot.customerNote */
+  customerNote?: string | null;
   trackingNumber?: string | null;
   waybillPrinted?: boolean;
   depositAmount?: number | string | null;
@@ -1527,7 +1529,7 @@ export async function saveCsConfirmation(input: {
       .map((part) => String(part || "").trim())
       .filter(Boolean)
       .join(" · ");
-    const nextSnap = { ...patched, homeConfirmNote: note };
+    const nextSnap = { ...patched, homeConfirmNote: note, customerNote: note };
     if (input.failContact) {
       await prisma.csOrderConfirmation.update({
         where: { id: input.id },
@@ -1631,6 +1633,13 @@ export async function saveCsConfirmation(input: {
   }
 
   const snap = ((row.customerSnapshot as Record<string, unknown> | null) || {}) as Record<string, unknown>;
+  const mergeCustomerNote = (base: Record<string, unknown>) => {
+    if (input.customerNote === undefined) return base;
+    return {
+      ...base,
+      customerNote: String(input.customerNote || "").trim() || null,
+    };
+  };
   const typed = row as {
     trackingNumber?: string | null;
     waybillPrinted?: boolean | null;
@@ -1901,6 +1910,7 @@ export async function saveCsConfirmation(input: {
         status: CS_CONFIRMATION_STATUS.FAILED_CONTACT,
         failReason: input.failReason?.trim() || "لم يرد",
         assignedAgentId: input.agentId,
+        customerSnapshot: mergeCustomerNote(snap),
         ...pendingDiscountClear,
       } as never,
     });
@@ -1921,6 +1931,7 @@ export async function saveCsConfirmation(input: {
         status: CS_CONFIRMATION_STATUS.CANCELLED,
         failReason: input.failReason?.trim() || "لاغى",
         assignedAgentId: input.agentId,
+        customerSnapshot: mergeCustomerNote(snap),
         ...pendingDiscountClear,
       } as never,
     });
@@ -1942,10 +1953,12 @@ export async function saveCsConfirmation(input: {
     input.orderTotalDelta !== undefined
       ? parseOrderTotalDelta(input.orderTotalDelta)
       : parseOrderTotalDelta(typed.orderTotalDelta);
-  const nextSnapshot = waybillSnapshot(
-    { ...snap, ...(nextTracking ? { trackingNumber: nextTracking } : {}) },
-    input.answers,
-    { orderTotalDelta: snapshotDelta },
+  const nextSnapshot = mergeCustomerNote(
+    waybillSnapshot(
+      { ...snap, ...(nextTracking ? { trackingNumber: nextTracking } : {}) },
+      input.answers,
+      { orderTotalDelta: snapshotDelta },
+    ),
   );
 
   if (!input.finalize) {

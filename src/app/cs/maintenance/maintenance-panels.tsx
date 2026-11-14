@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 
+import {
+  NumberedNotesField,
+  initialNumberedNotes,
+} from "@/components/cs/numbered-notes-field";
 import { ReturnTrackDrawer } from "@/components/cs/return-track-line";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
@@ -94,7 +98,7 @@ export function NoteModal({
   onClose: () => void;
   onSaved: (note: string) => void;
 }) {
-  const [text, setText] = useState(initial);
+  const [text, setText] = useState(() => initialNumberedNotes(initial));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -126,12 +130,15 @@ export function NoteModal({
       <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl">
         <h3 className="text-base font-extrabold text-[#14213D]">ملاحظة المرتجع</h3>
         <p className="text-xs font-bold text-[#14213D]/60">{trackingNumber}</p>
-        <textarea
+        <p className="text-[11px] font-bold text-[#14213D]/60">
+          دبل كليك على الملاحظات يضيف سطر جديد بالرقم التالي.
+        </p>
+        <NumberedNotesField
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
+          showLabel={false}
           rows={5}
-          placeholder="كلام العميل أو أي ملاحظة… (اختياري)"
-          className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm font-bold text-[#14213D]"
+          className="min-h-28 w-full rounded-xl border border-black/10 px-3 py-2 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]"
         />
         {error ? <p className="text-sm font-bold text-red-700">{error}</p> : null}
         <div className="flex gap-2">

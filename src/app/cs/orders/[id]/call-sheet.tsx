@@ -13,6 +13,13 @@ import {
 import { CsFulfillmentPanel } from "../fulfillment-panel";
 import { effectivePaymentState, formatCairoOrderDateTime, paymentStateBadge } from "@/lib/cs/order-window";
 import { OrderSalahiaChip } from "@/components/cs/order-salahia";
+import {
+  NumberedNotesField,
+  appendNumberedNoteLine,
+  focusNotesEnd,
+  initialNumberedNotes,
+  shouldActivateNumberedNote,
+} from "@/components/cs/numbered-notes-field";
 import { ReturnTrackLine } from "@/components/cs/return-track-line";
 import {
   BOSTA_TRACK_STAGES,
@@ -54,6 +61,7 @@ type Snapshot = {
   parentConfirmationId?: number;
   parentWooOrderNumber?: string;
   homeConfirmNote?: string | null;
+  customerNote?: string | null;
 };
 
 type AnswerState = {
@@ -383,6 +391,12 @@ export function CsCallSheet({
     }
     return base;
   });
+  const [customerNotes, setCustomerNotes] = useState(() =>
+    initialNumberedNotes(String(initialSnapshot?.customerNote || initialSnapshot?.homeConfirmNote || "")),
+  );
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const lastPhoneTap = useRef(0);
+  const lastNotesTap = useRef(0);
   const [fu, setFu] = useState({
     handedToCarrier: Boolean(followUp?.handedToCarrier),
     deliveredToCustomer: Boolean(followUp?.deliveredToCustomer),
@@ -726,6 +740,7 @@ export function CsCallSheet({
         failContact,
         cancelOrder,
         failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
+        customerNote: customerNotes.trim() || null,
         trackingNumber,
         waybillPrinted,
         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
@@ -1547,7 +1562,25 @@ export function CsCallSheet({
       <section className="shrink-0 rounded-2xl bg-[#14213D] px-4 py-3 text-sm text-white">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           <span className="font-extrabold">{answers.customer_name?.value || snapshot?.customerName}</span>
-          <span dir="ltr">{answers.primary_phone?.value || snapshot?.phone}</span>
+          <span
+            dir="ltr"
+            className="cursor-pointer select-none rounded bg-white/15 px-2 py-1 font-extrabold"
+            title="دبل كليك يضيف سطر ملاحظة جديد"
+            onDoubleClick={(event) => {
+              if (shouldActivateNumberedNote(event, lastPhoneTap)) {
+                setCustomerNotes((prev) => appendNumberedNoteLine(prev));
+                window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
+              }
+            }}
+            onTouchEnd={(event) => {
+              if (shouldActivateNumberedNote(event, lastPhoneTap)) {
+                setCustomerNotes((prev) => appendNumberedNoteLine(prev));
+                window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
+              }
+            }}
+          >
+            {answers.primary_phone?.value || snapshot?.phone || "—"}
+          </span>
           <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
             {signedDelta === 0
               ? snapshot?.total
@@ -1572,6 +1605,9 @@ export function CsCallSheet({
             <span dir="ltr">تتبع: {trackingNumber || snapshot?.trackingNumber}</span>
           ) : null}
         </div>
+        <p className="mt-2 text-[11px] font-bold text-white/80">
+          دبل كليك على الموبايل أو الملاحظات يضيف سطر جديد بالرقم التالي.
+        </p>
         <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-3">
           <span className="truncate">الشارع: {answers.address_complete?.value || snapshot?.address || "—"}</span>
           <span className="truncate">المحافظة: {snapshot?.governorate || answers.governorate_confirm?.value || "—"}</span>
@@ -1581,6 +1617,18 @@ export function CsCallSheet({
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}
         </p>
       </section>
+
+      <NumberedNotesField
+        value={customerNotes}
+        onChange={setCustomerNotes}
+        textareaRef={notesRef}
+        lastTapRef={lastNotesTap}
+        onAppend={() => {
+          setCustomerNotes((prev) => appendNumberedNoteLine(prev));
+          window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
+        }}
+        disabled={showFollowUp && !canEditSavedInfo}
+      />
 
       {message ? (
         <p
@@ -1890,23 +1938,6 @@ function egyptianTelHref(raw: string) {
   return `tel:${digits}`;
 }
 
-function initialHomeNotes(raw: string) {
-  const text = String(raw || "").trim();
-  return text || "1- ";
-}
-
-function nextHomeNoteNumber(notes: string) {
-  const matches = [...String(notes || "").matchAll(/^\s*(\d+)\s*-/gm)];
-  const last = matches.length ? Number(matches[matches.length - 1][1]) : 0;
-  return (Number.isFinite(last) ? last : 0) + 1;
-}
-
-function appendHomeNoteLine(notes: string) {
-  const n = nextHomeNoteNumber(notes);
-  const trimmed = String(notes || "").replace(/\s+$/, "");
-  return `${trimmed ? `${trimmed}\n` : ""}${n}- `;
-}
-
 const HOME_CUSTOMER_KEYS = [
   "customer_name",
   "address_complete",
@@ -1936,7 +1967,7 @@ export function HomeConfirmCallSheet({
   trackingNumber?: string | null;
 }) {
   const [notes, setNotes] = useState(() =>
-    initialHomeNotes(String(snapshot?.homeConfirmNote || failReason || "")),
+    initialNumberedNotes(String(snapshot?.customerNote || snapshot?.homeConfirmNote || failReason || "")),
   );
   const homePaymentState = effectivePaymentState({
     paymentMethod: snapshot?.paymentMethod,
@@ -1985,29 +2016,15 @@ export function HomeConfirmCallSheet({
   }
 
   function addNumberedNoteLine() {
-    setNotes((prev) => appendHomeNoteLine(prev));
-    window.requestAnimationFrame(() => {
-      const box = notesRef.current;
-      if (!box) return;
-      box.focus();
-      const end = box.value.length;
-      box.setSelectionRange(end, end);
-      box.scrollTop = box.scrollHeight;
-    });
+    setNotes((prev) => appendNumberedNoteLine(prev));
+    window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
   }
 
   function onDoubleActivate(
     event: { preventDefault: () => void; type: string },
     lastTap: { current: number },
   ) {
-    const now = Date.now();
-    if (event.type === "dblclick" || (event.type === "touchend" && now - lastTap.current < 350)) {
-      event.preventDefault();
-      lastTap.current = 0;
-      addNumberedNoteLine();
-      return;
-    }
-    if (event.type === "touchend") lastTap.current = now;
+    if (shouldActivateNumberedNote(event, lastTap)) addNumberedNoteLine();
   }
 
   async function save(kind: "confirm" | "postpone" | "cancel") {
@@ -2185,19 +2202,13 @@ export function HomeConfirmCallSheet({
         </label>
       </section>
 
-      <label className="grid gap-1 rounded-2xl bg-white p-3 text-sm font-bold text-[#14213D] shadow ring-1 ring-[#14213D]/15">
-        ملاحظات العميل
-        <textarea
-          ref={notesRef}
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          onDoubleClick={(event) => onDoubleActivate(event, lastNotesTap)}
-          onTouchEnd={(event) => onDoubleActivate(event, lastNotesTap)}
-          rows={7}
-          className="min-h-36 w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold text-[#14213D] outline-none focus:border-[#FCA311]"
-          placeholder="1- "
-        />
-      </label>
+      <NumberedNotesField
+        value={notes}
+        onChange={setNotes}
+        textareaRef={notesRef}
+        lastTapRef={lastNotesTap}
+        onAppend={addNumberedNoteLine}
+      />
 
       <section className="rounded-2xl bg-white p-3 shadow ring-1 ring-[#14213D]/15">
         <table className="w-full border-collapse text-right text-sm text-[#14213D]">

@@ -42,8 +42,8 @@ function customerNameOf(snapshot: unknown) {
 }
 
 function homeNoteOf(snapshot: unknown) {
-  const snap = snapshot as { homeConfirmNote?: string } | null;
-  return String(snap?.homeConfirmNote || "").trim();
+  const snap = snapshot as { customerNote?: string; homeConfirmNote?: string } | null;
+  return String(snap?.customerNote || snap?.homeConfirmNote || "").trim();
 }
 
 function hasNotesText(note: string, failReason: string | null | undefined) {
