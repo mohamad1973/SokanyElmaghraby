@@ -19,6 +19,12 @@ export type PanelReview = {
   usage: "new" | "used" | null;
 };
 
+export type PanelTicketBadge = {
+  id: number;
+  statusLabel: string;
+  wooOrderNumber: string;
+};
+
 export type PanelRow = {
   trackingNumber: string;
   productId?: number | null;
@@ -30,6 +36,8 @@ export type PanelRow = {
   note: string;
   openedAt: string | null;
   statusLabel: string;
+  deskTicket?: PanelTicketBadge | null;
+  deskTickets?: PanelTicketBadge[];
   review: PanelReview | null;
 };
 
@@ -147,9 +155,11 @@ export function NoteModal({
 export function TechPanel({
   rows,
   onChanged,
+  onOpenTicket,
 }: {
   rows: PanelRow[];
   onChanged: () => void;
+  onOpenTicket?: (tickets: PanelTicketBadge[]) => void;
 }) {
   // Only waiting for grade — graded items move to «عائد من الصيانة».
   const pending = rows.filter(
@@ -199,97 +209,103 @@ export function TechPanel({
       <p className="text-sm font-bold text-[#14213D]/70">
         المسلم للصيانة فقط — بعد الإصلاح اختَر فرز أول أو فرز ثاني أو هالك.
       </p>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-right text-sm">
-          <thead className="bg-[#F5F5F0] text-xs font-extrabold">
-            <tr>
-              <th className="px-2 py-2">البوليصة</th>
-              <th className="px-2 py-2">المسار</th>
-              <th className="px-2 py-2">الأوردر</th>
-              <th className="px-2 py-2">المنتج</th>
-              <th className="px-2 py-2">التسليم</th>
-              <th className="px-2 py-2">التصنيف</th>
-              <th className="px-2 py-2">ملاحظة فني</th>
-              <th className="px-2 py-2">حفظ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pending.length ? (
-              pending.map((row) => {
-                const state = stateFor(row);
-                const key = panelKey(row);
-                return (
-                  <tr key={key} className="border-t border-black/5">
-                    <td className="px-2 py-2 font-bold" dir="ltr">
-                      {row.trackingNumber}
-                    </td>
-                    <td className="px-2 py-2">
+      {pending.length ? (
+        <div className="space-y-3">
+          {pending.map((row) => {
+            const state = stateFor(row);
+            const key = panelKey(row);
+            const tickets =
+              row.deskTickets && row.deskTickets.length
+                ? row.deskTickets
+                : row.deskTicket
+                  ? [row.deskTicket]
+                  : [];
+            return (
+              <article key={key} className="w-full rounded-2xl bg-[#F5F5F0] p-3 ring-1 ring-black/5">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {tickets.length ? (
+                        <button
+                          type="button"
+                          title="فتح تكت الاستقبال"
+                          onClick={() => onOpenTicket?.(tickets)}
+                          className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-extrabold text-white"
+                        >
+                          تكت
+                        </button>
+                      ) : null}
+                      <span className="text-sm font-extrabold text-[#14213D]">
+                        #{row.wooOrderNumber || "—"}
+                      </span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-[#14213D] ring-1 ring-black/10">
+                        {row.statusLabel || "—"}
+                      </span>
+                    </div>
+                    <p className="text-sm font-extrabold text-[#14213D]">{row.customerName || "—"}</p>
+                    <p className="break-words text-xs font-bold text-[#14213D]/80">
+                      {row.product || "—"}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#14213D]/70">
+                      <span dir="ltr">{row.trackingNumber}</span>
                       <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
-                    </td>
-                    <td className="px-2 py-2">{row.wooOrderNumber || "—"}</td>
-                    <td className="px-2 py-2">{row.product || "—"}</td>
-                    <td className="px-2 py-2 text-xs">
-                      {formatCairoOrderDateTime(row.review?.deliveredToMaintenanceAt).absolute}
-                    </td>
-                    <td className="px-2 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {GRADE_OPTIONS.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            disabled={Boolean(row.review?.receivedFromMaintenanceAt)}
-                            onClick={() =>
-                              setDraft((cur) => ({
-                                ...cur,
-                                [key]: { ...state, grade: item.id },
-                              }))
-                            }
-                            className={`rounded-full px-2 py-1 text-xs font-extrabold ${
-                              state.grade === item.id ? "bg-[#E6B325] text-black" : "bg-[#F5F5F0]"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        value={state.techNote}
-                        disabled={Boolean(row.review?.receivedFromMaintenanceAt)}
-                        onChange={(e) =>
-                          setDraft((cur) => ({
-                            ...cur,
-                            [key]: { ...state, techNote: e.target.value },
-                          }))
-                        }
-                        className="w-40 rounded-lg border border-black/10 px-2 py-1 text-xs font-bold"
-                        placeholder="اختياري"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <button
-                        type="button"
-                        disabled={!state.grade || busy === key || Boolean(row.review?.receivedFromMaintenanceAt)}
-                        onClick={() => void saveGrade(row)}
-                        className="rounded-full bg-[#14213D] px-3 py-1 text-xs font-extrabold text-white disabled:opacity-40"
-                      >
-                        {busy === key ? "…" : "حفظ"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={8} className="px-3 py-6 text-center font-bold text-[#14213D]/50">
-                  مفيش قطع مسلّمة للصيانة في المدى.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                      <span>
+                        استلام: {formatCairoOrderDateTime(row.review?.deliveredToMaintenanceAt).absolute}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {GRADE_OPTIONS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={Boolean(row.review?.receivedFromMaintenanceAt)}
+                      onClick={() =>
+                        setDraft((cur) => ({
+                          ...cur,
+                          [key]: { ...state, grade: item.id },
+                        }))
+                      }
+                      className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                        state.grade === item.id ? "bg-[#E6B325] text-black" : "bg-white text-[#14213D] ring-1 ring-black/10"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <input
+                    value={state.techNote}
+                    disabled={Boolean(row.review?.receivedFromMaintenanceAt)}
+                    onChange={(e) =>
+                      setDraft((cur) => ({
+                        ...cur,
+                        [key]: { ...state, techNote: e.target.value },
+                      }))
+                    }
+                    className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs font-bold"
+                    placeholder="ملاحظة فني (اختياري)"
+                  />
+                  <button
+                    type="button"
+                    disabled={!state.grade || busy === key || Boolean(row.review?.receivedFromMaintenanceAt)}
+                    onClick={() => void saveGrade(row)}
+                    className="shrink-0 rounded-full bg-[#14213D] px-4 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
+                  >
+                    {busy === key ? "…" : "حفظ"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="rounded-2xl bg-[#F5F5F0] px-3 py-6 text-center text-sm font-bold text-[#14213D]/50">
+          مفيش قطع مسلّمة للصيانة في المدى.
+        </p>
+      )}
     </div>
   );
 }
@@ -704,6 +720,9 @@ type TechReportApiRow = {
   trackingNumber: string;
   wooOrderNumber: string;
   productName: string;
+  customerName: string;
+  statusLabel: string;
+  hasTicket: boolean;
   receivedAt: string | null;
   gradedAt: string | null;
   first: boolean;
@@ -800,62 +819,77 @@ export function TechReportPanel({ from, to }: { from: string; to: string }) {
           طباعة التقرير
         </button>
       </div>
-      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
-      <div className="space-y-2">
-        <h2 className="text-lg font-extrabold text-[#14213D]">تقرير فني الصيانة</h2>
-        <p className="text-sm font-bold text-[#14213D]/70" dir="ltr">
-          {reportFrom} → {reportTo}
-        </p>
-        <div className="flex flex-wrap gap-2 text-sm font-extrabold">
-          <span className="rounded-full bg-[#F5F5F0] px-3 py-1">استلم: {summary.receivedCount}</span>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-900">
-            تم إصلاح/فرز: {summary.repairedCount}
-          </span>
-          <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز أول: {summary.firstCount}</span>
-          <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز ثاني: {summary.secondCount}</span>
-          <span className="rounded-full bg-red-50 px-3 py-1 text-red-800">هالك: {summary.scrapCount}</span>
+      {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 print:hidden">{error}</p> : null}
+      <div className="tech-report-print space-y-3">
+        <div className="space-y-2">
+          <h2 className="text-lg font-extrabold text-[#14213D]">تقرير فني الصيانة</h2>
+          <p className="text-sm font-bold text-[#14213D]/70" dir="ltr">
+            {reportFrom} → {reportTo}
+          </p>
+          <div className="flex flex-wrap gap-2 text-sm font-extrabold">
+            <span className="rounded-full bg-[#F5F5F0] px-3 py-1">استلم: {summary.receivedCount}</span>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-900">
+              تم إصلاح/فرز: {summary.repairedCount}
+            </span>
+            <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز أول: {summary.firstCount}</span>
+            <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز ثاني: {summary.secondCount}</span>
+            <span className="rounded-full bg-red-50 px-3 py-1 text-red-800">هالك: {summary.scrapCount}</span>
+          </div>
         </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-right text-sm">
-          <thead className="bg-[#F5F5F0] text-xs font-extrabold">
-            <tr>
-              <th className="px-2 py-2">الأوردر</th>
-              <th className="px-2 py-2">البوليصة / الصنف</th>
-              <th className="px-2 py-2">تاريخ الاستلام</th>
-              <th className="px-2 py-2">فرز أول</th>
-              <th className="px-2 py-2">فرز ثاني</th>
-              <th className="px-2 py-2">هالك</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row) => (
-                <tr key={`${row.trackingNumber}-${row.productName}`} className="border-t border-black/5">
-                  <td className="px-2 py-2 font-extrabold">#{row.wooOrderNumber}</td>
-                  <td className="px-2 py-2">
-                    <div className="font-bold" dir="ltr">
-                      {row.trackingNumber}
-                    </div>
-                    {row.productName ? <div className="text-xs text-[#14213D]/70">{row.productName}</div> : null}
-                  </td>
-                  <td className="px-2 py-2 text-xs">
-                    {row.receivedAt ? formatCairoOrderDateTime(row.receivedAt).absolute : "—"}
-                  </td>
-                  <td className="px-2 py-2 text-center font-extrabold">{row.first ? "✓" : ""}</td>
-                  <td className="px-2 py-2 text-center font-extrabold">{row.second ? "✓" : ""}</td>
-                  <td className="px-2 py-2 text-center font-extrabold">{row.scrap ? "✓" : ""}</td>
-                </tr>
-              ))
-            ) : (
+        <div className="w-full">
+          <table className="w-full table-fixed text-right text-sm">
+            <thead className="bg-[#F5F5F0] text-xs font-extrabold">
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
-                  {loading ? "جاري التحميل…" : "اضغط «عرض التقرير» أو مفيش أوردرات في الفترة."}
-                </td>
+                <th className="w-[12%] px-1 py-2">الأوردر</th>
+                <th className="w-[14%] px-1 py-2">العميل</th>
+                <th className="w-[12%] px-1 py-2">الطبيعة</th>
+                <th className="w-[22%] px-1 py-2">البوليصة / الصنف</th>
+                <th className="w-[14%] px-1 py-2">تاريخ الاستلام</th>
+                <th className="w-[8%] px-1 py-2">فرز أول</th>
+                <th className="w-[8%] px-1 py-2">فرز ثاني</th>
+                <th className="w-[8%] px-1 py-2">هالك</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.length ? (
+                rows.map((row) => (
+                  <tr key={`${row.trackingNumber}-${row.productName}`} className="border-t border-black/5">
+                    <td className="break-words px-1 py-2 font-extrabold">
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        {row.hasTicket ? (
+                          <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                            تكت
+                          </span>
+                        ) : null}
+                        <span>#{row.wooOrderNumber}</span>
+                      </span>
+                    </td>
+                    <td className="break-words px-1 py-2 font-bold">{row.customerName || "—"}</td>
+                    <td className="break-words px-1 py-2">{row.statusLabel || "—"}</td>
+                    <td className="break-words px-1 py-2">
+                      <div className="font-bold" dir="ltr">
+                        {row.trackingNumber}
+                      </div>
+                      {row.productName ? <div className="text-xs text-[#14213D]/70">{row.productName}</div> : null}
+                    </td>
+                    <td className="break-words px-1 py-2 text-xs">
+                      {row.receivedAt ? formatCairoOrderDateTime(row.receivedAt).absolute : "—"}
+                    </td>
+                    <td className="px-1 py-2 text-center font-extrabold">{row.first ? "✓" : ""}</td>
+                    <td className="px-1 py-2 text-center font-extrabold">{row.second ? "✓" : ""}</td>
+                    <td className="px-1 py-2 text-center font-extrabold">{row.scrap ? "✓" : ""}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                    {loading ? "جاري التحميل…" : "اضغط «عرض التقرير» أو مفيش أوردرات في الفترة."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

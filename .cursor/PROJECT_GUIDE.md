@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فني الصيانة: اسم ونوع وتكت + تقرير وطباعة | قائمة الفني تعرض العميل وطبيعة المرتجع والتكت ككروت بدون سكرول أفقي؛ تقرير فني من/إلى مع الاستلام والفرز والتكت؛ طباعة التقرير تعمل؛ جدول فحص المرتجع table-fixed بدون overflow أفقي | `maintenance-panels.tsx`, `maintenance-client.tsx`, `maintenance-tech-report.ts` |
 | رفض سليم → مخزن أو صيانة | بعد رفض استلام + سليم: اختيار مخزن أونلاين أو إلى الصيانة؛ الصيانة تدخل طابور الفني | `maintenance-client.tsx`, `bosta-return-review.ts` |
 | فلاتر بدون فاتورة | فلتر شركة الشحن + حالة الأوردر (افتراضي تم الحفظ)؛ التاريخ على confirmedAt أو COALESCE مع createdAt | `missing-invoice-report.ts`, `missing-invoice-report/route.ts`, `missing-invoice-report-client.tsx` |
 | تقرير بدون فاتورة | أوردرات CONFIRMED بدون `invoiceNumber` بفلتر confirmedAt (من/إلى القاهرة)؛ تاب + كتالوج للمشرفة/أدمن/محاسبة | `missing-invoice-report.ts`, `missing-invoice-report/route.ts`, `missing-invoice-report-client.tsx`, `reports-hub.tsx`, `reports-catalog.ts` |

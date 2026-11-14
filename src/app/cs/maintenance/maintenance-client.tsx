@@ -986,6 +986,7 @@ export function MaintenanceClient({
   const [linking, setLinking] = useState<BostaRow | null>(null);
   const [noteRow, setNoteRow] = useState<BostaRow | null>(null);
   const [ticketRow, setTicketRow] = useState<BostaRow | null>(null);
+  const [ticketBadges, setTicketBadges] = useState<DeskTicketBadge[] | null>(null);
   const [printMode, setPrintMode] = useState<"all" | "maintenance">("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1235,6 +1236,8 @@ export function MaintenanceClient({
   })).filter((group) => group.rows.length > 0);
   const maintenancePrintRows = bostaSearched.filter((row) => rowMatchesDestination(row, "maintenance"));
   const panelRows: PanelRow[] = bostaSearched.flatMap((row): PanelRow[] => {
+    const deskTicket = row.deskTicket || null;
+    const deskTickets = row.deskTickets?.length ? row.deskTickets : deskTicket ? [deskTicket] : [];
     const maintenanceProducts = row.linkedProducts.filter((product) => product.destination === "maintenance");
     if (maintenanceProducts.length) {
       return maintenanceProducts.map((product): PanelRow => ({
@@ -1248,6 +1251,8 @@ export function MaintenanceClient({
         note: row.note || "",
         openedAt: row.openedAt,
         statusLabel: row.statusLabel,
+        deskTicket,
+        deskTickets,
         review: {
           destination: "maintenance",
           grade: product.grade || null,
@@ -1274,6 +1279,8 @@ export function MaintenanceClient({
         note: row.note || "",
         openedAt: row.openedAt,
         statusLabel: row.statusLabel,
+        deskTicket,
+        deskTickets,
         review: {
           destination: row.review.destination,
           grade: row.review.grade,
@@ -1396,9 +1403,13 @@ export function MaintenanceClient({
       </div>
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
       {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{notice}</p> : null}
-      <section className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
+      <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
         {hubTab === "tech" && canTech ? (
-          <TechPanel rows={panelRows} onChanged={() => void load({ from, to })} />
+          <TechPanel
+            rows={panelRows}
+            onChanged={() => void load({ from, to })}
+            onOpenTicket={(tickets) => setTicketBadges(tickets)}
+          />
         ) : null}
         {hubTab === "tech_report" && canTech ? <TechReportPanel from={from} to={to} /> : null}
         {hubTab === "receive" && canInspect ? (
@@ -1492,26 +1503,26 @@ export function MaintenanceClient({
             </header>
             {tabError ? <p className="px-4 py-3 text-sm font-bold text-red-700">{tabError}</p> : null}
             {tabMissing ? <p className="px-4 py-3 text-sm font-bold text-[#14213D]/60">{tabMissing}</p> : null}
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-right text-sm">
+            <div className="w-full">
+              <table className="w-full table-fixed text-right text-sm">
                 <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
                   <tr>
-                    <th className="px-3 py-2">اليوم</th>
-                    <th className="px-3 py-2">البوليصة</th>
-                    <th className="px-3 py-2">المسار</th>
-                    <th className="px-3 py-2">الأوردر</th>
-                    <th className="px-3 py-2">العميل</th>
-                    <th className="px-3 py-2">الموبايل</th>
-                    <th className="px-3 py-2">المنتج</th>
-                    <th className="px-3 py-2">
+                    <th className="w-[7%] px-1 py-2">اليوم</th>
+                    <th className="w-[10%] px-1 py-2">البوليصة</th>
+                    <th className="w-[6%] px-1 py-2">المسار</th>
+                    <th className="w-[9%] px-1 py-2">الأوردر</th>
+                    <th className="w-[10%] px-1 py-2">العميل</th>
+                    <th className="w-[9%] px-1 py-2">الموبايل</th>
+                    <th className="w-[16%] px-1 py-2">المنتج</th>
+                    <th className="w-[8%] px-1 py-2">
                       <button type="button" onClick={() => setGrouped((value) => !value)} className="font-extrabold">
                         التصنيف{grouped ? " (مجمّع)" : ""}
                       </button>
                     </th>
-                    <th className="px-3 py-2">الفتح</th>
-                    <th className="px-3 py-2">التسليم</th>
-                    <th className="px-3 py-2">ملاحظة</th>
-                    <th className="px-3 py-2">الفحص</th>
+                    <th className="w-[7%] px-1 py-2">الفتح</th>
+                    <th className="w-[7%] px-1 py-2">التسليم</th>
+                    <th className="w-[6%] px-1 py-2">ملاحظة</th>
+                    <th className="w-[5%] px-1 py-2">الفحص</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1522,15 +1533,17 @@ export function MaintenanceClient({
                         onClick={() => void openReview(row)}
                         className="cursor-pointer border-t border-black/5 hover:bg-[#F5F5F0]"
                       >
-                        <td className="px-3 py-2">{row.day || "—"}</td>
-                        <td className="px-3 py-2 font-bold">{row.trackingNumber}</td>
-                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                        <td className="break-words px-1 py-2 text-xs">{row.day || "—"}</td>
+                        <td className="break-all px-1 py-2 text-xs font-bold" dir="ltr">
+                          {row.trackingNumber}
+                        </td>
+                        <td className="px-1 py-2" onClick={(event) => event.stopPropagation()}>
                           <ReturnTrackDrawer
                             trackingNumber={row.trackingNumber}
                             confirmationId={row.confirmationId}
                           />
                         </td>
-                        <td className="px-3 py-2 font-extrabold">
+                        <td className="break-words px-1 py-2 text-xs font-extrabold">
                           <span className="inline-flex flex-wrap items-center gap-1">
                             {row.deskTicket ? (
                               <button
@@ -1539,6 +1552,7 @@ export function MaintenanceClient({
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   setTicketRow(row);
+                                  setTicketBadges(null);
                                 }}
                                 className="rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-extrabold text-white"
                               >
@@ -1548,9 +1562,11 @@ export function MaintenanceClient({
                             <span>{row.wooOrderNumber || "—"}</span>
                           </span>
                         </td>
-                        <td className="px-3 py-2">{row.customerName || "—"}</td>
-                        <td className="px-3 py-2">{row.phone || "—"}</td>
-                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                        <td className="break-words px-1 py-2 text-xs">{row.customerName || "—"}</td>
+                        <td className="break-all px-1 py-2 text-xs" dir="ltr">
+                          {row.phone || "—"}
+                        </td>
+                        <td className="break-words px-1 py-2" onClick={(event) => event.stopPropagation()}>
                           <div className="flex flex-wrap items-center gap-1">
                             {row.linkedProducts.length
                               ? row.linkedProducts.map((item) => (
@@ -1558,7 +1574,7 @@ export function MaintenanceClient({
                                     key={item.productId}
                                     className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-bold text-[#14213D]"
                                   >
-                                    <span className="truncate">{productText(item)}</span>
+                                    <span className="break-words">{productText(item)}</span>
                                     {item.destination ? (
                                       <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-extrabold ring-1 ring-black/10">
                                         {DEST_BADGE[item.destination]}
@@ -1579,7 +1595,7 @@ export function MaintenanceClient({
                                   </span>
                                 ))
                               : row.orderProduct
-                                ? <span className="text-sm font-bold text-[#14213D]">{row.orderProduct}</span>
+                                ? <span className="break-words text-xs font-bold text-[#14213D]">{row.orderProduct}</span>
                                 : null}
                             <button
                               type="button"
@@ -1591,22 +1607,24 @@ export function MaintenanceClient({
                             </button>
                           </div>
                         </td>
-                        <td className="px-3 py-2">{row.statusLabel}</td>
-                        <td className="px-3 py-2 text-xs">{formatCairoOrderDateTime(row.openedAt).absolute}</td>
-                        <td className="px-3 py-2 text-xs">
+                        <td className="break-words px-1 py-2 text-xs">{row.statusLabel}</td>
+                        <td className="break-words px-1 py-2 text-[11px]">
+                          {formatCairoOrderDateTime(row.openedAt).absolute}
+                        </td>
+                        <td className="break-words px-1 py-2 text-[11px]">
                           {formatCairoOrderDateTime(row.review?.deliveredToMaintenanceAt).absolute}
                         </td>
-                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                        <td className="px-1 py-2" onClick={(event) => event.stopPropagation()}>
                           <button
                             type="button"
                             onClick={() => setNoteRow(row)}
-                            className="rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10"
+                            className="rounded-full bg-[#F5F5F0] px-2 py-1 text-[11px] font-extrabold text-[#14213D] ring-1 ring-black/10"
                             title={row.note || "اضغط لكتابة ملاحظة"}
                           >
                             {row.note ? "ملاحظة ✓" : "ملاحظة"}
                           </button>
                         </td>
-                        <td className="px-3 py-2">{row.review?.label || "—"}</td>
+                        <td className="break-words px-1 py-2 text-xs">{row.review?.label || "—"}</td>
                       </tr>
                     ))
                   ) : (
@@ -1641,7 +1659,13 @@ export function MaintenanceClient({
           }}
         />
       ) : null}
-      {ticketRow?.deskTicket ? (
+      {ticketBadges?.length ? (
+        <DeskTicketModal
+          key={`ticket-badges-${ticketBadges.map((item) => item.id).join("-")}`}
+          tickets={ticketBadges}
+          onClose={() => setTicketBadges(null)}
+        />
+      ) : ticketRow?.deskTicket ? (
         <DeskTicketModal
           key={`ticket-${ticketRow.trackingNumber}-${ticketRow.deskTicket.id}`}
           tickets={ticketRow.deskTickets?.length ? ticketRow.deskTickets : [ticketRow.deskTicket]}
@@ -1839,10 +1863,13 @@ export function MaintenanceClient({
             visibility: hidden !important;
           }
           .print-only,
-          .print-only * {
+          .print-only *,
+          .tech-report-print,
+          .tech-report-print * {
             visibility: visible !important;
           }
-          .print-only {
+          .print-only,
+          .tech-report-print {
             display: block !important;
             position: absolute;
             inset: 0;
