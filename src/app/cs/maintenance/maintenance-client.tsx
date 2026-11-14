@@ -1503,26 +1503,26 @@ export function MaintenanceClient({
             </header>
             {tabError ? <p className="px-4 py-3 text-sm font-bold text-red-700">{tabError}</p> : null}
             {tabMissing ? <p className="px-4 py-3 text-sm font-bold text-[#14213D]/60">{tabMissing}</p> : null}
-            <div className="w-full">
-              <table className="w-full table-fixed text-right text-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-[1100px] w-full border-collapse text-right text-sm">
                 <thead className="bg-[#F5F5F0] text-xs font-extrabold text-[#14213D]">
                   <tr>
-                    <th className="w-[7%] px-1 py-2">اليوم</th>
-                    <th className="w-[10%] px-1 py-2">البوليصة</th>
-                    <th className="w-[6%] px-1 py-2">المسار</th>
-                    <th className="w-[9%] px-1 py-2">الأوردر</th>
-                    <th className="w-[10%] px-1 py-2">العميل</th>
-                    <th className="w-[9%] px-1 py-2">الموبايل</th>
-                    <th className="w-[16%] px-1 py-2">المنتج</th>
-                    <th className="w-[8%] px-1 py-2">
+                    <th className="border border-black/20 px-2 py-2">اليوم</th>
+                    <th className="border border-black/20 px-2 py-2">البوليصة</th>
+                    <th className="border border-black/20 px-2 py-2">المسار</th>
+                    <th className="border border-black/20 px-2 py-2">الأوردر</th>
+                    <th className="border border-black/20 px-2 py-2">العميل</th>
+                    <th className="border border-black/20 px-2 py-2">الموبايل</th>
+                    <th className="border border-black/20 px-2 py-2">المنتج</th>
+                    <th className="border border-black/20 px-2 py-2">
                       <button type="button" onClick={() => setGrouped((value) => !value)} className="font-extrabold">
                         التصنيف{grouped ? " (مجمّع)" : ""}
                       </button>
                     </th>
-                    <th className="w-[7%] px-1 py-2">الفتح</th>
-                    <th className="w-[7%] px-1 py-2">التسليم</th>
-                    <th className="w-[6%] px-1 py-2">ملاحظة</th>
-                    <th className="w-[5%] px-1 py-2">الفحص</th>
+                    <th className="border border-black/20 px-2 py-2">الفتح</th>
+                    <th className="border border-black/20 px-2 py-2">التسليم</th>
+                    <th className="border border-black/20 px-2 py-2">ملاحظة</th>
+                    <th className="border border-black/20 px-2 py-2">الفحص</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1531,19 +1531,19 @@ export function MaintenanceClient({
                       <tr
                         key={row.trackingNumber}
                         onClick={() => void openReview(row)}
-                        className="cursor-pointer border-t border-black/5 hover:bg-[#F5F5F0]"
+                        className="cursor-pointer hover:bg-[#F5F5F0]"
                       >
-                        <td className="break-words px-1 py-2 text-xs">{row.day || "—"}</td>
-                        <td className="break-all px-1 py-2 text-xs font-bold" dir="ltr">
+                        <td className="border border-black/20 px-2 py-2">{row.day || "—"}</td>
+                        <td className="border border-black/20 px-2 py-2 font-bold" dir="ltr">
                           {row.trackingNumber}
                         </td>
-                        <td className="px-1 py-2" onClick={(event) => event.stopPropagation()}>
+                        <td className="border border-black/20 px-2 py-2" onClick={(event) => event.stopPropagation()}>
                           <ReturnTrackDrawer
                             trackingNumber={row.trackingNumber}
                             confirmationId={row.confirmationId}
                           />
                         </td>
-                        <td className="break-words px-1 py-2 text-xs font-extrabold">
+                        <td className="border border-black/20 px-2 py-2 font-extrabold">
                           <span className="inline-flex flex-wrap items-center gap-1">
                             {row.deskTicket ? (
                               <button
@@ -1562,11 +1562,11 @@ export function MaintenanceClient({
                             <span>{row.wooOrderNumber || "—"}</span>
                           </span>
                         </td>
-                        <td className="break-words px-1 py-2 text-xs">{row.customerName || "—"}</td>
-                        <td className="break-all px-1 py-2 text-xs" dir="ltr">
+                        <td className="border border-black/20 px-2 py-2">{row.customerName || "—"}</td>
+                        <td className="border border-black/20 px-2 py-2" dir="ltr">
                           {row.phone || "—"}
                         </td>
-                        <td className="break-words px-1 py-2" onClick={(event) => event.stopPropagation()}>
+                        <td className="border border-black/20 px-2 py-2" onClick={(event) => event.stopPropagation()}>
                           <div className="flex flex-wrap items-center gap-1">
                             {row.linkedProducts.length
                               ? row.linkedProducts.map((item) => (
@@ -1574,7 +1574,7 @@ export function MaintenanceClient({
                                     key={item.productId}
                                     className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-bold text-[#14213D]"
                                   >
-                                    <span className="break-words">{productText(item)}</span>
+                                    <span className="truncate">{productText(item)}</span>
                                     {item.destination ? (
                                       <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-extrabold ring-1 ring-black/10">
                                         {DEST_BADGE[item.destination]}
@@ -1595,7 +1595,7 @@ export function MaintenanceClient({
                                   </span>
                                 ))
                               : row.orderProduct
-                                ? <span className="break-words text-xs font-bold text-[#14213D]">{row.orderProduct}</span>
+                                ? <span className="text-sm font-bold text-[#14213D]">{row.orderProduct}</span>
                                 : null}
                             <button
                               type="button"
@@ -1607,29 +1607,29 @@ export function MaintenanceClient({
                             </button>
                           </div>
                         </td>
-                        <td className="break-words px-1 py-2 text-xs">{row.statusLabel}</td>
-                        <td className="break-words px-1 py-2 text-[11px]">
+                        <td className="border border-black/20 px-2 py-2">{row.statusLabel}</td>
+                        <td className="border border-black/20 px-2 py-2 text-xs">
                           {formatCairoOrderDateTime(row.openedAt).absolute}
                         </td>
-                        <td className="break-words px-1 py-2 text-[11px]">
+                        <td className="border border-black/20 px-2 py-2 text-xs">
                           {formatCairoOrderDateTime(row.review?.deliveredToMaintenanceAt).absolute}
                         </td>
-                        <td className="px-1 py-2" onClick={(event) => event.stopPropagation()}>
+                        <td className="border border-black/20 px-2 py-2" onClick={(event) => event.stopPropagation()}>
                           <button
                             type="button"
                             onClick={() => setNoteRow(row)}
-                            className="rounded-full bg-[#F5F5F0] px-2 py-1 text-[11px] font-extrabold text-[#14213D] ring-1 ring-black/10"
+                            className="rounded-full bg-[#F5F5F0] px-2 py-1 text-xs font-extrabold text-[#14213D] ring-1 ring-black/10"
                             title={row.note || "اضغط لكتابة ملاحظة"}
                           >
                             {row.note ? "ملاحظة ✓" : "ملاحظة"}
                           </button>
                         </td>
-                        <td className="break-words px-1 py-2 text-xs">{row.review?.label || "—"}</td>
+                        <td className="border border-black/20 px-2 py-2">{row.review?.label || "—"}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={12} className="px-3 py-6 text-center font-bold text-[#14213D]/60">
+                      <td colSpan={12} className="border border-black/20 px-3 py-6 text-center font-bold text-[#14213D]/60">
                         {loading ? "جارٍ التحميل…" : tabMissing || EMPTY_INSPECT[tab]}
                       </td>
                     </tr>

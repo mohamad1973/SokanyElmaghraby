@@ -836,25 +836,25 @@ export function TechReportPanel({ from, to }: { from: string; to: string }) {
             <span className="rounded-full bg-red-50 px-3 py-1 text-red-800">هالك: {summary.scrapCount}</span>
           </div>
         </div>
-        <div className="w-full">
-          <table className="w-full table-fixed text-right text-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full border-collapse text-right text-sm">
             <thead className="bg-[#F5F5F0] text-xs font-extrabold">
               <tr>
-                <th className="w-[12%] px-1 py-2">الأوردر</th>
-                <th className="w-[14%] px-1 py-2">العميل</th>
-                <th className="w-[12%] px-1 py-2">الطبيعة</th>
-                <th className="w-[22%] px-1 py-2">البوليصة / الصنف</th>
-                <th className="w-[14%] px-1 py-2">تاريخ الاستلام</th>
-                <th className="w-[8%] px-1 py-2">فرز أول</th>
-                <th className="w-[8%] px-1 py-2">فرز ثاني</th>
-                <th className="w-[8%] px-1 py-2">هالك</th>
+                <th className="border border-black/20 px-2 py-2">الأوردر</th>
+                <th className="border border-black/20 px-2 py-2">العميل</th>
+                <th className="border border-black/20 px-2 py-2">الطبيعة</th>
+                <th className="border border-black/20 px-2 py-2">البوليصة / الصنف</th>
+                <th className="border border-black/20 px-2 py-2">تاريخ الاستلام</th>
+                <th className="border border-black/20 px-2 py-2">فرز أول</th>
+                <th className="border border-black/20 px-2 py-2">فرز ثاني</th>
+                <th className="border border-black/20 px-2 py-2">هالك</th>
               </tr>
             </thead>
             <tbody>
               {rows.length ? (
                 rows.map((row) => (
-                  <tr key={`${row.trackingNumber}-${row.productName}`} className="border-t border-black/5">
-                    <td className="break-words px-1 py-2 font-extrabold">
+                  <tr key={`${row.trackingNumber}-${row.productName}`}>
+                    <td className="border border-black/20 px-2 py-2 font-extrabold">
                       <span className="inline-flex flex-wrap items-center gap-1">
                         {row.hasTicket ? (
                           <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
@@ -864,25 +864,25 @@ export function TechReportPanel({ from, to }: { from: string; to: string }) {
                         <span>#{row.wooOrderNumber}</span>
                       </span>
                     </td>
-                    <td className="break-words px-1 py-2 font-bold">{row.customerName || "—"}</td>
-                    <td className="break-words px-1 py-2">{row.statusLabel || "—"}</td>
-                    <td className="break-words px-1 py-2">
+                    <td className="border border-black/20 px-2 py-2 font-bold">{row.customerName || "—"}</td>
+                    <td className="border border-black/20 px-2 py-2">{row.statusLabel || "—"}</td>
+                    <td className="border border-black/20 px-2 py-2">
                       <div className="font-bold" dir="ltr">
                         {row.trackingNumber}
                       </div>
                       {row.productName ? <div className="text-xs text-[#14213D]/70">{row.productName}</div> : null}
                     </td>
-                    <td className="break-words px-1 py-2 text-xs">
+                    <td className="border border-black/20 px-2 py-2 text-xs">
                       {row.receivedAt ? formatCairoOrderDateTime(row.receivedAt).absolute : "—"}
                     </td>
-                    <td className="px-1 py-2 text-center font-extrabold">{row.first ? "✓" : ""}</td>
-                    <td className="px-1 py-2 text-center font-extrabold">{row.second ? "✓" : ""}</td>
-                    <td className="px-1 py-2 text-center font-extrabold">{row.scrap ? "✓" : ""}</td>
+                    <td className="border border-black/20 px-2 py-2 text-center font-extrabold">{row.first ? "✓" : ""}</td>
+                    <td className="border border-black/20 px-2 py-2 text-center font-extrabold">{row.second ? "✓" : ""}</td>
+                    <td className="border border-black/20 px-2 py-2 text-center font-extrabold">{row.scrap ? "✓" : ""}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center font-bold text-[#14213D]/60">
+                  <td colSpan={8} className="border border-black/20 px-3 py-8 text-center font-bold text-[#14213D]/60">
                     {loading ? "جاري التحميل…" : "اضغط «عرض التقرير» أو مفيش أوردرات في الفترة."}
                   </td>
                 </tr>
