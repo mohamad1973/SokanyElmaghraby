@@ -291,7 +291,7 @@ const EMPTY_INSPECT: Record<TabId, string> = {
 };
 
 const SELECT_CLASS =
-  "mt-1 block w-full min-w-[9.5rem] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
+  "block w-full min-w-[11rem] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
 
 type KindFilter = Kind | "all";
 
@@ -1350,7 +1350,8 @@ export function MaintenanceClient({
   const deskReturn = tab !== "bosta";
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div dir="rtl">
+      <div className="no-print space-y-4">
       <div className="flex flex-wrap gap-2">
         {hubTabs
           .filter((item) => item.show)
@@ -1373,20 +1374,18 @@ export function MaintenanceClient({
         (hubTab === "receive" && canInspect) ||
         (hubTab === "accounting" && canAccounting) ||
         hubTab === "variance" ? (
-          <label className="text-xs font-extrabold text-[#14213D]">
-            شركة الشحن
-            <select
-              value={tab}
-              onChange={(event) => changeShippingCompany(event.target.value as TabId)}
-              className={SELECT_CLASS}
-            >
-              {TABS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <select
+            aria-label="شركة الشحن"
+            value={tab}
+            onChange={(event) => changeShippingCompany(event.target.value as TabId)}
+            className={SELECT_CLASS}
+          >
+            {TABS.map((item) => (
+              <option key={item.id} value={item.id}>
+                شركة الشحن · {item.label}
+              </option>
+            ))}
+          </select>
         ) : null}
         <label className="text-xs font-extrabold text-[#14213D]">
           من
@@ -1433,7 +1432,6 @@ export function MaintenanceClient({
             onOpenTicket={(tickets) => setTicketBadges(tickets)}
           />
         ) : null}
-        {hubTab === "tech_report" && canTech ? <TechReportPanel from={from} to={to} /> : null}
         {hubTab === "receive" && canInspect ? (
           <ReceiveAndShelfPanel rows={panelRows} onChanged={() => void load({ from, to, source: tab })} />
         ) : null}
@@ -1446,49 +1444,43 @@ export function MaintenanceClient({
             <header className="space-y-3 border-b border-black/10 px-4 py-3">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div className="flex flex-wrap items-end gap-2">
-                  <label className="text-xs font-extrabold text-[#14213D]">
-                    طبيعة المرتجع
-                    <select
-                      value={kindFilter}
-                      onChange={(event) => setKindFilter(event.target.value as KindFilter)}
-                      className={SELECT_CLASS}
-                    >
-                      <option value="all">الكل ({bostaSearched.length})</option>
-                      {KINDS.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label} ({counts[item.id]})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-extrabold text-[#14213D]">
-                    الاستخدام
-                    <select
-                      value={usageFilter}
-                      onChange={(event) => setUsageFilter(event.target.value as UsageFilter)}
-                      className={SELECT_CLASS}
-                    >
-                      {USAGE_FILTERS.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-extrabold text-[#14213D]">
-                    الوجهة
-                    <select
-                      value={destinationFilter}
-                      onChange={(event) => setDestinationFilter(event.target.value as DestinationFilter)}
-                      className={SELECT_CLASS}
-                    >
-                      {DEST_FILTERS.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <select
+                    aria-label="طبيعة المرتجع"
+                    value={kindFilter}
+                    onChange={(event) => setKindFilter(event.target.value as KindFilter)}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="all">طبيعة المرتجع · الكل ({bostaSearched.length})</option>
+                    {KINDS.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        طبيعة المرتجع · {item.label} ({counts[item.id]})
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="الاستخدام"
+                    value={usageFilter}
+                    onChange={(event) => setUsageFilter(event.target.value as UsageFilter)}
+                    className={SELECT_CLASS}
+                  >
+                    {USAGE_FILTERS.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        الاستخدام · {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="الوجهة"
+                    value={destinationFilter}
+                    onChange={(event) => setDestinationFilter(event.target.value as DestinationFilter)}
+                    className={SELECT_CLASS}
+                  >
+                    {DEST_FILTERS.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        الوجهة · {item.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1764,6 +1756,12 @@ export function MaintenanceClient({
           onSaved={(review, product) => rememberReview(active.trackingNumber, review, product)}
         />
       ) : null}
+      </div>
+      {hubTab === "tech_report" && canTech ? (
+        <div className="space-y-4">
+          <TechReportPanel from={from} to={to} />
+        </div>
+      ) : null}
       {hubTab === "inspect" && canInspect && printMode === "all" ? (
         <div className="print-only">
           <h1 className="text-center text-lg font-extrabold">
@@ -1874,23 +1872,26 @@ export function MaintenanceClient({
           display: none;
         }
         @media print {
-          body * {
-            visibility: hidden !important;
+          html,
+          body {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            margin: 0 !important;
           }
-          .print-only,
-          .print-only *,
-          .tech-report-print,
-          .tech-report-print * {
-            visibility: visible !important;
+          .no-print {
+            display: none !important;
           }
           .print-only,
           .tech-report-print {
             display: block !important;
-            position: absolute;
-            inset: 0;
-            padding: 8mm;
-            background: white;
-            color: black;
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 8mm !important;
+            background: white !important;
+            color: black !important;
           }
           @page {
             size: A4 landscape;
