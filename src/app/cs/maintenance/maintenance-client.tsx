@@ -284,11 +284,16 @@ const TAB_PRINT: Record<TabId, string> = {
 };
 
 const EMPTY_INSPECT: Record<TabId, string> = {
-  bosta: "مفيش مرتجعات في المدى ده. وسّع من/إلى (إمبارح موجود لو التاريخ يشمله) أو اضغط «حفظ ظاهر بوسطة».",
+  bosta: "مفيش مرتجعات في المدى ده. وسّع من/إلى (إمبارح موجود لو التاريخ يشمله).",
   temima: "مفيش مرتجعات تميمة في المدى.",
   eid: "مفيش مرتجعات عيد في المدى.",
   momen: "مفيش مرتجعات مؤمن في المدى.",
 };
+
+const SELECT_CLASS =
+  "mt-1 block w-full min-w-[9.5rem] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold text-[#14213D]";
+
+type KindFilter = Kind | "all";
 
 function matchesQuery(searchText: string, raw: string) {
   const query = raw.trim().toLowerCase();
@@ -977,7 +982,7 @@ export function MaintenanceClient({
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<TabId>("bosta");
   const [hubTab, setHubTab] = useState<HubTab>(startHub);
-  const [kinds, setKinds] = useState<Kind[]>(["refused", "exchange", "return"]);
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [usageFilter, setUsageFilter] = useState<UsageFilter>("all");
   const [destinationFilter, setDestinationFilter] = useState<DestinationFilter>("all");
   const [grouped, setGrouped] = useState(false);
@@ -989,62 +994,92 @@ export function MaintenanceClient({
   const [ticketBadges, setTicketBadges] = useState<DeskTicketBadge[] | null>(null);
   const [printMode, setPrintMode] = useState<"all" | "maintenance">("all");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(async (range?: { from: string; to: string }) => {
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams();
-      if (range?.from) params.set("from", range.from);
-      if (range?.to) params.set("to", range.to);
-      params.set("variance", "1");
-      const suffix = `?${params.toString()}`;
-      const response = await fetch(`/api/cs/maintenance/returns${suffix}`, { cache: "no-store" });
-      const body = (await response.json().catch(() => null)) as
-        | (Payload & { message?: string; detail?: string; partial?: boolean })
-        | null;
-      if (!response.ok || !body) {
-        const base = body?.message || "تعذر تحميل المرتجعات.";
-        setError(body?.detail ? `${base} (${body.detail})` : base);
+  const load = useCallback(
+    async (opts?: { from?: string; to?: string; source?: TabId; withVariance?: boolean; quiet?: boolean }) => {
+      if (!opts?.quiet) {
+        setLoading(true);
+        setError("");
+      }
+      try {
+        const params = new URLSearchParams();
+        if (opts?.from) params.set("from", opts.from);
+        if (opts?.to) params.set("to", opts.to);
+        params.set("source", opts?.source || "bosta");
+        if (opts?.withVariance) params.set("variance", "1");
+        const response = await fetch(`/api/cs/maintenance/returns?${params}`, { cache: "no-store" });
+        const body = (await response.json().catch(() => null)) as
+          | (Payload & { message?: string; detail?: string; partial?: boolean })
+          | null;
+        if (!response.ok || !body) {
+          if (!opts?.quiet) {
+            const base = body?.message || "تعذر تحميل المرتجعات.";
+            setError(body?.detail ? `${base} (${body.detail})` : base);
+          }
+          return null;
+        }
+        const source = opts?.source || "bosta";
+        setData((current) => {
+          if (!current) return body;
+          return {
+            ...current,
+            from: body.from,
+            to: body.to,
+            bosta: source === "bosta" ? body.bosta : current.bosta,
+            temima: source === "temima" ? body.temima : current.temima,
+            eid: source === "eid" ? body.eid : current.eid,
+            momen: source === "momen" ? body.momen : current.momen,
+            variance: opts?.withVariance ? body.variance : current.variance ?? null,
+          };
+        });
+        setFrom(body.from);
+        setTo(body.to);
+        if (body.message && body.partial && !opts?.quiet) {
+          setError(body.detail ? `${body.message} (${body.detail})` : body.message);
+        }
+        return body;
+      } catch {
+        if (!opts?.quiet) setError("تعذر تحميل المرتجعات. تحقق من الاتصال وحاول مرة أخرى.");
         return null;
+      } finally {
+        if (!opts?.quiet) setLoading(false);
       }
-      setData(body);
-      setFrom(body.from);
-      setTo(body.to);
-      if (body.message && body.partial) {
-        setError(body.detail ? `${body.message} (${body.detail})` : body.message);
-      }
-      return body;
-    } catch {
-      setError("تعذر تحميل المرتجعات. تحقق من الاتصال وحاول مرة أخرى.");
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      const first = await load();
-      if (!canInspect) return;
-      try {
-        const response = await fetch("/api/cs/maintenance/returns/capture", { method: "POST" });
-        const body = (await response.json()) as { message?: string; found?: number; saved?: number };
-        if (response.ok) {
+      const first = await load({ source: "bosta", withVariance: startHub === "variance" });
+      if (cancelled || !canInspect) return;
+      // Background Bosta pull — do not block first paint with a second full wait.
+      void (async () => {
+        try {
+          const response = await fetch("/api/cs/maintenance/returns/capture", { method: "POST" });
+          const body = (await response.json()) as { message?: string; found?: number; saved?: number };
+          if (cancelled || !response.ok) return;
           const saved = body.saved ?? 0;
-          const found = body.found ?? 0;
-          if (saved > 0 || found > 0) {
-            setNotice(`اتحدّث من بوسطة: ${saved} جديد من ${found} ظاهر.`);
+          if (saved > 0) {
+            setNotice(`اتحدّث من بوسطة: ${saved} جديد من ${body.found ?? 0} ظاهر.`);
+            await load({
+              from: first?.from || "",
+              to: first?.to || "",
+              source: "bosta",
+              quiet: true,
+            });
           }
-          await load({ from: first?.from || "", to: first?.to || "" });
+        } catch {
+          // keep the first load even if live pull fails
         }
-      } catch {
-        // keep the first load even if live pull fails
-      }
+      })();
     })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, [load, canInspect]);
 
   function patchCapturedRow(trackingNumber: string, patch: (row: BostaRow) => BostaRow) {
@@ -1101,31 +1136,19 @@ export function MaintenanceClient({
 
   function onSearch(event: FormEvent) {
     event.preventDefault();
-    void load({ from, to });
+    void load({ from, to, source: tab, withVariance: hubTab === "variance" });
   }
 
-  async function capture() {
-    setSaving(true);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch("/api/cs/maintenance/returns/capture", { method: "POST" });
-      const body = (await response.json()) as { message?: string; found?: number; saved?: number };
-      if (!response.ok) {
-        setError(body.message || "تعذر حفظ مرتجعات بوسطة.");
-        return;
-      }
-      setNotice(`اتحفظ ${body.saved ?? 0} من ${body.found ?? 0} ظاهرين على بوسطة.`);
-      await load({ from, to });
-    } catch {
-      setError("تعذر حفظ مرتجعات بوسطة.");
-    } finally {
-      setSaving(false);
+  function changeShippingCompany(next: TabId) {
+    setTab(next);
+    void load({ from, to, source: next, withVariance: hubTab === "variance" });
+  }
+
+  function changeHub(next: HubTab) {
+    setHubTab(next);
+    if (next === "variance") {
+      void load({ from, to, source: tab, withVariance: true });
     }
-  }
-
-  function toggleKind(kind: Kind) {
-    setKinds((current) => (current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]));
   }
 
   function patchProducts(trackingNumber: string, linkedProducts: LinkedProduct[]) {
@@ -1195,7 +1218,7 @@ export function MaintenanceClient({
 
   const bostaSearched = visible(tabSourceRows(data, tab));
   const bostaFiltered = bostaSearched.filter((row) => {
-    if (!kinds.includes(row.kind)) return false;
+    if (kindFilter !== "all" && row.kind !== kindFilter) return false;
     if (usageFilter === "new" || usageFilter === "used") {
       const candidates = inspectCandidates(row);
       if (candidates.length) {
@@ -1335,7 +1358,7 @@ export function MaintenanceClient({
             <button
               key={item.id}
               type="button"
-              onClick={() => setHubTab(item.id)}
+              onClick={() => changeHub(item.id)}
               className={`rounded-full px-4 py-2 text-sm font-extrabold ${
                 hubTab === item.id ? "bg-[#E6B325] text-black" : "bg-white text-[#14213D] ring-1 ring-black/10"
               }`}
@@ -1344,76 +1367,75 @@ export function MaintenanceClient({
             </button>
           ))}
       </div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex gap-2">
-          {(hubTab === "inspect" && canInspect) ||
-          (hubTab === "tech" && canTech) ||
-          (hubTab === "receive" && canInspect) ||
-          (hubTab === "accounting" && canAccounting)
-            ? TABS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setTab(item.id)}
-                  className={`rounded-full px-4 py-2 text-sm font-extrabold ${
-                    tab === item.id ? "bg-[#14213D] text-white" : "bg-white text-[#14213D] ring-1 ring-black/10"
-                  }`}
-                >
+      <form onSubmit={onSearch} className="flex flex-wrap items-end gap-2">
+        {(hubTab === "inspect" && canInspect) ||
+        (hubTab === "tech" && canTech) ||
+        (hubTab === "receive" && canInspect) ||
+        (hubTab === "accounting" && canAccounting) ||
+        hubTab === "variance" ? (
+          <label className="text-xs font-extrabold text-[#14213D]">
+            شركة الشحن
+            <select
+              value={tab}
+              onChange={(event) => changeShippingCompany(event.target.value as TabId)}
+              className={SELECT_CLASS}
+            >
+              {TABS.map((item) => (
+                <option key={item.id} value={item.id}>
                   {item.label}
-                </button>
-              ))
-            : null}
-        </div>
-        <form onSubmit={onSearch} className="flex flex-wrap items-end gap-2">
-          <label className="text-xs font-extrabold text-[#14213D]">
-            من
-            <input
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-              className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
-            />
+                </option>
+              ))}
+            </select>
           </label>
-          <label className="text-xs font-extrabold text-[#14213D]">
-            إلى
-            <input
-              type="date"
-              value={to}
-              onChange={(event) => setTo(event.target.value)}
-              className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
-            />
-          </label>
-          <label className="min-w-56 flex-1 text-xs font-extrabold text-[#14213D]">
-            بحث
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="أوردر أو تليفون أو أي بيان"
-              className="mt-1 block w-full rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-full bg-[#E6B325] px-4 py-2 text-sm font-extrabold text-black disabled:opacity-60"
-          >
-            {loading ? "جارٍ البحث…" : "بحث"}
-          </button>
-        </form>
-      </div>
+        ) : null}
+        <label className="text-xs font-extrabold text-[#14213D]">
+          من
+          <input
+            type="date"
+            value={from}
+            onChange={(event) => setFrom(event.target.value)}
+            className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="text-xs font-extrabold text-[#14213D]">
+          إلى
+          <input
+            type="date"
+            value={to}
+            onChange={(event) => setTo(event.target.value)}
+            className="mt-1 block rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="min-w-56 flex-1 text-xs font-extrabold text-[#14213D]">
+          بحث
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="أوردر أو تليفون أو أي بيان"
+            className="mt-1 block w-full rounded-xl border border-black/10 px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded-full bg-[#E6B325] px-4 py-2 text-sm font-extrabold text-black disabled:opacity-60"
+        >
+          {loading ? "جارٍ البحث…" : "بحث"}
+        </button>
+      </form>
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
       {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{notice}</p> : null}
       <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
         {hubTab === "tech" && canTech ? (
           <TechPanel
             rows={panelRows}
-            onChanged={() => void load({ from, to })}
+            onChanged={() => void load({ from, to, source: tab })}
             onOpenTicket={(tickets) => setTicketBadges(tickets)}
           />
         ) : null}
         {hubTab === "tech_report" && canTech ? <TechReportPanel from={from} to={to} /> : null}
         {hubTab === "receive" && canInspect ? (
-          <ReceiveAndShelfPanel rows={panelRows} onChanged={() => void load({ from, to })} />
+          <ReceiveAndShelfPanel rows={panelRows} onChanged={() => void load({ from, to, source: tab })} />
         ) : null}
         {hubTab === "accounting" && canAccounting ? <AccountingPanel rows={panelRows} /> : null}
         {hubTab === "variance" && (canInspect || canTech) ? (
@@ -1422,20 +1444,51 @@ export function MaintenanceClient({
         {hubTab === "inspect" && canInspect ? (
           <>
             <header className="space-y-3 border-b border-black/10 px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap gap-2">
-                  {KINDS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => toggleKind(item.id)}
-                      className={`rounded-full px-3 py-1 text-xs font-extrabold ${
-                        kinds.includes(item.id) ? "bg-[#E6B325] text-black" : "bg-[#F5F5F0] text-[#14213D]/50"
-                      }`}
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-xs font-extrabold text-[#14213D]">
+                    طبيعة المرتجع
+                    <select
+                      value={kindFilter}
+                      onChange={(event) => setKindFilter(event.target.value as KindFilter)}
+                      className={SELECT_CLASS}
                     >
-                      {item.label} {counts[item.id]}
-                    </button>
-                  ))}
+                      <option value="all">الكل ({bostaSearched.length})</option>
+                      {KINDS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label} ({counts[item.id]})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-extrabold text-[#14213D]">
+                    الاستخدام
+                    <select
+                      value={usageFilter}
+                      onChange={(event) => setUsageFilter(event.target.value as UsageFilter)}
+                      className={SELECT_CLASS}
+                    >
+                      {USAGE_FILTERS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-extrabold text-[#14213D]">
+                    الوجهة
+                    <select
+                      value={destinationFilter}
+                      onChange={(event) => setDestinationFilter(event.target.value as DestinationFilter)}
+                      className={SELECT_CLASS}
+                    >
+                      {DEST_FILTERS.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -1460,45 +1513,7 @@ export function MaintenanceClient({
                   >
                     طباعة تقرير الصيانة
                   </button>
-                  {tab === "bosta" ? (
-                    <button
-                      type="button"
-                      onClick={() => void capture()}
-                      disabled={saving}
-                      className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-60"
-                    >
-                      {saving ? "جارٍ الحفظ…" : "حفظ ظاهر بوسطة"}
-                    </button>
-                  ) : null}
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {USAGE_FILTERS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setUsageFilter(item.id)}
-                    className={`rounded-full px-3 py-1 text-xs font-extrabold ${
-                      usageFilter === item.id ? "bg-[#14213D] text-white" : "bg-[#F5F5F0] text-[#14213D]/70"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DEST_FILTERS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setDestinationFilter(item.id)}
-                    className={`rounded-full px-3 py-1 text-xs font-extrabold ${
-                      destinationFilter === item.id ? "bg-[#14213D] text-white" : "bg-[#F5F5F0] text-[#14213D]/70"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
               </div>
             </header>
             {tabError ? <p className="px-4 py-3 text-sm font-bold text-red-700">{tabError}</p> : null}

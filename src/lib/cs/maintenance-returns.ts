@@ -4,7 +4,6 @@ import { getPrismaClient } from "@/lib/db";
 import { listMonaCourierAgents } from "@/lib/cs/mona-courier";
 import { cairoDaysAgoYmd, cairoTodayYmd } from "@/lib/cs/order-window";
 import {
-  backfillDeskReturnCaptures,
   listCapturedBostaReturns,
   listCapturedReturns,
   type DeskReturnSource,
@@ -283,12 +282,7 @@ export async function listBostaReceivedReturns(from: string, to: string) {
 
 async function listDeskReceivedReturns(source: DeskReturnSource, from: string, to: string) {
   try {
-    try {
-      await backfillDeskReturnCaptures(from, to);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      console.error("[maintenance-returns] backfillDeskReturnCaptures", source, detail);
-    }
+    // Read path stays fast: no backfill on every search (cron / background sync fills captures).
     await ensureMaintenanceLifecycleColumns();
     const stored = await listCapturedReturns(from, to, [source]);
     return { rows: await hydrateCapturedReturnRows(stored), error: null as string | null, detail: null as string | null };
@@ -314,16 +308,22 @@ function courierBucket(name: string) {
   return null;
 }
 
-export async function listCourierReturns(from: string, to: string) {
+export async function listCourierBucketReturns(bucket: "eid" | "momen", from: string, to: string) {
   const couriers = await listMonaCourierAgents();
-  const eidFound = couriers.some((courier) => courierBucket(courier.name) === "eid");
-  const momenFound = couriers.some((courier) => courierBucket(courier.name) === "momen");
-  const [eid, momen] = await Promise.all([
-    listDeskReceivedReturns("eid", from, to),
-    listDeskReceivedReturns("momen", from, to),
-  ]);
+  const found = couriers.some((courier) => courierBucket(courier.name) === bucket);
+  const listed = await listDeskReceivedReturns(bucket, from, to);
   return {
-    eid: { found: eidFound, rows: eid.rows, error: eid.error, detail: eid.detail },
-    momen: { found: momenFound, rows: momen.rows, error: momen.error, detail: momen.detail },
+    found,
+    rows: listed.rows,
+    error: listed.error,
+    detail: listed.detail,
   };
+}
+
+export async function listCourierReturns(from: string, to: string) {
+  const [eid, momen] = await Promise.all([
+    listCourierBucketReturns("eid", from, to),
+    listCourierBucketReturns("momen", from, to),
+  ]);
+  return { eid, momen };
 }

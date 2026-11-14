@@ -12,15 +12,22 @@ import {
 import { resolveCsViewer } from "@/lib/cs/confirmations";
 import {
   listBostaReceivedReturns,
-  listCourierReturns,
+  listCourierBucketReturns,
   listTemimaReturns,
   maintenanceRange,
 } from "@/lib/cs/maintenance-returns";
 import { loadScTicketById } from "@/lib/cs/sc-intake";
 import { requireCsSession } from "@/lib/session-guards";
 
+type ReturnSource = "bosta" | "temima" | "eid" | "momen";
+
 function canHub(viewer: Awaited<ReturnType<typeof resolveCsViewer>>) {
   return Boolean(viewer.canAccessMaintenanceHub || viewer.isMaintenance);
+}
+
+function parseSource(raw: string | null): ReturnSource {
+  if (raw === "temima" || raw === "eid" || raw === "momen" || raw === "bosta") return raw;
+  return "bosta";
 }
 
 async function settledValue<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
@@ -52,51 +59,61 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, ticket: loaded.ticket });
     }
     const range = maintenanceRange(url.searchParams.get("from") || "", url.searchParams.get("to") || "");
+    const source = parseSource(url.searchParams.get("source"));
     const wantVariance = url.searchParams.get("variance") === "1";
-    const loadTemima = viewer.isMaintenance || viewer.isAdmin;
-    const loadCouriers = viewer.isMaintenance || viewer.isAdmin;
-    const loadVariance = wantVariance || viewer.isMaintenanceTech || viewer.isMaintenance || viewer.isAdmin;
+    const canDesk = viewer.isMaintenance || viewer.isAdmin;
+    type Listed = { rows: Awaited<ReturnType<typeof listBostaReceivedReturns>>["rows"]; error: string | null; detail?: string | null };
+    type CourierListed = Listed & { found: boolean };
+    const emptyRows: Listed = { rows: [], error: null, detail: null };
+    const emptyCourier: CourierListed = { found: false, rows: [], error: null, detail: null };
 
-    const [bosta, temima, couriers, variance] = await Promise.all([
-      settledValue(
+    let bosta: Listed = emptyRows;
+    let temima: Listed = emptyRows;
+    let eid: CourierListed = emptyCourier;
+    let momen: CourierListed = emptyCourier;
+
+    if (source === "bosta") {
+      bosta = await settledValue(
         listBostaReceivedReturns(range.from, range.to),
         { rows: [], error: "تعذر تحميل مرتجعات بوسطة.", detail: null },
         "bosta",
-      ),
-      loadTemima
-        ? settledValue(listTemimaReturns(range.from, range.to), { rows: [], error: null, detail: null }, "temima")
-        : Promise.resolve({ rows: [], error: null, detail: null }),
-      loadCouriers
-        ? settledValue(
-            listCourierReturns(range.from, range.to),
-            {
-              eid: { found: false, rows: [], error: null, detail: null },
-              momen: { found: false, rows: [], error: null, detail: null },
-            },
-            "couriers",
+      );
+    } else if (source === "temima") {
+      temima = canDesk
+        ? await settledValue(listTemimaReturns(range.from, range.to), { rows: [], error: null, detail: null }, "temima")
+        : emptyRows;
+    } else if (source === "eid") {
+      eid = canDesk
+        ? await settledValue(
+            listCourierBucketReturns("eid", range.from, range.to),
+            { found: false, rows: [], error: null, detail: null },
+            "eid",
           )
-        : Promise.resolve({
-            eid: { found: false, rows: [], error: null, detail: null },
-            momen: { found: false, rows: [], error: null, detail: null },
-          }),
-      loadVariance
-        ? settledValue(maintenanceVarianceReport(range.from, range.to), null, "variance")
-        : Promise.resolve(null),
-    ]);
+        : emptyCourier;
+    } else if (source === "momen") {
+      momen = canDesk
+        ? await settledValue(
+            listCourierBucketReturns("momen", range.from, range.to),
+            { found: false, rows: [], error: null, detail: null },
+            "momen",
+          )
+        : emptyCourier;
+    }
 
-    const failed = [
-      { error: bosta.error, detail: bosta.detail },
-      { error: temima.error, detail: temima.detail },
-      { error: couriers.eid.error, detail: couriers.eid.detail },
-      { error: couriers.momen.error, detail: couriers.momen.detail },
-    ].find((section) => section.error);
+    const variance = wantVariance
+      ? await settledValue(maintenanceVarianceReport(range.from, range.to), null, "variance")
+      : null;
+
+    const failed = [bosta, temima, eid, momen].find((section) => section.error);
+
     return NextResponse.json({
       from: range.from,
       to: range.to,
+      source,
       bosta: { rows: bosta.rows, error: bosta.error },
       temima: { rows: temima.rows, error: temima.error },
-      eid: { found: couriers.eid.found, rows: couriers.eid.rows, error: couriers.eid.error },
-      momen: { found: couriers.momen.found, rows: couriers.momen.rows, error: couriers.momen.error },
+      eid: { found: eid.found, rows: eid.rows, error: eid.error },
+      momen: { found: momen.found, rows: momen.rows, error: momen.error },
       variance,
       viewer: {
         isMaintenance: viewer.isMaintenance,
