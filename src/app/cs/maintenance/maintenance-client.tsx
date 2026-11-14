@@ -994,7 +994,7 @@ export function MaintenanceClient({
   const [noteRow, setNoteRow] = useState<BostaRow | null>(null);
   const [ticketRow, setTicketRow] = useState<BostaRow | null>(null);
   const [ticketBadges, setTicketBadges] = useState<DeskTicketBadge[] | null>(null);
-  const [printMode, setPrintMode] = useState<"all" | "maintenance">("all");
+  const [printMode, setPrintMode] = useState<"all" | "maintenance" | "handoff">("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1507,6 +1507,17 @@ export function MaintenanceClient({
                   >
                     طباعة تقرير الصيانة
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintMode("handoff");
+                      window.setTimeout(() => window.print(), 50);
+                    }}
+                    disabled={!maintenancePrintRows.length}
+                    className="rounded-full bg-[#14213D] px-4 py-2 text-xs font-extrabold text-white disabled:opacity-40"
+                  >
+                    طباعة شيت الاستلام
+                  </button>
                 </div>
               </div>
             </header>
@@ -1866,6 +1877,46 @@ export function MaintenanceClient({
           <p className="mt-8 text-sm font-extrabold">
             استلام مسئول الصيانة: ........................ &nbsp;&nbsp; التاريخ: ..../..../........ &nbsp;&nbsp;
             التوقيع: ........................
+          </p>
+        </div>
+      ) : null}
+      {printMode === "handoff" ? (
+        <div className="print-only">
+          <h1 className="text-center text-lg font-extrabold">شيت استلام مرتجعات · {TAB_PRINT[tab]}</h1>
+          <p className="mb-2 text-center text-xs font-bold">
+            {from} — {to} · عدد الأوردرات: {maintenancePrintRows.length}
+          </p>
+          <table className="w-full border-collapse text-right text-xs">
+            <thead>
+              <tr>
+                <th className="border border-black px-1 py-1">مسلسل</th>
+                <th className="border border-black px-1 py-1">رقم التراك</th>
+                <th className="border border-black px-1 py-1">اسم العميل</th>
+                <th className="border border-black px-1 py-1">موبايل العميل</th>
+                <th className="border border-black px-1 py-1">المنتجات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {maintenancePrintRows.map((item, index) => (
+                <tr key={item.trackingNumber}>
+                  <td className="border border-black px-1 py-1 text-center">{index + 1}</td>
+                  <td className="border border-black px-1 py-1" dir="ltr">
+                    {item.trackingNumber}
+                  </td>
+                  <td className="border border-black px-1 py-1">{item.customerName || ""}</td>
+                  <td className="border border-black px-1 py-1" dir="ltr">
+                    {item.phone || ""}
+                  </td>
+                  <td className="border border-black px-1 py-1">{item.product || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-8 text-sm font-extrabold">
+            استلام مسئول الصيانة: ........................ &nbsp;&nbsp; مندوب الشحن: ........................
+          </p>
+          <p className="mt-3 text-sm font-extrabold">
+            التاريخ: ..../..../........ &nbsp;&nbsp; التوقيع: ........................
           </p>
         </div>
       ) : null}
