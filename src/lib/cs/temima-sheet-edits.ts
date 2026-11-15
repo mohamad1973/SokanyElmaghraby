@@ -42,6 +42,46 @@ function snapshotText(value: string | null | undefined) {
   return text === "null" ? "" : text;
 }
 
+/** One-shot: mark Temima-blocking flag on legacy home-confirm-only saves. */
+let homeConfirmSavedFlagsReady: Promise<void> | null = null;
+
+async function ensureHomeConfirmSavedFlags() {
+  if (homeConfirmSavedFlagsReady) return homeConfirmSavedFlagsReady;
+  homeConfirmSavedFlagsReady = (async () => {
+    const prisma = getPrismaClient();
+    if (!prisma) return;
+    try {
+      // Home-only agents: roles/role contain home_confirm and do not include agent/supervisor/admin.
+      await prisma.$executeRawUnsafe(`
+        UPDATE CsOrderConfirmation o
+        INNER JOIN CsAgent a ON a.id = o.confirmedByAgentId
+        SET o.customerSnapshot = JSON_SET(COALESCE(o.customerSnapshot, JSON_OBJECT()), '$.homeConfirmSaved', true)
+        WHERE o.status = 'CONFIRMED'
+          AND o.shippingCompany = 'sayed_temima'
+          AND o.confirmedByAgentId IS NOT NULL
+          AND (
+            CONCAT(',', REPLACE(COALESCE(a.roles, a.role, ''), ' ', ''), ',') LIKE '%,home_confirm,%'
+            OR COALESCE(a.roles, a.role, '') = 'home_confirm'
+          )
+          AND CONCAT(',', REPLACE(COALESCE(a.roles, a.role, ''), ' ', ''), ',') NOT LIKE '%,agent,%'
+          AND CONCAT(',', REPLACE(COALESCE(a.roles, a.role, ''), ' ', ''), ',') NOT LIKE '%,supervisor,%'
+          AND CONCAT(',', REPLACE(COALESCE(a.roles, a.role, ''), ' ', ''), ',') NOT LIKE '%,admin,%'
+          AND IFNULL(JSON_UNQUOTE(JSON_EXTRACT(o.customerSnapshot, '$.homeConfirmSaved')), '') NOT IN ('false', '0')
+          AND (
+            o.confirmationEditedAt IS NULL
+            OR o.confirmationEditedAt <= o.confirmedAt
+          )
+      `);
+    } catch (error) {
+      console.warn(
+        "[temima-sheet] homeConfirmSaved backfill skipped",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  })();
+  return homeConfirmSavedFlagsReady;
+}
+
 export async function searchTemimaSheetOrders(rawQuery: string) {
   const prisma = getPrismaClient();
   const query = rawQuery.trim().slice(0, 80);
@@ -136,6 +176,7 @@ const SHEET_PICK = {
   shippingAssignedAt: true,
   handedToCarrier: true,
   handedToCarrierAt: true,
+  customerSnapshot: true,
 } as const;
 
 const SHEET_DAY_OR = (from: Date, endExclusive: Date) => [
@@ -417,6 +458,7 @@ export async function freezePreparedTemimaDay(dayYmd: string) {
 
 export async function listUnifiedSayedSheetIds(dateFrom: string, dateTo: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return [];
+  await ensureHomeConfirmSavedFlags();
   await restoreTodayEditsOnce();
   await ensureClosedDaysFrozen(dateFrom, dateTo);
   const days = eachSheetDay(dateFrom, dateTo);
@@ -566,6 +608,7 @@ export async function listSettlementSheetDayMap(dateFrom: string, dateTo: string
 export async function sayedSheetDayMap(dateFrom: string, dateTo: string) {
   const map = new Map<number, string>();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateFrom > dateTo) return map;
+  await ensureHomeConfirmSavedFlags();
   await restoreTodayEditsOnce();
   await ensureClosedDaysFrozen(dateFrom, dateTo);
   const days = eachSheetDay(dateFrom, dateTo).slice(0, 8);

@@ -13,6 +13,7 @@ export type TemimaSheetOrder = {
   confirmationEditedAt?: string | Date | null;
   shippingAssignedAt?: string | Date | null;
   handedToCarrierAt?: string | Date | null;
+  customerSnapshot?: unknown;
 };
 
 export type TemimaCutoff = { dayYmd: string; minutes: number };
@@ -151,6 +152,7 @@ type SheetOrder = {
   shippingAssignedAt?: string | Date | null;
   handedToCarrier?: boolean | null;
   handedToCarrierAt?: string | Date | null;
+  customerSnapshot?: unknown;
 };
 
 function timeMs(value: string | Date | null | undefined) {
@@ -159,12 +161,19 @@ function timeMs(value: string | Date | null | undefined) {
   return Number.isFinite(time) ? time : null;
 }
 
+function isHomeConfirmOnlySave(order: SheetOrder) {
+  const snap = order.customerSnapshot as { homeConfirmSaved?: boolean | null } | null | undefined;
+  return Boolean(snap?.homeConfirmSaved);
+}
+
 /**
  * Order-page save that counts for Temima sheet.
  * Stamping shipping after the first save does not enter the sheet until the order page is saved again.
+ * Home-confirm account saves do not count until a normal CS save clears homeConfirmSaved.
  */
 function temimaSaveAt(order: SheetOrder): string | Date | null {
   if (!order.confirmedAt) return null;
+  if (isHomeConfirmOnlySave(order)) return null;
   const firstSave = timeMs(order.confirmedAt);
   const shippedAt = timeMs(order.shippingAssignedAt);
   if (firstSave != null && shippedAt != null && shippedAt > firstSave) {

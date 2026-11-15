@@ -1529,7 +1529,11 @@ export async function saveCsConfirmation(input: {
       .map((part) => String(part || "").trim())
       .filter(Boolean)
       .join(" · ");
-    const nextSnap = { ...patched, homeConfirmNote: note, customerNote: note };
+    const nextSnap = {
+      ...patched,
+      homeConfirmNote: note,
+      customerNote: note,
+    };
     if (input.failContact) {
       await prisma.csOrderConfirmation.update({
         where: { id: input.id },
@@ -1567,6 +1571,8 @@ export async function saveCsConfirmation(input: {
     }
     const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
     const savedAt = new Date();
+    // Blocks Temima sheet until a normal CS save clears this flag.
+    const homeSnap = { ...nextSnap, homeConfirmSaved: true };
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
@@ -1576,7 +1582,7 @@ export async function saveCsConfirmation(input: {
           : { confirmedAt: savedAt, confirmedByAgentId: input.agentId }),
         failReason: null,
         assignedAgentId: input.agentId,
-        customerSnapshot: nextSnap,
+        customerSnapshot: homeSnap,
       } as never,
     });
     try {
@@ -1955,7 +1961,12 @@ export async function saveCsConfirmation(input: {
       : parseOrderTotalDelta(typed.orderTotalDelta);
   const nextSnapshot = mergeCustomerNote(
     waybillSnapshot(
-      { ...snap, ...(nextTracking ? { trackingNumber: nextTracking } : {}) },
+      {
+        ...snap,
+        ...(nextTracking ? { trackingNumber: nextTracking } : {}),
+        // CS save counts for Temima sheet; home-confirm-only saves must not.
+        homeConfirmSaved: false,
+      },
       input.answers,
       { orderTotalDelta: snapshotDelta },
     ),
