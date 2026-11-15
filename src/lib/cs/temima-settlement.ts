@@ -408,25 +408,11 @@ export async function listTemimaCarryForward(): Promise<TemimaCarryForward> {
   };
 }
 
-async function reopenAllTemimaWeeks() {
-  const prisma = getPrismaClient();
-  if (!prisma) return;
-  await prisma.csCarrierWeek.updateMany({
-    where: { carrierCompany: TEMIMA_COMPANY, carryKey: 0, status: "closed" },
-    data: { status: "open", closedAt: null },
-  });
-}
-
 export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, _agentId = 0) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   try {
     await ensureCsTables();
-    try {
-      await reopenAllTemimaWeeks();
-    } catch (error) {
-      console.warn("[temima-settlement] reopen weeks skipped", error instanceof Error ? error.message : error);
-    }
 
   const weeks = await loadWeeks();
   const range = resolveSettlementRange(
@@ -444,6 +430,10 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   const { sunday } = range;
   const week =
     weeks.find((row) => cairoYmdFromIso(row.weekStart.toISOString()) === sunday && !isCarryDayWeek(row)) || null;
+
+  if (week?.status === "closed") {
+    return loadClosedTemimaWeekSheet(week, weeks, range);
+  }
 
   const resolvedPostponeIds = new Set<number>();
   for (const item of weeks) {
@@ -608,7 +598,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     weekStart: range.start,
     weekEnd: range.end,
     fullWeek: range.fullWeek,
-    status: "open" as const,
+    status: (week?.status === "closed" ? "closed" : "open") as "open" | "closed",
     cashDue: due.cashDue,
     weekCollectDue: due.weekCollectDue,
     priorPostponeCollectDue: due.priorPostponeCollectDue,
@@ -623,6 +613,95 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     console.error("[temima-settlement] sheet failed", error instanceof Error ? error.message : error);
     return { ok: false as const, message: "تعذر تحميل شيت التصفية." };
   }
+}
+
+type WeekWithLines = Awaited<ReturnType<typeof loadWeeks>>[number];
+
+async function loadClosedTemimaWeekSheet(
+  week: WeekWithLines,
+  weeks: WeekWithLines[],
+  range: { start: string; end: string; fullWeek: boolean },
+) {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+
+  const lines = week.lines.filter((line) => !line.resolvesLineId);
+  const orderIds = [...new Set(lines.map((line) => line.confirmationId))];
+  const orders = orderIds.length
+    ? await prisma.csOrderConfirmation.findMany({
+        where: { id: { in: orderIds } },
+        select: {
+          id: true,
+          wooOrderNumber: true,
+          customerSnapshot: true,
+          courierOutcome: true,
+          courierRefusalReason: true,
+        },
+      })
+    : [];
+  const orderById = new Map(orders.map((row) => [row.id, row]));
+
+  const rows: TemimaSheetRow[] = lines.map((line) => {
+    const order = orderById.get(line.confirmationId);
+    const snap = (order?.customerSnapshot || {}) as {
+      total?: string;
+      paymentMethod?: string;
+      paymentMethodId?: string | null;
+    };
+    const typed = line as typeof line & {
+      orderTotal?: unknown;
+      depositAmount?: unknown;
+      sheetDay?: string | null;
+    };
+    const frozenTotal = Number(typed.orderTotal);
+    const frozenDeposit = Number(typed.depositAmount);
+    const cashAmount = Number(line.cashAmount) || 0;
+    const depositAmount = Number.isFinite(frozenDeposit) ? Math.max(0, frozenDeposit) : 0;
+    const orderTotal =
+      Number.isFinite(frozenTotal) && frozenTotal > 0
+        ? frozenTotal
+        : depositAmount + cashAmount || money(snap.total);
+    const rawDisposition = storedDisposition(line.disposition);
+    const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
+    return {
+      confirmationId: line.confirmationId,
+      wooOrderNumber: order?.wooOrderNumber || line.wooOrderNumber || "",
+      customerName: order ? customerNameOf(order.customerSnapshot) : "—",
+      productNames: order ? productNamesOf(order.customerSnapshot) : "—",
+      ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
+      cashAmount,
+      depositAmount,
+      orderTotal,
+      fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
+      disposition,
+      isLarge: Boolean(line.isLarge),
+      carried: false,
+      carryLocked: false,
+      postponeLineId: null,
+      sheetDay: String(typed.sheetDay || range.start),
+      refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
+    };
+  });
+
+  rows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
+  const due = collectDueBreakdown(rows);
+
+  return {
+    ok: true as const,
+    weekStart: range.start,
+    weekEnd: range.end,
+    fullWeek: range.fullWeek,
+    status: "closed" as const,
+    cashDue: Number(week.cashDue) || due.cashDue,
+    weekCollectDue: due.weekCollectDue,
+    priorPostponeCollectDue: due.priorPostponeCollectDue,
+    priorPostponeCollectedOrders: due.priorPostponeCollectedOrders,
+    cashPaid: Number(week.cashPaid) || 0,
+    monthId: week.monthId ?? null,
+    rows,
+    refusals: refusalRowsOf(rows),
+    history: historyOf(weeks),
+  };
 }
 
 function refusalRowsOf(rows: TemimaSheetRow[]): TemimaRefusalRow[] {
@@ -787,6 +866,9 @@ function linePayload(weekId: number, row: TemimaSheetRow) {
     wooOrderNumber: row.wooOrderNumber,
     disposition,
     cashAmount: row.cashAmount,
+    orderTotal: Number(row.orderTotal) || 0,
+    depositAmount: Number(row.depositAmount) || 0,
+    sheetDay: row.sheetDay || null,
     isLarge: disposition === "collect" ? row.isLarge : false,
     resolvesLineId: row.carried && disposition && disposition !== "postpone" ? row.postponeLineId : null,
   };

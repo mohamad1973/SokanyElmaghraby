@@ -436,6 +436,9 @@ async function runEnsureCsTables() {
       \`wooOrderNumber\` VARCHAR(64) NOT NULL,
       \`disposition\` VARCHAR(24) NOT NULL,
       \`cashAmount\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`orderTotal\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`depositAmount\` DECIMAL(12,2) NOT NULL DEFAULT 0,
+      \`sheetDay\` VARCHAR(10) NULL,
       \`isLarge\` BOOLEAN NOT NULL DEFAULT false,
       \`resolvesLineId\` INT NULL,
       \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -638,6 +641,9 @@ async function runEnsureCsTables() {
     "ALTER TABLE `CsOrderConfirmation` ADD COLUMN `confirmedByAgentId` INT NULL",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `carryKey` INT NOT NULL DEFAULT 0",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `sourceWeekId` INT NULL",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `orderTotal` DECIMAL(12,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `depositAmount` DECIMAL(12,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `sheetDay` VARCHAR(10) NULL",
   ];
 
   for (const sql of alters) {

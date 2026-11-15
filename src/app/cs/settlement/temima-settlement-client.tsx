@@ -722,7 +722,7 @@ export function TemimaSettlementClient({
                       {money(sumOf(block.rows, netValue))}
                     </td>
                     <td colSpan={2} className="whitespace-nowrap border border-[#14213D]/25 bg-[#F5F5F0] px-2 py-2 text-center font-extrabold tabular-nums text-[#14213D]">
-                      شحن اليوم {money(sumOf(block.rows, shippingFee))}
+                      أجرة توصيل اليوم {money(sumOf(block.rows, shippingFee))}
                     </td>
                   </tr>
                 </Fragment>
@@ -740,7 +740,7 @@ export function TemimaSettlementClient({
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(refusalTotal)}</td>
                 <td className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">{money(netTotal)}</td>
                 <td colSpan={2} className="whitespace-nowrap border border-white/20 bg-[#14213D] px-2 py-2 text-center font-extrabold tabular-nums text-white">
-                  شحن الأسبوع {money(shippingTotal)}
+                  أجرة توصيل الأسبوع {money(shippingTotal)}
                 </td>
               </tr>
             </tfoot>
@@ -848,7 +848,7 @@ export function TemimaSettlementClient({
         </div>
         {month ? (
           <p className="text-sm font-bold text-[#14213D]">
-            {month.weeks.length} أسبوع · {month.deliveredOrders} أوردر مسلّم · إجمالي شحن الشهر {money(month.shippingTotal)} ج
+            {month.weeks.length} أسبوع · {month.deliveredOrders} أوردر مسلّم · إجمالي أجرة التوصيل {money(month.shippingTotal)} ج
           </p>
         ) : null}
       </div>
@@ -968,7 +968,7 @@ export function TemimaSettlementClient({
                   <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, refusalValue))}</td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">{money(sumOf(block.rows, netValue))}</td>
                   <td className="border border-black px-1 py-1 text-center font-extrabold">
-                    شحن اليوم {money(sumOf(block.rows, shippingFee))}
+                    أجرة توصيل اليوم {money(sumOf(block.rows, shippingFee))}
                   </td>
                 </tr>
               </Fragment>
@@ -982,13 +982,13 @@ export function TemimaSettlementClient({
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(depositTotal)}</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(refusalTotal)}</td>
                 <td className="border border-black px-1 py-1 text-center font-extrabold">{money(netTotal)}</td>
-                <td className="border border-black px-1 py-1 text-center font-extrabold">شحن الأسبوع {money(shippingTotal)}</td>
+                <td className="border border-black px-1 py-1 text-center font-extrabold">أجرة توصيل الأسبوع {money(shippingTotal)}</td>
               </tr>
             </tfoot>
           ) : null}
         </table>
         {month ? (
-          <p className="mt-2 text-center text-sm font-extrabold">إجمالي شحن الشهر {money(month.shippingTotal)} ج</p>
+          <p className="mt-2 text-center text-sm font-extrabold">إجمالي أجرة التوصيل {money(month.shippingTotal)} ج</p>
         ) : null}
       </div>
 

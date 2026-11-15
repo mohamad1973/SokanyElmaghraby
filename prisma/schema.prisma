@@ -481,6 +481,9 @@ model CsCarrierWeekLine {
   wooOrderNumber  String        @db.VarChar(64)
   disposition     String        @db.VarChar(24)
   cashAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  orderTotal      Decimal       @default(0) @db.Decimal(12, 2)
+  depositAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  sheetDay        String?       @db.VarChar(10)
   isLarge         Boolean       @default(false)
   resolvesLineId  Int?
   createdAt       DateTime      @default(now())
