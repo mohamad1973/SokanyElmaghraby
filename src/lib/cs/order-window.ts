@@ -288,8 +288,14 @@ export function baseTotalFromSnapshot(
   if (!snap) return 0;
   const signed = fulfillmentAccountAmount(snap);
   if (signed != null) return signed;
-  if (hasWaybillTotal(snap)) return parseMoneyAmount(snap.waybillTotal);
-  return parseMoneyAmount(snap.wooTotal ?? snap.total);
+  const woo = parseMoneyAmount(snap.wooTotal ?? snap.total);
+  if (hasWaybillTotal(snap)) {
+    const waybill = parseMoneyAmount(snap.waybillTotal);
+    // Prepaid/Fawry: waybill COD is often 0 while goods value stays on Woo total.
+    if (waybill === 0 && woo > 0) return woo;
+    return waybill;
+  }
+  return woo;
 }
 
 /**
