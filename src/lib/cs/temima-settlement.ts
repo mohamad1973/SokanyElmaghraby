@@ -2,11 +2,14 @@ import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import {
+  baseTotalFromSnapshot,
+  cairoTodayYmd,
+  cairoYmdBounds,
+  cairoYmdFromIso,
   isFawryMethod,
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
-import { cairoTodayYmd, cairoYmdBounds, cairoYmdFromIso } from "@/lib/cs/order-window";
 import { listSettlementSheetDayMap, listTemimaSheetEdits } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
@@ -179,14 +182,48 @@ function settlementSplit(
   freshFawry: boolean,
   keepCancelledValue = false,
 ) {
-  return sheetCollectedSplit(
+  const snap = (row.customerSnapshot || {}) as {
+    paymentMethod?: string;
+    paymentMethodId?: string | null;
+    total?: unknown;
+    wooTotal?: unknown;
+    waybillTotal?: unknown;
+  };
+  const fawry = isFawryMethod(snap.paymentMethod, snap.paymentMethodId);
+  // Agents often approve a full-order discount so the COD waybill prints at 0.
+  // That must not wipe Temima goods value / deposit for prepaid Fawry.
+  let orderTotalDelta = row.orderTotalDelta;
+  let discountApprovalStatus = row.discountApprovalStatus;
+  if (fawry) {
+    const base = baseTotalFromSnapshot(snap);
+    const delta = Number(orderTotalDelta);
+    const discountOk =
+      String(discountApprovalStatus || "").toLowerCase() === "approved" &&
+      Number.isFinite(delta) &&
+      delta < 0;
+    if (discountOk && base + delta <= 0) {
+      orderTotalDelta = null;
+      discountApprovalStatus = null;
+    }
+  }
+
+  const split = sheetCollectedSplit(
     sheetSplitFromConfirmation({
       ...row,
+      orderTotalDelta,
+      discountApprovalStatus,
       settlementDepositOverride: override,
       keepCancelledValue,
       freshPaymentState: freshFawry,
     }),
   );
+
+  // Fawry on Temima: prepaid unless an explicit settlement deposit override exists.
+  if (fawry && (override == null || !Number.isFinite(Number(override)))) {
+    const total = Math.round((split.deposit + split.net) * 100) / 100;
+    if (total > 0) return { deposit: total, net: 0 };
+  }
+  return split;
 }
 
 function orderTotalOf(
