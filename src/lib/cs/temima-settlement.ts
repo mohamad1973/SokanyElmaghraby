@@ -414,11 +414,47 @@ export async function listTemimaCarryForward(): Promise<TemimaCarryForward> {
   };
 }
 
+async function ensureCarrierWeekLineFreezeColumns() {
+  const prisma = getPrismaClient();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  const alters = [
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `orderTotal` DECIMAL(12,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `depositAmount` DECIMAL(12,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `sheetDay` VARCHAR(10) NULL",
+  ];
+  for (const sql of alters) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/Duplicate column|already exists|1060/i.test(message)) {
+        console.warn("[temima-settlement] freeze column ALTER:", message.slice(0, 240));
+      }
+    }
+  }
+  const cols = await prisma.$queryRawUnsafe<Array<{ colName: string }>>(
+    `SELECT COLUMN_NAME AS colName FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'CsCarrierWeekLine'
+       AND COLUMN_NAME IN ('orderTotal', 'depositAmount', 'sheetDay')`,
+  );
+  const have = new Set(cols.map((row) => String(row.colName)));
+  if (!have.has("orderTotal") || !have.has("depositAmount") || !have.has("sheetDay")) {
+    return {
+      ok: false as const,
+      message: "تعذر تجهيز أعمدة تثبيت قيمة الشحنات على قاعدة البيانات. تأكد من صلاحية ALTER.",
+    };
+  }
+  return { ok: true as const };
+}
+
 export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, agentId = 0) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   try {
     await ensureCsTables();
+    const freezeCols = await ensureCarrierWeekLineFreezeColumns();
+    if (!freezeCols.ok) return freezeCols;
 
   const weeks = await loadWeeks();
   const range = resolveSettlementRange(
@@ -609,7 +645,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const openWeek =
       week && week.status !== "closed" ? week : await upsertOpenWeek(range.sunday, range.end, agentId);
     if (openWeek && openWeek.status !== "closed") {
-      await ensureOpenWeekShipmentFreeze(openWeek.id, rows);
+      try {
+        await ensureOpenWeekShipmentFreeze(openWeek.id, rows);
+      } catch (error) {
+        console.warn(
+          "[temima-settlement] shipment freeze skipped",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
   }
 

@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إصلاح تحميل تصفية تميمة | عمود orderTotal ناقص على DB؛ مسار ensure السريع بيتخطى ALTER — فرض الأعمدة قبل loadWeeks | `temima-settlement.ts`, `agents.ts` |
 | قيمة شحنات تميمة ثابتة من أول ظهور | orderTotal يتثبت أول ما الأوردر يدخل شيت التصفية (سطر listed) ومش بيتكتب فوقه؛ القفل مش شرط؛ الصافي/الحالة تتغير عادي | `temima-settlement.ts` |
 | تثبيت قيمة شحنات تصفية تميمة | وقف فتح الأسابيع المقفلة عند التحميل؛ لقطة orderTotal/deposit/sheetDay عند القفل؛ أجرة التوصيل منفصلة عن قيمة الشحنات | `temima-settlement.ts`, `temima-settlement-client.tsx`, `agents.ts`, `schema.prisma` |
 | ملاحظات عميل مرقّمة موحّدة | مكوّن مشترك (`1-` + دبل كليك)؛ شيت تأكيد عادي + منزل + ملاحظة مرتجع صيانة + شكوى/طلب الاستقبال؛ حفظ `customerNote` في الـ snapshot | `numbered-notes-field.tsx`, `call-sheet.tsx`, `confirmations.ts`, `maintenance-panels.tsx`, `desk-client.tsx` |

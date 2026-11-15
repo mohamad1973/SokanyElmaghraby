@@ -220,6 +220,9 @@ async function ensureCarrierWeekExtraColumns(prisma: NonNullable<ReturnType<type
   for (const sql of [
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `carryKey` INT NOT NULL DEFAULT 0",
     "ALTER TABLE `CsCarrierWeek` ADD COLUMN `sourceWeekId` INT NULL",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `orderTotal` DECIMAL(12,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `depositAmount` DECIMAL(12,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE `CsCarrierWeekLine` ADD COLUMN `sheetDay` VARCHAR(10) NULL",
   ]) {
     try {
       await prisma.$executeRawUnsafe(sql);
