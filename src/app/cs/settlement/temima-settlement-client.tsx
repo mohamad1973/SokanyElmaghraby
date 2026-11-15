@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cairoTodayYmd } from "@/lib/cs/order-window";
@@ -201,6 +202,7 @@ export function TemimaSettlementClient({
   const [fullWeek, setFullWeek] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">("open");
   const [rows, setRows] = useState<SheetRow[]>([]);
+  const [outsideCount, setOutsideCount] = useState(0);
   const [refusals, setRefusals] = useState<RefusalRow[]>([]);
   const [printKind, setPrintKind] = useState<"week" | "refusals">("week");
   const [closedCashDue, setClosedCashDue] = useState<number | null>(null);
@@ -234,6 +236,7 @@ export function TemimaSettlementClient({
       if (seq !== loadSeq.current) return;
       setMessage("تعذر التحميل.");
       setRows([]);
+      setOutsideCount(0);
       setLoading(false);
       return;
     }
@@ -244,6 +247,7 @@ export function TemimaSettlementClient({
       fullWeek?: boolean;
       status?: "open" | "closed";
       rows?: SheetRow[];
+      outsideCount?: number;
       refusals?: RefusalRow[];
       cashPaid?: number;
       cashDue?: number;
@@ -263,6 +267,7 @@ export function TemimaSettlementClient({
     if (!res.ok) {
       setMessage(data.message || "تعذر التحميل.");
       setRows([]);
+      setOutsideCount(0);
       setLoading(false);
       return;
     }
@@ -274,6 +279,7 @@ export function TemimaSettlementClient({
     setStatus(data.status || "open");
     editedIds.current.clear();
     setRows(data.rows || []);
+    setOutsideCount(Number(data.outsideCount) || 0);
     setRefusals(data.refusals || []);
     setClosedCashDue(data.status === "closed" && data.fullWeek ? Number(data.cashDue) || 0 : null);
     setCashPaid(data.cashPaid || 0);
@@ -521,6 +527,16 @@ export function TemimaSettlementClient({
         >
           طباعة بيان المرفوض
         </button>
+        <Link
+          href={
+            weekStart && weekEnd
+              ? `/cs/settlement/outsiders?week=${encodeURIComponent(weekStart)}&weekEnd=${encodeURIComponent(weekEnd)}`
+              : "/cs/settlement/outsiders"
+          }
+          className="h-9 rounded-lg bg-[#7A1F1F] px-3 text-xs font-extrabold leading-9 text-white"
+        >
+          خارج الشيت الأصلي{outsideCount ? `: ${outsideCount}` : ""}
+        </Link>
         {fullWeek ? null : (
           <p className="text-xs font-bold text-[#14213D]/70">قفل الأسبوع بالطلب، لما تختار من الأحد للسبت.</p>
         )}

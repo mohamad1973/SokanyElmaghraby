@@ -11,9 +11,10 @@ import {
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
-import { listSettlementSheetDayMap, listTemimaSheetEdits } from "@/lib/cs/temima-sheet-edits";
+import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
 import { listTemimaCutoffs } from "@/lib/cs/temima-cutoff";
+import { listEarliestFreezeDays } from "@/lib/cs/temima-sheet-freeze";
 import { captureDeskReturnFromConfirmation } from "@/lib/cs/bosta-return-capture";
 import { getPrismaClient } from "@/lib/db";
 
@@ -55,6 +56,9 @@ export type TemimaSheetRow = {
   carryFromStart?: string;
   carryFromEnd?: string;
   refusalReason?: string;
+  /** Present only on «خارج الشيت الأصلي» rows. */
+  outsideReason?: string;
+  naturalSheetDay?: string;
 };
 
 export type TemimaCarryForward = {
@@ -316,7 +320,13 @@ function clockDayOf(value: Date | string | null | undefined) {
   return cairoYmdFromIso(iso);
 }
 
-function fallbackSheetDay(
+function formatOutsideDayAr(ymd: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
+  const [year, month, day] = ymd.split("-");
+  return `${Number(day)}-${Number(month)}-${year}`;
+}
+
+function classifyOutsideReason(
   order: {
     id: number;
     shippingCompany?: string | null;
@@ -329,21 +339,53 @@ function fallbackSheetDay(
   } | null | undefined,
   cutoffs: Awaited<ReturnType<typeof listTemimaCutoffs>>,
   edits: Awaited<ReturnType<typeof listTemimaSheetEdits>>,
-  from: string,
-  to: string,
+  earliestFreeze: string | null | undefined,
+  rangeFrom: string,
+  rangeTo: string,
 ) {
-  if (!order) return from;
-  const day = sayedSheetYmd(order, cutoffs);
-  if (day && day >= from && day <= to && !edits.some((edit) => edit.confirmationId === order.id && edit.dayYmd === day && edit.kind === "exclude")) {
-    return day;
-  }
-  const include = edits.find(
-    (edit) => edit.kind === "include" && edit.confirmationId === order.id && edit.dayYmd >= from && edit.dayYmd <= to,
+  if (!order) return { reason: "سطر تصفية بدون أوردر مرتبط", naturalSheetDay: "" };
+  const natural = sayedSheetYmd(order, cutoffs) || "";
+  const excluded = edits.some(
+    (edit) =>
+      edit.kind === "exclude" &&
+      edit.confirmationId === order.id &&
+      edit.dayYmd >= rangeFrom &&
+      edit.dayYmd <= rangeTo,
   );
-  if (include?.dayYmd) return include.dayYmd;
-  const clocks = [clockDayOf(order.handedToCarrierAt), clockDayOf(order.confirmationEditedAt), clockDayOf(order.confirmedAt)];
-  const inRange = clocks.find((ymd) => ymd >= from && ymd <= to);
-  return inRange || from;
+  if (excluded) {
+    return {
+      reason: natural
+        ? `مستبعد من شيت اليوم (يوم الشيت الطبيعي: ${formatOutsideDayAr(natural)})`
+        : "مستبعد من شيت اليوم (exclude)",
+      naturalSheetDay: natural,
+    };
+  }
+  if (earliestFreeze && (earliestFreeze < rangeFrom || earliestFreeze > rangeTo)) {
+    return {
+      reason: `مملوك لتجميد يوم أسبق: ${formatOutsideDayAr(earliestFreeze)}`,
+      naturalSheetDay: natural || earliestFreeze,
+    };
+  }
+  if (natural && (natural < rangeFrom || natural > rangeTo)) {
+    return {
+      reason: `يوم الشيت الطبيعي: ${formatOutsideDayAr(natural)}`,
+      naturalSheetDay: natural,
+    };
+  }
+  if (natural) {
+    return {
+      reason: `يوم الشيت الطبيعي: ${formatOutsideDayAr(natural)} (خارج عضوية الشيت للمدى)`,
+      naturalSheetDay: natural,
+    };
+  }
+  const assignOnly =
+    Boolean(order.shippingAssignedAt) &&
+    !order.handedToCarrierAt &&
+    !order.confirmationEditedAt;
+  if (assignOnly) {
+    return { reason: "تعيين شحن فقط / خارج عضوية الشيت", naturalSheetDay: "" };
+  }
+  return { reason: "خارج عضوية الشيت الأصلي", naturalSheetDay: "" };
 }
 
 export type TemimaOrderSearchHit = {
@@ -584,16 +626,38 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const to = cairoYmdFromIso(item.weekEnd.toISOString());
     return from <= range.end && to >= range.start;
   });
-  const days = await listSettlementSheetDayMap(range.start, range.end);
-  const weekLineIds = overlappingWeeks.flatMap((item) =>
-    item.lines.filter((line) => !line.resolvesLineId).map((line) => line.confirmationId),
-  );
-  const sheetIds = [...new Set([...days.keys(), ...weekLineIds])];
+  // Day blocks must match the original Temima sheet — never dump assign/clock extras onto a day.
+  const days = await sayedSheetDayMap(range.start, range.end);
+  const sheetIds = [...days.keys()];
   const sheetIdSet = new Set(sheetIds);
+  const draft = new Map(overlappingWeeks.flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)));
+  if (week) {
+    for (const line of week.lines) {
+      if (!draft.has(line.confirmationId)) draft.set(line.confirmationId, line);
+    }
+  }
+  const weekLineIds = [
+    ...new Set(
+      overlappingWeeks.flatMap((item) =>
+        item.lines.filter((line) => !line.resolvesLineId).map((line) => line.confirmationId),
+      ),
+    ),
+  ];
   const carryIds = range.fullWeek
     ? openPostpones.map((row) => row.confirmationId).filter((id) => !sheetIdSet.has(id))
     : [];
-  const orderIds = [...sheetIds, ...carryIds];
+  const carryIdSet = new Set(carryIds);
+  // Outside = tracked on a settlement line for a day inside the viewed range, but not on the original sheet.
+  const outsideIds = weekLineIds.filter((id) => {
+    if (sheetIdSet.has(id) || carryIdSet.has(id)) return false;
+    const saved = draft.get(id) as { sheetDay?: string | null; resolvesLineId?: number | null } | undefined;
+    if (saved?.resolvesLineId) return false;
+    const lineDay = String(saved?.sheetDay || "").trim();
+    if (lineDay) return lineDay >= range.start && lineDay <= range.end;
+    // Undated lines would previously dump onto range.start — keep them visible as outside.
+    return true;
+  });
+  const orderIds = [...new Set([...sheetIds, ...carryIds, ...outsideIds])];
   const orders = orderIds.length
     ? await prisma.csOrderConfirmation.findMany({
         where: { id: { in: orderIds } },
@@ -614,16 +678,10 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       })
     : [];
   const orderById = new Map(orders.map((row) => [row.id, row]));
-
-  const draft = new Map(overlappingWeeks.flatMap((item) => item.lines.map((line) => [line.confirmationId, line] as const)));
-  if (week) {
-    for (const line of week.lines) {
-      if (!draft.has(line.confirmationId)) draft.set(line.confirmationId, line);
-    }
-  }
   const overrides = await depositOverrides(orderIds);
   const cutoffs = await listTemimaCutoffs();
   const edits = await listTemimaSheetEdits();
+  const earliestFreeze = await listEarliestFreezeDays(outsideIds);
 
   const rows: TemimaSheetRow[] = [];
   for (const id of sheetIds) {
@@ -637,10 +695,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     const rawDisposition = storedDisposition(saved?.disposition);
     // UI: postpone = لم يسجل (no separate مؤجل column/option).
     const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
-    const sheetDay =
-      days.get(id) ||
-      (order ? fallbackSheetDay(order, cutoffs, edits, range.start, range.end) : "") ||
-      range.start;
+    const sheetDay = days.get(id) || "";
+    if (!sheetDay) continue;
     const liveTotal = order ? split.deposit + split.net : Number(saved?.cashAmount || 0);
     const frozenTotal = lineFrozenOrderTotal(saved);
     const orderTotal = frozenTotal || liveTotal;
@@ -663,6 +719,52 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       postponeLineId: null,
       sheetDay,
       refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
+    });
+  }
+
+  const outsideRows: TemimaSheetRow[] = [];
+  for (const id of outsideIds) {
+    const order = orderById.get(id);
+    const saved = draft.get(id);
+    if (!order && !saved) continue;
+    if (saved?.resolvesLineId) continue;
+    const snap = (order?.customerSnapshot || {}) as { total?: string; paymentMethod?: string; paymentMethodId?: string | null };
+    const override = overrides.get(id) ?? null;
+    const split = order ? settlementSplit(order, override, true, true) : { net: Number(saved?.cashAmount || 0), deposit: 0 };
+    const rawDisposition = storedDisposition(saved?.disposition);
+    const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
+    const liveTotal = order ? split.deposit + split.net : Number(saved?.cashAmount || 0);
+    const frozenTotal = lineFrozenOrderTotal(saved);
+    const orderTotal = frozenTotal || liveTotal;
+    const depositAmount = order ? split.deposit : 0;
+    const cashAmount = frozenTotal > 0 ? orderTotal - depositAmount : split.net;
+    const classified = classifyOutsideReason(
+      order,
+      cutoffs,
+      edits,
+      earliestFreeze.get(id),
+      range.start,
+      range.end,
+    );
+    outsideRows.push({
+      confirmationId: id,
+      wooOrderNumber: order?.wooOrderNumber || saved?.wooOrderNumber || "",
+      customerName: order ? customerNameOf(order.customerSnapshot) : "—",
+      productNames: order ? productNamesOf(order.customerSnapshot) : "—",
+      ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
+      cashAmount,
+      depositAmount,
+      orderTotal,
+      fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
+      disposition,
+      isLarge: saved?.isLarge || false,
+      carried: false,
+      carryLocked: false,
+      postponeLineId: null,
+      sheetDay: "",
+      refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
+      outsideReason: classified.reason,
+      naturalSheetDay: classified.naturalSheetDay || undefined,
     });
   }
 
@@ -702,12 +804,13 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     }
   }
 
-  if (sheetIds.length) {
+  const sheetOnlyRows = rows.filter((row) => !row.carried);
+  if (sheetOnlyRows.length) {
     const openWeek =
       week && week.status !== "closed" ? week : await upsertOpenWeek(range.sunday, range.end, agentId);
     if (openWeek && openWeek.status !== "closed") {
       try {
-        await ensureOpenWeekShipmentFreeze(openWeek.id, rows);
+        await ensureOpenWeekShipmentFreeze(openWeek.id, sheetOnlyRows);
       } catch (error) {
         console.warn(
           "[temima-settlement] shipment freeze skipped",
@@ -718,6 +821,7 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
   }
 
   rows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
+  outsideRows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
   const due = collectDueBreakdown(rows);
 
   return {
@@ -733,6 +837,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
     cashPaid: week ? Number(week.cashPaid) : 0,
     monthId: week?.monthId ?? null,
     rows,
+    outsideRows,
+    outsideCount: outsideRows.length,
     refusals: refusalRowsOf(rows),
     history: historyOf(weeks),
   };
@@ -754,21 +860,33 @@ async function loadClosedTemimaWeekSheet(
 
   const lines = week.lines.filter((line) => !line.resolvesLineId);
   const orderIds = [...new Set(lines.map((line) => line.confirmationId))];
-  const orders = orderIds.length
-    ? await prisma.csOrderConfirmation.findMany({
-        where: { id: { in: orderIds } },
-        select: {
-          id: true,
-          wooOrderNumber: true,
-          customerSnapshot: true,
-          courierOutcome: true,
-          courierRefusalReason: true,
-        },
-      })
-    : [];
+  const [orders, sheetDays, cutoffs, edits] = await Promise.all([
+    orderIds.length
+      ? prisma.csOrderConfirmation.findMany({
+          where: { id: { in: orderIds } },
+          select: {
+            id: true,
+            wooOrderNumber: true,
+            customerSnapshot: true,
+            courierOutcome: true,
+            courierRefusalReason: true,
+            ...SHEET_DAY_SELECT,
+          },
+        })
+      : Promise.resolve([]),
+    sayedSheetDayMap(range.start, range.end),
+    listTemimaCutoffs(),
+    listTemimaSheetEdits(),
+  ]);
   const orderById = new Map(orders.map((row) => [row.id, row]));
+  const outsideCandidateIds = lines
+    .map((line) => line.confirmationId)
+    .filter((id) => !sheetDays.has(id));
+  const earliestFreeze = await listEarliestFreezeDays(outsideCandidateIds);
 
-  const rows: TemimaSheetRow[] = lines.map((line) => {
+  const rows: TemimaSheetRow[] = [];
+  const outsideRows: TemimaSheetRow[] = [];
+  for (const line of lines) {
     const order = orderById.get(line.confirmationId);
     const snap = (order?.customerSnapshot || {}) as {
       total?: string;
@@ -790,7 +908,8 @@ async function loadClosedTemimaWeekSheet(
         : depositAmount + cashAmount || money(snap.total);
     const rawDisposition = storedDisposition(line.disposition);
     const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
-    return {
+    const canonicalDay = sheetDays.get(line.confirmationId) || "";
+    const base = {
       confirmationId: line.confirmationId,
       wooOrderNumber: order?.wooOrderNumber || line.wooOrderNumber || "",
       customerName: order ? customerNameOf(order.customerSnapshot) : "—",
@@ -805,12 +924,30 @@ async function loadClosedTemimaWeekSheet(
       carried: false,
       carryLocked: false,
       postponeLineId: null,
-      sheetDay: String(typed.sheetDay || range.start),
       refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
     };
-  });
+    if (canonicalDay) {
+      rows.push({ ...base, sheetDay: canonicalDay });
+      continue;
+    }
+    const classified = classifyOutsideReason(
+      order,
+      cutoffs,
+      edits,
+      earliestFreeze.get(line.confirmationId),
+      range.start,
+      range.end,
+    );
+    outsideRows.push({
+      ...base,
+      sheetDay: "",
+      outsideReason: classified.reason,
+      naturalSheetDay: classified.naturalSheetDay || undefined,
+    });
+  }
 
   rows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
+  outsideRows.sort((a, b) => Number(b.wooOrderNumber) - Number(a.wooOrderNumber));
   const due = collectDueBreakdown(rows);
 
   return {
@@ -826,6 +963,8 @@ async function loadClosedTemimaWeekSheet(
     cashPaid: Number(week.cashPaid) || 0,
     monthId: week.monthId ?? null,
     rows,
+    outsideRows,
+    outsideCount: outsideRows.length,
     refusals: refusalRowsOf(rows),
     history: historyOf(weeks),
   };
