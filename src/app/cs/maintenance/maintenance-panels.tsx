@@ -32,6 +32,8 @@ export type PanelTicketBadge = {
 export type PanelRow = {
   trackingNumber: string;
   productId?: number | null;
+  productName?: string;
+  productCode?: string;
   wooOrderNumber: string;
   customerName: string;
   phone: string;
@@ -194,6 +196,8 @@ export function TechPanel({
     const key = panelKey(row);
     setBusy(key);
     try {
+      const productName = (row.productName || row.product || "").split(" · ")[0]?.trim() || "";
+      const productCode = (row.productCode || "").trim();
       const response = await fetch("/api/cs/maintenance/returns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,6 +207,8 @@ export function TechPanel({
           grade: state.grade,
           techNote: state.techNote,
           ...(row.productId != null ? { productId: row.productId } : {}),
+          ...(productName ? { productName } : {}),
+          ...(productCode ? { productCode } : {}),
         }),
       });
       if (response.ok) onChanged();
@@ -214,7 +220,7 @@ export function TechPanel({
   return (
     <div className="space-y-3 p-4" dir="rtl">
       <p className="text-sm font-bold text-[#14213D]/70">
-        المسلم للصيانة فقط — بعد الإصلاح اختَر فرز أول أو فرز ثاني أو هالك.
+        المسلم للصيانة فقط — لو الأوردر فيه أكتر من منتج، كل منتج كارت لوحده وفرز مستقل (أول / ثاني / هالك).
       </p>
       {pending.length ? (
         <div className="space-y-3">
@@ -227,10 +233,17 @@ export function TechPanel({
                 : row.deskTicket
                   ? [row.deskTicket]
                   : [];
+            const title = row.productName || row.product || "—";
             return (
               <article key={key} className="w-full rounded-2xl bg-[#F5F5F0] p-3 ring-1 ring-black/5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
+                    <p className="break-words text-base font-extrabold text-[#14213D]">{title}</p>
+                    {row.productCode ? (
+                      <p className="text-xs font-bold text-[#14213D]/60" dir="ltr">
+                        {row.productCode}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap items-center gap-2">
                       {tickets.length ? (
                         <button
@@ -249,10 +262,7 @@ export function TechPanel({
                         {row.statusLabel || "—"}
                       </span>
                     </div>
-                    <p className="text-sm font-extrabold text-[#14213D]">{row.customerName || "—"}</p>
-                    <p className="break-words text-xs font-bold text-[#14213D]/80">
-                      {row.product || "—"}
-                    </p>
+                    <p className="text-sm font-bold text-[#14213D]/80">{row.customerName || "—"}</p>
                     <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#14213D]/70">
                       <span dir="ltr">{row.trackingNumber}</span>
                       <ReturnTrackDrawer trackingNumber={row.trackingNumber} />

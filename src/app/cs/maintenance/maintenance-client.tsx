@@ -1270,6 +1270,8 @@ export function MaintenanceClient({
       return maintenanceProducts.map((product): PanelRow => ({
         trackingNumber: row.trackingNumber,
         productId: product.productId,
+        productName: product.productName,
+        productCode: product.productCode || "",
         wooOrderNumber: row.wooOrderNumber,
         customerName: row.customerName,
         phone: row.phone,
@@ -1294,10 +1296,69 @@ export function MaintenanceClient({
       }));
     }
     if (row.review?.destination !== "maintenance") return [];
+
+    // Tracking-level maintenance with 2+ order lines / linked products → one tech card each.
+    const splitProducts: LinkedProduct[] = (() => {
+      if ((row.linkedProducts || []).length >= 2) {
+        return (row.linkedProducts || []).map((product) => ({
+          ...product,
+          destination: product.destination || "maintenance",
+          deliveredToMaintenanceAt:
+            product.deliveredToMaintenanceAt || row.review?.deliveredToMaintenanceAt || null,
+          grade: product.grade || null,
+          techNote: product.techNote || "",
+        }));
+      }
+      const fromOrder = (row.orderItems || [])
+        .map((item) => provisionalFromOrderItem(item))
+        .filter((product) => product.productName);
+      if (fromOrder.length >= 2) {
+        return fromOrder.map((product) => ({
+          ...product,
+          destination: "maintenance" as const,
+          deliveredToMaintenanceAt: row.review?.deliveredToMaintenanceAt || null,
+        }));
+      }
+      return [];
+    })();
+
+    if (splitProducts.length >= 2) {
+      return splitProducts.map((product): PanelRow => ({
+        trackingNumber: row.trackingNumber,
+        productId: product.productId,
+        productName: product.productName,
+        productCode: product.productCode || "",
+        wooOrderNumber: row.wooOrderNumber,
+        customerName: row.customerName,
+        phone: row.phone,
+        product: productText(product),
+        day: row.day,
+        note: row.note || "",
+        openedAt: row.openedAt,
+        statusLabel: row.statusLabel,
+        deskTicket,
+        deskTickets,
+        review: {
+          destination: "maintenance",
+          grade: product.grade || null,
+          techNote: product.techNote || "",
+          deliveredToMaintenanceAt:
+            product.deliveredToMaintenanceAt || row.review?.deliveredToMaintenanceAt || null,
+          receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
+          shelfAt: product.shelfAt || null,
+          defects: product.defects || row.review?.defects || [],
+          label: product.label || "صيانة",
+          usage: product.usage || row.review?.usage || null,
+        },
+      }));
+    }
+
     return [
       {
         trackingNumber: row.trackingNumber,
         productId: null,
+        productName: row.product || "",
+        productCode: "",
         wooOrderNumber: row.wooOrderNumber,
         customerName: row.customerName,
         phone: row.phone,

@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| فرز فني لكل منتج منفصل | لو المرتجع فيه منتجين+، كارت فرز لكل صنف؛ ترقية صنف من مراجعة التراك عند الحفظ بـ productId | `maintenance-client.tsx`, `maintenance-panels.tsx`, `bosta-return-lifecycle.ts` |
 | تأكيدات المنزل مش تدخل شيت تميمة | حفظ home_confirm يوسم homeConfirmSaved؛ temimaSaveAt يتجاهله لحد حفظ CS؛ backfill للقديم | `confirmations.ts`, `temima-sheet.ts`, `temima-sheet-edits.ts` |
 | تصفية تميمة = شيت اليوم فقط | بلوك كل يوم من sayedSheetDayMap زي الشيت الأصلي؛ الزوائد في صفحة «خارج الشيت الأصلي» مع السبب (قاعدة عامة لكل الأيام) | `temima-settlement.ts`, `temima-settlement-client.tsx`, `outsiders/` |
 | ديبوزت تميمة = completed فقط | مدفوع الموقع ديبوزت فقط لو ووكومرس completed؛ cancelled/failed/refunded ديبوزت=0 وقيمة الشحنة تفضل؛ شيل إجبار أي فوري=ديبوزت | `temima-settlement.ts` |

@@ -160,6 +160,8 @@ export async function POST(request: Request) {
     note?: string;
     grade?: string;
     techNote?: string;
+    productName?: string;
+    productCode?: string;
   } | null;
 
   const action = String(body?.action || "review");
@@ -195,6 +197,8 @@ export async function POST(request: Request) {
         grade: String(body?.grade || ""),
         techNote: String(body?.techNote || ""),
         productId,
+        productName: String(body?.productName || ""),
+        productCode: String(body?.productCode || ""),
       });
       if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
       return NextResponse.json(result);

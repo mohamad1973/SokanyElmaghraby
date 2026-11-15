@@ -150,6 +150,8 @@ export async function saveTechGrade(input: {
   grade: string;
   techNote?: string;
   productId?: number | null;
+  productName?: string | null;
+  productCode?: string | null;
 }) {
   const prisma = getPrismaClient();
   const tracking = input.trackingNumber.trim();
@@ -166,7 +168,7 @@ export async function saveTechGrade(input: {
   if (productId != null) {
     const { ensureBostaReturnProductTable } = await import("@/lib/cs/bosta-return-product");
     await ensureBostaReturnProductTable();
-    const rows = await prisma.$queryRawUnsafe<
+    let rows = await prisma.$queryRawUnsafe<
       Array<{ destination: string | null; receivedFromMaintenanceAt: Date | null }>
     >(
       `SELECT destination, receivedFromMaintenanceAt FROM CsBostaReturnProduct
@@ -174,6 +176,63 @@ export async function saveTechGrade(input: {
       tracking,
       productId,
     );
+    // Multi-SKU tech grade: promote a line onto the product table from a tracking-level maintenance review.
+    if (!rows.length || rows[0].destination !== "maintenance") {
+      const review = await prisma.$queryRawUnsafe<
+        Array<{
+          destination: string | null;
+          receivedFromMaintenanceAt: Date | null;
+          deliveredToMaintenanceAt: Date | null;
+          condition: string | null;
+          usage: string | null;
+        }>
+      >(
+        `SELECT destination, receivedFromMaintenanceAt, deliveredToMaintenanceAt, \`condition\`, \`usage\`
+         FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
+        tracking,
+      );
+      const parent = review[0];
+      if (!parent || parent.destination !== "maintenance") {
+        return { ok: false as const, message: "الصنف مش مسلّم للصيانة." };
+      }
+      if (parent.receivedFromMaintenanceAt) {
+        return { ok: false as const, message: "اترجعت لمسؤول الصيانة؛ مينفعش تعدّل التصنيف." };
+      }
+      const productName = String(input.productName || "").trim().slice(0, 191) || `صنف ${productId}`;
+      const productCode = String(input.productCode || "").trim().slice(0, 64);
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO \`CsBostaReturnProduct\`
+          (\`trackingNumber\`, \`productId\`, \`productName\`, \`productCode\`,
+           \`condition\`, \`destination\`, \`usage\`,
+           \`deliveredToMaintenanceAt\`, \`inspectedAt\`, \`updatedAt\`)
+         VALUES (?, ?, ?, ?, ?, 'maintenance', ?, ?, COALESCE(?, CURRENT_TIMESTAMP(3)), CURRENT_TIMESTAMP(3))
+         ON DUPLICATE KEY UPDATE
+           \`productName\` = VALUES(\`productName\`),
+           \`productCode\` = VALUES(\`productCode\`),
+           \`condition\` = COALESCE(\`condition\`, VALUES(\`condition\`)),
+           \`destination\` = 'maintenance',
+           \`usage\` = COALESCE(\`usage\`, VALUES(\`usage\`)),
+           \`deliveredToMaintenanceAt\` = COALESCE(\`deliveredToMaintenanceAt\`, VALUES(\`deliveredToMaintenanceAt\`)),
+           \`inspectedAt\` = COALESCE(\`inspectedAt\`, VALUES(\`inspectedAt\`)),
+           \`updatedAt\` = CURRENT_TIMESTAMP(3)`,
+        tracking,
+        productId,
+        productName,
+        productCode,
+        parent.condition || "defective",
+        parent.usage || null,
+        parent.deliveredToMaintenanceAt,
+        parent.deliveredToMaintenanceAt,
+      );
+      rows = await prisma.$queryRawUnsafe<
+        Array<{ destination: string | null; receivedFromMaintenanceAt: Date | null }>
+      >(
+        `SELECT destination, receivedFromMaintenanceAt FROM CsBostaReturnProduct
+         WHERE trackingNumber = ? AND productId = ? LIMIT 1`,
+        tracking,
+        productId,
+      );
+    }
     if (!rows.length || rows[0].destination !== "maintenance") {
       return { ok: false as const, message: "الصنف مش مسلّم للصيانة." };
     }
