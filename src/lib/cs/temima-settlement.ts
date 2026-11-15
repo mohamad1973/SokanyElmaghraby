@@ -25,6 +25,12 @@ function storedDisposition(value: string | null | undefined): TemimaDisposition 
   return "";
 }
 
+/** Goods value frozen on first sheet sight — never overwritten once > 0. */
+function lineFrozenOrderTotal(line: { orderTotal?: unknown } | null | undefined) {
+  const n = Number(line?.orderTotal);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export type TemimaSheetRow = {
   confirmationId: number;
   wooOrderNumber: string;
@@ -408,7 +414,7 @@ export async function listTemimaCarryForward(): Promise<TemimaCarryForward> {
   };
 }
 
-export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, _agentId = 0) {
+export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?: string, agentId = 0) {
   const prisma = getPrismaClient();
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   try {
@@ -538,15 +544,20 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       days.get(id) ||
       (order ? fallbackSheetDay(order, cutoffs, edits, range.start, range.end) : "") ||
       range.start;
+    const liveTotal = order ? split.deposit + split.net : Number(saved?.cashAmount || 0);
+    const frozenTotal = lineFrozenOrderTotal(saved);
+    const orderTotal = frozenTotal || liveTotal;
+    const depositAmount = order ? split.deposit : 0;
+    const cashAmount = frozenTotal > 0 ? orderTotal - depositAmount : split.net;
     rows.push({
       confirmationId: id,
       wooOrderNumber: order?.wooOrderNumber || saved?.wooOrderNumber || "",
       customerName: order ? customerNameOf(order.customerSnapshot) : "—",
       productNames: order ? productNamesOf(order.customerSnapshot) : "—",
       ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
-      cashAmount: split.net,
-      depositAmount: order ? split.deposit : 0,
-      orderTotal: order ? split.deposit + split.net : Number(saved?.cashAmount || 0),
+      cashAmount,
+      depositAmount,
+      orderTotal,
       fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
       disposition,
       isLarge: saved?.isLarge || false,
@@ -567,6 +578,10 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
       const override = overrides.get(carried.confirmationId) ?? null;
       const rawDisposition = storedDisposition(saved?.disposition) || "postpone";
       const disposition: TemimaDisposition | "" = rawDisposition === "postpone" ? "" : rawDisposition;
+      const liveTotal = order ? orderTotalOf(order, override, true) : money(snap.total);
+      const frozenTotal = lineFrozenOrderTotal(saved);
+      const orderTotal = frozenTotal || liveTotal;
+      const depositAmount = order ? settlementSplit(order, override, true).deposit : 0;
       rows.push({
         confirmationId: carried.confirmationId,
         wooOrderNumber: carried.wooOrderNumber,
@@ -574,8 +589,8 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         productNames: order ? productNamesOf(order.customerSnapshot) : "—",
         ...(order ? contactOf(order.customerSnapshot) : { phone: "", address: "" }),
         cashAmount: carried.cashAmount,
-        depositAmount: order ? settlementSplit(order, override, true).deposit : 0,
-        orderTotal: order ? orderTotalOf(order, override, true) : money(snap.total),
+        depositAmount,
+        orderTotal,
         fawry: isFawryMethod(snap.paymentMethod, snap.paymentMethodId),
         disposition,
         isLarge: saved?.isLarge ?? carried.isLarge,
@@ -587,6 +602,14 @@ export async function getTemimaWeekSheet(weekStartInput?: string, weekEndInput?:
         carryFromEnd: carried.toYmd,
         refusalReason: disposition === "return" ? refusalReasonOf(order || {}) : undefined,
       });
+    }
+  }
+
+  if (sheetIds.length) {
+    const openWeek =
+      week && week.status !== "closed" ? week : await upsertOpenWeek(range.sunday, range.end, agentId);
+    if (openWeek && openWeek.status !== "closed") {
+      await ensureOpenWeekShipmentFreeze(openWeek.id, rows);
     }
   }
 
@@ -858,17 +881,72 @@ async function lockResolvedCarryLines(agentId: number) {
   for (const weekId of touched) await refreshWeekCashDue(weekId);
 }
 
-function linePayload(weekId: number, row: TemimaSheetRow) {
+async function ensureOpenWeekShipmentFreeze(weekId: number, rows: TemimaSheetRow[]) {
+  const prisma = getPrismaClient();
+  if (!prisma || !rows.length) return;
+  const targets = rows.filter((row) => !row.carried && Number(row.orderTotal) > 0);
+  if (!targets.length) return;
+  const existing = await prisma.csCarrierWeekLine.findMany({
+    where: {
+      weekId,
+      confirmationId: { in: targets.map((row) => row.confirmationId) },
+      resolvesLineId: null,
+    },
+  });
+  const byConf = new Map(existing.map((line) => [line.confirmationId, line]));
+  const toCreate: ReturnType<typeof listedFreezePayload>[] = [];
+  for (const row of targets) {
+    const line = byConf.get(row.confirmationId);
+    const frozen = lineFrozenOrderTotal(line);
+    if (line) {
+      if (frozen > 0) continue;
+      await prisma.csCarrierWeekLine.update({
+        where: { id: line.id },
+        data: {
+          orderTotal: Number(row.orderTotal) || 0,
+          sheetDay: row.sheetDay || line.sheetDay || null,
+        },
+      });
+      continue;
+    }
+    toCreate.push(listedFreezePayload(weekId, row));
+  }
+  if (toCreate.length) {
+    await prisma.csCarrierWeekLine.createMany({ data: toCreate });
+  }
+}
+
+function listedFreezePayload(weekId: number, row: TemimaSheetRow) {
+  return {
+    weekId,
+    confirmationId: row.confirmationId,
+    wooOrderNumber: row.wooOrderNumber,
+    disposition: "listed",
+    cashAmount: row.cashAmount,
+    orderTotal: Number(row.orderTotal) || 0,
+    depositAmount: Number(row.depositAmount) || 0,
+    sheetDay: row.sheetDay || null,
+    isLarge: false,
+    resolvesLineId: null as number | null,
+  };
+}
+
+function linePayload(
+  weekId: number,
+  row: TemimaSheetRow,
+  existing?: { orderTotal?: unknown; depositAmount?: unknown; sheetDay?: string | null } | null,
+) {
   const disposition = storedDisposition(row.disposition);
+  const prevTotal = lineFrozenOrderTotal(existing);
   return {
     weekId,
     confirmationId: row.confirmationId,
     wooOrderNumber: row.wooOrderNumber,
     disposition,
     cashAmount: row.cashAmount,
-    orderTotal: Number(row.orderTotal) || 0,
+    orderTotal: prevTotal > 0 ? prevTotal : Number(row.orderTotal) || 0,
     depositAmount: Number(row.depositAmount) || 0,
-    sheetDay: row.sheetDay || null,
+    sheetDay: row.sheetDay || existing?.sheetDay || null,
     isLarge: disposition === "collect" ? row.isLarge : false,
     resolvesLineId: row.carried && disposition && disposition !== "postpone" ? row.postponeLineId : null,
   };
@@ -927,25 +1005,39 @@ export async function saveTemimaWeek(input: {
 
   const edited = editedLineRows(input.rows);
   if (edited.length) {
+    const prior = await prisma.csCarrierWeekLine.findMany({
+      where: { weekId: week.id, confirmationId: { in: edited.map((row) => row.confirmationId) } },
+    });
+    const priorByConf = new Map(prior.map((line) => [line.confirmationId, line]));
     await prisma.csCarrierWeekLine.deleteMany({
       where: { weekId: week.id, confirmationId: { in: edited.map((row) => row.confirmationId) } },
     });
     const marked = edited.filter((row) => storedDisposition(row.disposition));
-    if (marked.length) {
-      await prisma.csCarrierWeekLine.createMany({ data: marked.map((row) => linePayload(week.id, row)) });
-      for (const row of marked) {
-        const disposition = storedDisposition(row.disposition);
-        if (!disposition) continue;
-        await prisma.$executeRaw`
-          UPDATE CsOrderConfirmation SET temimaSupervisorResult = ${disposition} WHERE id = ${row.confirmationId}
-        `;
-      }
+    const keepFreeze = edited.filter((row) => !storedDisposition(row.disposition) && Number(row.orderTotal) > 0);
+    const payloads = [
+      ...marked.map((row) => linePayload(week.id, row, priorByConf.get(row.confirmationId))),
+      ...keepFreeze.map((row) => listedFreezePayload(week.id, {
+        ...row,
+        orderTotal: lineFrozenOrderTotal(priorByConf.get(row.confirmationId)) || Number(row.orderTotal) || 0,
+      })),
+    ];
+    if (payloads.length) {
+      await prisma.csCarrierWeekLine.createMany({ data: payloads });
+    }
+    for (const row of marked) {
+      const disposition = storedDisposition(row.disposition);
+      if (!disposition) continue;
+      await prisma.$executeRaw`
+        UPDATE CsOrderConfirmation SET temimaSupervisorResult = ${disposition} WHERE id = ${row.confirmationId}
+      `;
     }
   }
 
   await lockResolvedCarryLines(input.agentId);
 
   if (input.close) {
+    const priorFreeze = await prisma.csCarrierWeekLine.findMany({ where: { weekId: week.id } });
+    const priorByConf = new Map(priorFreeze.map((line) => [line.confirmationId, line]));
     const live = await getTemimaWeekSheet(range.sunday, range.saturday, input.agentId);
     if (!live.ok) return live;
     const snapshotRows = live.rows.map((row) =>
@@ -966,7 +1058,9 @@ export async function saveTemimaWeek(input: {
     await prisma.csCarrierWeekLine.deleteMany({ where: { weekId: week.id } });
     const marked = snapshotRows.filter((row) => storedDisposition(row.disposition) && !row.carried);
     if (marked.length) {
-      await prisma.csCarrierWeekLine.createMany({ data: marked.map((row) => linePayload(week.id, row)) });
+      await prisma.csCarrierWeekLine.createMany({
+        data: marked.map((row) => linePayload(week.id, row, priorByConf.get(row.confirmationId))),
+      });
     }
     await lockResolvedCarryLines(input.agentId);
   }
