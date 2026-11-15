@@ -7,6 +7,7 @@ import {
   cairoYmdBounds,
   cairoYmdFromIso,
   isFawryMethod,
+  isPaidOnlineHighlight,
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
@@ -185,13 +186,16 @@ function settlementSplit(
   const snap = (row.customerSnapshot || {}) as {
     paymentMethod?: string;
     paymentMethodId?: string | null;
+    wooStatus?: string | null;
+    status?: string | null;
     total?: unknown;
     wooTotal?: unknown;
     waybillTotal?: unknown;
   };
   const fawry = isFawryMethod(snap.paymentMethod, snap.paymentMethodId);
+  const online = isPaidOnlineHighlight(String(snap.paymentMethod || ""), snap.paymentMethodId);
   // Agents often approve a full-order discount so the COD waybill prints at 0.
-  // That must not wipe Temima goods value / deposit for prepaid Fawry.
+  // That must not wipe Temima goods value for Fawry.
   let orderTotalDelta = row.orderTotalDelta;
   let discountApprovalStatus = row.discountApprovalStatus;
   if (fawry) {
@@ -218,11 +222,31 @@ function settlementSplit(
     }),
   );
 
-  // Fawry on Temima: prepaid unless an explicit settlement deposit override exists.
-  if (fawry && (override == null || !Number.isFinite(Number(override)))) {
-    const total = Math.round((split.deposit + split.net) * 100) / 100;
-    if (total > 0) return { deposit: total, net: 0 };
+  const wooStatus = String(snap.wooStatus || snap.status || "")
+    .toLowerCase()
+    .trim();
+  const cancelled =
+    wooStatus === "cancelled" ||
+    wooStatus === "canceled" ||
+    wooStatus === "failed" ||
+    wooStatus === "refunded" ||
+    wooStatus === "trash";
+  const goodsTotal = Math.round((split.deposit + split.net) * 100) / 100;
+
+  // Cancelled (etc.): never count as website deposit; keep goods value on net.
+  if (cancelled) {
+    return { deposit: 0, net: goodsTotal };
   }
+
+  // Website prepaid deposit only when Woo status is completed.
+  if (
+    (fawry || online) &&
+    wooStatus === "completed" &&
+    (override == null || !Number.isFinite(Number(override)))
+  ) {
+    if (goodsTotal > 0) return { deposit: goodsTotal, net: 0 };
+  }
+
   return split;
 }
 
