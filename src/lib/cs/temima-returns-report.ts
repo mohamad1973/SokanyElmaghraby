@@ -10,7 +10,7 @@ import {
   sheetSplitFromConfirmation,
 } from "@/lib/cs/order-window";
 import { getPrismaClient } from "@/lib/db";
-import { listSettlementSheetDayMap } from "@/lib/cs/temima-sheet-edits";
+import { sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import {
   defaultSettlementWeekStart,
   sundayOnOrBefore,
@@ -273,8 +273,8 @@ export async function getTemimaReturnsReport(weekStartInput?: string) {
   const currWednesday = addDaysYmd(sunday, 3);
 
   const [currDays, prevDays] = await Promise.all([
-    listSettlementSheetDayMap(sunday, saturday),
-    listSettlementSheetDayMap(prevThursday, prevSaturday),
+    sayedSheetDayMap(sunday, saturday),
+    sayedSheetDayMap(prevThursday, prevSaturday),
   ]);
 
   const unmarkedPrev = new Map<number, string>();

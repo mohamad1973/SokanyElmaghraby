@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| تقرير مرتجعات تميمة = يوم الشيت الأصلي | `getTemimaReturnsReport` يستخدم `sayedSheetDayMap` بدل dump التصفية حتى لا يُنسب أوردر (مثل #151783) لسبت تأكيد بدون عضوية شيت | `temima-returns-report.ts` |
 | فرز فني لكل منتج منفصل | لو المرتجع فيه منتجين+، كارت فرز لكل صنف؛ ترقية صنف من مراجعة التراك عند الحفظ بـ productId | `maintenance-client.tsx`, `maintenance-panels.tsx`, `bosta-return-lifecycle.ts` |
 | تأكيدات المنزل مش تدخل شيت تميمة | حفظ home_confirm يوسم homeConfirmSaved؛ temimaSaveAt يتجاهله لحد حفظ CS؛ backfill للقديم | `confirmations.ts`, `temima-sheet.ts`, `temima-sheet-edits.ts` |
 | تصفية تميمة = شيت اليوم فقط | بلوك كل يوم من sayedSheetDayMap زي الشيت الأصلي؛ الزوائد في صفحة «خارج الشيت الأصلي» مع السبب (قاعدة عامة لكل الأيام) | `temima-settlement.ts`, `temima-settlement-client.tsx`, `outsiders/` |
