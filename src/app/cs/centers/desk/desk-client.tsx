@@ -8,6 +8,7 @@ import {
   NumberedNotesField,
   initialNumberedNotes,
 } from "@/components/cs/numbered-notes-field";
+import { PhotoLightbox } from "@/components/cs/photo-lightbox";
 
 type Access = {
   isManager: boolean;
@@ -365,6 +366,7 @@ export function ScDeskClient() {
   const [refund, setRefund] = useState({ kind: "return" as "return" | "exchange", reason: "" });
   const [inbox, setInbox] = useState<Ticket[]>([]);
   const [uploading, setUploading] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const confirmationId = selected?.confirmationId || form.confirmationId || null;
   const wooOrderNumber = selected?.wooOrderNumber || form.wooOrderNumber || "";
   const deskOrder = useDeskOrder(confirmationId);
@@ -761,8 +763,16 @@ export function ScDeskClient() {
               {selected.managementNote ? <p className="text-sm font-bold">قرار الإدارة: {selected.managementNote}</p> : null}
               <div className="flex flex-wrap gap-2">
                 {[...selected.invoicePhotos, ...selected.productPhotos, ...(selected.complaintPhotos || [])].map((photo) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={photo.id} src={photo.url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => setPreviewUrl(photo.url)}
+                    className="overflow-hidden rounded-lg ring-1 ring-[#14213D]/10"
+                    title="تكبير الصورة"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt="" className="h-16 w-16 object-cover" />
+                  </button>
                 ))}
               </div>
               {selected.techSpecs ? (
@@ -1040,8 +1050,16 @@ export function ScDeskClient() {
               {uploading ? <p className="text-xs font-bold">جاري رفع الصورة...</p> : null}
               <div className="flex flex-wrap gap-2">
                 {form.invoiceUrls.concat(form.productUrls, form.complaintUrls).map((url) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={url} src={url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => setPreviewUrl(url)}
+                    className="overflow-hidden rounded-lg ring-1 ring-[#14213D]/10"
+                    title="تكبير الصورة"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="h-14 w-14 object-cover" />
+                  </button>
                 ))}
               </div>
               <button
@@ -1068,6 +1086,7 @@ export function ScDeskClient() {
           </div>
         </div>
       )}
+      <PhotoLightbox url={previewUrl} onClose={() => setPreviewUrl(null)} />
     </div>
   );
 }

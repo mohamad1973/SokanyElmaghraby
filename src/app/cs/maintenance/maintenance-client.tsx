@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { OrderSalahiaChip } from "@/components/cs/order-salahia";
+import { PhotoLightbox } from "@/components/cs/photo-lightbox";
 import { ReturnTrackDrawer, ReturnTrackLine } from "@/components/cs/return-track-line";
 import { customReturnProductId } from "@/lib/cs/custom-return-product-id";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
@@ -328,6 +329,7 @@ function DeskTicketModal({
   const [ticket, setTicket] = useState<DeskTicketDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -441,14 +443,23 @@ function DeskTicketModal({
             {photos.length ? (
               <div className="flex flex-wrap gap-2">
                 {photos.map((photo) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={photo.id} src={photo.url} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => setPreviewUrl(photo.url)}
+                    className="overflow-hidden rounded-lg ring-1 ring-black/10"
+                    title="تكبير الصورة"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt="" className="h-20 w-20 object-cover" />
+                  </button>
                 ))}
               </div>
             ) : null}
           </div>
         ) : null}
       </div>
+      <PhotoLightbox url={previewUrl} onClose={() => setPreviewUrl(null)} />
     </div>
   );
 }
