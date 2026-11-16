@@ -5,6 +5,7 @@ import {
   maintenanceVarianceReport,
   markReturnOpened,
   markShelf,
+  clearTechGrade,
   receiveFromMaintenance,
   saveReturnStaffNote,
   saveTechGrade,
@@ -199,6 +200,18 @@ export async function POST(request: Request) {
         productId,
         productName: String(body?.productName || ""),
         productCode: String(body?.productCode || ""),
+      });
+      if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+      return NextResponse.json(result);
+    }
+
+    if (action === "clear-grade") {
+      if (!(viewer.isMaintenanceTech || viewer.isAdmin)) {
+        return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+      }
+      const result = await clearTechGrade({
+        trackingNumber: String(body?.trackingNumber || ""),
+        productId,
       });
       if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
       return NextResponse.json(result);

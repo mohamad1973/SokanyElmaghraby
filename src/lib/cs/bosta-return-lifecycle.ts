@@ -308,6 +308,68 @@ export async function saveTechGrade(input: {
   return { ok: true as const, grade, techNote };
 }
 
+export async function clearTechGrade(input: {
+  trackingNumber: string;
+  productId?: number | null;
+}) {
+  const prisma = getPrismaClient();
+  const tracking = input.trackingNumber.trim();
+  if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
+  if (!tracking) return { ok: false as const, message: "البوليصة ناقصة." };
+  await ensureMaintenanceLifecycleColumns();
+  const productId =
+    Number.isInteger(input.productId) && Number(input.productId) !== 0 ? Number(input.productId) : null;
+
+  if (productId != null) {
+    const { ensureBostaReturnProductTable } = await import("@/lib/cs/bosta-return-product");
+    await ensureBostaReturnProductTable();
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ destination: string | null; receivedFromMaintenanceAt: Date | null }>
+    >(
+      `SELECT destination, receivedFromMaintenanceAt FROM CsBostaReturnProduct
+       WHERE trackingNumber = ? AND productId = ? LIMIT 1`,
+      tracking,
+      productId,
+    );
+    if (!rows.length || rows[0].destination !== "maintenance") {
+      return { ok: false as const, message: "الصنف مش مسلّم للصيانة." };
+    }
+    if (rows[0].receivedFromMaintenanceAt) {
+      return { ok: false as const, message: "اترجعت لمسؤول الصيانة؛ مينفعش تعدّل التصنيف." };
+    }
+    await prisma.$executeRawUnsafe(
+      `UPDATE \`CsBostaReturnProduct\`
+       SET \`grade\` = NULL, \`gradedAt\` = NULL, \`updatedAt\` = CURRENT_TIMESTAMP(3)
+       WHERE \`trackingNumber\` = ? AND \`productId\` = ?`,
+      tracking,
+      productId,
+    );
+    const { syncAggregateReviewFromProducts } = await import("@/lib/cs/bosta-return-review");
+    await syncAggregateReviewFromProducts(tracking);
+    return { ok: true as const };
+  }
+
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ destination: string | null; receivedFromMaintenanceAt: Date | null }>
+  >(
+    `SELECT destination, receivedFromMaintenanceAt FROM CsBostaReturnReview WHERE trackingNumber = ? LIMIT 1`,
+    tracking,
+  );
+  if (!rows.length || rows[0].destination !== "maintenance") {
+    return { ok: false as const, message: "البوليصة مش مسلّمة للصيانة." };
+  }
+  if (rows[0].receivedFromMaintenanceAt) {
+    return { ok: false as const, message: "اترجعت لمسؤول الصيانة؛ مينفعش تعدّل التصنيف." };
+  }
+  await prisma.$executeRawUnsafe(
+    `UPDATE \`CsBostaReturnReview\`
+     SET \`grade\` = NULL, \`gradedAt\` = NULL, \`updatedAt\` = CURRENT_TIMESTAMP(3)
+     WHERE \`trackingNumber\` = ?`,
+    tracking,
+  );
+  return { ok: true as const };
+}
+
 export type ReceiveItem = { trackingNumber: string; productId?: number | null };
 
 export async function receiveFromMaintenance(items: Array<string | ReceiveItem>) {

@@ -170,13 +170,8 @@ export function TechPanel({
   onChanged: () => void;
   onOpenTicket?: (tickets: PanelTicketBadge[]) => void;
 }) {
-  // Only waiting for grade — graded items move to «عائد من الصيانة».
-  const pending = rows.filter(
-    (row) =>
-      row.review?.destination === "maintenance" &&
-      !row.review.receivedFromMaintenanceAt &&
-      !row.review.grade,
-  );
+  // Keep every maintenance card in the day range — graded stays visible with badge + edit.
+  const pending = rows.filter((row) => row.review?.destination === "maintenance");
   const [busy, setBusy] = useState<string>("");
   const [draft, setDraft] = useState<Record<string, { grade: Grade | ""; techNote: string }>>({});
 
@@ -211,7 +206,39 @@ export function TechPanel({
           ...(productCode ? { productCode } : {}),
         }),
       });
-      if (response.ok) onChanged();
+      if (response.ok) {
+        setDraft((cur) => {
+          const next = { ...cur };
+          delete next[key];
+          return next;
+        });
+        onChanged();
+      }
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function clearGrade(row: PanelRow) {
+    const key = panelKey(row);
+    setBusy(key);
+    try {
+      const response = await fetch("/api/cs/maintenance/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "clear-grade",
+          trackingNumber: row.trackingNumber,
+          ...(row.productId != null ? { productId: row.productId } : {}),
+        }),
+      });
+      if (response.ok) {
+        setDraft((cur) => ({
+          ...cur,
+          [key]: { grade: "", techNote: row.review?.techNote || "" },
+        }));
+        onChanged();
+      }
     } finally {
       setBusy("");
     }
@@ -220,13 +247,17 @@ export function TechPanel({
   return (
     <div className="space-y-3 p-4" dir="rtl">
       <p className="text-sm font-bold text-[#14213D]/70">
-        المسلم للصيانة فقط — لو الأوردر فيه أكتر من منتج، كل منتج كارت لوحده وفرز مستقل (أول / ثاني / هالك).
+        المسلم للصيانة فقط — بعد الحفظ الكارت يفضل ظاهر ومحفوظ؛ تعديل يعيد الاختيار. كل منتج كارت لوحده.
       </p>
       {pending.length ? (
         <div className="space-y-3">
           {pending.map((row) => {
             const state = stateFor(row);
             const key = panelKey(row);
+            const savedGrade = row.review?.grade;
+            const received = Boolean(row.review?.receivedFromMaintenanceAt);
+            const lockedSaved = Boolean(savedGrade) && !received;
+            const readOnlySaved = Boolean(savedGrade) && received;
             const tickets =
               row.deskTickets && row.deskTickets.length
                 ? row.deskTickets
@@ -261,6 +292,18 @@ export function TechPanel({
                       <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-[#14213D] ring-1 ring-black/10">
                         {row.statusLabel || "—"}
                       </span>
+                      {savedGrade ? (
+                        <>
+                          <span className="rounded-full bg-[#E6B325] px-2 py-0.5 text-[11px] font-extrabold text-black">
+                            محفوظ · {GRADE_LABEL[savedGrade]}
+                          </span>
+                          {received ? (
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-[#14213D]/70 ring-1 ring-black/10">
+                              تم استلام العائد
+                            </span>
+                          ) : null}
+                        </>
+                      ) : null}
                     </div>
                     <p className="text-sm font-bold text-[#14213D]/80">{row.customerName || "—"}</p>
                     <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#14213D]/70">
@@ -272,48 +315,70 @@ export function TechPanel({
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {GRADE_OPTIONS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      disabled={Boolean(row.review?.receivedFromMaintenanceAt)}
-                      onClick={() =>
-                        setDraft((cur) => ({
-                          ...cur,
-                          [key]: { ...state, grade: item.id },
-                        }))
-                      }
-                      className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${
-                        state.grade === item.id ? "bg-[#E6B325] text-black" : "bg-white text-[#14213D] ring-1 ring-black/10"
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <input
-                    value={state.techNote}
-                    disabled={Boolean(row.review?.receivedFromMaintenanceAt)}
-                    onChange={(e) =>
-                      setDraft((cur) => ({
-                        ...cur,
-                        [key]: { ...state, techNote: e.target.value },
-                      }))
-                    }
-                    className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs font-bold"
-                    placeholder="ملاحظة فني (اختياري)"
-                  />
-                  <button
-                    type="button"
-                    disabled={!state.grade || busy === key || Boolean(row.review?.receivedFromMaintenanceAt)}
-                    onClick={() => void saveGrade(row)}
-                    className="shrink-0 rounded-full bg-[#14213D] px-4 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
-                  >
-                    {busy === key ? "…" : "حفظ"}
-                  </button>
-                </div>
+                {lockedSaved || readOnlySaved ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {row.review?.techNote ? (
+                      <p className="min-w-0 flex-1 text-xs font-bold text-[#14213D]/70">{row.review.techNote}</p>
+                    ) : (
+                      <span className="min-w-0 flex-1" />
+                    )}
+                    {lockedSaved ? (
+                      <button
+                        type="button"
+                        disabled={busy === key}
+                        onClick={() => void clearGrade(row)}
+                        className="shrink-0 rounded-full bg-[#14213D] px-4 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
+                      >
+                        {busy === key ? "…" : "تعديل"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {GRADE_OPTIONS.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() =>
+                            setDraft((cur) => ({
+                              ...cur,
+                              [key]: { ...state, grade: item.id },
+                            }))
+                          }
+                          className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${
+                            state.grade === item.id
+                              ? "bg-[#E6B325] text-black"
+                              : "bg-white text-[#14213D] ring-1 ring-black/10"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <input
+                        value={state.techNote}
+                        onChange={(e) =>
+                          setDraft((cur) => ({
+                            ...cur,
+                            [key]: { ...state, techNote: e.target.value },
+                          }))
+                        }
+                        className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-xs font-bold"
+                        placeholder="ملاحظة فني (اختياري)"
+                      />
+                      <button
+                        type="button"
+                        disabled={!state.grade || busy === key}
+                        onClick={() => void saveGrade(row)}
+                        className="shrink-0 rounded-full bg-[#14213D] px-4 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
+                      >
+                        {busy === key ? "…" : "حفظ"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </article>
             );
           })}
