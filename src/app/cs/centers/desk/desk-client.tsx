@@ -9,6 +9,11 @@ import {
   initialNumberedNotes,
 } from "@/components/cs/numbered-notes-field";
 import { PhotoLightbox } from "@/components/cs/photo-lightbox";
+import {
+  SC_CUSTOMER_REQUESTS,
+  customerRequestLabel,
+  isScCustomerRequestId,
+} from "@/lib/cs/sc-customer-request";
 
 type Access = {
   isManager: boolean;
@@ -302,8 +307,8 @@ function emptyForm() {
     productUrls: [] as string[],
     complaintUrls: [] as string[],
     complaintNote: initialNumberedNotes(""),
-    customerRequest: initialNumberedNotes(""),
-    staffProposal: "",
+    customerRequest: "",
+    staffProposal: initialNumberedNotes(""),
     confirmationId: null as number | null,
     wooOrderNumber: "",
   };
@@ -330,8 +335,8 @@ function formFromTicket(ticket: Ticket, centerId: number | "") {
     productUrls: ticket.productPhotos.map((photo) => photo.url),
     complaintUrls: (ticket.complaintPhotos || []).map((photo) => photo.url),
     complaintNote: initialNumberedNotes(ticket.complaintNote || ""),
-    customerRequest: initialNumberedNotes(ticket.customerRequest || ""),
-    staffProposal: ticket.staffProposal || "",
+    customerRequest: isScCustomerRequestId(ticket.customerRequest || "") ? ticket.customerRequest : "",
+    staffProposal: initialNumberedNotes(ticket.staffProposal || ""),
     confirmationId: ticket.confirmationId,
     wooOrderNumber: ticket.wooOrderNumber || "",
   };
@@ -758,8 +763,12 @@ export function ScDeskClient() {
                 <p className="text-xs font-bold text-[#14213D]/70">أوردر مربوط #{selected.wooOrderNumber}</p>
               ) : null}
               {selected.complaintNote ? <p className="text-sm font-bold">الشكوى: {selected.complaintNote}</p> : null}
-              {selected.customerRequest ? <p className="text-sm font-bold">طلب العميل: {selected.customerRequest}</p> : null}
-              {selected.staffProposal ? <p className="text-sm font-bold">اقتراح الموظف: {selected.staffProposal}</p> : null}
+              {selected.customerRequest ? (
+                <p className="text-sm font-bold">طلب العميل: {customerRequestLabel(selected.customerRequest)}</p>
+              ) : null}
+              {selected.staffProposal ? (
+                <p className="whitespace-pre-wrap text-sm font-bold">اقتراح الموظف: {selected.staffProposal}</p>
+              ) : null}
               {selected.managementNote ? <p className="text-sm font-bold">قرار الإدارة: {selected.managementNote}</p> : null}
               <div className="flex flex-wrap gap-2">
                 {[...selected.invoicePhotos, ...selected.productPhotos, ...(selected.complaintPhotos || [])].map((photo) => (
@@ -1023,14 +1032,28 @@ export function ScDeskClient() {
                 rows={4}
                 className={`${FIELD} min-h-20 py-2`}
               />
+              <label className="block text-xs font-bold">
+                طلب العميل
+                <select
+                  className={`${FIELD} mt-1`}
+                  value={form.customerRequest}
+                  onChange={(e) => setForm({ ...form, customerRequest: e.target.value })}
+                >
+                  <option value="">اختَر طلب العميل</option>
+                  {SC_CUSTOMER_REQUESTS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <NumberedNotesField
-                value={form.customerRequest}
-                onChange={(customerRequest) => setForm({ ...form, customerRequest })}
-                label="طلب العميل"
+                value={form.staffProposal}
+                onChange={(staffProposal) => setForm({ ...form, staffProposal })}
+                label="اقتراح موظف الاستقبال لحل المشكلة"
                 rows={3}
                 className={`${FIELD} min-h-16 py-2`}
               />
-              <textarea className={`${FIELD} h-16 py-2`} placeholder="اقتراح موظف الاستقبال لحل المشكلة" value={form.staffProposal} onChange={(e) => setForm({ ...form, staffProposal: e.target.value })} />
               <DeskPhotoPicker
                 label="صورة الفاتورة"
                 kind="invoice"

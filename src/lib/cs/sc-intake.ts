@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ensureScCenterTables, resolveScAccess, type ScAccess } from "@/lib/cs/sc-centers";
+import { isScCustomerRequestId } from "@/lib/cs/sc-customer-request";
 import { loadScPhoneHistory } from "@/lib/cs/sc-intake-history";
 import { createFulfillmentFromOrder } from "@/lib/cs/fulfillment-return";
 import { listMonaCourierAgents, monaCourierBucketFromName } from "@/lib/cs/mona-courier";
@@ -427,6 +428,10 @@ export async function saveScIntake(
   if (input.visualKind && input.visualKind !== "intact" && input.visualKind !== "broken") return { ok: false as const, message: "حدد سليم ظاهريًا أو به كسر." };
   const sourceOk = SC_PURCHASE_SOURCES.some((row) => row.id === input.purchaseSource);
   if (!sourceOk) return { ok: false as const, message: "حدد من أين اشتري المنتج." };
+  const customerRequest = String(input.customerRequest || "").trim();
+  if (!isScCustomerRequestId(customerRequest)) {
+    return { ok: false as const, message: "اختَر طلب العميل من القائمة." };
+  }
   const customer = await upsertCustomer({ name: input.name, phone: input.phone, address: input.address });
   if (!customer.ok) return customer;
   const allowedDefects = new Set<string>(SC_DEFECTS.map((row) => row.id));
@@ -455,7 +460,7 @@ export async function saveScIntake(
     JSON.stringify(defects),
     String(input.defectOther || "").trim(),
     String(input.complaintNote || "").trim(),
-    String(input.customerRequest || "").trim(),
+    customerRequest,
     String(input.staffProposal || "").trim(),
     Number.isInteger(confirmationId) && confirmationId > 0 ? confirmationId : null,
     String(input.wooOrderNumber || "").slice(0, 64),

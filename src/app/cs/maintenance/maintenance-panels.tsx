@@ -10,6 +10,7 @@ import { ReturnTrackDrawer } from "@/components/cs/return-track-line";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 export type Grade = "first" | "second" | "scrap";
+export type TechUsage = "new" | "used";
 
 export type PanelReview = {
   destination: string;
@@ -20,7 +21,7 @@ export type PanelReview = {
   shelfAt: string | null;
   defects: string[];
   label: string;
-  usage: "new" | "used" | null;
+  usage: TechUsage | null;
 };
 
 export type PanelTicketBadge = {
@@ -76,6 +77,19 @@ const GRADE_LABEL: Record<Grade, string> = {
   second: "فرز ثاني",
   scrap: "هالك",
 };
+
+const USAGE_OPTIONS: Array<{ id: TechUsage; label: string }> = [
+  { id: "new", label: "جديد" },
+  { id: "used", label: "مستخدم" },
+];
+
+const USAGE_LABEL: Record<TechUsage, string> = {
+  new: "جديد",
+  used: "مستخدم",
+};
+
+const TECH_SELECT_CLASS =
+  "rounded-xl border border-black/10 bg-white px-3 py-1.5 text-xs font-extrabold text-[#14213D]";
 
 const DEFECT_AR: Record<string, string> = {
   break: "كسر",
@@ -173,13 +187,16 @@ export function TechPanel({
   // Keep every maintenance card in the day range — graded stays visible with badge + edit.
   const pending = rows.filter((row) => row.review?.destination === "maintenance");
   const [busy, setBusy] = useState<string>("");
-  const [draft, setDraft] = useState<Record<string, { grade: Grade | ""; techNote: string }>>({});
+  const [draft, setDraft] = useState<
+    Record<string, { grade: Grade | ""; usage: TechUsage | ""; techNote: string }>
+  >({});
 
   function stateFor(row: PanelRow) {
     const key = panelKey(row);
     return (
       draft[key] || {
         grade: (row.review?.grade || "") as Grade | "",
+        usage: (row.review?.usage || "") as TechUsage | "",
         techNote: row.review?.techNote || "",
       }
     );
@@ -187,7 +204,7 @@ export function TechPanel({
 
   async function saveGrade(row: PanelRow) {
     const state = stateFor(row);
-    if (!state.grade) return;
+    if (!state.grade || !state.usage) return;
     const key = panelKey(row);
     setBusy(key);
     try {
@@ -200,6 +217,7 @@ export function TechPanel({
           action: "grade",
           trackingNumber: row.trackingNumber,
           grade: state.grade,
+          usage: state.usage,
           techNote: state.techNote,
           ...(row.productId != null ? { productId: row.productId } : {}),
           ...(productName ? { productName } : {}),
@@ -235,7 +253,11 @@ export function TechPanel({
       if (response.ok) {
         setDraft((cur) => ({
           ...cur,
-          [key]: { grade: "", techNote: row.review?.techNote || "" },
+          [key]: {
+            grade: "",
+            usage: (row.review?.usage || "") as TechUsage | "",
+            techNote: row.review?.techNote || "",
+          },
         }));
         onChanged();
       }
@@ -296,6 +318,7 @@ export function TechPanel({
                         <>
                           <span className="rounded-full bg-[#E6B325] px-2 py-0.5 text-[11px] font-extrabold text-black">
                             محفوظ · {GRADE_LABEL[savedGrade]}
+                            {row.review?.usage ? ` · ${USAGE_LABEL[row.review.usage]}` : ""}
                           </span>
                           {received ? (
                             <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-[#14213D]/70 ring-1 ring-black/10">
@@ -306,6 +329,11 @@ export function TechPanel({
                       ) : null}
                     </div>
                     <p className="text-sm font-bold text-[#14213D]/80">{row.customerName || "—"}</p>
+                    {row.phone ? (
+                      <p className="text-sm font-extrabold text-[#14213D]" dir="ltr">
+                        {row.phone}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#14213D]/70">
                       <span dir="ltr">{row.trackingNumber}</span>
                       <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
@@ -335,26 +363,49 @@ export function TechPanel({
                   </div>
                 ) : (
                   <>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {GRADE_OPTIONS.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() =>
+                    <div className="mt-3 flex flex-wrap items-end gap-2">
+                      <label className="text-[11px] font-extrabold text-[#14213D]">
+                        الفرز
+                        <select
+                          aria-label="الفرز"
+                          className={`mt-1 block ${TECH_SELECT_CLASS}`}
+                          value={state.grade}
+                          onChange={(e) =>
                             setDraft((cur) => ({
                               ...cur,
-                              [key]: { ...state, grade: item.id },
+                              [key]: { ...state, grade: e.target.value as Grade | "" },
                             }))
                           }
-                          className={`rounded-full px-3 py-1.5 text-xs font-extrabold ${
-                            state.grade === item.id
-                              ? "bg-[#E6B325] text-black"
-                              : "bg-white text-[#14213D] ring-1 ring-black/10"
-                          }`}
                         >
-                          {item.label}
-                        </button>
-                      ))}
+                          <option value="">اختَر الفرز</option>
+                          {GRADE_OPTIONS.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[11px] font-extrabold text-[#14213D]">
+                        الاستخدام
+                        <select
+                          aria-label="الاستخدام"
+                          className={`mt-1 block ${TECH_SELECT_CLASS}`}
+                          value={state.usage}
+                          onChange={(e) =>
+                            setDraft((cur) => ({
+                              ...cur,
+                              [key]: { ...state, usage: e.target.value as TechUsage | "" },
+                            }))
+                          }
+                        >
+                          <option value="">اختَر الاستخدام</option>
+                          {USAGE_OPTIONS.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <input
@@ -370,7 +421,7 @@ export function TechPanel({
                       />
                       <button
                         type="button"
-                        disabled={!state.grade || busy === key}
+                        disabled={!state.grade || !state.usage || busy === key}
                         onClick={() => void saveGrade(row)}
                         className="shrink-0 rounded-full bg-[#14213D] px-4 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
                       >

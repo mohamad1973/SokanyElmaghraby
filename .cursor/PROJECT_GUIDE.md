@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| طلب عميل دروب + فرز/استخدام فني + تثبيت تاريخ | طلب العميل 4 خيارات؛ اقتراح الاستقبال NumberedNotes؛ تاريخ الصيانة ما يرجعش لليوم؛ فني: تليفون + دروب فرز + دروب استخدام | `sc-customer-request.ts`, `desk-client.tsx`, `maintenance-client.tsx`, `maintenance-panels.tsx`, `bosta-return-lifecycle.ts` |
 | تكبير صور تكت الاستقبال | ضغط الصورة يفتحها بملء الشاشة (إغلاق بالخلفية أو زر) في مودال التكت ومكتب الاستقبال | `photo-lightbox.tsx`, `maintenance-client.tsx`, `desk-client.tsx` |
 | كروت فني الصيانة تفضل ظاهرة بعد الحفظ | بعد فرز أول/ثاني/هالك الكارت يبقى في المدى مع شارة «محفوظ» وزر تعديل (clear-grade) قبل استلام العائد | `maintenance-panels.tsx`, `bosta-return-lifecycle.ts`, `returns/route.ts` |
 | تقرير مرتجعات تميمة = يوم الشيت الأصلي | `getTemimaReturnsReport` يستخدم `sayedSheetDayMap` بدل dump التصفية حتى لا يُنسب أوردر (مثل #151783) لسبت تأكيد بدون عضوية شيت | `temima-returns-report.ts` |

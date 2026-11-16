@@ -7,6 +7,7 @@ import { OrderSalahiaChip } from "@/components/cs/order-salahia";
 import { PhotoLightbox } from "@/components/cs/photo-lightbox";
 import { ReturnTrackDrawer, ReturnTrackLine } from "@/components/cs/return-track-line";
 import { customReturnProductId } from "@/lib/cs/custom-return-product-id";
+import { customerRequestLabel } from "@/lib/cs/sc-customer-request";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 import {
@@ -418,7 +419,9 @@ function DeskTicketModal({
               <p className="text-[#14213D]/60">مفيش نص شكوى مكتوب على التكت.</p>
             )}
             {ticket.customerRequest ? (
-              <p className="whitespace-pre-wrap rounded-2xl bg-[#F5F5F0] px-3 py-3">طلب العميل: {ticket.customerRequest}</p>
+              <p className="rounded-2xl bg-[#F5F5F0] px-3 py-3">
+                طلب العميل: {customerRequestLabel(ticket.customerRequest)}
+              </p>
             ) : null}
             {ticket.staffProposal ? (
               <p className="whitespace-pre-wrap rounded-2xl bg-[#FFF8E7] px-3 py-3">
@@ -1034,12 +1037,24 @@ export function MaintenanceClient({
           return null;
         }
         const source = opts?.source || "bosta";
+        const dayOk = (value?: string) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+        // Keep employee-chosen range; only fill from API when client dates are empty.
+        let nextFrom = dayOk(opts?.from) ? opts!.from! : body.from;
+        let nextTo = dayOk(opts?.to) ? opts!.to! : body.to;
+        setFrom((prev) => {
+          nextFrom = dayOk(opts?.from) ? opts!.from! : dayOk(prev) ? prev : body.from;
+          return nextFrom;
+        });
+        setTo((prev) => {
+          nextTo = dayOk(opts?.to) ? opts!.to! : dayOk(prev) ? prev : body.to;
+          return nextTo;
+        });
         setData((current) => {
-          if (!current) return body;
+          if (!current) return { ...body, from: nextFrom, to: nextTo };
           return {
             ...current,
-            from: body.from,
-            to: body.to,
+            from: nextFrom,
+            to: nextTo,
             bosta: source === "bosta" ? body.bosta : current.bosta,
             temima: source === "temima" ? body.temima : current.temima,
             eid: source === "eid" ? body.eid : current.eid,
@@ -1047,12 +1062,10 @@ export function MaintenanceClient({
             variance: opts?.withVariance ? body.variance : current.variance ?? null,
           };
         });
-        setFrom(body.from);
-        setTo(body.to);
         if (body.message && body.partial && !opts?.quiet) {
           setError(body.detail ? `${body.message} (${body.detail})` : body.message);
         }
-        return body;
+        return { ...body, from: nextFrom, to: nextTo };
       } catch {
         if (!opts?.quiet) setError("تعذر تحميل المرتجعات. تحقق من الاتصال وحاول مرة أخرى.");
         return null;

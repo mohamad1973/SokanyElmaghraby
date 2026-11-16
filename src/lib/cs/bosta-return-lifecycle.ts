@@ -148,6 +148,7 @@ export function defectsLabel(defects: ReviewDefect[]) {
 export async function saveTechGrade(input: {
   trackingNumber: string;
   grade: string;
+  usage?: string;
   techNote?: string;
   productId?: number | null;
   productName?: string | null;
@@ -157,9 +158,11 @@ export async function saveTechGrade(input: {
   const tracking = input.trackingNumber.trim();
   const grade: ReviewGrade | "" =
     input.grade === "first" || input.grade === "second" || input.grade === "scrap" ? input.grade : "";
+  const usage = input.usage === "new" || input.usage === "used" ? input.usage : "";
   if (!prisma) return { ok: false as const, message: "قاعدة البيانات غير متصلة." };
   if (!tracking) return { ok: false as const, message: "البوليصة ناقصة." };
   if (!grade) return { ok: false as const, message: "اختَر فرز أول أو فرز ثاني أو هالك." };
+  if (!usage) return { ok: false as const, message: "اختَر الاستخدام: جديد أو مستخدم." };
   await ensureMaintenanceLifecycleColumns();
   const productId =
     Number.isInteger(input.productId) && Number(input.productId) !== 0 ? Number(input.productId) : null;
@@ -241,11 +244,12 @@ export async function saveTechGrade(input: {
     }
     await prisma.$executeRawUnsafe(
       `UPDATE \`CsBostaReturnProduct\`
-       SET \`grade\` = ?, \`techNote\` = ?,
+       SET \`grade\` = ?, \`usage\` = ?, \`techNote\` = ?,
            \`gradedAt\` = COALESCE(\`gradedAt\`, CURRENT_TIMESTAMP(3)),
            \`updatedAt\` = CURRENT_TIMESTAMP(3)
        WHERE \`trackingNumber\` = ? AND \`productId\` = ?`,
       grade,
+      usage,
       techNote || null,
       tracking,
       productId,
@@ -257,17 +261,17 @@ export async function saveTechGrade(input: {
       await recordReturnTrackEvent({
         trackingNumber: tracking,
         stage: "graded",
-        meta: { grade, techNote: techNote || null, productId },
+        meta: { grade, usage, techNote: techNote || null, productId },
       });
       await recordReturnTrackEvent({
         trackingNumber: tracking,
         stage: "returned_from_maintenance",
-        meta: { grade, productId },
+        meta: { grade, usage, productId },
       });
     } catch (error) {
       console.warn("[return-track] grade event", error instanceof Error ? error.message : error);
     }
-    return { ok: true as const, grade, techNote };
+    return { ok: true as const, grade, usage, techNote };
   }
 
   const rows = await prisma.$queryRawUnsafe<Array<{ destination: string; receivedFromMaintenanceAt: Date | null }>>(
@@ -282,11 +286,12 @@ export async function saveTechGrade(input: {
   }
   await prisma.$executeRawUnsafe(
     `UPDATE \`CsBostaReturnReview\`
-     SET \`grade\` = ?, \`techNote\` = ?,
+     SET \`grade\` = ?, \`usage\` = ?, \`techNote\` = ?,
          \`gradedAt\` = COALESCE(\`gradedAt\`, CURRENT_TIMESTAMP(3)),
          \`updatedAt\` = CURRENT_TIMESTAMP(3)
      WHERE \`trackingNumber\` = ?`,
     grade,
+    usage,
     techNote || null,
     tracking,
   );
@@ -295,17 +300,17 @@ export async function saveTechGrade(input: {
     await recordReturnTrackEvent({
       trackingNumber: tracking,
       stage: "graded",
-      meta: { grade, techNote: techNote || null },
+      meta: { grade, usage, techNote: techNote || null },
     });
     await recordReturnTrackEvent({
       trackingNumber: tracking,
       stage: "returned_from_maintenance",
-      meta: { grade },
+      meta: { grade, usage },
     });
   } catch (error) {
     console.warn("[return-track] grade event", error instanceof Error ? error.message : error);
   }
-  return { ok: true as const, grade, techNote };
+  return { ok: true as const, grade, usage, techNote };
 }
 
 export async function clearTechGrade(input: {

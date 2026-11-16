@@ -196,6 +196,7 @@ export async function POST(request: Request) {
       const result = await saveTechGrade({
         trackingNumber: String(body?.trackingNumber || ""),
         grade: String(body?.grade || ""),
+        usage: String(body?.usage || ""),
         techNote: String(body?.techNote || ""),
         productId,
         productName: String(body?.productName || ""),
