@@ -1842,6 +1842,10 @@ export async function saveCsConfirmation(input: {
         missing: [] as string[],
       };
     }
+    const reason = String(input.failReason || "").trim();
+    if (!reason) {
+      return { ok: false as const, message: "اكتب سبب الإلغاء.", missing: [] as string[] };
+    }
     const now = new Date();
     try {
       const { listTemimaCutoffs } = await import("@/lib/cs/temima-cutoff");
@@ -1876,7 +1880,7 @@ export async function saveCsConfirmation(input: {
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.CANCELLED,
-        failReason: "الغاء بعد الحفظ",
+        failReason: reason,
         postCancelAt: now,
         postCancelRefundPaid: false,
         postCancelInvoice: null,
@@ -1890,7 +1894,7 @@ export async function saveCsConfirmation(input: {
         confirmationId: input.id,
         actorAgentId: input.agentId,
         action: "cancel_after_save",
-        detail: "الغاء بعد الحفظ",
+        detail: reason,
         at: now,
       });
     } catch (error) {
@@ -2103,7 +2107,10 @@ export async function saveCsConfirmation(input: {
 
   if (input.cancelOrder) {
     const at = new Date();
-    const detail = input.failReason?.trim() || "لاغى";
+    const detail = String(input.failReason || "").trim();
+    if (!detail) {
+      return { ok: false as const, message: "اكتب سبب الإلغاء.", missing: [] as string[] };
+    }
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {

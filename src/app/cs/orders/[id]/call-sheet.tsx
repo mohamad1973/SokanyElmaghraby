@@ -518,6 +518,10 @@ export function CsCallSheet({
   const [cancelledAfterSave, setCancelledAfterSave] = useState(
     () => status === "CANCELLED" || Boolean(postCancel?.at),
   );
+  const [cancelReasonPrompt, setCancelReasonPrompt] = useState<null | {
+    kind: "cancel" | "cancel_after_save";
+  }>(null);
+  const [cancelReasonText, setCancelReasonText] = useState("");
   const initialDelta = splitOrderTotalDelta(initialOrderTotalDelta);
   const [discountAmount, setDiscountAmount] = useState(() =>
     initialDelta.sign === "minus" ? initialDelta.amount : "",
@@ -635,11 +639,18 @@ export function CsCallSheet({
     failContact = false,
     cancelOrder = false,
     sheetDayChoice?: "previous" | "today",
+    cancelReason?: string,
   ) {
     if (saving) return;
     setSaving(true);
     setMessage("");
     if (sheetDayChoice) setSheetDayPrompt(null);
+    const cancelReasonTrimmed = String(cancelReason || "").trim();
+    if (cancelOrder && !cancelReasonTrimmed) {
+      setSaving(false);
+      setMessage("اكتب سبب الإلغاء.");
+      return;
+    }
     if (finalize && !failContact && !cancelOrder && !confirmed) {
       if (!lockedShipping) {
         setSaving(false);
@@ -712,7 +723,7 @@ export function CsCallSheet({
         finalize: showFollowUp ? false : finalize,
         failContact,
         cancelOrder,
-        failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
+        failReason: failContact ? "لم يرد" : cancelOrder ? cancelReasonTrimmed : undefined,
         trackingNumber,
         waybillPrinted,
         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
@@ -796,16 +807,33 @@ export function CsCallSheet({
     if (finalize) window.location.href = "/cs";
   }
 
-  async function cancelAfterSave() {
-    if (saving || !canCancelAfterSave) return;
-    const ok = window.confirm("تأكيد إلغاء بعد الحفظ؟ الأوردر هيخرج من شيت تميمة ويتسجّل لاغى في الصلاحية.");
-    if (!ok) return;
+  function openCancelReasonPrompt(kind: "cancel" | "cancel_after_save") {
+    if (saving) return;
+    if (kind === "cancel_after_save" && !canCancelAfterSave) return;
+    setCancelReasonText("");
+    setCancelReasonPrompt({ kind });
+    setMessage("");
+  }
+
+  async function confirmCancelReason() {
+    if (saving || !cancelReasonPrompt) return;
+    const reason = cancelReasonText.trim();
+    if (!reason) {
+      setMessage("اكتب سبب الإلغاء.");
+      return;
+    }
+    const kind = cancelReasonPrompt.kind;
+    setCancelReasonPrompt(null);
+    if (kind === "cancel") {
+      await save(true, false, true, undefined, reason);
+      return;
+    }
     setSaving(true);
     setMessage("");
     const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cancelAfterSave: true }),
+      body: JSON.stringify({ cancelAfterSave: true, failReason: reason }),
     });
     const data = (await res.json()) as { message?: string };
     setSaving(false);
@@ -1441,6 +1469,45 @@ export function CsCallSheet({
           />
         );
       })()}
+      {cancelReasonPrompt ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 text-[#14213D] shadow-lg">
+            <p className="text-base font-extrabold">
+              {cancelReasonPrompt.kind === "cancel_after_save" ? "إلغاء بعد الحفظ" : "لاغى"}
+            </p>
+            <p className="mt-1 text-sm font-bold text-[#14213D]/70">اكتب سبب الإلغاء قبل التأكيد.</p>
+            <textarea
+              value={cancelReasonText}
+              onChange={(event) => setCancelReasonText(event.target.value)}
+              rows={4}
+              placeholder="سبب الإلغاء"
+              className="mt-3 w-full rounded-xl border border-[#E5E5E5] bg-[#F5F5F0] px-3 py-2 text-sm font-bold text-[#14213D]"
+              autoFocus
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving || !cancelReasonText.trim()}
+                onClick={() => void confirmCancelReason()}
+                className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+              >
+                {saving ? "جاري التحميل" : "تأكيد الإلغاء"}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setCancelReasonPrompt(null);
+                  setCancelReasonText("");
+                }}
+                className="rounded-xl bg-white px-3 py-2 text-sm font-extrabold text-[#14213D] ring-1 ring-[#E5E5E5]"
+              >
+                رجوع
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {sheetDayPrompt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-4 text-[#14213D] shadow-lg">
@@ -1532,7 +1599,7 @@ export function CsCallSheet({
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => void save(true, false, true)}
+                onClick={() => openCancelReasonPrompt("cancel")}
                 className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
               >
                 {saving ? "جاري التحميل" : "لاغى"}
@@ -1544,7 +1611,7 @@ export function CsCallSheet({
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => void cancelAfterSave()}
+                  onClick={() => openCancelReasonPrompt("cancel_after_save")}
                   className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
                 >
                   {saving ? "جاري التحميل" : "إلغاء بعد الحفظ"}
