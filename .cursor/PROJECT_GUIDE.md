@@ -458,12 +458,40 @@
 
 **ملاحظة:** لا ترفع `.env` إلى GitHub. إعدادات Vercel: Project → Settings → Environment Variables.
 
+### انقطاع `/cs` ERROR 510461111 — السبب وتجنّبه
+
+**السبب المؤكد (إنتاج):** Vercel Function (`fra1`/`arn1`) ما قدرش يوصل MySQL على Hostinger:
+
+`PrismaClientInitializationError: Can't reach database server at srv1729.hstgr.io:3306`
+
+الرقم على الموبايل (`510461111`) هو digest لنفس الخطأ. مش باج من آخر كوميت؛ Redeploy لوحده ما بيصلحش لو الـ DB لسه مش بترد. الموقع بيرجع لما الاتصال يرجع + Reload.
+
+**ثبّت Remote MySQL (Hostinger hPanel):**
+
+1. Databases → MySQL → القاعدة شغالة وphpMyAdmin بيفتح.
+2. Remote MySQL: فعّل الوصول البعيد وخلّي الـ host `%` (Vercel IP ديناميك — متقفلش بعد شغل محلي).
+3. متغيّرش يوزر/باسورد من غير تحديث `DATABASE_URL` في Vercel Production ثم Redeploy.
+4. تحقق سريع من الجهاز: TCP لـ `srv1729.hstgr.io:3306` + `/cs/login` = 200 وبدون `Can't reach` في Vercel logs.
+
+**لو ERROR 510461111 رجع — قبل أي rollback كود:**
+
+1. Vercel → Logs → ابحث `Can't reach database server` أو `PrismaClientInitializationError`.
+2. لو موجودة → المشكلة Hostinger/شبكة/Remote MySQL، مش الكود.
+3. hPanel: MySQL شغال + Remote MySQL `%` + phpMyAdmin.
+4. بعد رجوع الاتصال: Reload على `/cs` — من غير نشر جديد.
+5. لو Remote MySQL مفتوح ولسه `Can't reach`: افتح تذكرة Hostinger بالنص التالي.
+
+**نص تذكرة Hostinger (انسخه):**
+
+> Vercel serverless (regions fra1/arn1) cannot connect to MySQL at `srv1729.hstgr.io:3306`. Prisma error: Can't reach database server. Please confirm the database is running, Remote MySQL allows `%` (or all external clients), and firewall/security is not blocking port 3306 from Vercel egress IPs.
+
 ---
 
 ## سجل التعديلات (جلسات العمل معاً)
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| انقطاع /cs ERROR 510461111 — توثيق السبب والتجنّب | السبب: Vercel مش واصل `srv1729.hstgr.io:3306`؛ تحقق TCP + login 200 + cant_reach=0؛ دليل تشغيل: Remote MySQL `%`، checklist قبل rollback، نص تذكرة Hostinger | `.cursor/PROJECT_GUIDE.md` |
 | قفل شيت تميمة يمنع إلغاء/تعديل غير الأدمن | لو اليوم متجمّد (قفل أو طباعة≥4): إخفاء إلغاء بعد الحفظ وتعطيل المتابعة لغير الأدمن؛ باكند يرفض؛ الأدمن فقط | `temima-sheet-edits.ts`, `confirmations.ts`, `call-sheet.tsx`, `orders/[id]/page.tsx` |
 | بوباب سبب الإلغاء | قبل لاغى/إلغاء بعد الحفظ؛ السبب يُحفظ في failReason ويظهر في detail الصلاحية؛ الباكند يرفض الإلغاء بدون سبب | `call-sheet.tsx`, `confirmations.ts` |
 | إلغاء بعد الحفظ + صلاحية أكشنات الأوردر | زر أعلى بدل كارت الفاتورة؛ CANCELLED + خروج تميمة (exclude/freeze)؛ سجل صلاحية: إلغاء بعد الحفظ / لاغى / لم يرد / بدء / توزيع / شحن / متابعة | `call-sheet.tsx`, `confirmations.ts`, `order-activity.ts`, `assignments.ts` |
