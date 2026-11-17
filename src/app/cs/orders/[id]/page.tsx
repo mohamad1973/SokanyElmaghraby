@@ -6,6 +6,7 @@ import { getCsConfirmation, parseOrderTotalDelta, resolveCsViewer, serializeDepo
 import { getPrismaClient } from "@/lib/db";
 import { getCsCarrierByCode } from "@/lib/cs/sokany-waybill";
 import { usesSokanyWaybillPrint } from "@/lib/cs/sokany-waybill-types";
+import { isTemimaConfirmationOnFrozenSheet } from "@/lib/cs/temima-sheet-edits";
 import { requireCsSession } from "@/lib/session-guards";
 
 import { CsCallSheet, HomeConfirmCallSheet } from "./call-sheet";
@@ -90,6 +91,10 @@ export default async function CsOrderPage({ params }: Props) {
   const parentConfirmationId =
     row.parentConfirmationId && row.parentConfirmationId > 0 ? row.parentConfirmationId : null;
   const hasReturnChildren = !fulfillmentKind && !parentConfirmationId ? await hasReturnChildrenOf(confirmation.id) : false;
+  const temimaSheet =
+    confirmation.shippingCompany === "sayed_temima"
+      ? await isTemimaConfirmationOnFrozenSheet(confirmation.id)
+      : { frozen: false, dayYmd: null as string | null };
 
   if (viewer.isHomeConfirmOnly) {
     return (
@@ -150,6 +155,7 @@ export default async function CsOrderPage({ params }: Props) {
       orderTotalDelta={parseOrderTotalDelta(row.orderTotalDelta)}
       canApproveItems={viewer.isAdmin}
       canEditSavedInfo={viewer.isAdmin}
+      temimaSheetFrozen={temimaSheet.frozen}
       fulfillmentKind={fulfillmentKind}
       parentConfirmationId={parentConfirmationId}
       hasReturnChildren={hasReturnChildren}

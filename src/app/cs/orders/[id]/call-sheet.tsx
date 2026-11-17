@@ -111,6 +111,8 @@ type Props = {
   orderTotalDelta?: number | null;
   canApproveItems?: boolean;
   canEditSavedInfo?: boolean;
+  /** Temima sheet day for this order is frozen (print lock or freeze button). */
+  temimaSheetFrozen?: boolean;
   maintenanceTechNote?: string | null;
   fulfillmentKind?: string | null;
   parentConfirmationId?: number | null;
@@ -373,6 +375,7 @@ export function CsCallSheet({
   orderTotalDelta: initialOrderTotalDelta,
   canApproveItems = false,
   canEditSavedInfo = false,
+  temimaSheetFrozen = false,
   maintenanceTechNote = null,
   fulfillmentKind = null,
   parentConfirmationId: _parentConfirmationId = null,
@@ -380,6 +383,7 @@ export function CsCallSheet({
 }: Props) {
   const confirmed = status === "CONFIRMED";
   const showFollowUp = confirmed || Boolean(postCancel?.at);
+  const sheetLockedForViewer = temimaSheetFrozen && !canEditSavedInfo;
   const lockedShipping = String(shippingCompany || "").trim() || null;
 
   const [snapshot, setSnapshot] = useState(initialSnapshot);
@@ -587,7 +591,7 @@ export function CsCallSheet({
         ? "مدفوع بالكامل"
         : "مدفوع جزئي"
       : null;
-  const lockRecorded = showFollowUp && !canEditSavedInfo;
+  const lockRecorded = showFollowUp && (!canEditSavedInfo || sheetLockedForViewer);
   const paymentState = effectivePaymentState({
     paymentMethod: snapshot?.paymentMethod,
     paymentMethodId: snapshot?.paymentMethodId,
@@ -597,7 +601,11 @@ export function CsCallSheet({
   });
   const payBadge = paymentStateBadge(paymentState);
   const canCancelAfterSave =
-    showFollowUp && !cancelledAfterSave && !fu.handedToCarrier && status === "CONFIRMED";
+    showFollowUp &&
+    !cancelledAfterSave &&
+    !fu.handedToCarrier &&
+    status === "CONFIRMED" &&
+    !sheetLockedForViewer;
 
   const payloadAnswers: CsChecklistAnswerInput[] = useMemo(() => {
     const base = CS_CHECKLIST_ITEMS.map((item) => {
@@ -1622,9 +1630,14 @@ export function CsCallSheet({
                   ملغى بعد الحفظ
                 </span>
               ) : null}
+              {sheetLockedForViewer ? (
+                <span className="rounded-xl bg-amber-100 px-3 py-2 text-sm font-extrabold text-amber-900">
+                  الشيت متقفّل — للأدمن فقط
+                </span>
+              ) : null}
               <button
                 type="button"
-                disabled={saving || cancelledAfterSave}
+                disabled={saving || cancelledAfterSave || sheetLockedForViewer}
                 onClick={() => void save(false)}
                 className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
               >
@@ -1695,31 +1708,46 @@ export function CsCallSheet({
         </div>
       ) : (
         <div className="grid content-start gap-2 sm:grid-cols-2">
-          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+          <label
+            className={`flex flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5] ${
+              sheetLockedForViewer ? "pointer-events-none opacity-60" : "cursor-pointer"
+            }`}
+          >
             <span className="text-sm font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
               checked={fu.handedToCarrier}
+              disabled={sheetLockedForViewer}
               onChange={(e) => setFu((p) => ({ ...p, handedToCarrier: e.target.checked }))}
             />
           </label>
-          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+          <label
+            className={`flex flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5] ${
+              sheetLockedForViewer ? "pointer-events-none opacity-60" : "cursor-pointer"
+            }`}
+          >
             <span className="text-sm font-extrabold text-[#14213D]">تم التسليم للعميل</span>
             <p className="mt-1 text-sm text-[#14213D]/60">من التتبع أو تأكيد الاستلام</p>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
               checked={fu.deliveredToCustomer}
+              disabled={sheetLockedForViewer}
               onChange={(e) => setFu((p) => ({ ...p, deliveredToCustomer: e.target.checked }))}
             />
           </label>
-          <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
+          <label
+            className={`flex flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5] ${
+              sheetLockedForViewer ? "pointer-events-none opacity-60" : "cursor-pointer"
+            }`}
+          >
             <span className="text-sm font-extrabold text-[#14213D]">متابعة العميل</span>
             <input
               type="checkbox"
               className="mt-4 size-6 accent-[#FCA311]"
               checked={fu.customerFollowUp}
+              disabled={sheetLockedForViewer}
               onChange={(e) => setFu((p) => ({ ...p, customerFollowUp: e.target.checked }))}
             />
           </label>

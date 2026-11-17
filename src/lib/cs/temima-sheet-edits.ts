@@ -830,3 +830,47 @@ export async function excludeTemimaOrder(dayYmd: string, confirmationId: number)
   });
   return { ok: true as const, edit: { dayYmd, confirmationId, kind: "exclude" as const } };
 }
+
+/** True when this confirmation belongs to a Temima sheet day that is frozen (manual freeze or print lock). */
+export async function isTemimaConfirmationOnFrozenSheet(confirmationId: number) {
+  if (!Number.isInteger(confirmationId) || confirmationId <= 0) {
+    return { frozen: false as const, dayYmd: null as string | null };
+  }
+  const owners = await listEarliestFreezeDays([confirmationId]);
+  const freezeOwned = owners.get(confirmationId) || null;
+  if (freezeOwned && (await hasTemimaFreezeDay(freezeOwned))) {
+    return { frozen: true as const, dayYmd: freezeOwned };
+  }
+
+  const prisma = getPrismaClient();
+  if (!prisma) return { frozen: false as const, dayYmd: null as string | null };
+  const row = await prisma.csOrderConfirmation.findUnique({
+    where: { id: confirmationId },
+    select: {
+      shippingCompany: true,
+      status: true,
+      confirmedAt: true,
+      confirmationEditedAt: true,
+      shippingAssignedAt: true,
+      handedToCarrier: true,
+      handedToCarrierAt: true,
+      customerSnapshot: true,
+    },
+  });
+  if (!row || row.shippingCompany !== "sayed_temima") {
+    return { frozen: false as const, dayYmd: null as string | null };
+  }
+  const cutoffs = await listTemimaCutoffs();
+  const dayYmd = sayedSheetYmd(
+    {
+      ...row,
+      // Sheet-day rules require CONFIRMED; cancelled rows still need their historical day.
+      status: "CONFIRMED",
+    },
+    cutoffs,
+  );
+  if (dayYmd && (await hasTemimaFreezeDay(dayYmd))) {
+    return { frozen: true as const, dayYmd };
+  }
+  return { frozen: false as const, dayYmd };
+}

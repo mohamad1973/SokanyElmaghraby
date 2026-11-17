@@ -1835,6 +1835,17 @@ export async function saveCsConfirmation(input: {
         missing: [] as string[],
       };
     }
+    if (!input.canEditSavedInfo) {
+      const { isTemimaConfirmationOnFrozenSheet } = await import("@/lib/cs/temima-sheet-edits");
+      const sheet = await isTemimaConfirmationOnFrozenSheet(input.id);
+      if (sheet.frozen) {
+        return {
+          ok: false as const,
+          message: "الشيت متقفّل. التعديل والإلغاء للأدمن فقط.",
+          missing: [] as string[],
+        };
+      }
+    }
     if (typed.handedToCarrier) {
       return {
         ok: false as const,
@@ -1908,6 +1919,17 @@ export async function saveCsConfirmation(input: {
     followUpEditable &&
     (input.followUp || hasShippingMetaUpdate || input.salesOrderNumber !== undefined || input.postCancel)
   ) {
+    if (!input.canEditSavedInfo && row.shippingCompany === "sayed_temima") {
+      const { isTemimaConfirmationOnFrozenSheet } = await import("@/lib/cs/temima-sheet-edits");
+      const sheet = await isTemimaConfirmationOnFrozenSheet(input.id);
+      if (sheet.frozen) {
+        return {
+          ok: false as const,
+          message: "الشيت متقفّل. التعديل والإلغاء للأدمن فقط.",
+          missing: [] as string[],
+        };
+      }
+    }
     const now = new Date();
     const data: Record<string, unknown> = { ...shippingMetaPatch };
     const editSaved = Boolean(input.canEditSavedInfo);
@@ -2045,6 +2067,17 @@ export async function saveCsConfirmation(input: {
     hasShippingMetaUpdate &&
     Object.keys(shippingMetaPatch).length > 0
   ) {
+    if (!input.canEditSavedInfo && row.shippingCompany === "sayed_temima") {
+      const { isTemimaConfirmationOnFrozenSheet } = await import("@/lib/cs/temima-sheet-edits");
+      const sheet = await isTemimaConfirmationOnFrozenSheet(input.id);
+      if (sheet.frozen) {
+        return {
+          ok: false as const,
+          message: "الشيت متقفّل. التعديل والإلغاء للأدمن فقط.",
+          missing: [] as string[],
+        };
+      }
+    }
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
@@ -2275,6 +2308,17 @@ export async function saveCsConfirmation(input: {
   }
 
   const alreadySaved = row.status === CS_CONFIRMATION_STATUS.CONFIRMED && Boolean(row.confirmedAt);
+  if (alreadySaved && !input.canEditSavedInfo && (shippingCompany === "sayed_temima" || row.shippingCompany === "sayed_temima")) {
+    const { isTemimaConfirmationOnFrozenSheet } = await import("@/lib/cs/temima-sheet-edits");
+    const sheet = await isTemimaConfirmationOnFrozenSheet(input.id);
+    if (sheet.frozen) {
+      return {
+        ok: false as const,
+        message: "الشيت متقفّل. التعديل والإلغاء للأدمن فقط.",
+        missing: [] as string[],
+      };
+    }
+  }
   const savedAt = new Date();
   const shippingChanged = Boolean(shippingCompany) && row.shippingCompany !== shippingCompany;
   await prisma.csOrderConfirmation.update({
