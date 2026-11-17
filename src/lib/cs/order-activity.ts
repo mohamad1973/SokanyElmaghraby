@@ -10,6 +10,10 @@ export const ORDER_ACTIVITY_ACTIONS = [
   "start",
   "shipping",
   "inspect",
+  "cancel",
+  "fail_contact",
+  "cancel_after_save",
+  "follow_up",
   "other",
 ] as const;
 
@@ -23,6 +27,10 @@ export const ORDER_ACTIVITY_LABEL: Record<OrderActivityAction, string> = {
   start: "بدء مكالمة",
   shipping: "شركة الشحن",
   inspect: "فحص / صيانة",
+  cancel: "لاغى",
+  fail_contact: "لم يرد",
+  cancel_after_save: "إلغاء بعد الحفظ",
+  follow_up: "متابعة بعد الحفظ",
   other: "إجراء",
 };
 

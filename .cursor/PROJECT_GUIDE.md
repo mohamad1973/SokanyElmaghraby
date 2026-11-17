@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| إلغاء بعد الحفظ + صلاحية أكشنات الأوردر | زر أعلى بدل كارت الفاتورة؛ CANCELLED + خروج تميمة (exclude/freeze)؛ سجل صلاحية: إلغاء بعد الحفظ / لاغى / لم يرد / بدء / توزيع / شحن / متابعة | `call-sheet.tsx`, `confirmations.ts`, `order-activity.ts`, `assignments.ts` |
 | شكوى التكت في تقرير تسليم الصيانة + إخفاء ملاحظات كارت CS | عمود الملاحظة في طباعة تقرير التسليم يعرض `complaintNote` من التكت (+ ملاحظة الفرز إن وجدت)؛ شيل NumberedNotesField من كارت تأكيد CS العادي (منزل يبقى) | `sc-return-tickets.ts`, `maintenance-client.tsx`, `call-sheet.tsx` |
 | مخزون معيب جديد لم يُبع | تاب تسجيل منفصل؛ أصل `unsold_stock` vs مرتجع شحن؛ نفس فني/عائد؛ شارات + أصل/استخدام في التقرير المطبوع | `unsold-stock-intake.ts`, `maintenance-origin.ts`, `maintenance-client.tsx`, `maintenance-panels.tsx`, `maintenance-tech-report.ts` |
 | بوليصة Cancelled مش «لا يوجد تحصيل» | COD بوليصة سوكاني/تميمة بنفس قاعدة التسوية: ملغي يفضل قيمة الشحنة؛ مدفوع الموقع فقط لو Woo completed | `order-window.ts`, `sokany-waybill.ts`, `temima-settlement.ts` |

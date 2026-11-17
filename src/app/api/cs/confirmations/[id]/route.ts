@@ -20,6 +20,7 @@ type Body = {
   finalize?: boolean;
   failContact?: boolean;
   cancelOrder?: boolean;
+  cancelAfterSave?: boolean;
   failReason?: string;
   customerNote?: string | null;
   trackingNumber?: string | null;
@@ -120,6 +121,7 @@ export async function PUT(request: Request, context: Context) {
     !body.finalize &&
     !body.failContact &&
     !body.cancelOrder &&
+    !body.cancelAfterSave &&
     body.trackingNumber === undefined &&
     body.waybillPrinted === undefined &&
     body.depositAmount === undefined &&
@@ -157,6 +159,7 @@ export async function PUT(request: Request, context: Context) {
     !body.finalize &&
     !body.failContact &&
     !body.cancelOrder &&
+    !body.cancelAfterSave &&
     body.trackingNumber === undefined &&
     body.waybillPrinted === undefined &&
     body.depositAmount === undefined &&
@@ -196,6 +199,7 @@ export async function PUT(request: Request, context: Context) {
     !body.finalize &&
     !body.failContact &&
     !body.cancelOrder &&
+    !body.cancelAfterSave &&
     body.trackingNumber === undefined &&
     body.waybillPrinted === undefined &&
     body.depositAmount === undefined &&
@@ -249,6 +253,7 @@ export async function PUT(request: Request, context: Context) {
     finalize: Boolean(body.finalize),
     failContact: Boolean(body.failContact),
     cancelOrder: Boolean(body.cancelOrder),
+    cancelAfterSave: homeConfirmMode ? false : Boolean(body.cancelAfterSave),
     failReason: body.failReason,
     customerNote: homeConfirmMode ? undefined : body.customerNote,
     trackingNumber: homeConfirmMode ? undefined : body.trackingNumber,

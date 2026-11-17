@@ -382,6 +382,7 @@ export async function fairSplitAssign(input: {
     if (!nums.length) continue;
 
     let chunkAssigned = 0;
+    const assignedIds: number[] = [];
     for (const row of chunk) {
       if (row.assignedAgentId != null && row.assignedAgentId !== agentId) continue;
       // Assignee only — leave confirmedByAgentId untouched.
@@ -391,6 +392,7 @@ export async function fairSplitAssign(input: {
       });
       assigned += 1;
       chunkAssigned += 1;
+      assignedIds.push(row.id);
     }
 
     const from = Math.min(...nums);
@@ -403,6 +405,21 @@ export async function fairSplitAssign(input: {
         createdById: input.createdById,
       },
     });
+    if (assignedIds.length) {
+      try {
+        const { recordOrderActivityMany } = await import("@/lib/cs/order-activity");
+        await recordOrderActivityMany(
+          assignedIds.map((confirmationId) => ({
+            confirmationId,
+            actorAgentId: input.createdById,
+            action: "assign" as const,
+            detail: `توزيع · وكيل #${agentId} · من ${from} إلى ${to}`,
+          })),
+        );
+      } catch (error) {
+        console.error("[assignments] assign activity failed", error);
+      }
+    }
     ranges.push({ agentId, from, to, count: chunkAssigned });
   }
 

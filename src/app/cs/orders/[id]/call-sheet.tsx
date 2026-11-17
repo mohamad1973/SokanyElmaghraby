@@ -515,11 +515,9 @@ export function CsCallSheet({
   const [depositPaidPeriod, setDepositPaidPeriod] = useState<"morning" | "evening" | "">(() => paidParts.period);
   const [requestingApproval, setRequestingApproval] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
-  const [postInvoice, setPostInvoice] = useState<"before" | "after" | "">(
-    () => postCancel?.invoice || "",
+  const [cancelledAfterSave, setCancelledAfterSave] = useState(
+    () => status === "CANCELLED" || Boolean(postCancel?.at),
   );
-  const [postSystemNo, setPostSystemNo] = useState(() => String(postCancel?.systemNo || "").trim());
-  const [postRefundPaid, setPostRefundPaid] = useState(Boolean(postCancel?.refundPaid));
   const initialDelta = splitOrderTotalDelta(initialOrderTotalDelta);
   const [discountAmount, setDiscountAmount] = useState(() =>
     initialDelta.sign === "minus" ? initialDelta.amount : "",
@@ -594,9 +592,8 @@ export function CsCallSheet({
     paymentState: snapshot?.paymentState,
   });
   const payBadge = paymentStateBadge(paymentState);
-  const fawryPaid =
-    paymentState === "paid" && /fawry|فورى|فوري/i.test(`${snapshot?.paymentMethod || ""} ${snapshot?.paymentMethodId || ""}`);
-  const showCancelCard = showFollowUp && (!fu.handedToCarrier || postRefundPaid);
+  const canCancelAfterSave =
+    showFollowUp && !cancelledAfterSave && !fu.handedToCarrier && status === "CONFIRMED";
 
   const payloadAnswers: CsChecklistAnswerInput[] = useMemo(() => {
     const base = CS_CHECKLIST_ITEMS.map((item) => {
@@ -667,24 +664,6 @@ export function CsCallSheet({
 
     const to = parseDepositToKey(depositToKey);
 
-    if (showFollowUp && postRefundPaid) {
-      if (fu.handedToCarrier) {
-        setSaving(false);
-        setMessage("لا يمكن الإلغاء بعد التسليم لشركة الشحن.");
-        return;
-      }
-      if (postInvoice !== "before" && postInvoice !== "after") {
-        setSaving(false);
-        setMessage("حدّد الإلغاء قبل الفاتورة أو بعد الفاتورة.");
-        return;
-      }
-      if (postInvoice === "after" && !postSystemNo.trim()) {
-        setSaving(false);
-        setMessage("اكتب رقم الإلغاء على السيستم.");
-        return;
-      }
-    }
-
     if (finalize && !failContact && !cancelOrder && !showFollowUp) {
       const typedDeposit = Number(depositAmount.replace(/,/g, "").trim());
       const hasDeposit = depositAmount.trim() !== "" && Number.isFinite(typedDeposit) && typedDeposit > 0;
@@ -748,10 +727,6 @@ export function CsCallSheet({
             : discountAmount.trim() === ""
               ? null
               : undefined,
-        postCancel:
-          showFollowUp && postRefundPaid
-            ? { invoice: postInvoice, systemNo: postSystemNo, refundPaid: true }
-            : undefined,
         followUp: showFollowUp ? fu : undefined,
         sheetDayChoice,
       }),
@@ -805,7 +780,7 @@ export function CsCallSheet({
     const bostaNote = data.bostaMessage ? ` ${data.bostaMessage}` : "";
 
     if (showFollowUp) {
-      setMessage(postRefundPaid ? "تم تسجيل الإلغاء." : data.bostaMessage || "تم حفظ المتابعة.");
+      setMessage(data.bostaMessage || "تم حفظ المتابعة.");
       return;
     }
 
@@ -819,6 +794,30 @@ export function CsCallSheet({
         : "تم حفظ المسودة.") + bostaNote,
     );
     if (finalize) window.location.href = "/cs";
+  }
+
+  async function cancelAfterSave() {
+    if (saving || !canCancelAfterSave) return;
+    const ok = window.confirm("تأكيد إلغاء بعد الحفظ؟ الأوردر هيخرج من شيت تميمة ويتسجّل لاغى في الصلاحية.");
+    if (!ok) return;
+    setSaving(true);
+    setMessage("");
+    const res = await fetch(`/api/cs/confirmations/${confirmationId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cancelAfterSave: true }),
+    });
+    const data = (await res.json()) as { message?: string };
+    setSaving(false);
+    if (!res.ok) {
+      setMessage(data.message || "تعذر الإلغاء بعد الحفظ.");
+      return;
+    }
+    setCancelledAfterSave(true);
+    setMessage("تم الإلغاء بعد الحفظ.");
+    window.setTimeout(() => {
+      window.location.href = "/cs";
+    }, 600);
   }
 
   const inputCls =
@@ -1540,14 +1539,31 @@ export function CsCallSheet({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void save(false)}
-              className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
-            >
-              {saving ? "جاري التحميل" : "حفظ المتابعة"}
-            </button>
+            <>
+              {canCancelAfterSave ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void cancelAfterSave()}
+                  className="rounded-xl bg-red-700 px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+                >
+                  {saving ? "جاري التحميل" : "إلغاء بعد الحفظ"}
+                </button>
+              ) : null}
+              {cancelledAfterSave ? (
+                <span className="rounded-xl bg-red-100 px-3 py-2 text-sm font-extrabold text-red-800">
+                  ملغى بعد الحفظ
+                </span>
+              ) : null}
+              <button
+                type="button"
+                disabled={saving || cancelledAfterSave}
+                onClick={() => void save(false)}
+                className="rounded-xl bg-[#14213D] px-3 py-2 text-sm font-extrabold text-white disabled:opacity-60"
+              >
+                {saving ? "جاري التحميل" : "حفظ المتابعة"}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1612,54 +1628,6 @@ export function CsCallSheet({
         </div>
       ) : (
         <div className="grid content-start gap-2 sm:grid-cols-2">
-          {showCancelCard ? (
-            <div className="flex flex-col justify-between rounded-2xl bg-red-50 p-3 shadow ring-2 ring-red-700">
-              <div>
-                <p className="text-sm font-extrabold text-red-800">إلغاء بعد التأكيد</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPostInvoice("before")}
-                    className={`rounded-lg px-2 py-1 text-xs font-extrabold ${
-                      postInvoice === "before" ? "bg-red-700 text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    قبل الفاتورة
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPostInvoice("after")}
-                    className={`rounded-lg px-2 py-1 text-xs font-extrabold ${
-                      postInvoice === "after" ? "bg-red-700 text-white" : "bg-white text-[#14213D]"
-                    }`}
-                  >
-                    بعد الفاتورة
-                  </button>
-                </div>
-                {postInvoice === "after" ? (
-                  <input
-                    value={postSystemNo}
-                    onChange={(e) => setPostSystemNo(e.target.value)}
-                    placeholder="رقم الإلغاء على السيستم"
-                    className="mt-2 w-full rounded-lg border border-[#E5E5E5] bg-white px-2 py-1.5 text-xs font-bold"
-                  />
-                ) : null}
-                {fawryPaid ? <p className="mt-2 text-xs font-extrabold text-red-800">طلب استرداد المبلغ</p> : null}
-                {depositApprovalStatus === "approved" || initialDepositPaid ? (
-                  <p className="mt-1 text-xs font-extrabold text-red-800">طلب استرداد الديبوزت</p>
-                ) : null}
-              </div>
-              <label className="mt-3 flex items-center gap-2 text-sm font-extrabold text-[#14213D]">
-                <input
-                  type="checkbox"
-                  className="size-5 accent-red-700"
-                  checked={postRefundPaid}
-                  onChange={(e) => setPostRefundPaid(e.target.checked)}
-                />
-                تم الدفع للعميل
-              </label>
-            </div>
-          ) : null}
           <label className="flex cursor-pointer flex-col justify-between rounded-2xl bg-white p-3 shadow ring-2 ring-[#E5E5E5]">
             <span className="text-sm font-extrabold text-[#14213D]">تم التسليم لشركة الشحن</span>
             <input

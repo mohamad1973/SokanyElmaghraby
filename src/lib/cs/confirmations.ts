@@ -1238,16 +1238,32 @@ export async function startCsConfirmation(id: number, agentId: number) {
     return { ok: true as const, confirmation: confirmation! };
   }
 
+  const startedNow = !row.startedAt;
+  const startedAt = row.startedAt || new Date();
   const updated = await prisma.csOrderConfirmation.update({
     where: { id },
     data: {
       status: CS_CONFIRMATION_STATUS.IN_PROGRESS,
       assignedAgentId: agentId,
-      startedAt: row.startedAt || new Date(),
+      startedAt,
       customerSnapshot: snapshot ?? undefined,
     },
     include: { answers: true, assignedAgent: true, confirmedByAgent: true },
   });
+  if (startedNow) {
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      await recordOrderActivity({
+        confirmationId: id,
+        actorAgentId: agentId,
+        action: "start",
+        detail: "بدء مكالمة",
+        at: startedAt instanceof Date ? startedAt : new Date(startedAt),
+      });
+    } catch (error) {
+      console.error("[cs] start activity record failed", error);
+    }
+  }
 
   return { ok: true as const, confirmation: updated };
 }
@@ -1467,6 +1483,8 @@ export async function saveCsConfirmation(input: {
   finalize: boolean;
   failContact?: boolean;
   cancelOrder?: boolean;
+  /** Post-save cancel: leave Temima sheet, mark CANCELLED, audit in صلاحية */
+  cancelAfterSave?: boolean;
   failReason?: string;
   /** Freeform numbered customer notes → customerSnapshot.customerNote */
   customerNote?: string | null;
@@ -1535,6 +1553,7 @@ export async function saveCsConfirmation(input: {
       customerNote: note,
     };
     if (input.failContact) {
+      const at = new Date();
       await prisma.csOrderConfirmation.update({
         where: { id: input.id },
         data: {
@@ -1544,9 +1563,22 @@ export async function saveCsConfirmation(input: {
           customerSnapshot: nextSnap,
         } as never,
       });
+      try {
+        const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+        await recordOrderActivity({
+          confirmationId: input.id,
+          actorAgentId: input.agentId,
+          action: "fail_contact",
+          detail: note || "تأجيل",
+          at,
+        });
+      } catch (error) {
+        console.error("[cs] home-confirm fail_contact activity failed", error);
+      }
       return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
     }
     if (input.cancelOrder) {
+      const at = new Date();
       await prisma.csOrderConfirmation.update({
         where: { id: input.id },
         data: {
@@ -1556,6 +1588,18 @@ export async function saveCsConfirmation(input: {
           customerSnapshot: nextSnap,
         } as never,
       });
+      try {
+        const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+        await recordOrderActivity({
+          confirmationId: input.id,
+          actorAgentId: input.agentId,
+          action: "cancel",
+          detail: note || "لاغى",
+          at,
+        });
+      } catch (error) {
+        console.error("[cs] home-confirm cancel activity failed", error);
+      }
       return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
     }
     if (!input.finalize) {
@@ -1603,7 +1647,9 @@ export async function saveCsConfirmation(input: {
   const sheetChoice =
     input.sheetDayChoice === "previous" || input.sheetDayChoice === "today" ? input.sheetDayChoice : null;
   let closedSheetDay = "";
-  const leavingSheet = Boolean(input.failContact || input.cancelOrder || input.postCancel?.refundPaid);
+  const leavingSheet = Boolean(
+    input.failContact || input.cancelOrder || input.cancelAfterSave || input.postCancel?.refundPaid,
+  );
   if (
     !leavingSheet &&
     row.status === CS_CONFIRMATION_STATUS.CONFIRMED &&
@@ -1776,6 +1822,83 @@ export async function saveCsConfirmation(input: {
   const followUpEditable =
     row.status === CS_CONFIRMATION_STATUS.CONFIRMED || Boolean(typed.postCancelAt);
 
+  if (input.cancelAfterSave) {
+    const alreadyCancelled =
+      row.status === CS_CONFIRMATION_STATUS.CANCELLED && Boolean(typed.postCancelAt);
+    if (alreadyCancelled) {
+      return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
+    }
+    if (row.status !== CS_CONFIRMATION_STATUS.CONFIRMED) {
+      return {
+        ok: false as const,
+        message: "الإلغاء بعد الحفظ للأوردرات المحفوظة فقط.",
+        missing: [] as string[],
+      };
+    }
+    if (typed.handedToCarrier) {
+      return {
+        ok: false as const,
+        message: "لا يمكن الإلغاء بعد التسليم لشركة الشحن.",
+        missing: [] as string[],
+      };
+    }
+    const now = new Date();
+    try {
+      const { listTemimaCutoffs } = await import("@/lib/cs/temima-cutoff");
+      const { sayedSheetYmd } = await import("@/lib/cs/temima-sheet");
+      const { excludeTemimaOrder } = await import("@/lib/cs/temima-sheet-edits");
+      const { cairoTodayYmd } = await import("@/lib/cs/order-window");
+      const cutoffs = await listTemimaCutoffs();
+      const sheetDay = sayedSheetYmd(
+        {
+          id: row.id,
+          confirmedAt: row.confirmedAt,
+          confirmationEditedAt: row.confirmationEditedAt,
+          shippingAssignedAt: row.shippingAssignedAt,
+          shippingCompany: row.shippingCompany,
+          status: CS_CONFIRMATION_STATUS.CONFIRMED,
+          handedToCarrier: typed.handedToCarrier,
+          handedToCarrierAt: row.handedToCarrierAt,
+          customerSnapshot: row.customerSnapshot,
+        } as never,
+        cutoffs,
+      );
+      const days = new Set<string>();
+      if (sheetDay) days.add(sheetDay);
+      days.add(cairoTodayYmd());
+      for (const day of days) {
+        await excludeTemimaOrder(day, input.id);
+      }
+    } catch (error) {
+      console.error("[confirmations] cancelAfterSave temima cleanup failed", error);
+    }
+    await prisma.csOrderConfirmation.update({
+      where: { id: input.id },
+      data: {
+        status: CS_CONFIRMATION_STATUS.CANCELLED,
+        failReason: "الغاء بعد الحفظ",
+        postCancelAt: now,
+        postCancelRefundPaid: false,
+        postCancelInvoice: null,
+        postCancelSystemNo: null,
+        assignedAgentId: input.agentId,
+      } as never,
+    });
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      await recordOrderActivity({
+        confirmationId: input.id,
+        actorAgentId: input.agentId,
+        action: "cancel_after_save",
+        detail: "الغاء بعد الحفظ",
+        at: now,
+      });
+    } catch (error) {
+      console.error("[confirmations] cancelAfterSave activity failed", error);
+    }
+    return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
+  }
+
   // Post-confirmation follow-up update (includes tracking / waybill / deposit / cancel / sales order)
   if (
     followUpEditable &&
@@ -1849,6 +1972,40 @@ export async function saveCsConfirmation(input: {
     if (editSaved && input.answers?.length && !post?.refundPaid) {
       await persistChecklistAnswers(input.id, input.answers);
     }
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      if (post?.refundPaid) {
+        await recordOrderActivity({
+          confirmationId: input.id,
+          actorAgentId: input.agentId,
+          action: "cancel_after_save",
+          detail: "الغاء بعد التأكيد (قديم)",
+          at: now,
+        });
+      } else if (input.followUp) {
+        const bits: string[] = [];
+        if (input.followUp.handedToCarrier) bits.push("تسليم لشركة الشحن");
+        if (input.followUp.deliveredToCustomer) bits.push("تسليم للعميل");
+        if (input.followUp.customerFollowUp) bits.push("متابعة العميل");
+        await recordOrderActivity({
+          confirmationId: input.id,
+          actorAgentId: input.agentId,
+          action: "follow_up",
+          detail: bits.length ? bits.join(" · ") : "حفظ متابعة",
+          at: now,
+        });
+      } else if (hasShippingMetaUpdate) {
+        await recordOrderActivity({
+          confirmationId: input.id,
+          actorAgentId: input.agentId,
+          action: "edit",
+          detail: "تعديل بيانات شحن / ديبوزت",
+          at: now,
+        });
+      }
+    } catch (error) {
+      console.error("[confirmations] follow-up activity failed", error);
+    }
     const followFee = typed.bostaShippingFee == null ? null : Number(typed.bostaShippingFee);
     const bosta = post?.refundPaid
       ? null
@@ -1910,11 +2067,13 @@ export async function saveCsConfirmation(input: {
       : {};
 
   if (input.failContact) {
+    const at = new Date();
+    const detail = input.failReason?.trim() || "لم يرد";
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.FAILED_CONTACT,
-        failReason: input.failReason?.trim() || "لم يرد",
+        failReason: detail,
         assignedAgentId: input.agentId,
         customerSnapshot: mergeCustomerNote(snap),
         ...pendingDiscountClear,
@@ -1927,15 +2086,29 @@ export async function saveCsConfirmation(input: {
         console.error("[confirmations] discount notify clear on failContact failed", error);
       }
     }
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      await recordOrderActivity({
+        confirmationId: input.id,
+        actorAgentId: input.agentId,
+        action: "fail_contact",
+        detail,
+        at,
+      });
+    } catch (error) {
+      console.error("[confirmations] fail_contact activity failed", error);
+    }
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.FAILED_CONTACT, missing: [] as string[] };
   }
 
   if (input.cancelOrder) {
+    const at = new Date();
+    const detail = input.failReason?.trim() || "لاغى";
     await prisma.csOrderConfirmation.update({
       where: { id: input.id },
       data: {
         status: CS_CONFIRMATION_STATUS.CANCELLED,
-        failReason: input.failReason?.trim() || "لاغى",
+        failReason: detail,
         assignedAgentId: input.agentId,
         customerSnapshot: mergeCustomerNote(snap),
         ...pendingDiscountClear,
@@ -1947,6 +2120,18 @@ export async function saveCsConfirmation(input: {
       } catch (error) {
         console.error("[confirmations] discount notify clear on cancelOrder failed", error);
       }
+    }
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      await recordOrderActivity({
+        confirmationId: input.id,
+        actorAgentId: input.agentId,
+        action: "cancel",
+        detail,
+        at,
+      });
+    } catch (error) {
+      console.error("[confirmations] cancel activity failed", error);
     }
     return { ok: true as const, status: CS_CONFIRMATION_STATUS.CANCELLED, missing: [] as string[] };
   }
@@ -2112,6 +2297,15 @@ export async function saveCsConfirmation(input: {
         : `حفظ · ${shippingCompany || "—"}`,
       at: savedAt,
     });
+    if (shippingChanged) {
+      await recordOrderActivity({
+        confirmationId: input.id,
+        actorAgentId: input.agentId,
+        action: "shipping",
+        detail: `شركة الشحن · ${shippingCompany || "—"}`,
+        at: savedAt,
+      });
+    }
   } catch (error) {
     console.error("[cs] confirmation activity record failed", error);
   }
@@ -2235,6 +2429,18 @@ export async function setCsHandedToCarrier(input: {
       handedToCarrierAt,
     },
   });
+  try {
+    const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+    await recordOrderActivity({
+      confirmationId: input.id,
+      actorAgentId: input.agentId,
+      action: "follow_up",
+      detail: input.handedToCarrier ? "تسليم لشركة الشحن" : "إلغاء تسليم لشركة الشحن",
+      at: now,
+    });
+  } catch (error) {
+    console.error("[confirmations] handedToCarrier activity failed", error);
+  }
   return {
     ok: true as const,
     handedToCarrier: input.handedToCarrier,
@@ -2291,11 +2497,13 @@ export async function setCsShippingCompany(input: {
 
   const company = await resolveAssignableCarrierCode(input.shippingCompany);
 
+  const shippingAt = new Date();
+  const shippingChanged = row.shippingCompany !== company;
   await prisma.csOrderConfirmation.update({
     where: { id: input.id },
     data: {
       shippingCompany: company,
-      ...(row.shippingCompany !== company ? { shippingAssignedAt: company ? new Date() : null } : {}),
+      ...(shippingChanged ? { shippingAssignedAt: company ? shippingAt : null } : {}),
     },
   });
 
@@ -2327,6 +2535,21 @@ export async function setCsShippingCompany(input: {
         value: company,
       },
     });
+  }
+
+  if (shippingChanged) {
+    try {
+      const { recordOrderActivity } = await import("@/lib/cs/order-activity");
+      await recordOrderActivity({
+        confirmationId: input.id,
+        actorAgentId: input.agentId,
+        action: "shipping",
+        detail: `شركة الشحن · ${company || "—"}`,
+        at: shippingAt,
+      });
+    } catch (error) {
+      console.error("[confirmations] shipping activity failed", error);
+    }
   }
 
   return { ok: true as const, shippingCompany: company };
