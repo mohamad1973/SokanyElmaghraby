@@ -391,6 +391,119 @@ export function sheetCollectedSplit(input: {
   return { deposit, net: Math.max(0, total - deposit) };
 }
 
+function isCancelledWooStatus(wooStatus?: string | null, statusFallback?: string | null) {
+  const status = String(wooStatus || statusFallback || "")
+    .toLowerCase()
+    .trim();
+  return (
+    status === "cancelled" ||
+    status === "canceled" ||
+    status === "failed" ||
+    status === "refunded" ||
+    status === "trash"
+  );
+}
+
+/**
+ * Shared collect rules for Temima settlement + Sokany/Temima AWB:
+ * - cancelled/failed/refunded/trash → never website prepaid; full goods on COD net
+ * - Fawry/online prepaid (net 0) only when Woo status is completed
+ * - processing/pending online → still collectible
+ */
+export function applyWebsiteCollectRules(
+  split: { deposit: number; net: number },
+  input: {
+    wooStatus?: string | null;
+    status?: string | null;
+    paymentMethod?: string | null;
+    paymentMethodId?: string | null;
+    settlementDepositOverride?: number | null;
+  },
+) {
+  const wooStatus = String(input.wooStatus || input.status || "")
+    .toLowerCase()
+    .trim();
+  const goodsTotal = Math.round((split.deposit + split.net) * 100) / 100;
+  const override = input.settlementDepositOverride;
+  const hasOverride = override != null && Number.isFinite(Number(override));
+
+  if (isCancelledWooStatus(wooStatus)) {
+    return { deposit: 0, net: goodsTotal };
+  }
+
+  const fawry = isFawryMethod(input.paymentMethod, input.paymentMethodId);
+  const online = isPaidOnlineHighlight(String(input.paymentMethod || ""), input.paymentMethodId);
+  if (!(fawry || online)) return split;
+
+  if (wooStatus === "completed" && !hasOverride) {
+    if (goodsTotal > 0) return { deposit: goodsTotal, net: 0 };
+    return split;
+  }
+
+  // Not completed: undo website-"paid" zeroing so COD prints / settles as collectible.
+  if (!hasOverride) {
+    return { deposit: 0, net: goodsTotal };
+  }
+  return split;
+}
+
+/** Waybill + settlement COD split with cancelled/completed-only prepaid rules. */
+export function waybillOrSettlementCollectSplit(input: {
+  customerSnapshot: unknown;
+  depositAmount?: unknown;
+  depositPaid?: boolean | null;
+  depositApprovalStatus?: string | null;
+  orderTotalDelta?: unknown;
+  discountApprovalStatus?: string | null;
+  settlementDepositOverride?: number | null;
+  keepCancelledValue?: boolean;
+  freshPaymentState?: boolean;
+}) {
+  const snap = (input.customerSnapshot || {}) as {
+    paymentMethod?: string;
+    paymentMethodId?: string | null;
+    wooStatus?: string | null;
+    status?: string | null;
+    total?: unknown;
+    wooTotal?: unknown;
+    waybillTotal?: unknown;
+  };
+  const fawry = isFawryMethod(snap.paymentMethod, snap.paymentMethodId);
+  let orderTotalDelta = input.orderTotalDelta;
+  let discountApprovalStatus = input.discountApprovalStatus;
+  // Agents often approve a full-order discount so the COD waybill prints at 0.
+  // That must not wipe goods value for Fawry.
+  if (fawry) {
+    const base = baseTotalFromSnapshot(snap);
+    const delta = Number(orderTotalDelta);
+    const discountOk =
+      String(discountApprovalStatus || "").toLowerCase() === "approved" &&
+      Number.isFinite(delta) &&
+      delta < 0;
+    if (discountOk && base + delta <= 0) {
+      orderTotalDelta = null;
+      discountApprovalStatus = null;
+    }
+  }
+
+  const split = sheetCollectedSplit(
+    sheetSplitFromConfirmation({
+      ...input,
+      orderTotalDelta,
+      discountApprovalStatus,
+      keepCancelledValue: input.keepCancelledValue !== false,
+    }),
+  );
+
+  return applyWebsiteCollectRules(split, {
+    wooStatus: snap.wooStatus,
+    status: snap.status,
+    paymentMethod: snap.paymentMethod,
+    paymentMethodId: snap.paymentMethodId,
+    settlementDepositOverride: input.settlementDepositOverride,
+  });
+}
+
 /**
  * Real payment completion for CS badges/filters — not just payment method.
  * Online + Woo pending (no date_paid) = awaiting; online + paid/processing = paid; COD = cod.

@@ -2,14 +2,13 @@ import "server-only";
 
 import { ensureCsTables } from "@/lib/cs/agents";
 import {
-  baseTotalFromSnapshot,
   cairoTodayYmd,
   cairoYmdBounds,
   cairoYmdFromIso,
   isFawryMethod,
-  isPaidOnlineHighlight,
   sheetCollectedSplit,
   sheetSplitFromConfirmation,
+  waybillOrSettlementCollectSplit,
 } from "@/lib/cs/order-window";
 import { listTemimaSheetEdits, sayedSheetDayMap } from "@/lib/cs/temima-sheet-edits";
 import { sayedSheetYmd } from "@/lib/cs/temima-sheet";
@@ -187,71 +186,12 @@ function settlementSplit(
   freshFawry: boolean,
   keepCancelledValue = false,
 ) {
-  const snap = (row.customerSnapshot || {}) as {
-    paymentMethod?: string;
-    paymentMethodId?: string | null;
-    wooStatus?: string | null;
-    status?: string | null;
-    total?: unknown;
-    wooTotal?: unknown;
-    waybillTotal?: unknown;
-  };
-  const fawry = isFawryMethod(snap.paymentMethod, snap.paymentMethodId);
-  const online = isPaidOnlineHighlight(String(snap.paymentMethod || ""), snap.paymentMethodId);
-  // Agents often approve a full-order discount so the COD waybill prints at 0.
-  // That must not wipe Temima goods value for Fawry.
-  let orderTotalDelta = row.orderTotalDelta;
-  let discountApprovalStatus = row.discountApprovalStatus;
-  if (fawry) {
-    const base = baseTotalFromSnapshot(snap);
-    const delta = Number(orderTotalDelta);
-    const discountOk =
-      String(discountApprovalStatus || "").toLowerCase() === "approved" &&
-      Number.isFinite(delta) &&
-      delta < 0;
-    if (discountOk && base + delta <= 0) {
-      orderTotalDelta = null;
-      discountApprovalStatus = null;
-    }
-  }
-
-  const split = sheetCollectedSplit(
-    sheetSplitFromConfirmation({
-      ...row,
-      orderTotalDelta,
-      discountApprovalStatus,
-      settlementDepositOverride: override,
-      keepCancelledValue,
-      freshPaymentState: freshFawry,
-    }),
-  );
-
-  const wooStatus = String(snap.wooStatus || snap.status || "")
-    .toLowerCase()
-    .trim();
-  const cancelled =
-    wooStatus === "cancelled" ||
-    wooStatus === "canceled" ||
-    wooStatus === "failed" ||
-    wooStatus === "refunded" ||
-    wooStatus === "trash";
-  const goodsTotal = Math.round((split.deposit + split.net) * 100) / 100;
-
-  // Cancelled (etc.): never count as website deposit; keep goods value on net.
-  if (cancelled) {
-    return { deposit: 0, net: goodsTotal };
-  }
-
-  // Website prepaid deposit only when Woo status is completed.
-  if (
-    (fawry || online) &&
-    wooStatus === "completed" &&
-    (override == null || !Number.isFinite(Number(override)))
-  ) {
-    if (goodsTotal > 0) return { deposit: goodsTotal, net: 0 };
-  }
-
-  return split;
+  return waybillOrSettlementCollectSplit({
+    ...row,
+    settlementDepositOverride: override,
+    keepCancelledValue,
+    freshPaymentState: freshFawry,
+  });
 }
 
 function orderTotalOf(
