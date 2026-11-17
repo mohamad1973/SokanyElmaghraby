@@ -15,8 +15,10 @@ import {
   listBostaReceivedReturns,
   listCourierBucketReturns,
   listTemimaReturns,
+  listUnsoldStockReturns,
   maintenanceRange,
 } from "@/lib/cs/maintenance-returns";
+import { registerUnsoldStockDefects } from "@/lib/cs/unsold-stock-intake";
 import { loadScTicketById } from "@/lib/cs/sc-intake";
 import { requireCsSession } from "@/lib/session-guards";
 
@@ -105,7 +107,13 @@ export async function GET(request: Request) {
       ? await settledValue(maintenanceVarianceReport(range.from, range.to), null, "variance")
       : null;
 
-    const failed = [bosta, temima, eid, momen].find((section) => section.error);
+    const unsold = await settledValue(
+      listUnsoldStockReturns(range.from, range.to),
+      { rows: [], error: "تعذر تحميل المخزون المعيب.", detail: null },
+      "unsold",
+    );
+
+    const failed = [bosta, temima, eid, momen, unsold].find((section) => section.error);
 
     return NextResponse.json({
       from: range.from,
@@ -115,6 +123,7 @@ export async function GET(request: Request) {
       temima: { rows: temima.rows, error: temima.error },
       eid: { found: eid.found, rows: eid.rows, error: eid.error },
       momen: { found: momen.found, rows: momen.rows, error: momen.error },
+      unsold: { rows: unsold.rows, error: unsold.error },
       variance,
       viewer: {
         isMaintenance: viewer.isMaintenance,
@@ -163,6 +172,8 @@ export async function POST(request: Request) {
     techNote?: string;
     productName?: string;
     productCode?: string;
+    quantity?: number;
+    defect?: string;
   } | null;
 
   const action = String(body?.action || "review");
@@ -213,6 +224,22 @@ export async function POST(request: Request) {
       const result = await clearTechGrade({
         trackingNumber: String(body?.trackingNumber || ""),
         productId,
+      });
+      if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
+      return NextResponse.json(result);
+    }
+
+    if (action === "unsold-stock") {
+      if (!(viewer.isMaintenance || viewer.isAdmin)) {
+        return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
+      }
+      const result = await registerUnsoldStockDefects({
+        productId: productId || 0,
+        productName: String(body?.productName || ""),
+        productCode: String(body?.productCode || ""),
+        quantity: Number(body?.quantity || 0),
+        note: String(body?.note || ""),
+        defect: String(body?.defect || "manufacturing"),
       });
       if (!result.ok) return NextResponse.json({ message: result.message }, { status: 400 });
       return NextResponse.json(result);

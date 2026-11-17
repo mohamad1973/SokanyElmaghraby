@@ -5,12 +5,13 @@ import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { listBostaHeadingReturns, type BostaHeadingKind } from "@/lib/shipping/bosta-client";
 
 export type DeskReturnSource = "temima" | "eid" | "momen";
-export type ReturnCaptureSource = "bosta" | DeskReturnSource;
+export type ReturnCaptureSource = "bosta" | DeskReturnSource | "unsold_stock";
+export type ReturnCaptureKind = BostaHeadingKind | "unsold";
 
 export type StoredBostaReturn = {
   trackingNumber: string;
   seenDay: string;
-  kind: BostaHeadingKind;
+  kind: ReturnCaptureKind;
   reasonText: string;
   customerName: string;
   phone: string;
@@ -20,10 +21,11 @@ export type StoredBostaReturn = {
   source: ReturnCaptureSource;
 };
 
-const KIND: Record<string, BostaHeadingKind> = {
+const KIND: Record<string, ReturnCaptureKind> = {
   refused: "refused",
   return: "return",
   exchange: "exchange",
+  unsold: "unsold",
 };
 
 let tableReady: Promise<void> | null = null;
@@ -159,7 +161,9 @@ export async function captureBostaHeadingReturns() {
 
 function captureSourceOf(value: unknown): ReturnCaptureSource {
   const source = String(value || "").trim();
-  if (source === "temima" || source === "eid" || source === "momen") return source;
+  if (source === "temima" || source === "eid" || source === "momen" || source === "unsold_stock") {
+    return source;
+  }
   return "bosta";
 }
 

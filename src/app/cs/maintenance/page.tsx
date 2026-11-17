@@ -22,7 +22,8 @@ export default async function CsMaintenancePage({
     hub === "tech_report" ||
     hub === "receive" ||
     hub === "accounting" ||
-    hub === "inspect"
+    hub === "inspect" ||
+    hub === "unsold_stock"
       ? hub
       : undefined;
   return (

@@ -13,8 +13,9 @@ import {
 import { linkedProductLabel, listBostaReturnProducts, type LinkedReturnProduct } from "@/lib/cs/bosta-return-product";
 import { listBostaReturnReviews, type BostaReturnReview } from "@/lib/cs/bosta-return-review";
 import { ensureMaintenanceLifecycleColumns, listCaptureExtras } from "@/lib/cs/bosta-return-lifecycle";
-import type { BostaHeadingKind } from "@/lib/shipping/bosta-client";
+import type { ReturnCaptureKind } from "@/lib/cs/bosta-return-capture";
 import { attachDeskTicketsToReturns, type DeskTicketBadge } from "@/lib/cs/sc-return-tickets";
+import { originFromCaptureSource, type MaintenanceOrigin } from "@/lib/cs/maintenance-origin";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -36,7 +37,7 @@ export type MaintenanceBostaRow = {
   orderProduct: string;
   orderItems: MaintenanceOrderItem[];
   linkedProducts: LinkedReturnProduct[];
-  kind: BostaHeadingKind;
+  kind: ReturnCaptureKind;
   statusLabel: string;
   reasonText: string;
   note: string;
@@ -44,6 +45,7 @@ export type MaintenanceBostaRow = {
   review: BostaReturnReview | null;
   searchText: string;
   source: ReturnCaptureSource;
+  origin: MaintenanceOrigin;
   deskTicket: DeskTicketBadge | null;
   deskTickets: DeskTicketBadge[];
 };
@@ -182,7 +184,8 @@ async function matchLocalOrders(rows: Array<{ trackingNumber: string; businessRe
   return { byTracking, byNumber };
 }
 
-const KIND_LABEL: Record<BostaHeadingKind, string> = {
+const KIND_LABEL: Record<ReturnCaptureKind, string> = {
+  unsold: "جديد لم يُبع",
   refused: "رفض استلام",
   return: "استرجاع",
   exchange: "استبدال",
@@ -228,6 +231,7 @@ async function hydrateCapturedReturnRows(stored: StoredBostaReturn[]): Promise<M
       openedAt: extra?.openedAt || null,
       review,
       source: row.source,
+      origin: originFromCaptureSource(row.source),
       searchText: searchBlob([
         row.trackingNumber,
         row.businessReference,
@@ -248,6 +252,7 @@ async function hydrateCapturedReturnRows(stored: StoredBostaReturn[]): Promise<M
         snap.trackingNumber,
         local?.invoiceNumber,
         local?.trackingNumber,
+        row.source === "unsold_stock" ? "جديد لم يبع مخزون معيب" : "مرتجع شحن",
       ]),
     };
   });
@@ -298,6 +303,22 @@ async function listDeskReceivedReturns(source: DeskReturnSource, from: string, t
 
 export async function listTemimaReturns(from: string, to: string) {
   return listDeskReceivedReturns("temima", from, to);
+}
+
+export async function listUnsoldStockReturns(from: string, to: string) {
+  try {
+    await ensureMaintenanceLifecycleColumns();
+    const stored = await listCapturedReturns(from, to, ["unsold_stock"]);
+    return { rows: await hydrateCapturedReturnRows(stored), error: null as string | null, detail: null as string | null };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("[maintenance-returns] listUnsoldStockReturns", detail);
+    return {
+      rows: [] as MaintenanceBostaRow[],
+      error: "تعذر تحميل المخزون المعيب. حاول مرة أخرى." as string | null,
+      detail: detail.slice(0, 200),
+    };
+  }
 }
 
 function courierBucket(name: string) {

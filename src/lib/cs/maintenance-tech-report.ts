@@ -3,6 +3,7 @@ import "server-only";
 import { ensureBostaReturnCaptureTable } from "@/lib/cs/bosta-return-capture";
 import { ensureBostaReturnProductTable } from "@/lib/cs/bosta-return-product";
 import { ensureBostaReturnReviewTable } from "@/lib/cs/bosta-return-review";
+import { originBadgeLabel, originFromCaptureSource } from "@/lib/cs/maintenance-origin";
 import { cairoTodayYmd, cairoYmdBounds } from "@/lib/cs/order-window";
 import { attachDeskTicketsToReturns } from "@/lib/cs/sc-return-tickets";
 import { getPrismaClient } from "@/lib/db";
@@ -13,6 +14,9 @@ export type TechReportRow = {
   productName: string;
   customerName: string;
   statusLabel: string;
+  originLabel: string;
+  usageLabel: string;
+  unsold: boolean;
   hasTicket: boolean;
   receivedAt: string | null;
   gradedAt: string | null;
@@ -25,6 +29,12 @@ const KIND_LABEL: Record<string, string> = {
   refused: "رفض استلام",
   return: "استرجاع",
   exchange: "استبدال",
+  unsold: "جديد لم يُبع",
+};
+
+const USAGE_LABEL: Record<string, string> = {
+  new: "جديد",
+  used: "مستخدم",
 };
 
 function isYmd(value?: string): value is string {
@@ -68,6 +78,9 @@ async function withTickets(
     productName: row.productName,
     customerName: row.customerName,
     statusLabel: row.statusLabel,
+    originLabel: row.originLabel,
+    usageLabel: row.usageLabel,
+    unsold: row.unsold,
     hasTicket: ticketByTrack.get(row.trackingNumber) || false,
     receivedAt: row.receivedAt,
     gradedAt: row.gradedAt,
@@ -103,6 +116,8 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
       customerName: string | null;
       phone: string | null;
       kind: string | null;
+      source: string | null;
+      usage: string | null;
       confirmationId: number | null;
       deliveredToMaintenanceAt: Date | string | null;
       gradedAt: Date | string | null;
@@ -114,6 +129,8 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
             COALESCE(NULLIF(c.\`customerName\`, ''), '') AS customerName,
             COALESCE(NULLIF(c.\`phone\`, ''), '') AS phone,
             COALESCE(c.\`kind\`, '') AS kind,
+            COALESCE(c.\`source\`, '') AS source,
+            COALESCE(p.\`usage\`, '') AS \`usage\`,
             c.\`confirmationId\` AS confirmationId,
             p.\`deliveredToMaintenanceAt\`, p.\`gradedAt\`, p.\`grade\`
      FROM \`CsBostaReturnProduct\` p
@@ -133,15 +150,34 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
     confirmationId: number | null;
   };
 
-  let drafts: DraftRow[] = productRows.map((row) => {
+  function draftFrom(row: {
+    trackingNumber: string;
+    productName?: string | null;
+    wooOrderNumber: string | null;
+    customerName: string | null;
+    phone: string | null;
+    kind: string | null;
+    source?: string | null;
+    usage?: string | null;
+    confirmationId: number | null;
+    deliveredToMaintenanceAt: Date | string | null;
+    gradedAt: Date | string | null;
+    grade: string | null;
+  }): DraftRow {
     const grade = String(row.grade || "").trim();
     const trackingNumber = String(row.trackingNumber || "").trim();
+    const origin = originFromCaptureSource(row.source);
+    const usage = row.usage === "new" || row.usage === "used" ? row.usage : null;
     return {
       trackingNumber,
       wooOrderNumber: String(row.wooOrderNumber || "").trim() || trackingNumber,
       productName: String(row.productName || "").trim(),
       customerName: String(row.customerName || "").trim(),
       statusLabel: statusOf(row.kind),
+      originLabel: originBadgeLabel(origin, usage),
+      usageLabel:
+        origin === "unsold_stock" ? "جديد لم يُبع" : usage ? USAGE_LABEL[usage] : "—",
+      unsold: origin === "unsold_stock",
       phone: String(row.phone || "").trim(),
       confirmationId: row.confirmationId == null ? null : Number(row.confirmationId),
       receivedAt: isoOrNull(row.deliveredToMaintenanceAt),
@@ -150,7 +186,9 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
       second: grade === "second",
       scrap: grade === "scrap",
     };
-  });
+  }
+
+  let drafts: DraftRow[] = productRows.map((row) => draftFrom(row));
 
   if (!drafts.length) {
     const reviewRows = await prisma.$queryRawUnsafe<
@@ -160,6 +198,8 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
         customerName: string | null;
         phone: string | null;
         kind: string | null;
+        source: string | null;
+        usage: string | null;
         confirmationId: number | null;
         deliveredToMaintenanceAt: Date | string | null;
         gradedAt: Date | string | null;
@@ -171,6 +211,8 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
               COALESCE(NULLIF(c.\`customerName\`, ''), '') AS customerName,
               COALESCE(NULLIF(c.\`phone\`, ''), '') AS phone,
               COALESCE(c.\`kind\`, '') AS kind,
+              COALESCE(c.\`source\`, '') AS source,
+              COALESCE(r.\`usage\`, '') AS \`usage\`,
               c.\`confirmationId\` AS confirmationId,
               r.\`deliveredToMaintenanceAt\`, r.\`gradedAt\`, r.\`grade\`
        FROM \`CsBostaReturnReview\` r
@@ -184,24 +226,7 @@ export async function getMaintenanceTechReport(fromYmdInput?: string, toYmdInput
       start,
       end,
     );
-    drafts = reviewRows.map((row) => {
-      const grade = String(row.grade || "").trim();
-      const trackingNumber = String(row.trackingNumber || "").trim();
-      return {
-        trackingNumber,
-        wooOrderNumber: String(row.wooOrderNumber || "").trim() || trackingNumber,
-        productName: "",
-        customerName: String(row.customerName || "").trim(),
-        statusLabel: statusOf(row.kind),
-        phone: String(row.phone || "").trim(),
-        confirmationId: row.confirmationId == null ? null : Number(row.confirmationId),
-        receivedAt: isoOrNull(row.deliveredToMaintenanceAt),
-        gradedAt: isoOrNull(row.gradedAt),
-        first: grade === "first",
-        second: grade === "second",
-        scrap: grade === "scrap",
-      };
-    });
+    drafts = reviewRows.map((row) => draftFrom({ ...row, productName: "" }));
   }
 
   const rows = await withTickets(drafts);

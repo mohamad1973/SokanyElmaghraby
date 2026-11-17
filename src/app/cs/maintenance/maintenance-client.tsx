@@ -16,15 +16,18 @@ import {
   ReceiveAndShelfPanel,
   TechPanel,
   TechReportPanel,
+  UnsoldStockPanel,
   VariancePanel,
   defectsAr,
   type PanelRow,
   type VariancePayload,
 } from "./maintenance-panels";
 
-type Kind = "refused" | "return" | "exchange";
+type Kind = "refused" | "return" | "exchange" | "unsold";
 type TabId = "bosta" | "temima" | "eid" | "momen";
-type HubTab = "inspect" | "tech" | "receive" | "accounting" | "variance" | "tech_report";
+type HubTab = "inspect" | "tech" | "receive" | "accounting" | "variance" | "tech_report" | "unsold_stock";
+type Source = "bosta" | "temima" | "eid" | "momen" | "unsold_stock";
+type MaintenanceOrigin = "shipping_return" | "unsold_stock";
 type Condition = "sound" | "broken" | "defective";
 type Defect = "break" | "power" | "disassembled" | "dented" | "manufacturing";
 type Usage = "new" | "used";
@@ -138,8 +141,6 @@ function rowMatchesDestination(row: BostaRow, destination: Destination) {
   return row.review?.destination === destination;
 }
 
-type Source = "bosta" | "temima" | "eid" | "momen";
-
 type DeskTicketBadge = {
   id: number;
   statusLabel: string;
@@ -208,6 +209,7 @@ type BostaRow = {
   orderItems?: OrderItem[];
   linkedProducts: LinkedProduct[];
   source?: Source;
+  origin?: MaintenanceOrigin;
   deskTicket?: DeskTicketBadge | null;
   deskTickets?: DeskTicketBadge[];
 };
@@ -225,6 +227,7 @@ type Payload = {
   temima: { rows: BostaRow[]; error?: string | null };
   eid: CourierSection;
   momen: CourierSection;
+  unsold?: { rows: BostaRow[]; error?: string | null };
   variance?: VariancePayload | null;
 };
 
@@ -235,7 +238,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "momen", label: "مؤمن" },
 ];
 
-const KINDS: Array<{ id: Kind; label: string }> = [
+const KINDS: Array<{ id: Exclude<Kind, "unsold">; label: string }> = [
   { id: "refused", label: "رفض استلام" },
   { id: "exchange", label: "استبدال" },
   { id: "return", label: "استرجاع" },
@@ -249,7 +252,7 @@ const DEFECTS: Array<{ id: Defect; label: string }> = [
   { id: "manufacturing", label: "عيب صناعة" },
 ];
 
-const KIND_RANK: Record<Kind, number> = { refused: 0, exchange: 1, return: 2 };
+const KIND_RANK: Record<Kind, number> = { refused: 0, exchange: 1, return: 2, unsold: 3 };
 
 const USAGE_OPTIONS: Array<{ id: Usage; label: string }> = [
   { id: "new", label: "جديد" },
@@ -1059,6 +1062,7 @@ export function MaintenanceClient({
             temima: source === "temima" ? body.temima : current.temima,
             eid: source === "eid" ? body.eid : current.eid,
             momen: source === "momen" ? body.momen : current.momen,
+            unsold: body.unsold || current.unsold,
             variance: opts?.withVariance ? body.variance : current.variance ?? null,
           };
         });
@@ -1286,131 +1290,147 @@ export function MaintenanceClient({
   const maintenancePrintRows = bostaSearched.filter((row) => rowMatchesDestination(row, "maintenance"));
   /** Handoff receipt: every return for the selected company/day (not destination-gated). */
   const handoffPrintRows = bostaSearched;
-  const panelRows: PanelRow[] = bostaSearched.flatMap((row): PanelRow[] => {
-    const deskTicket = row.deskTicket || null;
-    const deskTickets = row.deskTickets?.length ? row.deskTickets : deskTicket ? [deskTicket] : [];
-    const maintenanceProducts = row.linkedProducts.filter((product) => product.destination === "maintenance");
-    if (maintenanceProducts.length) {
-      return maintenanceProducts.map((product): PanelRow => ({
-        trackingNumber: row.trackingNumber,
-        productId: product.productId,
-        productName: product.productName,
-        productCode: product.productCode || "",
-        wooOrderNumber: row.wooOrderNumber,
-        customerName: row.customerName,
-        phone: row.phone,
-        product: productText(product),
-        day: row.day,
-        note: row.note || "",
-        openedAt: row.openedAt,
-        statusLabel: row.statusLabel,
-        deskTicket,
-        deskTickets,
-        review: {
-          destination: "maintenance",
-          grade: product.grade || null,
-          techNote: product.techNote || "",
-          deliveredToMaintenanceAt: product.deliveredToMaintenanceAt || null,
-          receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
-          shelfAt: product.shelfAt || null,
-          defects: product.defects || [],
-          label: product.label || "صيانة",
-          usage: product.usage || null,
-        },
-      }));
-    }
-    if (row.review?.destination !== "maintenance") return [];
-
-    // Tracking-level maintenance with 2+ order lines / linked products → one tech card each.
-    const splitProducts: LinkedProduct[] = (() => {
-      if ((row.linkedProducts || []).length >= 2) {
-        return (row.linkedProducts || []).map((product) => ({
-          ...product,
-          destination: product.destination || "maintenance",
-          deliveredToMaintenanceAt:
-            product.deliveredToMaintenanceAt || row.review?.deliveredToMaintenanceAt || null,
-          grade: product.grade || null,
-          techNote: product.techNote || "",
+  function toPanelRows(rows: BostaRow[]): PanelRow[] {
+    return rows.flatMap((row): PanelRow[] => {
+      const origin: MaintenanceOrigin =
+        row.origin || (row.source === "unsold_stock" || row.kind === "unsold" ? "unsold_stock" : "shipping_return");
+      const deskTicket = row.deskTicket || null;
+      const deskTickets = row.deskTickets?.length ? row.deskTickets : deskTicket ? [deskTicket] : [];
+      const maintenanceProducts = row.linkedProducts.filter((product) => product.destination === "maintenance");
+      if (maintenanceProducts.length) {
+        return maintenanceProducts.map((product): PanelRow => ({
+          trackingNumber: row.trackingNumber,
+          productId: product.productId,
+          productName: product.productName,
+          productCode: product.productCode || "",
+          wooOrderNumber: row.wooOrderNumber,
+          customerName: row.customerName,
+          phone: row.phone,
+          product: productText(product),
+          day: row.day,
+          note: row.note || "",
+          openedAt: row.openedAt,
+          statusLabel: row.statusLabel,
+          origin,
+          deskTicket,
+          deskTickets,
+          review: {
+            destination: "maintenance",
+            grade: product.grade || null,
+            techNote: product.techNote || "",
+            deliveredToMaintenanceAt: product.deliveredToMaintenanceAt || null,
+            receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
+            shelfAt: product.shelfAt || null,
+            defects: product.defects || [],
+            label: product.label || "صيانة",
+            usage: product.usage || null,
+          },
         }));
       }
-      const fromOrder = (row.orderItems || [])
-        .map((item) => provisionalFromOrderItem(item))
-        .filter((product) => product.productName);
-      if (fromOrder.length >= 2) {
-        return fromOrder.map((product) => ({
-          ...product,
-          destination: "maintenance" as const,
-          deliveredToMaintenanceAt: row.review?.deliveredToMaintenanceAt || null,
+      if (row.review?.destination !== "maintenance") return [];
+
+      const splitProducts: LinkedProduct[] = (() => {
+        if ((row.linkedProducts || []).length >= 2) {
+          return (row.linkedProducts || []).map((product) => ({
+            ...product,
+            destination: product.destination || "maintenance",
+            deliveredToMaintenanceAt:
+              product.deliveredToMaintenanceAt || row.review?.deliveredToMaintenanceAt || null,
+            grade: product.grade || null,
+            techNote: product.techNote || "",
+          }));
+        }
+        const fromOrder = (row.orderItems || [])
+          .map((item) => provisionalFromOrderItem(item))
+          .filter((product) => product.productName);
+        if (fromOrder.length >= 2) {
+          return fromOrder.map((product) => ({
+            ...product,
+            destination: "maintenance" as const,
+            deliveredToMaintenanceAt: row.review?.deliveredToMaintenanceAt || null,
+          }));
+        }
+        return [];
+      })();
+
+      if (splitProducts.length >= 2) {
+        return splitProducts.map((product): PanelRow => ({
+          trackingNumber: row.trackingNumber,
+          productId: product.productId,
+          productName: product.productName,
+          productCode: product.productCode || "",
+          wooOrderNumber: row.wooOrderNumber,
+          customerName: row.customerName,
+          phone: row.phone,
+          product: productText(product),
+          day: row.day,
+          note: row.note || "",
+          openedAt: row.openedAt,
+          statusLabel: row.statusLabel,
+          origin,
+          deskTicket,
+          deskTickets,
+          review: {
+            destination: "maintenance",
+            grade: product.grade || null,
+            techNote: product.techNote || "",
+            deliveredToMaintenanceAt:
+              product.deliveredToMaintenanceAt || row.review?.deliveredToMaintenanceAt || null,
+            receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
+            shelfAt: product.shelfAt || null,
+            defects: product.defects || row.review?.defects || [],
+            label: product.label || "صيانة",
+            usage: product.usage || row.review?.usage || null,
+          },
         }));
       }
-      return [];
-    })();
 
-    if (splitProducts.length >= 2) {
-      return splitProducts.map((product): PanelRow => ({
-        trackingNumber: row.trackingNumber,
-        productId: product.productId,
-        productName: product.productName,
-        productCode: product.productCode || "",
-        wooOrderNumber: row.wooOrderNumber,
-        customerName: row.customerName,
-        phone: row.phone,
-        product: productText(product),
-        day: row.day,
-        note: row.note || "",
-        openedAt: row.openedAt,
-        statusLabel: row.statusLabel,
-        deskTicket,
-        deskTickets,
-        review: {
-          destination: "maintenance",
-          grade: product.grade || null,
-          techNote: product.techNote || "",
-          deliveredToMaintenanceAt:
-            product.deliveredToMaintenanceAt || row.review?.deliveredToMaintenanceAt || null,
-          receivedFromMaintenanceAt: product.receivedFromMaintenanceAt || null,
-          shelfAt: product.shelfAt || null,
-          defects: product.defects || row.review?.defects || [],
-          label: product.label || "صيانة",
-          usage: product.usage || row.review?.usage || null,
+      return [
+        {
+          trackingNumber: row.trackingNumber,
+          productId: null,
+          productName: row.product || "",
+          productCode: "",
+          wooOrderNumber: row.wooOrderNumber,
+          customerName: row.customerName,
+          phone: row.phone,
+          product: row.product,
+          day: row.day,
+          note: row.note || "",
+          openedAt: row.openedAt,
+          statusLabel: row.statusLabel,
+          origin,
+          deskTicket,
+          deskTickets,
+          review: {
+            destination: row.review.destination,
+            grade: row.review.grade,
+            techNote: row.review.techNote || "",
+            deliveredToMaintenanceAt: row.review.deliveredToMaintenanceAt,
+            receivedFromMaintenanceAt: row.review.receivedFromMaintenanceAt,
+            shelfAt: row.review.shelfAt,
+            defects: row.review.defects,
+            label: row.review.label,
+            usage: row.review.usage,
+          },
         },
-      }));
-    }
+      ];
+    });
+  }
 
-    return [
-      {
-        trackingNumber: row.trackingNumber,
-        productId: null,
-        productName: row.product || "",
-        productCode: "",
-        wooOrderNumber: row.wooOrderNumber,
-        customerName: row.customerName,
-        phone: row.phone,
-        product: row.product,
-        day: row.day,
-        note: row.note || "",
-        openedAt: row.openedAt,
-        statusLabel: row.statusLabel,
-        deskTicket,
-        deskTickets,
-        review: {
-          destination: row.review.destination,
-          grade: row.review.grade,
-          techNote: row.review.techNote || "",
-          deliveredToMaintenanceAt: row.review.deliveredToMaintenanceAt,
-          receivedFromMaintenanceAt: row.review.receivedFromMaintenanceAt,
-          shelfAt: row.review.shelfAt,
-          defects: row.review.defects,
-          label: row.review.label,
-          usage: row.review.usage,
-        },
-      },
-    ];
-  });
+  const unsoldRows = data?.unsold?.rows || [];
+  const shippingPanelRows = toPanelRows(bostaSearched);
+  const unsoldPanelRows = toPanelRows(unsoldRows);
+  const seenPanel = new Set(shippingPanelRows.map((row) => `${row.trackingNumber}:${row.productId ?? ""}`));
+  const panelRows: PanelRow[] = [
+    ...shippingPanelRows,
+    ...unsoldPanelRows.filter((row) => !seenPanel.has(`${row.trackingNumber}:${row.productId ?? ""}`)),
+  ];
   const usageFilterLabel = USAGE_FILTERS.find((item) => item.id === usageFilter)?.label || "";
   const destFilterLabel = DEST_FILTERS.find((item) => item.id === destinationFilter)?.label || "";
   const hubTabs: Array<{ id: HubTab; label: string; show: boolean }> = [
     { id: "inspect", label: "فحص المرتجع", show: canInspect },
+    { id: "unsold_stock", label: "مخزون معيب", show: canInspect },
     { id: "tech", label: "فني الصيانة", show: canTech },
     { id: "tech_report", label: "تقرير فني", show: canTech },
     { id: "receive", label: "عائد من الصيانة", show: canInspect },
@@ -1517,6 +1537,9 @@ export function MaintenanceClient({
       {error ? <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
       {notice ? <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{notice}</p> : null}
       <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/10">
+        {hubTab === "unsold_stock" && canInspect ? (
+          <UnsoldStockPanel onChanged={() => void load({ from, to, source: tab })} />
+        ) : null}
         {hubTab === "tech" && canTech ? (
           <TechPanel
             rows={panelRows}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   NumberedNotesField,
   initialNumberedNotes,
 } from "@/components/cs/numbered-notes-field";
 import { ReturnTrackDrawer } from "@/components/cs/return-track-line";
+import { originBadgeLabel } from "@/lib/cs/maintenance-origin";
 import { formatCairoOrderDateTime } from "@/lib/cs/order-window";
 
 export type Grade = "first" | "second" | "scrap";
@@ -43,6 +44,7 @@ export type PanelRow = {
   note: string;
   openedAt: string | null;
   statusLabel: string;
+  origin?: "shipping_return" | "unsold_stock";
   deskTicket?: PanelTicketBadge | null;
   deskTickets?: PanelTicketBadge[];
   review: PanelReview | null;
@@ -204,7 +206,8 @@ export function TechPanel({
 
   async function saveGrade(row: PanelRow) {
     const state = stateFor(row);
-    if (!state.grade || !state.usage) return;
+    const usage = row.origin === "unsold_stock" ? "new" : state.usage;
+    if (!state.grade || !usage) return;
     const key = panelKey(row);
     setBusy(key);
     try {
@@ -217,7 +220,7 @@ export function TechPanel({
           action: "grade",
           trackingNumber: row.trackingNumber,
           grade: state.grade,
-          usage: state.usage,
+          usage,
           techNote: state.techNote,
           ...(row.productId != null ? { productId: row.productId } : {}),
           ...(productName ? { productName } : {}),
@@ -314,6 +317,18 @@ export function TechPanel({
                       <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-extrabold text-[#14213D] ring-1 ring-black/10">
                         {row.statusLabel || "—"}
                       </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
+                          row.origin === "unsold_stock"
+                            ? "bg-[#FCA311] text-black"
+                            : "bg-white text-[#14213D] ring-1 ring-black/10"
+                        }`}
+                      >
+                        {originBadgeLabel(
+                          row.origin === "unsold_stock" ? "unsold_stock" : "shipping_return",
+                          row.review?.usage || null,
+                        )}
+                      </span>
                       {savedGrade ? (
                         <>
                           <span className="rounded-full bg-[#E6B325] px-2 py-0.5 text-[11px] font-extrabold text-black">
@@ -328,12 +343,18 @@ export function TechPanel({
                         </>
                       ) : null}
                     </div>
-                    <p className="text-sm font-bold text-[#14213D]/80">{row.customerName || "—"}</p>
-                    {row.phone ? (
-                      <p className="text-sm font-extrabold text-[#14213D]" dir="ltr">
-                        {row.phone}
-                      </p>
-                    ) : null}
+                    {row.origin === "unsold_stock" ? (
+                      <p className="text-sm font-bold text-[#14213D]/80">مخزون معيب — بدون عميل</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-[#14213D]/80">{row.customerName || "—"}</p>
+                        {row.phone ? (
+                          <p className="text-sm font-extrabold text-[#14213D]" dir="ltr">
+                            {row.phone}
+                          </p>
+                        ) : null}
+                      </>
+                    )}
                     <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#14213D]/70">
                       <span dir="ltr">{row.trackingNumber}</span>
                       <ReturnTrackDrawer trackingNumber={row.trackingNumber} />
@@ -385,27 +406,33 @@ export function TechPanel({
                           ))}
                         </select>
                       </label>
-                      <label className="text-[11px] font-extrabold text-[#14213D]">
-                        الاستخدام
-                        <select
-                          aria-label="الاستخدام"
-                          className={`mt-1 block ${TECH_SELECT_CLASS}`}
-                          value={state.usage}
-                          onChange={(e) =>
-                            setDraft((cur) => ({
-                              ...cur,
-                              [key]: { ...state, usage: e.target.value as TechUsage | "" },
-                            }))
-                          }
-                        >
-                          <option value="">اختَر الاستخدام</option>
-                          {USAGE_OPTIONS.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      {row.origin === "unsold_stock" ? (
+                        <span className="rounded-full bg-[#FCA311]/30 px-3 py-1.5 text-[11px] font-extrabold text-[#14213D]">
+                          الاستخدام: جديد لم يُبع
+                        </span>
+                      ) : (
+                        <label className="text-[11px] font-extrabold text-[#14213D]">
+                          الاستخدام
+                          <select
+                            aria-label="الاستخدام"
+                            className={`mt-1 block ${TECH_SELECT_CLASS}`}
+                            value={state.usage}
+                            onChange={(e) =>
+                              setDraft((cur) => ({
+                                ...cur,
+                                [key]: { ...state, usage: e.target.value as TechUsage | "" },
+                              }))
+                            }
+                          >
+                            <option value="">اختَر الاستخدام</option>
+                            {USAGE_OPTIONS.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <input
@@ -421,7 +448,11 @@ export function TechPanel({
                       />
                       <button
                         type="button"
-                        disabled={!state.grade || !state.usage || busy === key}
+                        disabled={
+                          !state.grade ||
+                          (row.origin !== "unsold_stock" && !state.usage) ||
+                          busy === key
+                        }
                         onClick={() => void saveGrade(row)}
                         className="shrink-0 rounded-full bg-[#14213D] px-4 py-1.5 text-xs font-extrabold text-white disabled:opacity-40"
                       >
@@ -855,13 +886,168 @@ type TechReportApiRow = {
   productName: string;
   customerName: string;
   statusLabel: string;
+  originLabel: string;
+  usageLabel: string;
   hasTicket: boolean;
   receivedAt: string | null;
   gradedAt: string | null;
   first: boolean;
   second: boolean;
   scrap: boolean;
+  unsold: boolean;
 };
+
+export function UnsoldStockPanel({ onChanged }: { onChanged: () => void }) {
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<Array<{ id: number; name: string; displayCode: string; sku: string }>>([]);
+  const [picked, setPicked] = useState<{ id: number; name: string; code: string } | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [note, setNote] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2 || picked) {
+      setHits([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      void fetch(`/api/products/search?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+        .then(async (response) => {
+          const body = (await response.json()) as {
+            products?: Array<{ id: number; name: string; displayCode: string; sku: string }>;
+          };
+          setHits(Array.isArray(body.products) ? body.products : []);
+        })
+        .catch(() => setError("تعذر البحث عن المنتج."))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, picked]);
+
+  async function save() {
+    if (!picked) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/cs/maintenance/returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "unsold-stock",
+          productId: picked.id,
+          productName: picked.name,
+          productCode: picked.code,
+          quantity,
+          note,
+          defect: "manufacturing",
+        }),
+      });
+      const body = (await response.json()) as { message?: string; count?: number };
+      if (!response.ok) {
+        setError(body.message || "تعذر تسجيل المخزون المعيب.");
+        return;
+      }
+      setNotice(`اتسجل ${body.count || quantity} قطعة · جديد لم يُبع ودخلوا فني الصيانة.`);
+      setPicked(null);
+      setQuery("");
+      setQuantity(1);
+      setNote("");
+      onChanged();
+    } catch {
+      setError("تعذر تسجيل المخزون المعيب.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 p-4" dir="rtl">
+      <div className="space-y-1">
+        <h2 className="text-lg font-extrabold text-[#14213D]">مخزون معيب — جديد لم يُبع</h2>
+        <p className="text-sm font-bold text-[#14213D]/70">
+          منتجات من الرف/الاستيراد/الإنتاج فيها عيب ولم تُباع. التسجيل يدخلها مباشرة لطابور فني الصيانة بشارة «جديد لم
+          يُبع»، منفصلة عن مرتجعات شركات الشحن.
+        </p>
+      </div>
+      <div className="max-w-xl space-y-3 rounded-2xl bg-[#F5F5F0] p-4 ring-1 ring-black/5">
+        <label className="block text-xs font-extrabold text-[#14213D]">
+          بحث المنتج
+          <input
+            value={picked ? `${picked.name}${picked.code ? ` · ${picked.code}` : ""}` : query}
+            onChange={(e) => {
+              setPicked(null);
+              setQuery(e.target.value);
+            }}
+            placeholder="اسم أو كود المنتج"
+            className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        {searching ? <p className="text-xs font-bold text-[#14213D]/60">جارٍ البحث…</p> : null}
+        {!picked && hits.length ? (
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-xl bg-white p-2 ring-1 ring-black/10">
+            {hits.map((hit) => (
+              <li key={hit.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPicked({ id: hit.id, name: hit.name, code: hit.displayCode || hit.sku || "" });
+                    setQuery("");
+                    setHits([]);
+                  }}
+                  className="w-full rounded-lg px-2 py-1.5 text-right text-sm font-bold text-[#14213D] hover:bg-[#F5F5F0]"
+                >
+                  {hit.name}
+                  {hit.displayCode || hit.sku ? (
+                    <span className="ms-2 text-xs text-[#14213D]/60" dir="ltr">
+                      {hit.displayCode || hit.sku}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <label className="block text-xs font-extrabold text-[#14213D]">
+          الكمية
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={quantity}
+            onChange={(e) => setQuantity(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+            className="mt-1 w-28 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold"
+          />
+        </label>
+        <label className="block text-xs font-extrabold text-[#14213D]">
+          ملاحظة العيب (اختياري)
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            className="mt-1 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-bold"
+            placeholder="مثال: كسر من الاستيراد / عيب صناعة"
+          />
+        </label>
+        {error ? <p className="text-sm font-bold text-red-700">{error}</p> : null}
+        {notice ? <p className="text-sm font-bold text-emerald-800">{notice}</p> : null}
+        <button
+          type="button"
+          disabled={!picked || saving}
+          onClick={() => void save()}
+          className="rounded-full bg-[#E6B325] px-5 py-2 text-sm font-extrabold text-black disabled:opacity-50"
+        >
+          {saving ? "جارٍ التسجيل…" : "تسجيل وإرسال للصيانة"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function TechReportPanel({ from, to }: { from: string; to: string }) {
   const [loading, setLoading] = useState(false);
@@ -964,18 +1150,22 @@ export function TechReportPanel({ from, to }: { from: string; to: string }) {
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-900">
               تم إصلاح/فرز: {summary.repairedCount}
             </span>
+            <span className="rounded-full bg-[#FFF3D6] px-3 py-1 text-[#8A5A00]">
+              جديد لم يُبع: {rows.filter((row) => row.unsold).length}
+            </span>
             <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز أول: {summary.firstCount}</span>
             <span className="rounded-full bg-[#F5F5F0] px-3 py-1">فرز ثاني: {summary.secondCount}</span>
             <span className="rounded-full bg-red-50 px-3 py-1 text-red-800">هالك: {summary.scrapCount}</span>
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] w-full border-collapse text-right text-sm">
+          <table className="min-w-[1040px] w-full border-collapse text-right text-sm">
             <thead className="bg-[#F5F5F0] text-xs font-extrabold">
               <tr>
-                <th className="border border-black/20 px-2 py-2">الأوردر</th>
+                <th className="border border-black/20 px-2 py-2">الأوردر / المرجع</th>
                 <th className="border border-black/20 px-2 py-2">العميل</th>
-                <th className="border border-black/20 px-2 py-2">الطبيعة</th>
+                <th className="border border-black/20 px-2 py-2">الأصل</th>
+                <th className="border border-black/20 px-2 py-2">الاستخدام</th>
                 <th className="border border-black/20 px-2 py-2">البوليصة / الصنف</th>
                 <th className="border border-black/20 px-2 py-2">تاريخ الاستلام</th>
                 <th className="border border-black/20 px-2 py-2">فرز أول</th>
@@ -994,11 +1184,19 @@ export function TechReportPanel({ from, to }: { from: string; to: string }) {
                             تكت
                           </span>
                         ) : null}
+                        {row.unsold ? (
+                          <span className="rounded-full bg-[#FCA311] px-1.5 py-0.5 text-[10px] font-extrabold text-black">
+                            جديد لم يُبع
+                          </span>
+                        ) : null}
                         <span>#{row.wooOrderNumber}</span>
                       </span>
                     </td>
-                    <td className="border border-black/20 px-2 py-2 font-bold">{row.customerName || "—"}</td>
-                    <td className="border border-black/20 px-2 py-2">{row.statusLabel || "—"}</td>
+                    <td className="border border-black/20 px-2 py-2 font-bold">
+                      {row.unsold ? "—" : row.customerName || "—"}
+                    </td>
+                    <td className="border border-black/20 px-2 py-2 font-bold">{row.originLabel || "—"}</td>
+                    <td className="border border-black/20 px-2 py-2 font-bold">{row.usageLabel || "—"}</td>
                     <td className="border border-black/20 px-2 py-2">
                       <div className="font-bold" dir="ltr">
                         {row.trackingNumber}
@@ -1015,7 +1213,7 @@ export function TechReportPanel({ from, to }: { from: string; to: string }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="border border-black/20 px-3 py-8 text-center font-bold text-[#14213D]/60">
+                  <td colSpan={9} className="border border-black/20 px-3 py-8 text-center font-bold text-[#14213D]/60">
                     {loading ? "جاري التحميل…" : "اضغط «عرض التقرير» أو مفيش أوردرات في الفترة."}
                   </td>
                 </tr>

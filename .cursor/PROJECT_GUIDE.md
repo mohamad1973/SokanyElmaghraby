@@ -464,6 +464,7 @@
 
 | الموضوع | ماذا فُعل | Commit / ملفات |
 |---------|-----------|----------------|
+| مخزون معيب جديد لم يُبع | تاب تسجيل منفصل؛ أصل `unsold_stock` vs مرتجع شحن؛ نفس فني/عائد؛ شارات + أصل/استخدام في التقرير المطبوع | `unsold-stock-intake.ts`, `maintenance-origin.ts`, `maintenance-client.tsx`, `maintenance-panels.tsx`, `maintenance-tech-report.ts` |
 | بوليصة Cancelled مش «لا يوجد تحصيل» | COD بوليصة سوكاني/تميمة بنفس قاعدة التسوية: ملغي يفضل قيمة الشحنة؛ مدفوع الموقع فقط لو Woo completed | `order-window.ts`, `sokany-waybill.ts`, `temima-settlement.ts` |
 | طلب عميل دروب + فرز/استخدام فني + تثبيت تاريخ | طلب العميل 4 خيارات؛ اقتراح الاستقبال NumberedNotes؛ تاريخ الصيانة ما يرجعش لليوم؛ فني: تليفون + دروب فرز + دروب استخدام | `sc-customer-request.ts`, `desk-client.tsx`, `maintenance-client.tsx`, `maintenance-panels.tsx`, `bosta-return-lifecycle.ts` |
 | تكبير صور تكت الاستقبال | ضغط الصورة يفتحها بملء الشاشة (إغلاق بالخلفية أو زر) في مودال التكت ومكتب الاستقبال | `photo-lightbox.tsx`, `maintenance-client.tsx`, `desk-client.tsx` |
