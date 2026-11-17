@@ -391,12 +391,6 @@ export function CsCallSheet({
     }
     return base;
   });
-  const [customerNotes, setCustomerNotes] = useState(() =>
-    initialNumberedNotes(String(initialSnapshot?.customerNote || initialSnapshot?.homeConfirmNote || "")),
-  );
-  const notesRef = useRef<HTMLTextAreaElement>(null);
-  const lastPhoneTap = useRef(0);
-  const lastNotesTap = useRef(0);
   const [fu, setFu] = useState({
     handedToCarrier: Boolean(followUp?.handedToCarrier),
     deliveredToCustomer: Boolean(followUp?.deliveredToCustomer),
@@ -740,7 +734,6 @@ export function CsCallSheet({
         failContact,
         cancelOrder,
         failReason: failContact ? "لم يرد" : cancelOrder ? "لاغى" : undefined,
-        customerNote: customerNotes.trim() || null,
         trackingNumber,
         waybillPrinted,
         depositAmount: depositAmount.trim() === "" ? null : depositAmount.trim(),
@@ -1562,23 +1555,7 @@ export function CsCallSheet({
       <section className="shrink-0 rounded-2xl bg-[#14213D] px-4 py-3 text-sm text-white">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           <span className="font-extrabold">{answers.customer_name?.value || snapshot?.customerName}</span>
-          <span
-            dir="ltr"
-            className="cursor-pointer select-none rounded bg-white/15 px-2 py-1 font-extrabold"
-            title="دبل كليك يضيف سطر ملاحظة جديد"
-            onDoubleClick={(event) => {
-              if (shouldActivateNumberedNote(event, lastPhoneTap)) {
-                setCustomerNotes((prev) => appendNumberedNoteLine(prev));
-                window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
-              }
-            }}
-            onTouchEnd={(event) => {
-              if (shouldActivateNumberedNote(event, lastPhoneTap)) {
-                setCustomerNotes((prev) => appendNumberedNoteLine(prev));
-                window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
-              }
-            }}
-          >
+          <span dir="ltr" className="rounded bg-white/15 px-2 py-1 font-extrabold">
             {answers.primary_phone?.value || snapshot?.phone || "—"}
           </span>
           <span className="rounded bg-[#FCA311] px-2 py-0.5 font-extrabold text-black">
@@ -1605,9 +1582,6 @@ export function CsCallSheet({
             <span dir="ltr">تتبع: {trackingNumber || snapshot?.trackingNumber}</span>
           ) : null}
         </div>
-        <p className="mt-2 text-[11px] font-bold text-white/80">
-          دبل كليك على الموبايل أو الملاحظات يضيف سطر جديد بالرقم التالي.
-        </p>
         <div className="mt-1 grid gap-1 text-xs text-white/90 sm:grid-cols-3">
           <span className="truncate">الشارع: {answers.address_complete?.value || snapshot?.address || "—"}</span>
           <span className="truncate">المحافظة: {snapshot?.governorate || answers.governorate_confirm?.value || "—"}</span>
@@ -1617,18 +1591,6 @@ export function CsCallSheet({
           {(snapshot?.items || []).map((i) => `${i.quantity}×${i.name}`).join(" · ")}
         </p>
       </section>
-
-      <NumberedNotesField
-        value={customerNotes}
-        onChange={setCustomerNotes}
-        textareaRef={notesRef}
-        lastTapRef={lastNotesTap}
-        onAppend={() => {
-          setCustomerNotes((prev) => appendNumberedNoteLine(prev));
-          window.requestAnimationFrame(() => focusNotesEnd(notesRef.current));
-        }}
-        disabled={showFollowUp && !canEditSavedInfo}
-      />
 
       {message ? (
         <p

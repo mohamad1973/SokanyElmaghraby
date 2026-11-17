@@ -145,7 +145,21 @@ type DeskTicketBadge = {
   id: number;
   statusLabel: string;
   wooOrderNumber: string;
+  complaintNote?: string;
 };
+
+function printMaintenanceNote(row: BostaRow) {
+  const tickets = row.deskTickets?.length
+    ? row.deskTickets
+    : row.deskTicket
+      ? [row.deskTicket]
+      : [];
+  const complaint =
+    tickets.map((ticket) => String(ticket.complaintNote || "").trim()).find(Boolean) || "";
+  const note = String(row.note || "").trim();
+  if (complaint && note) return `${complaint}\n${note}`;
+  return complaint || note;
+}
 
 type Photo = { id: number; kind: string; url: string };
 
@@ -1993,7 +2007,7 @@ export function MaintenanceClient({
                       ? formatCairoOrderDateTime(item.review.deliveredToMaintenanceAt).absolute
                       : ""}
                   </td>
-                  <td className="border border-black px-1 py-1">{item.note || ""}</td>
+                  <td className="border border-black px-1 py-1 whitespace-pre-wrap">{printMaintenanceNote(item)}</td>
                 </tr>
               ))}
             </tbody>

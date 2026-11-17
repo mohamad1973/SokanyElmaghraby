@@ -9,6 +9,7 @@ export type DeskTicketBadge = {
   id: number;
   statusLabel: string;
   wooOrderNumber: string;
+  complaintNote: string;
 };
 
 type MatchRow = {
@@ -27,6 +28,7 @@ type TicketHit = {
   waybillTracking: string;
   status: string;
   customerPhone: string;
+  complaintNote: string | null;
 };
 
 function last10(value: string) {
@@ -88,6 +90,7 @@ function badgeOf(ticket: TicketHit): DeskTicketBadge {
     id: Number(ticket.id),
     statusLabel: SC_TICKET_STATUS[ticket.status as keyof typeof SC_TICKET_STATUS] || ticket.status,
     wooOrderNumber: ticket.wooOrderNumber || "",
+    complaintNote: String(ticket.complaintNote || "").trim(),
   };
 }
 
@@ -137,7 +140,7 @@ export async function attachDeskTicketsToReturns<T extends MatchRow>(
     }
     const tickets = await prisma.$queryRawUnsafe<TicketHit[]>(
       `SELECT t.id, t.wooOrderNumber, t.confirmationId, t.fulfillmentConfirmationId, t.waybillTracking, t.status,
-              cu.phone AS customerPhone
+              t.complaintNote, cu.phone AS customerPhone
        FROM ScTicket t
        JOIN ScCustomer cu ON cu.id = t.customerId
        WHERE ${clauses.join(" OR ")}
